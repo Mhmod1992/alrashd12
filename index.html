@@ -4,8 +4,15 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#3b82f6" />
+    
+    <!-- PWA: Apple Specific Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Aero Workshop" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    
     <title>نظام إدارة ورشة سيارات</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -31,6 +38,7 @@
         font-family: 'Inter', 'Tajawal', sans-serif;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        overscroll-behavior-y: none; /* Prevent pull-to-refresh on mobile PWA */
       }
       
       body {
@@ -169,6 +177,14 @@
       }
       .animate-progress-bar {
         animation: progressBar 10s linear forwards;
+      }
+      
+      @keyframes slideInUp {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-slide-in-up {
+        animation: slideInUp 0.5s cubic-bezier(0.23, 1, 0.32, 1);
       }
 
       @media print {
