@@ -297,10 +297,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const refreshSessionAndReload = useCallback(async () => {
         setIsRefreshing(true);
+        console.log("Attempting session recovery...");
+
+        // 1. Try Silent Refresh first (The "Gentle" Approach)
+        try {
+            const { data, error } = await supabase.auth.refreshSession();
+            
+            if (!error && data.session) {
+                console.log("Session refreshed successfully");
+                
+                // Re-establish realtime connections
+                retryConnection();
+                
+                // Refresh data to ensure UI is up to date
+                await fetchAllData();
+
+                addNotification({ title: 'تم التحديث', message: 'تم تجديد الجلسة واستعادة الاتصال بنجاح.', type: 'success' });
+                setIsRefreshing(false);
+                setIsSessionError(false);
+                return; // Stop here, no need to reload page
+            }
+        } catch (e) {
+            console.warn("Soft refresh failed, proceeding to hard reset", e);
+        }
+
+        // 2. If soft refresh failed, execute Radical Reset (The "Hard" Approach)
         console.log("Executing Radical Reset for Mobile Stability...");
 
         try {
-            // 1. Attempt graceful signout (don't wait long)
+            // Attempt graceful signout (don't wait long)
             await Promise.race([
                 supabase.auth.signOut(),
                 new Promise(resolve => setTimeout(resolve, 500))
@@ -309,8 +334,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             console.error("Graceful signout failed, proceeding to hard wipe", e);
         }
 
-        // 2. BRUTAL WIPE of Client Storage
-        // This removes Supabase tokens, cached settings, stale states, everything.
+        // BRUTAL WIPE of Client Storage
         try {
             window.localStorage.clear();
             window.sessionStorage.clear();
@@ -318,15 +342,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             console.error("Storage clear error", e);
         }
 
-        // 3. Cache Busting Reload
-        // Adding a timestamp query param forces the browser (especially mobile Safari/Chrome)
-        // to treat this as a completely new page, bypassing the stubborn cache.
+        // Cache Busting Reload
         const currentUrl = new URL(window.location.href);
         currentUrl.searchParams.set('reset_ts', Date.now().toString());
         
-        // Use replace to avoid adding the broken state to history
         window.location.replace(currentUrl.toString());
-    }, []);
+    }, [addNotification, fetchAllData, retryConnection]);
 
 
 
