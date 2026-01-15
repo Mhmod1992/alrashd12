@@ -297,32 +297,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const refreshSessionAndReload = useCallback(async () => {
         setIsRefreshing(true);
-        console.log("Executing Surgical Reset for Session Timers & Tokens...");
+        console.log("Executing Radical Reset for Mobile Stability...");
 
         try {
-            // 1. Clear App Session Timers
-            localStorage.removeItem('lastActiveTime');
-            localStorage.removeItem('loginDate');
+            // 1. Attempt graceful signout (don't wait long)
+            await Promise.race([
+                supabase.auth.signOut(),
+                new Promise(resolve => setTimeout(resolve, 500))
+            ]);
+        } catch (e) { 
+            console.error("Graceful signout failed, proceeding to hard wipe", e);
+        }
 
-            // 2. Clear Supabase Auth Tokens (CRITICAL for fixing zombie sessions on mobile)
-            // Supabase keys usually start with 'sb-' or contain 'supabase'
-            Object.keys(localStorage).forEach((key) => {
-                if (key.startsWith('sb-') || key.includes('supabase')) {
-                    localStorage.removeItem(key);
-                }
-            });
-            
-            // 3. Clear Navigation History
-            window.sessionStorage.removeItem('pageHistory');
-
+        // 2. BRUTAL WIPE of Client Storage
+        // This removes Supabase tokens, cached settings, stale states, everything.
+        try {
+            window.localStorage.clear();
+            window.sessionStorage.clear();
         } catch (e) {
             console.error("Storage clear error", e);
         }
 
-        // Cache Busting Reload
+        // 3. Cache Busting Reload
+        // Adding a timestamp query param forces the browser (especially mobile Safari/Chrome)
+        // to treat this as a completely new page, bypassing the stubborn cache.
         const currentUrl = new URL(window.location.href);
         currentUrl.searchParams.set('reset_ts', Date.now().toString());
         
+        // Use replace to avoid adding the broken state to history
         window.location.replace(currentUrl.toString());
     }, []);
 
@@ -331,7 +333,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     useEffect(() => {
         let mounted = true;
 
-        // 1. Safety Timeout: Force error screen if initialization hangs (Long backup)
+        // 1. Safety Timeout: Force error screen if initialization hangs
         const timeoutId = setTimeout(() => {
             if (mounted && isLoading) {
                 console.warn("Session initialization timed out. Forcing recovery mode.");
@@ -339,40 +341,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setIsSessionError(true);
                 setIsLoading(false);
             }
-        }, 10000); // Increased safety valve to 10s as backup
+        }, 7000); // 7 seconds safety valve
 
         const initializeApp = async () => {
             try {
-                // --- 🛡️ SMART CHECK (System Self-Repair) 🛡️ ---
-                // Ensures critical local storage keys are valid before proceeding.
-                try {
-                    const now = Date.now();
-                    const lastActive = localStorage.getItem('lastActiveTime');
-                    const loginDate = localStorage.getItem('loginDate');
-                    
-                    // Fix corrupted lastActiveTime
-                    if (lastActive) {
-                        const parsed = parseInt(lastActive, 10);
-                        // If NaN, or futuristic (clock error), or extremely old (> 30 days which implies stale junk)
-                        if (isNaN(parsed) || parsed > now + 86400000 || parsed < now - (30 * 24 * 60 * 60 * 1000)) {
-                            console.warn("Smart Check: Resetting invalid lastActiveTime.");
-                            localStorage.setItem('lastActiveTime', now.toString());
-                        }
-                    } else {
-                        // Initialize if missing to prevent null checks failing later
-                        localStorage.setItem('lastActiveTime', now.toString());
-                    }
-
-                    // Fix corrupted loginDate format
-                    if (loginDate && !/^\d{4}-\d{2}-\d{2}$/.test(loginDate)) {
-                         console.warn("Smart Check: Resetting invalid loginDate format.");
-                         localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
-                    }
-                } catch (e) {
-                    console.error("Smart Check Error:", e);
-                }
-                // ------------------------------------------------
-
                 // Fetch Settings
                 const { data: settingsDataRaw } = await supabase.from('app_settings').select('*').eq('id', 1).maybeSingle();
                 const fetchedSettingsData = (settingsDataRaw?.settings_data || {}) as Record<string, any>;
@@ -390,28 +362,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setSettings(finalGlobalSettings);
                 }
 
-                // Explicit Session Check with Timeout (Race Condition Fix)
-                // This prevents the app from hanging if supabase.auth.getSession() never resolves (common on mobile reload)
-                const sessionPromise = supabase.auth.getSession();
-                const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Session retrieval timed out')), 4000)
-                );
+                // Explicit Session Check
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-                let session: any = null;
-                
-                try {
-                    const result: any = await Promise.race([sessionPromise, timeoutPromise]);
-                    if (result.error) throw result.error;
-                    session = result.data.session;
-                } catch (raceError) {
-                     console.warn("Session check race failed:", raceError);
-                     // If we timed out or failed to get session, we assume "No Session" to avoid hanging.
-                     // This directs the user to Login instead of "System Not Responding".
-                     if (mounted) {
-                         setAuthUser(null);
-                         setIsLoading(false);
-                     }
-                     return; // Exit early
+                if (sessionError) {
+                    throw sessionError; // Triggers catch -> isSessionError = true
                 }
 
                 if (session?.user) {
@@ -438,12 +393,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         // Valid user
                         if (mounted) {
                             setAuthUser(employeeProfile);
-                            // Refresh valid session tracking data
                             localStorage.setItem('lastActiveTime', Date.now().toString());
-                            const todayStr = new Date().toLocaleDateString('en-CA');
-                            if (localStorage.getItem('loginDate') !== todayStr) {
-                                 localStorage.setItem('loginDate', todayStr);
-                            }
                         }
                     }
                 } else {
