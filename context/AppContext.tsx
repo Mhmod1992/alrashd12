@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useMemo, useRef } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { supabase, createTemporaryClient } from '../lib/supabaseClient';
@@ -296,28 +297,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const refreshSessionAndReload = useCallback(async () => {
         setIsRefreshing(true);
+        console.log("Executing Radical Reset for Mobile Stability...");
+
         try {
-            console.log("Manual refresh triggered: attempting to revive session...");
-            // Force refresh session
-            const { error, data } = await supabase.auth.refreshSession();
-
-            if (error) {
-                console.warn("Session refresh failed, clearing token to force re-login:", error);
-                // If refresh fails, sign out and clear possible stale storage items
-                await supabase.auth.signOut().catch(() => { });
-                localStorage.removeItem('supabase.auth.token');
-                localStorage.removeItem('lastActiveTime');
-                sessionStorage.clear();
-            } else if (data.session) {
-                console.log("Session successfully refreshed.");
-            }
-
-            // Hard Reload to restart everything from a clean state
-            window.location.reload();
-        } catch (error) {
-            console.error("Critical error during session refresh recovery:", error);
-            window.location.reload();
+            // 1. Attempt graceful signout (don't wait long)
+            await Promise.race([
+                supabase.auth.signOut(),
+                new Promise(resolve => setTimeout(resolve, 500))
+            ]);
+        } catch (e) { 
+            console.error("Graceful signout failed, proceeding to hard wipe", e);
         }
+
+        // 2. BRUTAL WIPE of Client Storage
+        // This removes Supabase tokens, cached settings, stale states, everything.
+        try {
+            window.localStorage.clear();
+            window.sessionStorage.clear();
+        } catch (e) {
+            console.error("Storage clear error", e);
+        }
+
+        // 3. Cache Busting Reload
+        // Adding a timestamp query param forces the browser (especially mobile Safari/Chrome)
+        // to treat this as a completely new page, bypassing the stubborn cache.
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('reset_ts', Date.now().toString());
+        
+        // Use replace to avoid adding the broken state to history
+        window.location.replace(currentUrl.toString());
     }, []);
 
 
