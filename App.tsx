@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { AppProvider, useAppContext } from './context/AppContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -48,7 +48,6 @@ const AppContent: React.FC = () => {
   // Added setPage to destructuring
   const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, refreshSessionAndReload } = useAppContext();
   const [isSidebarOpen, setSidebarOpen] = React.useState(false);
-  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
 
   // Redirect Logic based on Permissions (More flexible than Role check)
@@ -117,25 +116,8 @@ const AppContent: React.FC = () => {
     }
   }, [settings.appName]);
 
-  // Auto-retry logic when session error occurs
-  useEffect(() => {
-    if (isSessionError) {
-      setRetryCountdown(5); // Start 5 second countdown
-      const interval = setInterval(() => {
-        setRetryCountdown(prev => {
-          if (prev !== null && prev <= 1) {
-            clearInterval(interval);
-            refreshSessionAndReload(); // Auto trigger refresh
-            return 0;
-          }
-          return prev !== null ? prev - 1 : null;
-        });
-      }, 1000);
-      return () => clearInterval(interval);
-    } else {
-      setRetryCountdown(null);
-    }
-  }, [isSessionError, refreshSessionAndReload]);
+  // The problematic force-reload logic has been removed from here
+  // and replaced with a better "revival" mechanism in AppContext.
 
   if (isLoading) {
     return <AppShellSkeleton />;
@@ -152,11 +134,10 @@ const AppContent: React.FC = () => {
           </div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">النظام لا يستجيب</h2>
           <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
-             جاري محاولة إعادة الاتصال بقاعدة البيانات... 
-             {retryCountdown !== null && retryCountdown > 0 && <span className="block mt-2 font-bold text-red-500">سيتم التحديث تلقائياً خلال {retryCountdown} ثواني</span>}
+            يبدو أن هناك مشكلة في الاتصال أو تحميل البيانات. يرجى تحديث النظام للمتابعة.
           </p>
           <Button onClick={refreshSessionAndReload} className="w-full justify-center py-3 text-lg shadow-lg shadow-red-500/20" variant="danger" leftIcon={<RefreshCwIcon className="w-5 h-5" />}>
-            تحديث النظام الآن
+            تحديث النظام
           </Button>
         </div>
       </div>

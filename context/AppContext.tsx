@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useMemo, useRef } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { supabase, createTemporaryClient } from '../lib/supabaseClient';
@@ -18,6 +17,9 @@ import { useThemeScope } from './scopes/useThemeScope';
 import { useDataScope } from './scopes/useDataScope';
 import { useActionsScope } from './scopes/useActionsScope';
 import { REQUESTS_PAGE_SIZE, INACTIVITY_LIMIT_MS, PERSONAL_SETTING_KEYS, ROOT_PAGES, PARENT_MAP } from './constants';
+
+
+
 
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -141,6 +143,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [requests, clients, cars]);
 
 
+
     // Make logout available - defining it early to be used in effects
     const logout = useCallback(async () => {
         isManualLogout.current = true;
@@ -188,18 +191,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     useEffect(() => { ensureEntitiesLoadedRef.current = ensureEntitiesLoaded; }, [ensureEntitiesLoaded]);
 
 
-    const setupRealtimeSubscription = useCallback(() => {
-        // Only connect if we are authenticated and not already connecting/connected
-        if (!authUserRef.current) return;
-        
-        // Clean up existing channels first to avoid duplicates
-        const cleanup = async () => {
-             if (channelRef.current) await supabase.removeChannel(channelRef.current);
-             if (notificationsChannelRef.current) await supabase.removeChannel(notificationsChannelRef.current);
-             if (messagesChannelRef.current) await supabase.removeChannel(messagesChannelRef.current);
-        };
 
-        cleanup();
+
+
+
+
+
+
+    const setupRealtimeSubscription = useCallback(() => {
+        if (channelRef.current) return;
 
         setRealtimeStatus('connecting');
 
@@ -214,6 +214,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                         });
 
+                        // Trigger side notifier for other users
                         if (authUserRef.current && newReq.employee_id !== authUserRef.current.id) {
                             setIncomingRequest(newReq);
                         }
@@ -226,25 +227,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
+
+                        // 1. Update main list
                         setRequests(prev => prev.filter(r => r.id !== deletedId));
-                        setSearchedRequests(prev => prev ? prev.filter(r => r.id !== deletedId) : null);
+
+                        // 2. Update search results if active
+                        setSearchedRequests(prev => {
+                            if (!prev) return null;
+                            return prev.filter(r => r.id !== deletedId);
+                        });
+
+                        // 3. Broadcast deletion event to other components (like filtered lists in Requests page)
                         setLastRemoteDeleteId(deletedId);
+
+                        // Reset the trigger after a short delay
                         setTimeout(() => setLastRemoteDeleteId(null), 1000);
                     }
                 }
             )
             .subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    setRealtimeStatus('connected');
-                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
+                else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                     setRealtimeStatus('disconnected');
-                    // Retry after delay
-                    setTimeout(() => {
-                        if (authUserRef.current && realtimeStatusRef.current === 'disconnected') {
-                             // setupRealtimeSubscription(); // Avoid infinite recursion directly, let the effect handle it
-                             console.log("Realtime disconnected, attempting to reconnect...");
-                        }
-                    }, 5000);
                 }
             });
         channelRef.current = channel;
@@ -253,7 +257,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' },
                 (payload) => {
                     const newNotif = payload.new as any;
-                    if (!newNotif.user_id || (authUserRef.current && newNotif.user_id === authUserRef.current.id)) {
+                    if (!newNotif.user_id || (authUser && newNotif.user_id === authUser.id)) {
                         const appNotif: AppNotification = newNotif as AppNotification;
                         setAppNotifications(prev => [appNotif, ...prev]);
                     }
@@ -266,7 +270,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'internal_messages' },
                 (payload) => {
                     const newMessage = payload.new as InternalMessage;
-                    if (authUserRef.current && newMessage.receiver_id === authUserRef.current.id) {
+                    if (authUser && newMessage.receiver_id === authUser.id) {
                         setUnreadMessagesCount(prev => prev + 1);
                         addNotification({ title: 'رسالة جديدة', message: `لديك رسالة جديدة من ${newMessage.sender_name} `, type: 'info' });
                     }
@@ -275,10 +279,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .subscribe();
         messagesChannelRef.current = msgChannel;
 
-    }, [addNotification, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId]);
+    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId]);
 
     const retryConnection = useCallback(() => {
-        setupRealtimeSubscription();
+        const cleanup = async () => {
+            if (channelRef.current) await supabase.removeChannel(channelRef.current);
+            if (notificationsChannelRef.current) await supabase.removeChannel(notificationsChannelRef.current);
+            if (messagesChannelRef.current) await supabase.removeChannel(messagesChannelRef.current);
+            channelRef.current = null;
+            notificationsChannelRef.current = null;
+            messagesChannelRef.current = null;
+        };
+
+        cleanup().then(() => setupRealtimeSubscription());
     }, [setupRealtimeSubscription]);
 
     const refreshSessionAndReload = useCallback(async () => {
@@ -290,100 +303,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             if (error) {
                 console.warn("Session refresh failed, clearing token to force re-login:", error);
+                // If refresh fails, sign out and clear possible stale storage items
                 await supabase.auth.signOut().catch(() => { });
                 localStorage.removeItem('supabase.auth.token');
                 localStorage.removeItem('lastActiveTime');
                 sessionStorage.clear();
             } else if (data.session) {
                 console.log("Session successfully refreshed.");
-                // Update local auth user immediately if possible
-                const { data: employeeProfile } = await supabase.from('employees').select('*').eq('id', data.session.user.id).single();
-                if (employeeProfile) {
-                    setAuthUser(employeeProfile);
-                }
             }
-            // Just refresh data instead of hard reload if session is valid
-             await fetchAllData();
-             setupRealtimeSubscription();
-             setIsSessionError(false);
+
+            // Hard Reload to restart everything from a clean state
+            window.location.reload();
         } catch (error) {
             console.error("Critical error during session refresh recovery:", error);
-            window.location.reload(); // Fallback to hard reload
-        } finally {
-            setIsRefreshing(false);
+            window.location.reload();
         }
-    }, [fetchAllData, setupRealtimeSubscription]);
+    }, []);
 
-    // --- APP REVIVAL LOGIC (Mobile Focus) ---
-    useEffect(() => {
-        const handleVisibilityChange = async () => {
-            if (document.visibilityState === 'visible') {
-                console.log("App became visible. Checking connection status...");
-                
-                // 1. Check/Refresh Session
-                const { data: { session }, error } = await supabase.auth.getSession();
-                
-                if (error || !session) {
-                    // Try aggressive refresh
-                    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-                    if (refreshError && authUserRef.current) {
-                         // Session truly dead
-                         console.warn("Session expired in background, refresh failed.");
-                    } else if (refreshData.session) {
-                        console.log("Session restored on wake.");
-                    }
-                }
-
-                // 2. Reconnect Realtime
-                if (authUserRef.current) {
-                    // Force reconnect regardless of status to ensure socket is alive
-                    console.log("Reconnecting realtime sockets...");
-                    retryConnection();
-                    
-                    // 3. Refresh Data (Optional: only if it's been a while)
-                    // fetchAllData();
-                }
-            }
-        };
-
-        const handleOnline = () => {
-            setIsOnline(true);
-            addNotification({ title: 'تم استعادة الاتصال', message: 'لقد عدت متصلاً بالإنترنت.', type: 'info' });
-            if (authUserRef.current) {
-                supabase.auth.startAutoRefresh();
-                retryConnection();
-            }
-        };
-
-        const handleOffline = () => {
-            setIsOnline(false);
-            setRealtimeStatus('disconnected');
-            addNotification({ title: 'فقد الاتصال', message: 'لا يوجد اتصال بالإنترنت.', type: 'warning' });
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, [retryConnection, addNotification]); // fetchAllData removed from deps to avoid loop
 
 
     useEffect(() => {
         let mounted = true;
 
-        // 1. Safety Timeout
+        // 1. Safety Timeout: Force error screen if initialization hangs
         const timeoutId = setTimeout(() => {
             if (mounted && isLoading) {
                 console.warn("Session initialization timed out. Forcing recovery mode.");
+                localStorage.removeItem('lastActiveTime');
                 setIsSessionError(true);
                 setIsLoading(false);
             }
-        }, 7000);
+        }, 7000); // 7 seconds safety valve
 
         const initializeApp = async () => {
             try {
@@ -404,55 +354,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setSettings(finalGlobalSettings);
                 }
 
-                // Explicit Session Check with Auto-Refresh Fallback
-                let sessionData = await supabase.auth.getSession();
-                
-                // If no session but we expect one (e.g. storage has token), try refresh immediately
-                if (!sessionData.data.session) {
-                     const refreshResult = await supabase.auth.refreshSession();
-                     if (refreshResult.data.session) {
-                         sessionData = refreshResult;
-                     }
+                // Explicit Session Check
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+                if (sessionError) {
+                    throw sessionError; // Triggers catch -> isSessionError = true
                 }
 
-                if (sessionData.error) {
-                    throw sessionData.error;
-                }
-
-                if (sessionData.data.session?.user) {
+                if (session?.user) {
                     // Session exists, verify user in database
                     const { data: employeeProfile, error: profileError } = await supabase
                         .from('employees')
                         .select('*')
-                        .eq('id', sessionData.data.session.user.id)
+                        .eq('id', session.user.id)
                         .single();
 
                     if (profileError) {
+                        // Check specific error codes
                         if (profileError.code === 'PGRST116') {
+                            // Code for "Row not found" - User deleted from DB
                             console.warn("Valid token but no employee profile. Logging out.");
                             await supabase.auth.signOut();
                             if (mounted) setAuthUser(null);
                         } else {
+                            // Network error or other DB error - Show Recovery
                             console.error("Profile fetch error:", profileError);
                             if (mounted) setIsSessionError(true);
                         }
                     } else {
+                        // Valid user
                         if (mounted) {
                             setAuthUser(employeeProfile);
                             localStorage.setItem('lastActiveTime', Date.now().toString());
                         }
                     }
                 } else {
+                    // No session
                     if (mounted) setAuthUser(null);
                 }
 
             } catch (error) {
                 console.error("Initialization error:", error);
+                // Critical failure -> Recovery Mode
                 if (mounted) setIsSessionError(true);
             } finally {
                 if (mounted) {
-                    clearTimeout(timeoutId);
-                    setIsLoading(false);
+                    clearTimeout(timeoutId); // Clear safety timeout
+                    setIsLoading(false); // Stop loading indicator
                 }
             }
         };
@@ -464,6 +412,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 if (session) {
+                    // Sync state if session updates and we don't have the user yet (redundancy)
+                    // USE REF HERE to prevent stale closure issues and loops
                     if (!authUserRef.current || authUserRef.current.id !== session.user.id) {
                         const { data: employeeProfile } = await supabase.from('employees').select('*').eq('id', session.user.id).single();
                         if (employeeProfile) {
@@ -475,7 +425,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setIsSessionError(false);
                 }
             } else if (event === 'SIGNED_OUT') {
-                 if (isManualLogout.current) {
+                if (isManualLogout.current) {
                     setAuthUser(null);
                     setIsLoading(false);
                 } else {
@@ -490,7 +440,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             clearTimeout(timeoutId);
             subscription?.unsubscribe();
         };
-    }, []);
+    }, []); // Empty dependency array to run once on mount
 
     useEffect(() => {
         if (!authUser) return;
@@ -512,6 +462,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const storedDate = localStorage.getItem('loginDate');
             const todayStr = new Date().toLocaleDateString('en-CA');
             if (storedDate && storedDate !== todayStr) {
+                // IMPORTANT: Ensure we actually have a session before logging out, to avoid double-actions or weird states
                 if (authUserRef.current) {
                     logout();
                     addNotification({ title: 'يوم جديد', message: 'انتهى اليوم، يرجى تسجيل الدخول من جديد.', type: 'info' });
@@ -546,6 +497,67 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [authUser, fetchAllData, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations]);
 
+    // --- APP REVIVAL LOGIC ---
+    useEffect(() => {
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === 'visible') {
+                // 1. Refresh Auth Token
+                const { data: { session }, error } = await supabase.auth.getSession();
+
+                if (error || !session) {
+                    // If session is truly dead, try to refresh once
+                    const { error: refreshError } = await supabase.auth.refreshSession();
+                    if (refreshError && authUserRef.current) {
+                        console.warn("Session expired in background, refresh failed.");
+                        // Optional: logout user if refresh fails
+                        // logout(); 
+                    }
+                } else {
+                    // Session is valid, ensure local auth state is correct
+                    if (authUserRef.current && authUserRef.current.id !== session.user.id) {
+                        console.warn("Auth state drift detected. Reloading to sync.");
+                        window.location.reload();
+                    }
+                }
+
+                // 2. Restart auto-refresh
+                supabase.auth.startAutoRefresh();
+
+                // 3. Reconnect Realtime if disconnected
+                if (authUserRef.current && realtimeStatusRef.current === 'disconnected') {
+                    console.log("App became visible, retrying realtime connection.");
+                    retryConnection();
+                }
+            }
+        };
+
+        const handleOnline = () => {
+            setIsOnline(true);
+            addNotification({ title: 'تم استعادة الاتصال', message: 'لقد عدت متصلاً بالإنترنت.', type: 'info' });
+            if (authUserRef.current) {
+                supabase.auth.startAutoRefresh();
+                retryConnection();
+            }
+        };
+
+        const handleOffline = () => {
+            setIsOnline(false);
+            setRealtimeStatus('disconnected');
+            addNotification({ title: 'فقد الاتصال', message: 'لا يوجد اتصال بالإنترنت.', type: 'warning' });
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, [retryConnection, addNotification, logout]);
+
+
 
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
@@ -553,6 +565,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data: req, error } = await supabase.from('inspection_requests').select('*').eq('id', requestId).single();
 
         if (error && !req) {
+            // If request is not found (deleted), remove it from local state
             setRequests(prev => prev.filter(r => r.id !== requestId));
             return;
         }
@@ -719,6 +732,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [];
     }, [ensureEntitiesLoaded]);
 
+    // NEW: Filtered Client Requests Fetcher
     const fetchClientRequestsFiltered = useCallback(async (clientId: string, startDate?: string, endDate?: string, onlyUnpaid?: boolean): Promise<InspectionRequest[]> => {
         let query = supabase.from('inspection_requests').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
 
@@ -730,9 +744,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
 
         if (onlyUnpaid) {
+            // Check for payment_type = Unpaid OR status = WAITING_PAYMENT
             query = query.or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT} `);
         }
 
+        // Limit to prevent massive loads if no filter provided (safety)
         if (!startDate && !endDate && !onlyUnpaid) {
             query = query.limit(100);
         }
@@ -752,6 +768,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [];
     }, [ensureEntitiesLoaded, addNotification]);
 
+    // NEW: Light-weight Financial Summary
     const getClientFinancialSummary = useCallback(async (clientId: string) => {
         try {
             const { data, error } = await supabase
@@ -759,7 +776,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 .select('id, request_number, price, status, payment_type, created_at, car_id')
                 .eq('client_id', clientId)
                 .or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT} `)
-                .neq('status', 'cancelled') 
+                .neq('status', 'cancelled') // Assuming we might have cancelled status, good practice.
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -889,6 +906,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return data || [];
     }, [fetchCarModelsByMake]);
 
+
+
+
+
     const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
         try {
             const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: password });
@@ -904,13 +925,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
                 localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
                 localStorage.setItem('lastActiveTime', Date.now().toString());
-                // The realtime notification is now handled via DB trigger or in AppContext via subscription
+                await sendSystemNotification({ title: 'تسجيل دخول', message: `قام ${employeeProfile.name} بتسجيل الدخول للنظام.`, type: 'login' });
             }
             return { success: true };
         } catch (e: any) {
             return { success: false, error: e.message || 'حدث خطأ' };
         }
-    }, []);
+    }, [sendSystemNotification]);
 
     const updateOwnPassword = useCallback(async (newPassword: string) => {
         const { error } = await supabase.auth.updateUser({ password: newPassword });
@@ -918,6 +939,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     const removeNotification = useCallback((id: string) => setNotifications(prev => prev.filter(n => n.id !== id)), []);
+
+
 
     const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber }), []);
     const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null }), []);
@@ -967,6 +990,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch (e) { }
     }, []);
 
+
+
+
+
+
+
+
+
     const fetchInboxMessages = useCallback(async () => {
         if (!authUser) return [];
         const { data, error } = await supabase.from('internal_messages').select('*').eq('receiver_id', authUser.id).order('created_at', { ascending: false });
@@ -980,6 +1011,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (error) throw error;
         return data as InternalMessage[];
     }, [authUser]);
+
+
 
     const factoryResetOperations = useCallback(async () => {
         setIsRefreshing(true);
@@ -1049,14 +1082,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             else if (rev.payment_method === PaymentType.Transfer) transferTotal += rev.amount;
         });
 
+        // Filter out employee deductions ('خصومات') and advances ('سلف') from general expenses
+        // deductions don't exit the drawer, advances do but are managed in payroll.
         const filteredGeneralExpenses = exps.filter(e => e.category !== 'خصومات' && e.category !== 'سلف');
         const advancesEntries = exps.filter(e => e.category === 'سلف');
 
         const totalRevenue = totalRequestsRevenue + totalOtherRevenue,
             actualCashFlow = cashTotal + cardTotal + transferTotal,
+            // totalExpenses for KPI cards will only show operational expenses
             totalExpenses = filteredGeneralExpenses.reduce((sum, e) => sum + e.amount, 0),
+            // totalAdvances for cash drawer deduction but NOT profit deduction
             totalAdvances = advancesEntries.reduce((sum, e) => sum + e.amount, 0),
             totalCommissions = reqs.reduce((sum, r) => sum + (r.broker?.commission || 0), 0),
+            // Net Profit strictly subtracts operational expenses and commissions, not advances (loans)
             netProfit = actualCashFlow - totalExpenses - totalCommissions;
         const dailyMap: Record<string, any> = {};
         const addToDaily = (dateStr: string, key: string, value: number) => {
@@ -1111,12 +1149,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             brokerSummary: Object.values(brokerSummaryMap),
             forecast: { history: historyForChart, data: forecastData, trend: trendDirection },
             filteredRequests: reqs,
-            filteredExpenses: filteredGeneralExpenses, 
+            filteredExpenses: filteredGeneralExpenses, // Use filtered expenses here
             filteredRevenues: revs
         };
     }, [brokers, ensureEntitiesLoaded]);
 
     const fetchServerExpenses = useCallback(async (startDate: string, endDate: string): Promise<Expense[]> => {
+        // Use multiple .neq for maximum compatibility with all Supabase environments
         const { data, error } = await supabase.from('expenses')
             .select('*')
             .neq('category', 'خصومات')
@@ -1146,10 +1185,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const q = params.query.trim();
                 const cleanQ = q.replace(/\s/g, '');
 
+                // Find cars matching query
                 const { data: matchedCars } = await supabase.from('cars').select('id')
                     .or(`plate_number.ilike.%${cleanQ}%,plate_number_en.ilike.%${cleanQ}%,vin.ilike.%${cleanQ}%`);
                 const carIdsFromCars = matchedCars?.map(c => c.id) || [];
 
+                // Find clients matching query
                 const { data: matchedClients } = await supabase.from('clients').select('id')
                     .or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
                 const clientIdsFromClients = matchedClients?.map(c => c.id) || [];
@@ -1195,6 +1236,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     const fetchEmployeeTransactionsForMonth = useCallback(async (employeeId: string, month: number, year: number): Promise<Expense[]> => {
+        // Validation: Ensure month and year are valid before creating Date objects
         if (!month || !year || isNaN(month) || isNaN(year)) {
             console.warn("Invalid month or year passed to fetchEmployeeTransactionsForMonth", { month, year });
             return [];
@@ -1211,6 +1253,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return [];
         }
     }, []);
+
+    // --- Reservations Logic ---
 
     const fetchReservations = useCallback(async () => {
         try {
@@ -1229,7 +1273,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
     const parseReservationText = useCallback(async (text: string): Promise<Partial<Reservation>> => {
+        // Regex extraction based on the provided WhatsApp template
         const extract = (key: string) => {
+            // Matches *Key:* Value (until end of line)
+            // Escaping * is important
             const regex = new RegExp(`\\*${key}:\\*\\s*([^\\n\\r]+)`);
             const match = text.match(regex);
             return match ? match[1].trim() : '';
@@ -1238,6 +1285,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const client_name = extract('اسم العميل');
         const client_phone = extract('رقم الهاتف');
 
+        // Car Details
         const make = extract('الشركة');
         const model = extract('الموديل');
         const year = extract('سنة الصنع');
@@ -1254,6 +1302,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             car_details,
             plate_text,
             service_type,
+            // Clean up the text for notes, removing the template keys potentially
             notes: text
         };
     }, []);
