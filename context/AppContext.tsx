@@ -345,6 +345,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const initializeApp = async () => {
             try {
+                // --- 🛡️ SMART CHECK (System Self-Repair) 🛡️ ---
+                // Ensures critical local storage keys are valid before proceeding.
+                try {
+                    const now = Date.now();
+                    const lastActive = localStorage.getItem('lastActiveTime');
+                    const loginDate = localStorage.getItem('loginDate');
+                    
+                    // Fix corrupted lastActiveTime
+                    if (lastActive) {
+                        const parsed = parseInt(lastActive, 10);
+                        // If NaN, or futuristic (clock error), or extremely old (> 30 days which implies stale junk)
+                        if (isNaN(parsed) || parsed > now + 86400000 || parsed < now - (30 * 24 * 60 * 60 * 1000)) {
+                            console.warn("Smart Check: Resetting invalid lastActiveTime.");
+                            localStorage.setItem('lastActiveTime', now.toString());
+                        }
+                    } else {
+                        // Initialize if missing to prevent null checks failing later
+                        localStorage.setItem('lastActiveTime', now.toString());
+                    }
+
+                    // Fix corrupted loginDate format
+                    if (loginDate && !/^\d{4}-\d{2}-\d{2}$/.test(loginDate)) {
+                         console.warn("Smart Check: Resetting invalid loginDate format.");
+                         localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
+                    }
+                } catch (e) {
+                    console.error("Smart Check Error:", e);
+                }
+                // ------------------------------------------------
+
                 // Fetch Settings
                 const { data: settingsDataRaw } = await supabase.from('app_settings').select('*').eq('id', 1).maybeSingle();
                 const fetchedSettingsData = (settingsDataRaw?.settings_data || {}) as Record<string, any>;
@@ -393,7 +423,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         // Valid user
                         if (mounted) {
                             setAuthUser(employeeProfile);
+                            // Refresh valid session tracking data
                             localStorage.setItem('lastActiveTime', Date.now().toString());
+                            const todayStr = new Date().toLocaleDateString('en-CA');
+                            if (localStorage.getItem('loginDate') !== todayStr) {
+                                 localStorage.setItem('loginDate', todayStr);
+                            }
                         }
                     }
                 } else {
