@@ -297,13 +297,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const refreshSessionAndReload = useCallback(async () => {
         setIsRefreshing(true);
-        console.log("Executing Surgical Reset for Session Timers...");
+        console.log("Executing Surgical Reset for Session Timers & Tokens...");
 
         try {
-            // Surgical Fix: Only clear the session timing keys that might be causing hangs/loops
-            // This allows the user to stay logged in (if token is valid) but resets the session activity timers.
+            // 1. Clear App Session Timers
             localStorage.removeItem('lastActiveTime');
             localStorage.removeItem('loginDate');
+
+            // 2. Clear Supabase Auth Tokens (CRITICAL for fixing zombie sessions on mobile)
+            // Supabase keys usually start with 'sb-' or contain 'supabase'
+            Object.keys(localStorage).forEach((key) => {
+                if (key.startsWith('sb-') || key.includes('supabase')) {
+                    localStorage.removeItem(key);
+                }
+            });
+            
+            // 3. Clear Navigation History
+            window.sessionStorage.removeItem('pageHistory');
+
         } catch (e) {
             console.error("Storage clear error", e);
         }
