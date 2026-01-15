@@ -297,34 +297,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const refreshSessionAndReload = useCallback(async () => {
         setIsRefreshing(true);
-        console.log("Executing Radical Reset for Mobile Stability...");
+        console.log("Executing Surgical Reset for Session Timers...");
 
         try {
-            // 1. Attempt graceful signout (don't wait long)
-            await Promise.race([
-                supabase.auth.signOut(),
-                new Promise(resolve => setTimeout(resolve, 500))
-            ]);
-        } catch (e) { 
-            console.error("Graceful signout failed, proceeding to hard wipe", e);
-        }
-
-        // 2. BRUTAL WIPE of Client Storage
-        // This removes Supabase tokens, cached settings, stale states, everything.
-        try {
-            window.localStorage.clear();
-            window.sessionStorage.clear();
+            // Surgical Fix: Only clear the session timing keys that might be causing hangs/loops
+            // This allows the user to stay logged in (if token is valid) but resets the session activity timers.
+            localStorage.removeItem('lastActiveTime');
+            localStorage.removeItem('loginDate');
         } catch (e) {
             console.error("Storage clear error", e);
         }
 
-        // 3. Cache Busting Reload
-        // Adding a timestamp query param forces the browser (especially mobile Safari/Chrome)
-        // to treat this as a completely new page, bypassing the stubborn cache.
+        // Cache Busting Reload
         const currentUrl = new URL(window.location.href);
         currentUrl.searchParams.set('reset_ts', Date.now().toString());
         
-        // Use replace to avoid adding the broken state to history
         window.location.replace(currentUrl.toString());
     }, []);
 
