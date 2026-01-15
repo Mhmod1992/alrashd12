@@ -331,7 +331,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     useEffect(() => {
         let mounted = true;
 
-        // 1. Safety Timeout: Force error screen if initialization hangs
+        // 1. Safety Timeout: Force error screen if initialization hangs (Long backup)
         const timeoutId = setTimeout(() => {
             if (mounted && isLoading) {
                 console.warn("Session initialization timed out. Forcing recovery mode.");
@@ -339,7 +339,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setIsSessionError(true);
                 setIsLoading(false);
             }
-        }, 7000); // 7 seconds safety valve
+        }, 10000); // Increased safety valve to 10s as backup
 
         const initializeApp = async () => {
             try {
@@ -390,11 +390,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setSettings(finalGlobalSettings);
                 }
 
-                // Explicit Session Check
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                // Explicit Session Check with Timeout (Race Condition Fix)
+                // This prevents the app from hanging if supabase.auth.getSession() never resolves (common on mobile reload)
+                const sessionPromise = supabase.auth.getSession();
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Session retrieval timed out')), 4000)
+                );
 
-                if (sessionError) {
-                    throw sessionError; // Triggers catch -> isSessionError = true
+                let session: any = null;
+                
+                try {
+                    const result: any = await Promise.race([sessionPromise, timeoutPromise]);
+                    if (result.error) throw result.error;
+                    session = result.data.session;
+                } catch (raceError) {
+                     console.warn("Session check race failed:", raceError);
+                     // If we timed out or failed to get session, we assume "No Session" to avoid hanging.
+                     // This directs the user to Login instead of "System Not Responding".
+                     if (mounted) {
+                         setAuthUser(null);
+                         setIsLoading(false);
+                     }
+                     return; // Exit early
                 }
 
                 if (session?.user) {
