@@ -1,0 +1,254 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#3b82f6" />
+    <title>نظام إدارة ورشة سيارات</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'Tajawal', 'sans-serif'],
+              numeric: ['Inter', 'sans-serif'],
+            },
+            screens: {
+              'print': {'raw': 'print'},
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Noto+Sans+Arabic:wght@400;700&family=Tajawal:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&family=Lalezar&family=Markazi+Text:wght@400;500;700&display=swap');
+      
+      body {
+        font-family: 'Inter', 'Tajawal', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      body {
+        font-feature-settings: 'ss02' on, 'cv05' on;
+      }
+      
+      input, select, textarea, button {
+        font-family: 'Inter', 'Tajawal', sans-serif;
+      }
+      
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1; 
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: #94a3b8; 
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background-color: #334155; 
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background-color: #475569; 
+      }
+
+      /* Animations */
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+      
+      @keyframes slideInDown {
+        from { transform: translateY(-100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-slide-in-down {
+        animation: slideInDown 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      
+      @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+      .animate-fadeOut { animation: fadeOut 2s ease-in-out forwards; }
+
+      @keyframes highlight {
+        0% { box-shadow: inset 0 0 0 4px rgba(59, 130, 246, 0.4); }
+        100% { box-shadow: inset 0 0 0 0 rgba(59, 130, 246, 0); }
+      }
+      .animate-highlight { animation: highlight 2s cubic-bezier(0.25, 0.8, 0.25, 1); }
+
+      /* Watermark Background Text Styles */
+      .watermark-container {
+        position: relative;
+        z-index: 1;
+      }
+      .watermark-bg {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2.5rem; /* Ultra Compact Size */
+        font-weight: 900;
+        color: rgba(148, 163, 184, 0.05);
+        pointer-events: none;
+        user-select: none;
+        z-index: 0;
+        white-space: nowrap;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        text-align: center;
+        width: 100%;
+        letter-spacing: -0.01em;
+      }
+      .dark .watermark-bg {
+        color: rgba(255, 255, 255, 0.02);
+      }
+
+      /* Active Tab Pulse */
+      @keyframes activeTabPulse {
+        0% { transform: scale(1.05); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+        50% { transform: scale(1.08); box-shadow: 0 0 20px 2px rgba(59, 130, 246, 0.3); }
+        100% { transform: scale(1.05); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+      }
+      .animate-active-tab {
+        animation: activeTabPulse 2.5s infinite ease-in-out;
+      }
+
+      /* Pulse Blue Highlight for Navigation */
+      @keyframes pulseBlue {
+        0% { background-color: transparent; }
+        30% { background-color: rgba(59, 130, 246, 0.2); transform: scale(1.02); }
+        70% { background-color: rgba(59, 130, 246, 0.2); transform: scale(1.02); }
+        100% { background-color: transparent; }
+      }
+      .animate-pulse-blue {
+        animation: pulseBlue 3s cubic-bezier(0.4, 0, 0.2, 1);
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3) !important;
+        z-index: 50;
+      }
+
+      @keyframes glow {
+        0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.3); border-color: rgba(59, 130, 246, 0.3); }
+        50% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.6); border-color: rgba(59, 130, 246, 0.6); }
+      }
+      .animate-glow { animation: glow 2s ease-in-out infinite; }
+
+      @keyframes scaleIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .animate-scale-in { animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+      .lined-paper {
+          background-size: 100% 2.5rem;
+          background-image: linear-gradient(to bottom, transparent calc(2.5rem - 1px), #e2e8f0 calc(2.5rem - 1px));
+      }
+      .dark .lined-paper {
+          background-image: linear-gradient(to bottom, transparent calc(2.5rem - 1px), #334155 calc(2.5rem - 1px));
+      }
+
+      .page-footer-container { display: none; }
+
+      /* Incoming Request Notifier Animations */
+      @keyframes slideInFromLeft {
+        from { transform: translateX(-120%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      .animate-slide-in-from-left {
+        animation: slideInFromLeft 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      @keyframes progressBar {
+        from { width: 100%; }
+        to { width: 0%; }
+      }
+      .animate-progress-bar {
+        animation: progressBar 10s linear forwards;
+      }
+
+      @media print {
+        @page { 
+          size: A4; 
+          margin: 10mm; 
+          @bottom-center {
+            content: "صفحة " counter(page) " من " counter(pages);
+            font-family: 'Tajawal', sans-serif;
+            font-size: 9pt;
+            color: #555;
+          }
+        }
+        
+        body {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          background-color: white !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
+
+        .no-print { display: none !important; }
+        
+        body * { visibility: hidden; }
+        .print-container, .print-container * { visibility: visible; }
+
+        .print-container {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background-color: white !important;
+          overflow: visible !important;
+          height: auto !important;
+          display: block !important;
+        }
+
+        .report-wrapper {
+           box-shadow: none !important;
+           border: none !important;
+           width: 100% !important;
+           margin: 0 !important;
+           padding: 0 !important;
+        }
+      }
+    </style>
+    <script src="https://unpkg.com/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.84.0",
+    "react-datepicker": "https://aistudiocdn.com/react-datepicker@^8.10.0",
+    "vite-plugin-pwa": "https://aistudiocdn.com/vite-plugin-pwa@^1.2.0",
+    "path": "https://esm.sh/path@^0.12.7",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "process": "https://esm.sh/process@^0.11.10"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="background-container" class="fixed top-0 left-0 -z-10 h-full w-full bg-slate-50 dark:bg-slate-900 bg-cover bg-center transition-colors duration-500">
+      <div id="blob-1" class="absolute top-0 -left-40 h-96 w-96 rounded-full bg-purple-500/20 blur-3xl filter animate-blob opacity-70"></div>
+      <div id="blob-2" class="absolute top-0 -right-40 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl filter animate-blob animation-delay-2000 opacity-70"></div>
+      <div id="blob-3" class="absolute -bottom-8 left-20 h-96 w-96 rounded-full bg-pink-500/20 blur-3xl filter animate-blob animation-delay-4000 opacity-70"></div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
