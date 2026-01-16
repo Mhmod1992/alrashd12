@@ -1,457 +1,426 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { RequestStatus, ActivityLog, FinancialStats } from '../types';
-import FileTextIcon from '../components/icons/FileTextIcon';
-import UsersIcon from '../components/icons/UsersIcon';
-import PlusIcon from '../components/icons/PlusIcon';
-import RefreshCwIcon from '../components/icons/RefreshCwIcon';
-import ActionCard from '../components/ActionCard';
-import SettingsIcon from '../components/icons/SettingsIcon';
-import ActivityLogFeed from '../components/ActivityLogFeed';
-import Drawer from '../components/Drawer';
-import HistoryIcon from '../components/icons/HistoryIcon';
-import CheckCircleIcon from '../components/icons/CheckCircleIcon';
-import DollarSignIcon from '../components/icons/DollarSignIcon';
-import CreditCardIcon from '../components/icons/CreditCardIcon';
-import { Skeleton } from '../components/Skeleton'; // Use simpler skeleton
+import { FinancialStats } from '../types';
+import LineChart from '../components/LineChart';
 import Icon from '../components/Icon';
+import RefreshCwIcon from '../components/icons/RefreshCwIcon';
+import TrendingUpIcon from '../components/icons/TrendingUpIcon';
+import DollarSignIcon from '../components/icons/DollarSignIcon';
+import UsersIcon from '../components/icons/UsersIcon';
+import BriefcaseIcon from '../components/icons/BriefcaseIcon';
+import PlusIcon from '../components/icons/PlusIcon';
+import CreditCardIcon from '../components/icons/CreditCardIcon';
+import FileTextIcon from '../components/icons/FileTextIcon';
+import { Skeleton } from '../components/Skeleton';
 
-interface DashboardStats {
-  revenue: number;
-  expenses: number;
-  newRequests: number;
-  completedRequests: number;
-  waitingPayment: number;
-  statusDistribution: { label: string; value: number; color: string }[];
-}
+// --- Quick Actions Component ---
+const QuickActions: React.FC = () => {
+    const { setPage, setInitialRequestModalState } = useAppContext();
 
-// --- New Compact Components for Dashboard ---
-
-const CompactStatCard: React.FC<{ 
-    title: string; 
-    value: string | number; 
-    icon: React.ReactNode; 
-    color: string;
-    onClick?: () => void;
-}> = ({ title, value, icon, color, onClick }) => {
-    // Map colors to Tailwind classes
-    const colorStyles: Record<string, string> = {
-        green: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
-        purple: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400',
-        indigo: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400',
-        red: 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400',
-        blue: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',
-    };
-    
-    const activeStyle = colorStyles[color] || colorStyles.blue;
+    const actions = [
+        { 
+            label: 'طلب جديد', 
+            icon: <PlusIcon className="w-5 h-5" />, 
+            color: 'bg-blue-600 text-white', 
+            action: () => { setInitialRequestModalState('new'); setPage('requests'); } 
+        },
+        { 
+            label: 'العملاء', 
+            icon: <UsersIcon className="w-5 h-5" />, 
+            color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300', 
+            action: () => setPage('clients') 
+        },
+        { 
+            label: 'المصروفات', 
+            icon: <CreditCardIcon className="w-5 h-5" />, 
+            color: 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300', 
+            action: () => setPage('expenses') 
+        },
+        { 
+            label: 'الطلبات', 
+            icon: <FileTextIcon className="w-5 h-5" />, 
+            color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300', 
+            action: () => setPage('requests') 
+        },
+    ];
 
     return (
-        <div 
-            onClick={onClick}
-            className="bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between h-full cursor-pointer hover:shadow-md transition-shadow"
-        >
-            <div className="flex justify-between items-start mb-2">
-                <div className={`p-2 rounded-lg ${activeStyle}`}>
-                    {React.cloneElement(icon as React.ReactElement<{ className?: string }>, { className: 'w-4 h-4 sm:w-5 sm:h-5' })}
+        <div className="grid grid-cols-4 gap-3 mb-6">
+            {actions.map((btn, idx) => (
+                <button
+                    key={idx}
+                    onClick={btn.action}
+                    className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all active:scale-95"
+                >
+                    <div className={`p-2.5 rounded-full mb-2 ${btn.color} shadow-sm`}>
+                        {btn.icon}
+                    </div>
+                    <span className="text-[10px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">{btn.label}</span>
+                </button>
+            ))}
+        </div>
+    );
+};
+
+// --- Period Toggle ---
+const PeriodToggle: React.FC<{ 
+    activePeriod: 'today' | 'week' | 'month' | 'year'; 
+    onChange: (p: 'today' | 'week' | 'month' | 'year') => void;
+    isLoading: boolean;
+}> = ({ activePeriod, onChange, isLoading }) => {
+    const periods = [
+        { id: 'today', label: 'يومي' },
+        { id: 'week', label: 'أسبوعي' },
+        { id: 'month', label: 'شهري' },
+    ];
+
+    return (
+        <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-lg">
+            {periods.map((p) => (
+                <button
+                    key={p.id}
+                    onClick={() => !isLoading && onChange(p.id as any)}
+                    className={`
+                        px-3 py-1 text-[10px] sm:text-xs font-bold rounded-md transition-all
+                        ${activePeriod === p.id 
+                            ? 'bg-white dark:bg-slate-500 text-slate-800 dark:text-white shadow-sm' 
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}
+                    `}
+                >
+                    {p.label}
+                </button>
+            ))}
+        </div>
+    );
+};
+
+// --- Compact KPI Card ---
+const ExecutiveKpiCard: React.FC<{
+    title: string;
+    value: string;
+    trend?: number;
+    icon: React.ReactNode;
+    colorClass: string; // Tailwind text color class
+    bgClass: string; // Tailwind bg color class
+    isLoading?: boolean;
+}> = ({ title, value, trend, icon, colorClass, bgClass, isLoading }) => {
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col justify-between h-full relative overflow-hidden group hover:border-blue-200 transition-colors">
+            
+            {/* Decor Circle */}
+            <div className={`absolute -right-4 -top-4 w-16 h-16 rounded-full opacity-10 ${bgClass} group-hover:scale-150 transition-transform duration-500`}></div>
+
+            <div className="flex justify-between items-start mb-2 relative z-10">
+                <div className={`p-2 rounded-lg ${bgClass} ${colorClass}`}>
+                    {React.cloneElement(icon as React.ReactElement, { className: 'w-5 h-5' })}
                 </div>
-                {/* Optional trend arrow could go here */}
+                {trend !== undefined && (
+                    <div className={`flex items-center gap-0.5 text-[10px] font-bold ${trend >= 0 ? 'text-emerald-600' : 'text-rose-500'} bg-slate-50 dark:bg-slate-900 px-1.5 py-0.5 rounded`}>
+                        <span>{Math.abs(trend)}%</span>
+                        <TrendingUpIcon className={`w-3 h-3 ${trend < 0 ? 'rotate-180' : ''}`} />
+                    </div>
+                )}
             </div>
-            <div>
-                <h3 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100">{value}</h3>
-                <p className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">{title}</p>
+            
+            <div className="relative z-10">
+                <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">{title}</p>
+                {isLoading ? (
+                    <div className="h-6 w-20 bg-slate-100 dark:bg-slate-700 rounded animate-pulse"></div>
+                ) : (
+                    <h3 className="text-lg sm:text-2xl font-black text-slate-800 dark:text-white font-numeric tracking-tight">{value}</h3>
+                )}
             </div>
         </div>
     );
 };
 
-const CompactRequestRow: React.FC<{ request: any, onClick: () => void }> = ({ request, onClick }) => {
-    const getStatusColor = (status: string) => {
-        switch(status) {
-            case RequestStatus.NEW: return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
-            case RequestStatus.IN_PROGRESS: return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
-            case RequestStatus.COMPLETE: return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300';
-            case RequestStatus.WAITING_PAYMENT: return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
-            default: return 'bg-slate-100 text-slate-700';
-        }
-    };
+const EmployeeLeaderboard: React.FC<{ data: { name: string; revenue: number; role: string; count: number }[], isLoading: boolean }> = ({ data, isLoading }) => {
+    if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
 
-    const carName = request.car_snapshot 
-        ? `${request.car_snapshot.make_ar} ${request.car_snapshot.model_ar}` 
-        : 'سيارة غير معروفة';
+    const maxRevenue = Math.max(...data.map(d => d.revenue), 1);
 
     return (
-        <div 
-            onClick={onClick}
-            className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors"
-        >
-            <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-300 flex-shrink-0">
-                    #{request.request_number}
-                </div>
-                <div>
-                    <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200 line-clamp-1">{carName}</h4>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{new Date(request.created_at).toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'})}</span>
-                </div>
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-full flex flex-col">
+            <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+                <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
+                    <UsersIcon className="w-4 h-4 text-blue-500" />
+                    الأفضل أداءً
+                </h4>
             </div>
-            <div className={`px-2 py-1 rounded-md text-[10px] font-bold ${getStatusColor(request.status)} whitespace-nowrap`}>
-                {request.status}
+            <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+                {data.length > 0 ? (
+                    <div className="space-y-4">
+                        {data.map((emp, idx) => (
+                            <div key={idx} className="group">
+                                <div className="flex justify-between text-xs mb-1.5 font-bold">
+                                    <span className="text-slate-700 dark:text-slate-200">{idx + 1}. {emp.name}</span>
+                                    <span className="text-slate-600 dark:text-slate-400 font-numeric">{emp.revenue.toLocaleString()}</span>
+                                </div>
+                                <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                                    <div 
+                                        className="bg-blue-500 h-full rounded-full transition-all duration-1000 ease-out"
+                                        style={{ width: `${(emp.revenue / maxRevenue) * 100}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 text-xs">لا توجد بيانات.</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> = ({ transactions, isLoading }) => {
+    if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
+
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-full flex flex-col">
+             <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
+                    <DollarSignIcon className="w-4 h-4 text-emerald-500" />
+                    أحدث العمليات
+                </h4>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                {transactions.length > 0 ? (
+                    <div className="divide-y dark:divide-slate-700/50">
+                        {transactions.map((tx, idx) => (
+                            <div key={idx} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-lg transition-colors flex justify-between items-center">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${tx.type === 'income' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                                        {tx.type === 'income' ? <Icon name="dollar-sign" className="w-4 h-4" /> : <Icon name="credit-card" className="w-4 h-4" />}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{tx.description}</p>
+                                        <p className="text-[10px] text-slate-400">{new Date(tx.date).toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'})}</p>
+                                    </div>
+                                </div>
+                                <span className={`text-xs font-black font-numeric whitespace-nowrap ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                    {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 text-xs">لا توجد عمليات.</div>
+                )}
             </div>
         </div>
     );
 };
 
 const Dashboard: React.FC = () => {
-  const {
-    requests, authUser, setPage, can, clearSearchedRequests,
-    setInitialRequestModalState, expenses, employees, systemLogs, setSelectedRequestId,
-    fetchServerFinancials, addNotification
-  } = useAppContext();
+  const { authUser, fetchServerFinancials, employees } = useAppContext();
+  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'year'>('month');
+  const [stats, setStats] = useState<FinancialStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
-  const [greeting, setGreeting] = useState('');
-  const [currentDate, setCurrentDate] = useState('');
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
-
-  // --- Dynamic Greeting & Date ---
-  useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) setGreeting('صباح الخير');
-    else if (hour >= 12 && hour < 17) setGreeting('طاب يومك');
-    else setGreeting('مساء الخير');
-
-    const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
-    setCurrentDate(new Date().toLocaleDateString('ar-SA', dateOptions));
-  }, []);
-
-  // --- Server-Side Stats Fetching ---
-  useEffect(() => {
-    const getDashboardStats = async () => {
-      setIsLoadingStats(true);
+  const loadData = async () => {
+      setIsLoading(true);
       try {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+          const now = new Date();
+          let start = new Date();
+          let end = new Date();
 
-        const financialStats: FinancialStats = await fetchServerFinancials(todayStart.toISOString(), todayEnd.toISOString(), false);
+          if (activePeriod === 'today') {
+              start.setHours(0, 0, 0, 0);
+              end.setHours(23, 59, 59, 999);
+          } else if (activePeriod === 'week') {
+              const day = now.getDay();
+              const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+              start = new Date(now.setDate(diff));
+              start.setHours(0,0,0,0);
+              end = new Date();
+              end.setHours(23,59,59,999);
+          } else if (activePeriod === 'month') {
+              start = new Date(now.getFullYear(), now.getMonth(), 1);
+              end.setHours(23, 59, 59, 999);
+          }
 
-        const newRequestsToday = financialStats.filteredRequests.filter(r => r.status === RequestStatus.NEW).length;
-        const inProgressToday = financialStats.filteredRequests.filter(r => r.status === RequestStatus.IN_PROGRESS).length;
-        const completedToday = financialStats.filteredRequests.filter(r => r.status === RequestStatus.COMPLETE).length;
-        const waitingPaymentToday = financialStats.filteredRequests.filter(r => r.status === RequestStatus.WAITING_PAYMENT).length;
-        
-        // Use actualCashFlow (Actual money collected) instead of totalRevenue (Invoiced amount)
-        // This excludes "Waiting for Payment" and "Unpaid" requests from the KPI card.
-        const revenueToday = financialStats.actualCashFlow;
-
-        setStats({
-          revenue: revenueToday,
-          expenses: financialStats.totalExpenses,
-          newRequests: newRequestsToday,
-          completedRequests: completedToday,
-          waitingPayment: waitingPaymentToday,
-          statusDistribution: [
-              { label: 'جديد', value: newRequestsToday, color: '#8b5cf6' },
-              { label: 'قيد التنفيذ', value: inProgressToday, color: '#f59e0b' },
-              { label: 'مكتمل', value: completedToday, color: '#10b981' },
-              { label: 'انتظار الدفع', value: waitingPaymentToday, color: '#ec4899' },
-          ].filter(d => d.value > 0)
-        });
+          const currentStats = await fetchServerFinancials(start.toISOString(), end.toISOString(), false);
+          setStats(currentStats);
+          setLastRefreshed(new Date());
 
       } catch (error) {
-        console.error("Failed to fetch dashboard stats", error);
-        setStats(null);
+          console.error("Dashboard Load Error", error);
       } finally {
-        setIsLoadingStats(false);
+          setIsLoading(false);
       }
-    };
-    getDashboardStats();
-  }, [fetchServerFinancials]);
-
-  const visibleRequests = useMemo(() => {
-    let filtered = requests;
-    
-    // Filter out completed if no permission
-    if (!can('view_completed_requests')) {
-      filtered = filtered.filter(r => r.status !== RequestStatus.COMPLETE);
-    }
-
-    // ISOLATE: Exclude Waiting for Payment from the main dashboard list
-    // (They are accessed via the KPI card or dedicated page)
-    filtered = filtered.filter(r => r.status !== RequestStatus.WAITING_PAYMENT);
-
-    return filtered;
-  }, [requests, can]);
-
-  // Show only top 5 latest
-  const latestRequests = [...visibleRequests].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5);
-
-  const handleRowClick = (requestId: string) => {
-    setSelectedRequestId(requestId);
-    setPage('fill-request');
   };
 
-  const actionCards = useMemo(() => {
-    const cards = [];
+  useEffect(() => {
+      loadData();
+  }, [activePeriod]);
 
-    if (can('create_requests')) {
-      cards.push({
-        id: 'new-request',
-        title: 'فحص جديد',
-        icon: <PlusIcon />,
-        color: 'blue',
-        onClick: () => {
-          setInitialRequestModalState('new');
-          clearSearchedRequests(); // Clear search if going to new
-          setPage('requests');
-        },
+  // Derived Data
+  const totalRevenue = stats?.totalRevenue || 0;
+  const netProfit = stats?.netProfit || 0;
+  const avgTicket = stats?.filteredRequests.length ? Math.round(totalRevenue / stats.filteredRequests.length) : 0;
+  const activeCars = stats?.filteredRequests.filter(r => r.status === 'قيد التنفيذ' || r.status === 'جديد').length || 0;
+  const chartData = stats?.forecast?.history || [];
+  
+  const leaderboardData = useMemo(() => {
+      if (!stats) return [];
+      const map = new Map<string, {name: string, revenue: number, count: number, role: string}>();
+      stats.filteredRequests.forEach(req => {
+          if (req.employee_id) {
+              const emp = employees.find(e => e.id === req.employee_id);
+              const name = emp?.name || 'غير معروف';
+              const role = emp?.role === 'manager' ? 'مدير' : 'موظف';
+              const current = map.get(req.employee_id) || { name, revenue: 0, count: 0, role };
+              current.revenue += req.price;
+              current.count += 1;
+              map.set(req.employee_id, current);
+          }
       });
-    }
+      return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  }, [stats, employees]);
 
-    const canAccessRequests = can('create_requests') || can('fill_requests') || can('update_requests_data') || can('delete_requests');
-    if (canAccessRequests) {
-      cards.push({
-        id: 'manage-requests',
-        title: 'الطلبات',
-        icon: <FileTextIcon />,
-        color: 'orange',
-        onClick: () => {
-            clearSearchedRequests(); // Clear search when viewing all
-            setPage('requests');
-        },
-      });
-    }
+  const transactionFeed = useMemo(() => {
+      if (!stats) return [];
+      const incomes = stats.filteredRequests.map(r => ({
+          type: 'income', amount: r.price, date: r.created_at, description: `فحص #${r.request_number}`, user: employees.find(e => e.id === r.employee_id)?.name.split(' ')[0] || '-'
+      }));
+      const expenses = stats.filteredExpenses.map(e => ({
+          type: 'expense', amount: e.amount, date: e.date, description: e.category, user: e.employeeName?.split(' ')[0] || '-'
+      }));
+      return [...incomes, ...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
+  }, [stats, employees]);
 
-    if (can('manage_clients')) {
-      cards.push({
-        id: 'manage-clients',
-        title: 'العملاء',
-        icon: <UsersIcon />,
-        color: 'purple',
-        onClick: () => setPage('clients'),
-      });
-    }
-
-    if (can('view_financials')) {
-      cards.push({
-        id: 'financials',
-        title: 'المالية',
-        icon: <DollarSignIcon />,
-        color: 'green',
-        onClick: () => setPage('financials'),
-      });
-    }
-
-    return cards;
-  }, [can, setPage, setInitialRequestModalState, clearSearchedRequests]);
-
-  // --- Activity Stream Logic ---
-  const globalActivityLog = useMemo(() => {
-    const allLogs: ActivityLog[] = [];
-    const highLevelActions = ['غيّر حالة الطلب', 'تغيير حالة الطلب', 'تعديل بيانات الطلب', 'إضافة مصروف'];
-
-    requests.forEach(req => {
-      const creator = employees.find(e => e.id === req.employee_id);
-      allLogs.push({
-        id: `req-create-${req.id}`,
-        timestamp: req.created_at,
-        employeeId: req.employee_id || 'system',
-        employeeName: creator?.name || 'النظام',
-        action: 'أنشأ طلبًا',
-        details: `#${req.request_number}`,
-        link_id: req.id,
-        link_page: 'fill-request'
-      });
-
-      if (req.activity_log) {
-        const highLevelLogs = req.activity_log.filter(log =>
-          highLevelActions.some(action => log.action.includes(action))
-        );
-        highLevelLogs.forEach(log => {
-          allLogs.push({ ...log, link_id: req.id, link_page: 'fill-request' });
-        });
-      }
-    });
-
-    expenses.forEach(exp => {
-      if (exp.category !== 'خصومات' && exp.category !== 'سلف') {
-        allLogs.push({
-          id: `exp-create-${exp.id}`,
-          timestamp: exp.date,
-          employeeId: exp.employeeId,
-          employeeName: exp.employeeName,
-          action: 'أضاف مصروفًا',
-          details: `${exp.amount} ريال`
-        });
-      }
-    });
-
-    if (systemLogs) {
-      allLogs.push(...systemLogs.map(log => ({ ...log, link_page: log.link_page || undefined })));
-    }
-
-    return allLogs
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 10);
-
-  }, [requests, expenses, employees, systemLogs]);
-
-  const renderKpiCards = () => {
-    if (isLoadingStats) {
-      return (
-        <>
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-        </>
-      );
-    }
-
-    if (!stats) return null;
-
-    return (
-      <>
-        <CompactStatCard
-          title="الدخل اليومي (المقبوض)"
-          value={stats.revenue.toLocaleString('en-US', { style: 'currency', currency: 'SAR', minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-          icon={<DollarSignIcon />}
-          color="green"
-        />
-        <CompactStatCard
-          title="بانتظار الدفع"
-          value={stats.waitingPayment}
-          icon={<Icon name="credit-card" />}
-          color="purple"
-          onClick={() => setPage('waiting-requests')}
-        />
-        <CompactStatCard
-          title="طلبات مكتملة"
-          value={stats.completedRequests}
-          icon={<CheckCircleIcon />}
-          color="indigo"
-        />
-         <CompactStatCard
-          title="طلبات جديدة"
-          value={stats.newRequests}
-          icon={<Icon name="sparkles" />}
-          color="red"
-        />
-      </>
-    );
-  };
-
+  const pieData = stats?.paymentDistribution || [];
 
   return (
-    <div className="container mx-auto animate-fade-in pb-20">
-      {/* Header Section - More Compact */}
-      <div className="flex flex-row justify-between items-center mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white tracking-tight">
-            {greeting}، {authUser?.name.split(' ')[0]}
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {currentDate}
-          </p>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 p-4 animate-fade-in">
+        
+        {/* Header Row */}
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+                <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">نظرة عامة</h1>
+                <div className="h-6 w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">مرحباً {authUser?.name.split(' ')[0]}</p>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                 <PeriodToggle activePeriod={activePeriod} onChange={setActivePeriod} isLoading={isLoading} />
+                 <button onClick={loadData} disabled={isLoading} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors">
+                     <RefreshCwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                 </button>
+            </div>
         </div>
-        {can('create_requests') && (
-          <button
-            onClick={() => { 
-                setInitialRequestModalState('new'); 
-                clearSearchedRequests(); // Clear search
-                setPage('requests'); 
-            }}
-            className="flex items-center justify-center w-10 h-10 sm:w-auto sm:h-auto sm:gap-2 bg-blue-600 text-white rounded-full sm:rounded-xl shadow-lg hover:bg-blue-700 transition-all sm:px-4 sm:py-2"
-          >
-            <PlusIcon className="w-6 h-6 sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline font-bold text-sm">فحص جديد</span>
-          </button>
-        )}
-      </div>
+        
+        {/* Quick Actions (New Section) */}
+        <QuickActions />
 
-      {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Left Column (2/3): Stats & Tables */}
-          <div className="lg:col-span-2 space-y-6">
-             {/* 1. Compact KPI Grid (2x2 on Mobile, 4x1 on Desktop) */}
-             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                {renderKpiCards()}
+        {/* KPI Grid (2 cols on mobile, 4 on desktop) */}
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <ExecutiveKpiCard 
+                title="صافي الربح" 
+                value={`${netProfit.toLocaleString()}`} 
+                trend={12} 
+                icon={<DollarSignIcon />} 
+                bgClass="bg-emerald-100 dark:bg-emerald-900/30"
+                colorClass="text-emerald-600 dark:text-emerald-400"
+                isLoading={isLoading} 
+            />
+            <ExecutiveKpiCard 
+                title="الدخل الكلي" 
+                value={`${totalRevenue.toLocaleString()}`} 
+                trend={5} 
+                icon={<Icon name="sparkles" />} 
+                bgClass="bg-blue-100 dark:bg-blue-900/30"
+                colorClass="text-blue-600 dark:text-blue-400"
+                isLoading={isLoading} 
+            />
+            <ExecutiveKpiCard 
+                title="متوسط الفاتورة" 
+                value={`${avgTicket}`} 
+                trend={-2} 
+                icon={<BriefcaseIcon />} 
+                bgClass="bg-amber-100 dark:bg-amber-900/30"
+                colorClass="text-amber-600 dark:text-amber-400"
+                isLoading={isLoading} 
+            />
+             <ExecutiveKpiCard 
+                title="سيارات بالورشة" 
+                value={activeCars.toString()} 
+                icon={<Icon name="car" />} 
+                bgClass="bg-rose-100 dark:bg-rose-900/30"
+                colorClass="text-rose-600 dark:text-rose-400"
+                isLoading={isLoading} 
+            />
+        </div>
+
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+             {/* Main Chart */}
+             <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4">
+                 <div className="flex justify-between items-center mb-4">
+                     <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
+                         <TrendingUpIcon className="w-4 h-4 text-blue-500" />
+                         تحليل الإيرادات
+                     </h3>
+                     <span className="text-[10px] text-slate-400">{lastRefreshed.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                 </div>
+                 <div className="w-full h-48">
+                     {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
+                         <LineChart data={chartData} forecastData={[]} height={180} color="#3b82f6" />
+                     )}
+                 </div>
              </div>
 
-             {/* 2. Quick Actions - MOVED ABOVE TABLE */}
-             {actionCards.length > 0 && (
-                <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 hide-scrollbar">
-                    <div className="flex sm:grid sm:grid-cols-4 gap-3 min-w-max sm:min-w-0">
-                        {actionCards.map(card => (
-                            <div key={card.id} className="w-32 sm:w-auto">
-                                <ActionCard
-                                    title={card.title}
-                                    icon={card.icon}
-                                    onClick={card.onClick}
-                                    color={card.color as any}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-             )}
-
-             {/* 3. Compact Recent Requests Widget */}
-             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
-                    <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
-                        <FileTextIcon className="w-4 h-4 text-blue-500"/>
-                        أحدث الطلبات (النشطة)
-                    </h3>
-                    <button onClick={() => { clearSearchedRequests(); setPage('requests'); }} className="text-xs font-bold text-blue-600 hover:underline">عرض الكل</button>
-                </div>
-                <div className="divide-y divide-slate-50 dark:divide-slate-700">
-                    {latestRequests.length > 0 ? (
-                        latestRequests.map(req => (
-                            <CompactRequestRow key={req.id} request={req} onClick={() => handleRowClick(req.id)} />
-                        ))
-                    ) : (
-                        <div className="p-8 text-center text-slate-400 text-sm">لا توجد طلبات نشطة حديثة.</div>
-                    )}
-                </div>
+             {/* Donut Chart */}
+             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 flex flex-col justify-center">
+                 <h3 className="font-bold text-slate-700 dark:text-white text-sm mb-4 text-center">مصادر الدخل</h3>
+                 <div className="relative w-32 h-32 mx-auto">
+                     {isLoading ? <Skeleton className="w-full h-full rounded-full" /> : (
+                         <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                            {pieData.length > 0 ? (() => {
+                                let accumulated = 0;
+                                const total = pieData.reduce((acc, curr) => acc + curr.value, 0);
+                                return pieData.map((slice, i) => {
+                                    const percentage = slice.value / total;
+                                    const dashArray = percentage * 314; 
+                                    const dashOffset = -accumulated * 314;
+                                    accumulated += percentage;
+                                    return (
+                                        <circle 
+                                            key={i} r="40" cx="50" cy="50" 
+                                            fill="transparent" 
+                                            stroke={slice.color} 
+                                            strokeWidth="15"
+                                            strokeDasharray={`${dashArray} 314`}
+                                            strokeDashoffset={dashOffset}
+                                        />
+                                    );
+                                })
+                            })() : <circle r="40" cx="50" cy="50" fill="transparent" stroke="#e2e8f0" strokeWidth="15" />}
+                         </svg>
+                     )}
+                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                         <span className="text-xl font-black text-slate-800 dark:text-white font-numeric">{pieData.length}</span>
+                     </div>
+                 </div>
+                 <div className="mt-4 grid grid-cols-2 gap-2">
+                     {pieData.slice(0, 4).map((p, i) => (
+                         <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                             <span className="w-2 h-2 rounded-full" style={{backgroundColor: p.color}}></span>
+                             <span className="text-slate-600 dark:text-slate-300 truncate">{p.label}</span>
+                         </div>
+                     ))}
+                 </div>
              </div>
+        </div>
 
-          </div>
-
-          {/* Right Column (1/3): Streamlined Activity Feed */}
-          <div className="lg:col-span-1">
-             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col h-full max-h-[500px]">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
-                        <HistoryIcon className="w-4 h-4 text-purple-500"/>
-                        النشاط المباشر
-                    </h3>
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
-                    <ActivityLogFeed logs={globalActivityLog} />
-                </div>
-                
-                <div className="p-3 border-t border-slate-100 dark:border-slate-700 text-center">
-                    <button 
-                        onClick={() => setIsActivityLogOpen(true)}
-                        className="text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors"
-                    >
-                        عرض السجل الكامل
-                    </button>
-                </div>
-             </div>
-          </div>
-
-      </div>
-
-      <Drawer isOpen={isActivityLogOpen} onClose={() => setIsActivityLogOpen(false)} title="سجل النشاط العام">
-        <ActivityLogFeed logs={globalActivityLog} />
-      </Drawer>
+        {/* Bottom Lists */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-80">
+            <EmployeeLeaderboard data={leaderboardData} isLoading={isLoading} />
+            <RecentTransactions transactions={transactionFeed} isLoading={isLoading} />
+        </div>
     </div>
   );
 };
