@@ -215,7 +215,7 @@ const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> 
 
 const Dashboard: React.FC = () => {
   const { authUser, fetchServerFinancials, employees } = useAppContext();
-  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'year'>('month');
+  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [stats, setStats] = useState<FinancialStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
@@ -294,18 +294,27 @@ const Dashboard: React.FC = () => {
 
   const pieData = stats?.paymentDistribution || [];
 
+  // Date Formatting for Welcome
+  const today = new Date();
+  const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  const formattedDate = today.toLocaleDateString('ar-SA', dateOptions);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 p-4 animate-fade-in">
         
         {/* Header Row */}
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-                <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">نظرة عامة</h1>
-                <div className="h-6 w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">مرحباً {authUser?.name.split(' ')[0]}</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                    مرحباً، {authUser?.name.split(' ')[0]} <span className="text-2xl">👋</span>
+                </h1>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1 rounded-full w-fit border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <Icon name="calendar-clock" className="w-4 h-4 text-blue-500" />
+                    <span>{formattedDate}</span>
+                </p>
             </div>
             
-            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 self-end md:self-auto">
                  <PeriodToggle activePeriod={activePeriod} onChange={setActivePeriod} isLoading={isLoading} />
                  <button onClick={loadData} disabled={isLoading} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors">
                      <RefreshCwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
