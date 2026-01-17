@@ -301,19 +301,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const refreshSessionAndReload = useCallback(async () => {
         setIsRefreshing(true);
         try {
-            localStorage.removeItem('lastActiveTime');
-            localStorage.removeItem('loginDate');
-            Object.keys(localStorage).forEach((key) => {
-                if (key.startsWith('sb-') || key.includes('supabase')) {
-                    localStorage.removeItem(key);
-                }
-            });
-            window.sessionStorage.removeItem('pageHistory');
-        } catch (e) { console.error(e); }
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('reset_ts', Date.now().toString());
-        window.location.replace(currentUrl.toString());
-    }, []);
+            // 1. Attempt to refresh the session token
+            const { data, error } = await supabase.auth.refreshSession();
+            
+            if (error) {
+                 console.warn("Session refresh failed", error);
+                 throw error;
+            }
+
+            if (data.session) {
+                // 2. Re-establish Realtime Connection
+                retryConnection();
+
+                // 3. Re-fetch all critical data
+                await fetchAllData();
+
+                // 4. Update activity timestamp
+                localStorage.setItem('lastActiveTime', Date.now().toString());
+
+                // 5. Clear error states
+                setIsSessionError(false);
+                addNotification({ title: 'تم تحديث الاتصال', message: 'تم استعادة الاتصال بالخادم وتحديث البيانات.', type: 'success' });
+            } else {
+                // No session means we are logged out
+                logout();
+            }
+        } catch (e) {
+            console.error("Soft refresh failed:", e);
+            addNotification({ title: 'خطأ', message: 'تعذر تحديث الاتصال. يرجى التحقق من الشبكة.', type: 'error' });
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [retryConnection, fetchAllData, logout, addNotification]);
 
     // --- MAIN INITIALIZATION & RECOVERY ---
     useEffect(() => {

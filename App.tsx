@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import InstallPwaBanner from './components/InstallPwaBanner';
 import Button from './components/Button'; // Import Button
 import RefreshCwIcon from './components/icons/RefreshCwIcon'; // Import Refresh Icon
+import WifiOffIcon from './components/icons/WifiOffIcon'; // Import WifiOff Icon
 import IncomingRequestNotifier from './components/IncomingRequestNotifier'; // Import the new notifier
 
 // Lazy Load Pages
@@ -46,7 +47,7 @@ const PageLoader = () => (
 
 const AppContent: React.FC = () => {
   // Added setPage to destructuring
-  const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, refreshSessionAndReload } = useAppContext();
+  const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, refreshSessionAndReload, isOnline } = useAppContext();
   const [isSidebarOpen, setSidebarOpen] = React.useState(false);
 
 
@@ -206,15 +207,34 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen text-slate-800 dark:text-slate-200">
-      {!isFocusMode && <Sidebar isSidebarOpen={isSidebarOpen} setSidebarOpen={setSidebarOpen} />}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {!isFocusMode && <Header toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />}
-        <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-slate-100/80 dark:bg-slate-900/80 ${isFocusMode ? '' : 'p-4 sm:p-6'}`}>
-          <Suspense fallback={<PageLoader />}>
-            {mainContent()}
-          </Suspense>
-        </main>
+    <div className="flex flex-col h-screen text-slate-800 dark:text-slate-200">
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="bg-red-600 text-white px-4 py-2 flex items-center justify-between shadow-md z-[100] animate-slide-in-down flex-shrink-0">
+          <div className="flex items-center gap-3">
+             <WifiOffIcon className="w-5 h-5 animate-pulse" />
+             <span className="font-bold text-sm">لا يوجد اتصال بالإنترنت - أنت تعمل في وضع غير متصل</span>
+          </div>
+          <button 
+            onClick={refreshSessionAndReload} 
+            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md text-xs font-bold transition-colors flex items-center gap-2"
+          >
+            <RefreshCwIcon className="w-3.5 h-3.5" />
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden relative">
+        {!isFocusMode && <Sidebar isSidebarOpen={isSidebarOpen} setSidebarOpen={setSidebarOpen} />}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {!isFocusMode && <Header toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />}
+          <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-slate-100/80 dark:bg-slate-900/80 ${isFocusMode ? '' : 'p-4 sm:p-6'}`}>
+            <Suspense fallback={<PageLoader />}>
+              {mainContent()}
+            </Suspense>
+          </main>
+        </div>
       </div>
 
       {/* Mailbox Modal */}

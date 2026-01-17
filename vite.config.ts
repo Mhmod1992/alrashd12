@@ -1,3 +1,4 @@
+
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -25,10 +26,10 @@ export default defineConfig(({ mode }) => {
           includeAssets: ['icon.svg'], 
           manifest: {
             id: '/',
-            name: 'نظام إدارة ورشة سيارات',
-            short_name: 'Aero Workshop',
+            name: 'نظام إدارة الورشة',
+            short_name: 'الورشة',
             description: 'نظام شامل لإدارة ورش صيانة السيارات والفحص الفني',
-            theme_color: '#3b82f6',
+            theme_color: '#1e293b',
             background_color: '#ffffff',
             display: 'standalone',
             scope: '/',
