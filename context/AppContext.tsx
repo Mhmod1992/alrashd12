@@ -20,9 +20,6 @@ import { useActionsScope } from './scopes/useActionsScope';
 import { REQUESTS_PAGE_SIZE, INACTIVITY_LIMIT_MS, PERSONAL_SETTING_KEYS, ROOT_PAGES, PARENT_MAP } from './constants';
 
 
-
-
-
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -36,8 +33,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         expandedArchiveCarId, setExpandedArchiveCarId, deferredPrompt, installPwa
     } = useNavigationScope();
 
+    // --- OPTIMIZATION: Initialize authUser directly from localStorage if available ---
+    const [authUser, setAuthUser] = useState<Employee | null>(() => {
+        try {
+            const cached = localStorage.getItem('cached_authUser');
+            return cached ? JSON.parse(cached) : null;
+        } catch {
+            return null;
+        }
+    });
 
-    const [isLoading, setIsLoading] = useState(true);
+    // Only show global loading if we don't have a cached user. 
+    // If we have a cached user, we show the UI immediately while verifying in background.
+    const [isLoading, setIsLoading] = useState(!authUser);
+    
     const [isSessionError, setIsSessionError] = useState(false);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected');
@@ -48,7 +57,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const [selectedRequestId, setSelectedRequestId] = useLocalStorage<string | null>('selectedRequestId', null);
     const [selectedClientId, setSelectedClientId] = useLocalStorage<string | null>('selectedClientId', null);
-    const [authUser, setAuthUser] = useState<Employee | null>(null);
 
     const {
         requests, setRequests,
@@ -97,7 +105,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addCarMake, addCarMakesBulk, updateCarMake, deleteCarMake, deleteAllCarMakes, deleteModelsByMakeId, findOrCreateCarMake,
         addCarModel, addCarModelsBulk, updateCarModel, deleteCarModel, findOrCreateCarModel,
         addBroker, updateBroker, deleteBroker,
-        addEmployee, updateEmployee, adminChangePassword, deleteEmployee,
+        addEmployee, updateEmployee: originalUpdateEmployee, adminChangePassword, deleteEmployee,
         addExpense, updateExpense, deleteExpense,
         addRevenue, deleteRevenue,
         sendInternalMessage, markMessageAsRead,
@@ -110,7 +118,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchAllData
     );
 
-
+    // Override updateEmployee to sync with cache if we are updating the current user
+    const updateEmployee = useCallback(async (employeeUpdate: any) => {
+        const result = await originalUpdateEmployee(employeeUpdate);
+        if (result && authUser && result.id === authUser.id) {
+            const updatedUser = { ...authUser, ...result };
+            setAuthUser(updatedUser);
+            localStorage.setItem('cached_authUser', JSON.stringify(updatedUser));
+        }
+        return result;
+    }, [authUser, originalUpdateEmployee]);
 
     const can = useCallback((permission: Permission): boolean => {
         if (!authUser) return false;
@@ -123,10 +140,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         settingsPage, setSettingsPage, settings, setSettings, updateSettings,
         globalSettings, setGlobalSettings, isSetupComplete, setIsSetupComplete
     } = useThemeScope(authUser, setAuthUser, can);
+    
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
     const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; }>({ isOpen: false, requestNumber: null, requestId: null });
     const [shouldPrintDraft, setShouldPrintDraft] = useState(false);
-
 
     const isManualLogout = useRef(false);
 
@@ -144,8 +161,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [requests, clients, cars]);
 
 
-
-    // Make logout available - defining it early to be used in effects
+    // Make logout available
     const logout = useCallback(async () => {
         isManualLogout.current = true;
 
@@ -160,18 +176,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 console.error("Supabase sign out error:", error);
                 addNotification({ title: 'خطأ في الشبكة', message: 'فشل تسجيل الخروج من الخادم. سيتم تسجيل خروجك محلياً.', type: 'warning' });
             } finally {
+                // Clear state
                 setAuthUser(null);
                 setHistory(['dashboard']);
+                
+                // Clear Persistence
                 window.sessionStorage.removeItem('pageHistory');
+                localStorage.removeItem('cached_authUser'); // Clear Cached User
+                localStorage.removeItem('loginDate');
+                localStorage.removeItem('lastActiveTime');
+                
+                // Clear Supabase tokens to ensure clean state
+                Object.keys(localStorage).forEach((key) => {
+                    if (key.startsWith('sb-') || key.includes('supabase')) {
+                        localStorage.removeItem(key);
+                    }
+                });
 
                 setSelectedRequestId(null);
                 setSelectedClientId(null);
                 setSettingsPage('general');
                 setIsFocusMode(false);
                 setIsSessionError(false);
-
-                localStorage.removeItem('loginDate');
-                localStorage.removeItem('lastActiveTime');
 
                 setTimeout(() => { isManualLogout.current = false; }, 1000);
             }
@@ -192,13 +218,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     useEffect(() => { ensureEntitiesLoadedRef.current = ensureEntitiesLoaded; }, [ensureEntitiesLoaded]);
 
 
-
-
-
-
-
-
-
     const setupRealtimeSubscription = useCallback(() => {
         if (channelRef.current) return;
 
@@ -214,34 +233,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             if (prev.some(r => r.id === newReq.id)) return prev;
                             return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                         });
-
-                        // Trigger side notifier for other users
                         if (authUserRef.current && newReq.employee_id !== authUserRef.current.id) {
                             setIncomingRequest(newReq);
                         }
-
                         triggerHighlight(newReq.id);
-
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedReq = payload.new as InspectionRequest;
                         await ensureEntitiesLoadedRef.current([updatedReq]);
                         setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
-
-                        // 1. Update main list
                         setRequests(prev => prev.filter(r => r.id !== deletedId));
-
-                        // 2. Update search results if active
-                        setSearchedRequests(prev => {
-                            if (!prev) return null;
-                            return prev.filter(r => r.id !== deletedId);
-                        });
-
-                        // 3. Broadcast deletion event to other components (like filtered lists in Requests page)
+                        setSearchedRequests(prev => prev ? prev.filter(r => r.id !== deletedId) : null);
                         setLastRemoteDeleteId(deletedId);
-
-                        // Reset the trigger after a short delay
                         setTimeout(() => setLastRemoteDeleteId(null), 1000);
                     }
                 }
@@ -291,92 +295,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             notificationsChannelRef.current = null;
             messagesChannelRef.current = null;
         };
-
         cleanup().then(() => setupRealtimeSubscription());
     }, [setupRealtimeSubscription]);
 
     const refreshSessionAndReload = useCallback(async () => {
         setIsRefreshing(true);
-        console.log("Executing Surgical Reset for Session Timers & Tokens...");
-
         try {
-            // 1. Clear App Session Timers
             localStorage.removeItem('lastActiveTime');
             localStorage.removeItem('loginDate');
-
-            // 2. Clear Supabase Auth Tokens (CRITICAL for fixing zombie sessions on mobile)
-            // Supabase keys usually start with 'sb-' or contain 'supabase'
             Object.keys(localStorage).forEach((key) => {
                 if (key.startsWith('sb-') || key.includes('supabase')) {
                     localStorage.removeItem(key);
                 }
             });
-            
-            // 3. Clear Navigation History
             window.sessionStorage.removeItem('pageHistory');
-
-        } catch (e) {
-            console.error("Storage clear error", e);
-        }
-
-        // Cache Busting Reload
+        } catch (e) { console.error(e); }
         const currentUrl = new URL(window.location.href);
         currentUrl.searchParams.set('reset_ts', Date.now().toString());
-        
         window.location.replace(currentUrl.toString());
     }, []);
 
-
-
+    // --- MAIN INITIALIZATION & RECOVERY ---
     useEffect(() => {
         let mounted = true;
 
-        // 1. Safety Timeout: Force error screen if initialization hangs (Long backup)
+        // Safety timeout in case initialization hangs
         const timeoutId = setTimeout(() => {
             if (mounted && isLoading) {
-                console.warn("Session initialization timed out. Forcing recovery mode.");
-                localStorage.removeItem('lastActiveTime');
-                setIsSessionError(true);
+                console.warn("Initialization timed out. Forcing UI load if cached user exists.");
+                if (!authUser) setIsSessionError(true);
                 setIsLoading(false);
             }
-        }, 10000); // Increased safety valve to 10s as backup
+        }, 8000);
 
         const initializeApp = async () => {
             try {
-                // --- 🛡️ SMART CHECK (System Self-Repair) 🛡️ ---
-                // Ensures critical local storage keys are valid before proceeding.
-                try {
-                    const now = Date.now();
-                    const lastActive = localStorage.getItem('lastActiveTime');
-                    const loginDate = localStorage.getItem('loginDate');
-                    
-                    // Fix corrupted lastActiveTime
-                    if (lastActive) {
-                        const parsed = parseInt(lastActive, 10);
-                        // If NaN, or futuristic (clock error), or extremely old (> 30 days which implies stale junk)
-                        if (isNaN(parsed) || parsed > now + 86400000 || parsed < now - (30 * 24 * 60 * 60 * 1000)) {
-                            console.warn("Smart Check: Resetting invalid lastActiveTime.");
-                            localStorage.setItem('lastActiveTime', now.toString());
-                        }
-                    } else {
-                        // Initialize if missing to prevent null checks failing later
-                        localStorage.setItem('lastActiveTime', now.toString());
-                    }
-
-                    // Fix corrupted loginDate format
-                    if (loginDate && !/^\d{4}-\d{2}-\d{2}$/.test(loginDate)) {
-                         console.warn("Smart Check: Resetting invalid loginDate format.");
-                         localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
-                    }
-                } catch (e) {
-                    console.error("Smart Check Error:", e);
-                }
-                // ------------------------------------------------
-
-                // Fetch Settings
+                // 1. Initial Local Data Setup (Settings)
                 const { data: settingsDataRaw } = await supabase.from('app_settings').select('*').eq('id', 1).maybeSingle();
                 const fetchedSettingsData = (settingsDataRaw?.settings_data || {}) as Record<string, any>;
-
                 const finalGlobalSettings = {
                     ...mockSettings, ...fetchedSettingsData,
                     plateCharacters: fetchedSettingsData?.plateCharacters || mockSettings.plateCharacters,
@@ -390,32 +346,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setSettings(finalGlobalSettings);
                 }
 
-                // Explicit Session Check with Timeout (Race Condition Fix)
-                // This prevents the app from hanging if supabase.auth.getSession() never resolves (common on mobile reload)
-                const sessionPromise = supabase.auth.getSession();
-                const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Session retrieval timed out')), 4000)
-                );
-
-                let session: any = null;
+                // 2. Background Session Verification
+                // If we have a cached user (authUser is set), we don't wait for this to render.
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
                 
-                try {
-                    const result: any = await Promise.race([sessionPromise, timeoutPromise]);
-                    if (result.error) throw result.error;
-                    session = result.data.session;
-                } catch (raceError) {
-                     console.warn("Session check race failed:", raceError);
-                     // If we timed out or failed to get session, we assume "No Session" to avoid hanging.
-                     // This directs the user to Login instead of "System Not Responding".
-                     if (mounted) {
-                         setAuthUser(null);
-                         setIsLoading(false);
-                     }
-                     return; // Exit early
+                if (sessionError || !session) {
+                    if (authUser && mounted) {
+                        console.warn("Cached user exists but session invalid. Logging out.");
+                        // Invalid session but we had a cache -> clear it and force login
+                        setAuthUser(null);
+                        localStorage.removeItem('cached_authUser');
+                    }
+                    if(mounted) setIsLoading(false);
+                    return;
                 }
 
                 if (session?.user) {
-                    // Session exists, verify user in database
+                    // Fetch fresh profile
                     const { data: employeeProfile, error: profileError } = await supabase
                         .from('employees')
                         .select('*')
@@ -423,42 +370,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         .single();
 
                     if (profileError) {
-                        // Check specific error codes
-                        if (profileError.code === 'PGRST116') {
-                            // Code for "Row not found" - User deleted from DB
-                            console.warn("Valid token but no employee profile. Logging out.");
+                        if (profileError.code === 'PGRST116') { // User deleted
                             await supabase.auth.signOut();
-                            if (mounted) setAuthUser(null);
-                        } else {
-                            // Network error or other DB error - Show Recovery
-                            console.error("Profile fetch error:", profileError);
-                            if (mounted) setIsSessionError(true);
-                        }
-                    } else {
-                        // Valid user
-                        if (mounted) {
-                            setAuthUser(employeeProfile);
-                            // Refresh valid session tracking data
-                            localStorage.setItem('lastActiveTime', Date.now().toString());
-                            const todayStr = new Date().toLocaleDateString('en-CA');
-                            if (localStorage.getItem('loginDate') !== todayStr) {
-                                 localStorage.setItem('loginDate', todayStr);
+                            if (mounted) {
+                                setAuthUser(null);
+                                localStorage.removeItem('cached_authUser');
                             }
+                        } else {
+                            // Transient error? Keep cached user if possible, else show error
+                            console.error("Profile fetch error:", profileError);
+                            if (!authUser && mounted) setIsSessionError(true);
+                        }
+                    } else if (mounted) {
+                        // Success: Update state and cache
+                        setAuthUser(employeeProfile);
+                        localStorage.setItem('cached_authUser', JSON.stringify(employeeProfile));
+                        localStorage.setItem('lastActiveTime', Date.now().toString());
+                        
+                        const todayStr = new Date().toLocaleDateString('en-CA');
+                        if (localStorage.getItem('loginDate') !== todayStr) {
+                             localStorage.setItem('loginDate', todayStr);
                         }
                     }
-                } else {
-                    // No session
-                    if (mounted) setAuthUser(null);
                 }
-
             } catch (error) {
-                console.error("Initialization error:", error);
-                // Critical failure -> Recovery Mode
-                if (mounted) setIsSessionError(true);
+                console.error("Init Error:", error);
+                if (!authUser && mounted) setIsSessionError(true);
             } finally {
                 if (mounted) {
-                    clearTimeout(timeoutId); // Clear safety timeout
-                    setIsLoading(false); // Stop loading indicator
+                    clearTimeout(timeoutId);
+                    setIsLoading(false);
                 }
             }
         };
@@ -467,15 +408,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!mounted) return;
-
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 if (session) {
-                    // Sync state if session updates and we don't have the user yet (redundancy)
-                    // USE REF HERE to prevent stale closure issues and loops
-                    if (!authUserRef.current || authUserRef.current.id !== session.user.id) {
+                     // Check if profile needs update
+                     if (!authUserRef.current || authUserRef.current.id !== session.user.id) {
                         const { data: employeeProfile } = await supabase.from('employees').select('*').eq('id', session.user.id).single();
                         if (employeeProfile) {
                             setAuthUser(employeeProfile);
+                            localStorage.setItem('cached_authUser', JSON.stringify(employeeProfile));
                         }
                     }
                     localStorage.setItem('lastActiveTime', Date.now().toString());
@@ -483,13 +423,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setIsSessionError(false);
                 }
             } else if (event === 'SIGNED_OUT') {
-                if (isManualLogout.current) {
-                    setAuthUser(null);
-                    setIsLoading(false);
-                } else {
-                    setAuthUser(null);
-                    setIsLoading(false);
-                }
+                setAuthUser(null);
+                localStorage.removeItem('cached_authUser');
+                setIsLoading(false);
             }
         });
 
@@ -498,8 +434,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             clearTimeout(timeoutId);
             subscription?.unsubscribe();
         };
-    }, []); // Empty dependency array to run once on mount
+    }, []); 
 
+    // Session Inactivity Check
     useEffect(() => {
         if (!authUser) return;
         const checkInactivity = () => {
@@ -519,12 +456,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const checkMidnight = () => {
             const storedDate = localStorage.getItem('loginDate');
             const todayStr = new Date().toLocaleDateString('en-CA');
-            if (storedDate && storedDate !== todayStr) {
-                // IMPORTANT: Ensure we actually have a session before logging out, to avoid double-actions or weird states
-                if (authUserRef.current) {
-                    logout();
-                    addNotification({ title: 'يوم جديد', message: 'انتهى اليوم، يرجى تسجيل الدخول من جديد.', type: 'info' });
-                }
+            if (storedDate && storedDate !== todayStr && authUserRef.current) {
+                logout();
+                addNotification({ title: 'يوم جديد', message: 'انتهى اليوم، يرجى تسجيل الدخول من جديد.', type: 'info' });
             }
         };
         checkMidnight();
@@ -532,15 +466,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return () => clearInterval(interval);
     }, [authUser, logout, setHistory, addNotification]);
 
-
+    // Data Load Effect
     useEffect(() => {
         if (authUser) {
+            // If requests are empty, trigger data fetch.
+            // Note: Since we might have authUser from cache immediately, this might fire fast.
+            // Ideally, we could split this into 'critical' vs 'heavy' data, but for now
+            // standard fetch is okay as it runs in background and UI is unblocked.
             if (requests.length === 0) {
-                setIsLoading(true);
-                fetchAllData().finally(() => setIsLoading(false));
+                // Don't set global isLoading to true here, as we want to show the dashboard shell.
+                // We use isRefreshing internally.
+                fetchAllData();
             }
             setupRealtimeSubscription();
         } else {
+            // Cleanup
             setRequests([]); setClients([]); setCars([]); setCarMakes([]); setCarModels([]); setExpenses([]); setAppNotifications([]); setTechnicians([]); setReservations([]);
             const cleanup = async () => {
                 if (channelRef.current) await supabase.removeChannel(channelRef.current);
@@ -555,35 +495,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [authUser, fetchAllData, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations]);
 
-    // --- APP REVIVAL LOGIC ---
+    // Network Status & Reconnection
     useEffect(() => {
         const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible') {
-                // 1. Refresh Auth Token
                 const { data: { session }, error } = await supabase.auth.getSession();
-
-                if (error || !session) {
-                    // If session is truly dead, try to refresh once
-                    const { error: refreshError } = await supabase.auth.refreshSession();
-                    if (refreshError && authUserRef.current) {
-                        console.warn("Session expired in background, refresh failed.");
-                        // Optional: logout user if refresh fails
-                        // logout(); 
-                    }
-                } else {
-                    // Session is valid, ensure local auth state is correct
-                    if (authUserRef.current && authUserRef.current.id !== session.user.id) {
-                        console.warn("Auth state drift detected. Reloading to sync.");
-                        window.location.reload();
-                    }
+                if ((error || !session) && authUserRef.current) {
+                     // Try refresh
+                     const { error: refreshError } = await supabase.auth.refreshSession();
+                     if (refreshError) console.warn("Session refresh failed on visibility change.");
+                } else if (session && authUserRef.current && authUserRef.current.id !== session.user.id) {
+                     window.location.reload();
                 }
-
-                // 2. Restart auto-refresh
+                
                 supabase.auth.startAutoRefresh();
-
-                // 3. Reconnect Realtime if disconnected
+                
                 if (authUserRef.current && realtimeStatusRef.current === 'disconnected') {
-                    console.log("App became visible, retrying realtime connection.");
                     retryConnection();
                 }
             }
@@ -615,19 +542,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
     }, [retryConnection, addNotification, logout]);
 
-
-
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
     const fetchAndUpdateSingleRequest = useCallback(async (requestId: string) => {
         const { data: req, error } = await supabase.from('inspection_requests').select('*').eq('id', requestId).single();
-
         if (error && !req) {
-            // If request is not found (deleted), remove it from local state
             setRequests(prev => prev.filter(r => r.id !== requestId));
             return;
         }
-
         if (req) {
             setRequests(prev => {
                 const exists = prev.some(r => r.id === requestId);
@@ -790,35 +712,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [];
     }, [ensureEntitiesLoaded]);
 
-    // NEW: Filtered Client Requests Fetcher
     const fetchClientRequestsFiltered = useCallback(async (clientId: string, startDate?: string, endDate?: string, onlyUnpaid?: boolean): Promise<InspectionRequest[]> => {
         let query = supabase.from('inspection_requests').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
-
-        if (startDate) {
-            query = query.gte('created_at', startDate);
-        }
-        if (endDate) {
-            query = query.lte('created_at', endDate);
-        }
-
-        if (onlyUnpaid) {
-            // Check for payment_type = Unpaid OR status = WAITING_PAYMENT
-            query = query.or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT} `);
-        }
-
-        // Limit to prevent massive loads if no filter provided (safety)
-        if (!startDate && !endDate && !onlyUnpaid) {
-            query = query.limit(100);
-        }
+        if (startDate) query = query.gte('created_at', startDate);
+        if (endDate) query = query.lte('created_at', endDate);
+        if (onlyUnpaid) query = query.or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT} `);
+        if (!startDate && !endDate && !onlyUnpaid) query = query.limit(100);
 
         const { data, error } = await query;
-
         if (error) {
-            console.error("Error fetching filtered client requests:", error);
             addNotification({ title: 'خطأ', message: 'فشل تحميل سجل الطلبات.', type: 'error' });
             return [];
         }
-
         if (data) {
             await ensureEntitiesLoaded(data);
             return data as InspectionRequest[];
@@ -826,7 +731,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [];
     }, [ensureEntitiesLoaded, addNotification]);
 
-    // NEW: Light-weight Financial Summary
     const getClientFinancialSummary = useCallback(async (clientId: string) => {
         try {
             const { data, error } = await supabase
@@ -834,7 +738,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 .select('id, request_number, price, status, payment_type, created_at, car_id')
                 .eq('client_id', clientId)
                 .or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT} `)
-                .neq('status', 'cancelled') // Assuming we might have cancelled status, good practice.
+                .neq('status', 'cancelled')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -878,7 +782,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (error || !data) return null;
         return data;
     }, []);
-
 
     const fetchRequestsByDateRange = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
         const { data, error } = await supabase.from('inspection_requests').select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at').gte('created_at', startDate).lte('created_at', endDate).order('created_at', { ascending: false });
@@ -964,10 +867,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return data || [];
     }, [fetchCarModelsByMake]);
 
-
-
-
-
     const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
         try {
             const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: password });
@@ -981,8 +880,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     await supabase.auth.signOut();
                     return { success: false, error: 'لا يوجد ملف موظف.' };
                 }
+                
+                // Cache user immediately on successful login
+                setAuthUser(employeeProfile);
+                localStorage.setItem('cached_authUser', JSON.stringify(employeeProfile));
                 localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
                 localStorage.setItem('lastActiveTime', Date.now().toString());
+                
                 await sendSystemNotification({ title: 'تسجيل دخول', message: `قام ${employeeProfile.name} بتسجيل الدخول للنظام.`, type: 'login' });
             }
             return { success: true };
@@ -997,8 +901,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     const removeNotification = useCallback((id: string) => setNotifications(prev => prev.filter(n => n.id !== id)), []);
-
-
 
     const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber }), []);
     const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null }), []);
@@ -1048,14 +950,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch (e) { }
     }, []);
 
-
-
-
-
-
-
-
-
     const fetchInboxMessages = useCallback(async () => {
         if (!authUser) return [];
         const { data, error } = await supabase.from('internal_messages').select('*').eq('receiver_id', authUser.id).order('created_at', { ascending: false });
@@ -1069,8 +963,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (error) throw error;
         return data as InternalMessage[];
     }, [authUser]);
-
-
 
     const factoryResetOperations = useCallback(async () => {
         setIsRefreshing(true);
@@ -1140,19 +1032,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             else if (rev.payment_method === PaymentType.Transfer) transferTotal += rev.amount;
         });
 
-        // Filter out employee deductions ('خصومات') and advances ('سلف') from general expenses
-        // deductions don't exit the drawer, advances do but are managed in payroll.
         const filteredGeneralExpenses = exps.filter(e => e.category !== 'خصومات' && e.category !== 'سلف');
         const advancesEntries = exps.filter(e => e.category === 'سلف');
 
         const totalRevenue = totalRequestsRevenue + totalOtherRevenue,
             actualCashFlow = cashTotal + cardTotal + transferTotal,
-            // totalExpenses for KPI cards will only show operational expenses
             totalExpenses = filteredGeneralExpenses.reduce((sum, e) => sum + e.amount, 0),
-            // totalAdvances for cash drawer deduction but NOT profit deduction
             totalAdvances = advancesEntries.reduce((sum, e) => sum + e.amount, 0),
             totalCommissions = reqs.reduce((sum, r) => sum + (r.broker?.commission || 0), 0),
-            // Net Profit strictly subtracts operational expenses and commissions, not advances (loans)
             netProfit = actualCashFlow - totalExpenses - totalCommissions;
         const dailyMap: Record<string, any> = {};
         const addToDaily = (dateStr: string, key: string, value: number) => {
@@ -1207,13 +1094,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             brokerSummary: Object.values(brokerSummaryMap),
             forecast: { history: historyForChart, data: forecastData, trend: trendDirection },
             filteredRequests: reqs,
-            filteredExpenses: filteredGeneralExpenses, // Use filtered expenses here
+            filteredExpenses: filteredGeneralExpenses,
             filteredRevenues: revs
         };
     }, [brokers, ensureEntitiesLoaded]);
 
     const fetchServerExpenses = useCallback(async (startDate: string, endDate: string): Promise<Expense[]> => {
-        // Use multiple .neq for maximum compatibility with all Supabase environments
         const { data, error } = await supabase.from('expenses')
             .select('*')
             .neq('category', 'خصومات')
@@ -1243,12 +1129,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const q = params.query.trim();
                 const cleanQ = q.replace(/\s/g, '');
 
-                // Find cars matching query
                 const { data: matchedCars } = await supabase.from('cars').select('id')
                     .or(`plate_number.ilike.%${cleanQ}%,plate_number_en.ilike.%${cleanQ}%,vin.ilike.%${cleanQ}%`);
                 const carIdsFromCars = matchedCars?.map(c => c.id) || [];
 
-                // Find clients matching query
                 const { data: matchedClients } = await supabase.from('clients').select('id')
                     .or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
                 const clientIdsFromClients = matchedClients?.map(c => c.id) || [];
@@ -1294,7 +1178,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     const fetchEmployeeTransactionsForMonth = useCallback(async (employeeId: string, month: number, year: number): Promise<Expense[]> => {
-        // Validation: Ensure month and year are valid before creating Date objects
         if (!month || !year || isNaN(month) || isNaN(year)) {
             console.warn("Invalid month or year passed to fetchEmployeeTransactionsForMonth", { month, year });
             return [];
@@ -1312,8 +1195,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, []);
 
-    // --- Reservations Logic ---
-
     const fetchReservations = useCallback(async () => {
         try {
             const { data, error } = await supabase.from('reservations')
@@ -1328,13 +1209,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, []);
 
-
-
     const parseReservationText = useCallback(async (text: string): Promise<Partial<Reservation>> => {
-        // Regex extraction based on the provided WhatsApp template
         const extract = (key: string) => {
-            // Matches *Key:* Value (until end of line)
-            // Escaping * is important
             const regex = new RegExp(`\\*${key}:\\*\\s*([^\\n\\r]+)`);
             const match = text.match(regex);
             return match ? match[1].trim() : '';
@@ -1343,7 +1219,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const client_name = extract('اسم العميل');
         const client_phone = extract('رقم الهاتف');
 
-        // Car Details
         const make = extract('الشركة');
         const model = extract('الموديل');
         const year = extract('سنة الصنع');
@@ -1360,7 +1235,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             car_details,
             plate_text,
             service_type,
-            // Clean up the text for notes, removing the template keys potentially
             notes: text
         };
     }, []);
