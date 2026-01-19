@@ -596,27 +596,39 @@ const Requests: React.FC = () => {
 
     return (
         <div className="container mx-auto">
-            <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200">إدارة الطلبات</h2>
-                <div className="flex items-center gap-3">
+            <div className="flex flex-col md:grid md:grid-cols-3 items-center justify-between mb-8 gap-4">
+                {/* 1. Page Title (Right) */}
+                <div className="text-center md:text-right order-1">
+                    <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200">إدارة الطلبات</h2>
+                </div>
+
+                {/* 2. Main Actions (Center) */}
+                <div className="flex items-center justify-center gap-3 order-3 md:order-2 w-full">
                     {reservations.filter(r => r.status === 'confirmed').length > 0 && (
                         <button
                             onClick={() => setIsReservationsModalOpen(true)}
-                            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-amber-200 dark:shadow-none transition-all"
+                            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg shadow-amber-200 dark:shadow-none transition-all"
                         >
                             <Icon name="calendar-check" className="w-5 h-5" />
-                            <span>الحجوزات المؤكدة</span>
+                            <span>الحجوزات</span>
                             <span className="bg-white text-amber-600 px-1.5 py-0.5 rounded-full text-xs">
                                 {reservations.filter(r => r.status === 'confirmed').length}
                             </span>
                         </button>
                     )}
                     {can('create_requests') && (
-                        <Button onClick={() => setIsModalOpen(true)} leftIcon={<PlusIcon className="w-5 h-5" />}>
+                        <Button 
+                            onClick={() => setIsModalOpen(true)} 
+                            leftIcon={<PlusIcon className="w-5 h-5" />}
+                            className="shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-1 transition-all px-8 py-2.5 font-bold text-lg"
+                        >
                             إنشاء طلب جديد
                         </Button>
                     )}
                 </div>
+                
+                {/* 3. Empty Spacer for Balance (Left) */}
+                <div className="hidden md:block order-3"></div>
             </div>
 
             {/* Modal for Confirmed Reservations Table */}

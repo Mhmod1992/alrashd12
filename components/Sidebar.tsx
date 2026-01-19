@@ -162,20 +162,28 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
         {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)}></div>}
         
         <aside className={`${baseClasses} ${isSidebarOpen ? openClasses : closedClasses} ${designClasses.sidebar}`}>
+            {/* Header with Continuous Animation Loop */}
             <div className={`flex items-center justify-center h-20 flex-shrink-0 ${designClasses.header}`}>
-                <div className="flex items-center gap-3">
-                    {settings.logoUrl ? (
-                        <img src={settings.logoUrl} alt="Logo" className="h-10 w-auto object-contain" />
-                    ) : (
-                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold text-xl shadow-lg`}>
-                            A
+                <div className="flex items-center">
+                    {/* Logo - Always Visible */}
+                    <div className="flex-shrink-0 z-10 bg-white dark:bg-slate-900 rounded-full">
+                        {settings.logoUrl ? (
+                            <img src={settings.logoUrl} alt="Logo" className="h-10 w-auto object-contain" />
+                        ) : (
+                            <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold text-xl shadow-lg`}>
+                                A
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Animated Text Container - Expands and Retracts */}
+                    <div className="animate-reveal-loop">
+                        <div>
+                            <h1 className={`text-xl font-bold ${designClasses.logo} tracking-tight leading-none whitespace-nowrap`}>
+                                {settings.appName || 'Aero'}
+                            </h1>
+                            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold block">Edition</span>
                         </div>
-                    )}
-                    <div>
-                        <h1 className={`text-xl font-bold ${designClasses.logo} tracking-tight leading-none`}>
-                            {settings.appName || 'Aero'}
-                        </h1>
-                        <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Edition</span>
                     </div>
                 </div>
             </div>

@@ -7,6 +7,7 @@ import Icon from '../../components/Icon';
 import Modal from '../../components/Modal';
 import { compressImageToBase64, uuidv4 } from '../../lib/utils';
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
+import ArrowLeftIcon from '../../components/icons/ArrowLeftIcon';
 
 
 const InspectionSettingsTab: React.FC = () => {
@@ -14,20 +15,29 @@ const InspectionSettingsTab: React.FC = () => {
         inspectionTypes, addInspectionType, updateInspectionType, deleteInspectionType,
         customFindingCategories, addFindingCategory, updateFindingCategory, deleteFindingCategory,
         predefinedFindings, addPredefinedFinding, updatePredefinedFinding, deletePredefinedFinding,
+        settings
     } = useAppContext();
 
+    const [activeTab, setActiveTab] = useState<'packages' | 'findings'>('packages');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalContent, setModalContent] = useState<React.ReactNode>(null);
     const [modalTitle, setModalTitle] = useState('');
     const [expandedTypeId, setExpandedTypeId] = useState<string | null>(null);
     
     // State for selecting a category to manage its findings
-    const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
-        customFindingCategories.length > 0 ? customFindingCategories[0].id : null
-    );
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+
+    // Set default category when switching to findings tab on DESKTOP only
+    useEffect(() => {
+        const isLargeScreen = window.innerWidth >= 1024;
+        if (activeTab === 'findings' && !selectedCategoryId && customFindingCategories.length > 0 && isLargeScreen) {
+            setSelectedCategoryId(customFindingCategories[0].id);
+        }
+    }, [activeTab]);
 
     // Toggle for View Mode: 'groups' or 'flat'
     const [viewMode, setViewMode] = useState<'groups' | 'flat'>('groups');
+    const design = settings.design || 'aero';
 
     // --- Inspection Type Management ---
     const handleAddType = () => {
@@ -163,245 +173,294 @@ const InspectionSettingsTab: React.FC = () => {
         return customFindingCategories.find(c => c.id === selectedCategoryId)?.name || '';
     }, [selectedCategoryId, customFindingCategories]);
 
+    // Style Helpers
+    const activeTabClasses = design === 'classic' 
+        ? 'border-teal-500 text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20' 
+        : design === 'glass' 
+            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20' 
+            : 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20';
 
     return (
-        <div className="space-y-12 animate-fade-in">
-            {/* SECTION 1: Inspection Types (Packages) */}
-            <section className="border-b-2 border-dashed dark:border-slate-700 pb-8">
-                <div className="flex justify-between items-center mb-6">
-                    <div>
-                        <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-200">أنواع الفحص (الباقات)</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">إدارة باقات الفحص وأسعارها والتبويبات المشمولة فيها.</p>
-                    </div>
-                    <Button onClick={handleAddType} leftIcon={<Icon name="add" className="w-5 h-5"/>}>
-                        إضافة نوع
-                    </Button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {inspectionTypes.map(type => (
-                       <div key={type.id} className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300 ${expandedTypeId === type.id ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-md'}`}>
-                          <div 
-                            className="p-4 cursor-pointer"
-                            onClick={() => setExpandedTypeId(prevId => prevId === type.id ? null : type.id)}
-                          >
-                            <div className="flex justify-between items-start">
-                                <div className="flex items-center gap-3">
-                                   <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
-                                        <Icon name="document-report" className="w-6 h-6" />
-                                   </div>
-                                   <div>
-                                      <p className="font-bold text-lg text-gray-800 dark:text-gray-200">{type.name}</p>
-                                      <p className="text-sm font-semibold text-green-600 dark:text-green-400">{type.price} ريال</p>
-                                   </div>
-                                </div>
-                                <Icon name="chevron-down" className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${expandedTypeId === type.id ? 'rotate-180' : ''}`} />
+        <div className="space-y-6 animate-fade-in pb-10">
+            
+            {/* Tab Navigation (Sticky) */}
+            <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-t-xl sticky top-0 z-30 shadow-sm">
+                <button
+                    onClick={() => setActiveTab('packages')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all border-b-2 ${activeTab === 'packages' ? activeTabClasses : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                >
+                    <Icon name="document-report" className="w-5 h-5" />
+                    <span>أنواع الفحص (الباقات)</span>
+                </button>
+                <button
+                    onClick={() => setActiveTab('findings')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all border-b-2 ${activeTab === 'findings' ? activeTabClasses : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                >
+                    <Icon name="findings" className="w-5 h-5" />
+                    <span>إدارة بنود الفحص</span>
+                </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="relative">
+                
+                {/* TAB 1: PACKAGES */}
+                {activeTab === 'packages' && (
+                    <section className="animate-fade-in p-1">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">باقات الفحص</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">قم بإنشاء وتعديل أنواع الفحوصات والأسعار وربطها بالأقسام.</p>
                             </div>
-                          </div>
-                          
-                          {expandedTypeId === type.id && (
-                            <div className="px-4 pb-4 pt-0 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700 animate-fade-in">
-                                <div className="my-3">
-                                    <h4 className="font-semibold text-xs text-gray-500 uppercase tracking-wider mb-2">التبويبات المشمولة (بالترتيب)</h4>
-                                    <div className="flex flex-col gap-1">
-                                        {type.finding_category_ids.length > 0 ? (
-                                            type.finding_category_ids.map((catId, index) => {
-                                                const category = customFindingCategories.find(c => c.id === catId);
-                                                return category ? (
-                                                    <div key={`${catId}-${index}`} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                                        <span className="text-gray-400 text-xs font-mono w-4">{index + 1}.</span>
-                                                        <span>{category.name}</span>
-                                                    </div>
-                                                ) : null;
-                                            })
-                                        ) : (
-                                            <span className="text-xs text-gray-400 italic">لا توجد تبويبات</span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex justify-end gap-2 mt-4 pt-3 border-t dark:border-gray-600">
-                                    <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); handleEditType(type); }} leftIcon={<Icon name="edit" className="w-4 h-4"/>}>تعديل</Button>
-                                    <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); deleteInspectionType(type.id); }} leftIcon={<Icon name="delete" className="w-4 h-4"/>}>حذف</Button>
-                                </div>
-                            </div>
-                          )}
+                            <Button onClick={handleAddType} leftIcon={<Icon name="add" className="w-5 h-5"/>}>
+                                إضافة باقة
+                            </Button>
                         </div>
-                    ))}
-                </div>
-            </section>
-
-            {/* SECTION 2: Findings Management */}
-            <section>
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                    <div>
-                        <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-200">إدارة بنود الفحص</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">اختر التبويب لإدارة البنود والمجموعات والصور وترتيبها.</p>
-                    </div>
-                    <Button onClick={handleAddCategory} variant="secondary" leftIcon={<Icon name="add" className="w-5 h-5"/>}>
-                        إضافة تبويب جديد
-                    </Button>
-                </div>
-
-                <div className="flex flex-col lg:flex-row gap-6">
-                    {/* Categories Sidebar / List */}
-                    <div className="lg:w-1/4 flex-shrink-0">
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden sticky top-4">
-                            <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-b dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-200">
-                                التبويبات ({customFindingCategories.length})
-                            </div>
-                            <div className="max-h-[500px] overflow-y-auto p-2 space-y-1">
-                                {customFindingCategories.map(cat => (
-                                    <div 
-                                        key={cat.id} 
-                                        className={`group flex justify-between items-center p-3 rounded-lg cursor-pointer transition-all ${
-                                            selectedCategoryId === cat.id 
-                                            ? 'bg-blue-600 text-white shadow-md' 
-                                            : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
-                                        }`}
-                                        onClick={() => setSelectedCategoryId(cat.id)}
-                                    >
-                                        <span className="font-medium truncate">{cat.name}</span>
-                                        <div className={`flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${selectedCategoryId === cat.id ? 'opacity-100' : ''}`}>
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); handleEditCategory(cat); }}
-                                                className={`p-1.5 rounded hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`}
-                                                title="تعديل التبويب"
-                                            >
-                                                <Icon name="edit" className="w-4 h-4" />
-                                            </button>
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
-                                                className={`p-1.5 rounded hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-red-200 hover:text-white' : 'text-red-500'}`}
-                                                title="حذف التبويب"
-                                            >
-                                                <Icon name="delete" className="w-4 h-4" />
-                                            </button>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {inspectionTypes.map(type => (
+                            <div key={type.id} className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300 ${expandedTypeId === type.id ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-md'}`}>
+                                <div 
+                                    className="p-4 cursor-pointer"
+                                    onClick={() => setExpandedTypeId(prevId => prevId === type.id ? null : type.id)}
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                                                <Icon name="document-report" className="w-6 h-6" />
                                         </div>
+                                        <div>
+                                            <p className="font-bold text-lg text-gray-800 dark:text-gray-200">{type.name}</p>
+                                            <p className="text-sm font-semibold text-green-600 dark:text-green-400">{type.price} ريال</p>
+                                        </div>
+                                        </div>
+                                        <Icon name="chevron-down" className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${expandedTypeId === type.id ? 'rotate-180' : ''}`} />
                                     </div>
-                                ))}
-                                {customFindingCategories.length === 0 && (
-                                    <div className="text-center py-8 text-gray-400 text-sm">
-                                        لا توجد تبويبات.
+                                </div>
+                                
+                                {expandedTypeId === type.id && (
+                                    <div className="px-4 pb-4 pt-0 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700 animate-fade-in">
+                                        <div className="my-3">
+                                            <h4 className="font-semibold text-xs text-gray-500 uppercase tracking-wider mb-2">التبويبات المشمولة (بالترتيب)</h4>
+                                            <div className="flex flex-col gap-1">
+                                                {type.finding_category_ids.length > 0 ? (
+                                                    (type.fill_tab_order_ids || type.finding_category_ids).map((catId, index) => {
+                                                        const category = customFindingCategories.find(c => c.id === catId);
+                                                        return category ? (
+                                                            <div key={`${catId}-${index}`} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                                                <span className="text-gray-400 text-xs font-mono w-4">{index + 1}.</span>
+                                                                <span>{category.name}</span>
+                                                            </div>
+                                                        ) : null;
+                                                    })
+                                                ) : (
+                                                    <span className="text-xs text-gray-400 italic">لا توجد تبويبات</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end gap-2 mt-4 pt-3 border-t dark:border-gray-600">
+                                            <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); handleEditType(type); }} leftIcon={<Icon name="edit" className="w-4 h-4"/>}>تعديل</Button>
+                                            <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); deleteInspectionType(type.id); }} leftIcon={<Icon name="delete" className="w-4 h-4"/>}>حذف</Button>
+                                        </div>
                                     </div>
                                 )}
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {/* TAB 2: FINDINGS */}
+                {activeTab === 'findings' && (
+                    <section className="animate-fade-in flex flex-col">
+                        {/* Header Area */}
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4 px-1 pt-1">
+                            {!selectedCategoryId && (
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">إدارة البنود والمعايير</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">إضافة وحذف البنود والصور والمجموعات الخاصة بكل قسم.</p>
+                                </div>
+                            )}
+                            <div className={`${selectedCategoryId ? 'hidden lg:block' : ''}`}>
+                                <Button onClick={handleAddCategory} variant="secondary" leftIcon={<Icon name="add" className="w-5 h-5"/>}>
+                                    إضافة تبويب جديد
+                                </Button>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Findings Grid Area */}
-                    <div className="lg:w-3/4 flex-grow">
-                        {selectedCategoryId ? (
-                            <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-6 min-h-[400px]">
-                                <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                                    <div>
-                                        <h4 className="text-lg font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                                            <Icon name="findings" className="w-5 h-5 text-blue-500" />
-                                            بنود: {selectedCategoryName}
-                                            <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs py-0.5 px-2 rounded-full">{filteredFindings.length}</span>
-                                        </h4>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {/* View Mode Toggle */}
-                                        <div className="flex items-center bg-white dark:bg-slate-700 rounded-lg border dark:border-slate-600 p-1">
-                                            <button
-                                                onClick={() => setViewMode('groups')}
-                                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'groups' ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
-                                            >
-                                                المجموعات
-                                            </button>
-                                            <button
-                                                onClick={() => setViewMode('flat')}
-                                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'flat' ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
-                                                title="عرض الترتيب كما يظهر في التقرير"
-                                            >
-                                                ترتيب التقرير
-                                            </button>
-                                        </div>
-                                        <Button onClick={handleAddFinding} leftIcon={<Icon name="add" className="w-5 h-5"/>}>
-                                            إضافة بند
-                                        </Button>
-                                    </div>
+                        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
+                            {/* Categories Sidebar - STICKY */}
+                            <div className={`lg:w-1/4 flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden sticky top-20 max-h-[calc(100vh-100px)] lg:h-[calc(100vh-100px)] ${selectedCategoryId ? 'hidden lg:flex' : 'flex w-full'}`}>
+                                <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-b dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-200 flex-shrink-0">
+                                    التبويبات ({customFindingCategories.length})
                                 </div>
-
-                                {filteredFindings.length > 0 ? (
-                                    <div className="space-y-8">
-                                        {/* VIEW MODE: GROUPS */}
-                                        {viewMode === 'groups' && groupedFindings.map(([groupName, findings]) => (
-                                            <div key={groupName} className="relative">
-                                                <h5 className="sticky top-0 z-10 bg-gray-50/95 dark:bg-slate-900/80 backdrop-blur-sm py-2 mb-3 font-bold text-slate-600 dark:text-slate-300 border-b dark:border-slate-600 flex items-center gap-2">
-                                                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                                    {groupName}
-                                                    <span className="text-xs font-normal text-slate-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full border dark:border-slate-700">{findings.length}</span>
-                                                </h5>
-                                                
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                                                    {findings.map(finding => (
-                                                        <FindingCardItem 
-                                                            key={finding.id} 
-                                                            finding={finding} 
-                                                            onEdit={handleEditFinding} 
-                                                            onDelete={deletePredefinedFinding}
-                                                            onMove={handleMoveFinding}
-                                                            onOrderChange={handleManualOrderChange}
-                                                        />
-                                                    ))}
+                                <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                    {customFindingCategories.map(cat => (
+                                        <div 
+                                            key={cat.id} 
+                                            className={`group flex justify-between items-center p-3 rounded-lg cursor-pointer transition-all ${
+                                                selectedCategoryId === cat.id 
+                                                ? 'bg-blue-600 text-white shadow-md' 
+                                                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+                                            }`}
+                                            onClick={() => setSelectedCategoryId(cat.id)}
+                                        >
+                                            <span className="font-medium truncate">{cat.name}</span>
+                                            <div className="flex items-center">
+                                                <div className={`flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${selectedCategoryId === cat.id ? 'opacity-100' : ''}`}>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleEditCategory(cat); }}
+                                                        className={`p-1.5 rounded hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`}
+                                                        title="تعديل التبويب"
+                                                    >
+                                                        <Icon name="edit" className="w-4 h-4" />
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
+                                                        className={`p-1.5 rounded hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-red-200 hover:text-white' : 'text-red-500'}`}
+                                                        title="حذف التبويب"
+                                                    >
+                                                        <Icon name="delete" className="w-4 h-4" />
+                                                    </button>
                                                 </div>
+                                                <Icon name="chevron-right" className={`w-4 h-4 rtl:rotate-180 transform ${selectedCategoryId === cat.id ? 'text-white' : 'text-gray-400 opacity-0 group-hover:opacity-100'} lg:hidden ms-2`} />
                                             </div>
-                                        ))}
+                                        </div>
+                                    ))}
+                                    {customFindingCategories.length === 0 && (
+                                        <div className="text-center py-8 text-gray-400 text-sm">
+                                            لا توجد تبويبات.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
 
-                                        {/* VIEW MODE: FLAT (REPORT ORDER) */}
-                                        {viewMode === 'flat' && (
-                                            <div>
-                                                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800 mb-4 flex gap-2 items-start">
-                                                    <Icon name="document-report" className="w-5 h-5 text-blue-600 mt-0.5" />
-                                                    <p className="text-xs text-blue-800 dark:text-blue-200">
-                                                        هذا العرض يوضح الترتيب الفعلي للبطاقات في التقرير النهائي. استخدم الأسهم أو اكتب الرقم للترتيب.
-                                                    </p>
+                            {/* Findings Grid Area - Extended Downwards (No internal scroll) */}
+                            <div className={`lg:w-3/4 flex-1 flex-col bg-gray-50 dark:bg-gray-800/30 rounded-xl overflow-hidden h-auto ${selectedCategoryId ? 'flex' : 'hidden lg:flex'}`}>
+                                {selectedCategoryId ? (
+                                    <>
+                                        <div className="p-4 border-b dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 flex flex-col sm:flex-row justify-between items-center gap-4 sticky top-0 z-20 backdrop-blur-md">
+                                            <div className="flex items-center w-full sm:w-auto">
+                                                {/* Back Button (Mobile Only) */}
+                                                <button 
+                                                    onClick={() => setSelectedCategoryId(null)}
+                                                    className="lg:hidden p-2 -mr-2 ml-2 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors"
+                                                >
+                                                    <ArrowLeftIcon className="w-5 h-5 transform scale-x-[-1]" />
+                                                </button>
+                                                
+                                                <h4 className="text-lg font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                                    <Icon name="findings" className="w-5 h-5 text-blue-500" />
+                                                    <span className="truncate max-w-[150px] sm:max-w-none">{selectedCategoryName}</span>
+                                                    <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs py-0.5 px-2 rounded-full">{filteredFindings.length}</span>
+                                                </h4>
+                                            </div>
+                                            <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                                                {/* View Mode Toggle */}
+                                                <div className="flex items-center bg-white dark:bg-slate-700 rounded-lg border dark:border-slate-600 p-1 flex-shrink-0">
+                                                    <button
+                                                        onClick={() => setViewMode('groups')}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'groups' ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
+                                                    >
+                                                        المجموعات
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setViewMode('flat')}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'flat' ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
+                                                        title="عرض الترتيب كما يظهر في التقرير"
+                                                    >
+                                                        ترتيب التقرير
+                                                    </button>
                                                 </div>
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                                                    {filteredFindings.map((finding, index) => (
-                                                        <div key={finding.id} className="relative">
-                                                            <div className="absolute top-2 right-2 z-10 bg-slate-800 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full opacity-70">
-                                                                {index + 1}
+                                                <Button onClick={handleAddFinding} leftIcon={<Icon name="add" className="w-4 h-4"/>} size="sm" className="whitespace-nowrap flex-shrink-0">
+                                                    إضافة بند
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-2 sm:p-4 pb-24">
+                                            {filteredFindings.length > 0 ? (
+                                                <div className="space-y-6">
+                                                    {/* VIEW MODE: GROUPS */}
+                                                    {viewMode === 'groups' && groupedFindings.map(([groupName, findings]) => (
+                                                        <div key={groupName} className="relative">
+                                                            <h5 className="sticky top-16 z-10 bg-gray-50/95 dark:bg-slate-900/90 backdrop-blur-sm py-2 mb-3 font-bold text-slate-600 dark:text-slate-300 border-b dark:border-slate-600 flex items-center gap-2">
+                                                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                                                {groupName}
+                                                                <span className="text-xs font-normal text-slate-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full border dark:border-slate-700">{findings.length}</span>
+                                                            </h5>
+                                                            
+                                                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+                                                                {findings.map(finding => (
+                                                                    <FindingCardItem 
+                                                                        key={finding.id} 
+                                                                        finding={finding} 
+                                                                        onEdit={handleEditFinding} 
+                                                                        onDelete={deletePredefinedFinding}
+                                                                        onMove={handleMoveFinding}
+                                                                        onOrderChange={handleManualOrderChange}
+                                                                    />
+                                                                ))}
                                                             </div>
-                                                            <div className={`absolute top-2 left-2 z-10 text-[9px] px-1.5 py-0.5 rounded ${
-                                                                finding.report_position === 'right' ? 'bg-green-100 text-green-700' :
-                                                                finding.report_position === 'left' ? 'bg-red-100 text-red-700' :
-                                                                'bg-gray-100 text-gray-700'
-                                                            }`}>
-                                                                {finding.report_position === 'right' ? 'يمين' :
-                                                                 finding.report_position === 'left' ? 'يسار' : 'وسط'}
-                                                            </div>
-                                                            <FindingCardItem 
-                                                                finding={finding} 
-                                                                onEdit={handleEditFinding} 
-                                                                onDelete={deletePredefinedFinding}
-                                                                onMove={handleMoveFinding}
-                                                                onOrderChange={handleManualOrderChange}
-                                                            />
                                                         </div>
                                                     ))}
+
+                                                    {/* VIEW MODE: FLAT (REPORT ORDER) */}
+                                                    {viewMode === 'flat' && (
+                                                        <div>
+                                                            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800 mb-4 flex gap-2 items-start">
+                                                                <Icon name="document-report" className="w-5 h-5 text-blue-600 mt-0.5" />
+                                                                <p className="text-xs text-blue-800 dark:text-blue-200">
+                                                                    هذا العرض يوضح الترتيب الفعلي للبطاقات في التقرير النهائي. استخدم الأسهم أو اكتب الرقم للترتيب.
+                                                                </p>
+                                                            </div>
+                                                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+                                                                {filteredFindings.map((finding, index) => (
+                                                                    <div key={finding.id} className="relative group">
+                                                                        <div className="absolute top-1 right-1 z-10 bg-slate-800 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full opacity-80 shadow-sm border border-slate-600">
+                                                                            {index + 1}
+                                                                        </div>
+                                                                        <div className={`absolute top-1 left-1 z-10 text-[8px] px-1 py-0.5 rounded opacity-80 shadow-sm ${
+                                                                            finding.report_position === 'right' ? 'bg-green-100 text-green-700' :
+                                                                            finding.report_position === 'left' ? 'bg-red-100 text-red-700' :
+                                                                            'bg-gray-100 text-gray-700'
+                                                                        }`}>
+                                                                            {finding.report_position === 'right' ? 'يمين' :
+                                                                            finding.report_position === 'left' ? 'يسار' : 'وسط'}
+                                                                        </div>
+                                                                        <FindingCardItem 
+                                                                            finding={finding} 
+                                                                            onEdit={handleEditFinding} 
+                                                                            onDelete={deletePredefinedFinding}
+                                                                            onMove={handleMoveFinding}
+                                                                            onOrderChange={handleManualOrderChange}
+                                                                        />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </div>
-                                        )}
-                                    </div>
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                                                    <Icon name="findings" className="w-12 h-12 mb-2 opacity-50" />
+                                                    <p>لا توجد بنود فحص في هذا التبويب.</p>
+                                                    <button onClick={handleAddFinding} className="mt-2 text-blue-600 hover:underline text-sm font-semibold">إضافة أول بند</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
                                 ) : (
-                                    <div className="flex flex-col items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <Icon name="findings" className="w-12 h-12 mb-2 opacity-50" />
-                                        <p>لا توجد بنود فحص في هذا التبويب.</p>
-                                        <button onClick={handleAddFinding} className="mt-2 text-blue-600 hover:underline text-sm font-semibold">إضافة أول بند</button>
+                                    <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                                        <Icon name="chevron-right" className="w-12 h-12 mb-4 opacity-30" />
+                                        <p className="text-lg">اختر تبويبًا من القائمة الجانبية</p>
+                                        <p className="text-sm">لإدارة البنود والصور الخاصة به</p>
                                     </div>
                                 )}
                             </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full min-h-[400px] bg-gray-50 dark:bg-gray-800/30 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-gray-400">
-                                <Icon name="chevron-right" className="w-12 h-12 mb-4 opacity-30" />
-                                <p className="text-lg">اختر تبويبًا من القائمة الجانبية</p>
-                                <p className="text-sm">لإدارة البنود والصور الخاصة به</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </section>
+                        </div>
+                    </section>
+                )}
+            </div>
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle} size={modalTitle.includes('بند') ? '2xl' : 'lg'}>
                 {modalContent}
@@ -410,7 +469,7 @@ const InspectionSettingsTab: React.FC = () => {
     );
 };
 
-// Extracted Component for cleaner code
+// Extracted Component for cleaner code - COMPACT VERSION
 const FindingCardItem: React.FC<{ 
     finding: PredefinedFinding; 
     onEdit: (f: PredefinedFinding) => void; 
@@ -419,10 +478,8 @@ const FindingCardItem: React.FC<{
     onOrderChange: (id: string, newIndex: number) => void;
 }> = ({ finding, onEdit, onDelete, onMove, onOrderChange }) => {
     
-    // Local state for the input field to prevent jumping while typing
     const [localOrder, setLocalOrder] = useState<string>(String(finding.orderIndex || 0));
 
-    // Sync local state when the prop changes (e.g. after a re-sort)
     useEffect(() => {
         setLocalOrder(String(finding.orderIndex || 0));
     }, [finding.orderIndex]);
@@ -432,7 +489,6 @@ const FindingCardItem: React.FC<{
         if (!isNaN(val) && val !== finding.orderIndex) {
             onOrderChange(finding.id, val);
         } else {
-            // Revert if invalid or unchanged
             setLocalOrder(String(finding.orderIndex || 0));
         }
     };
@@ -445,9 +501,9 @@ const FindingCardItem: React.FC<{
     };
 
     return (
-        <div className={`group relative bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col transition-all duration-200 h-full ${finding.is_bundle ? 'border-r-4 border-r-purple-500' : ''}`}>
-            {/* Image Area */}
-            <div className="aspect-[4/3] w-full bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
+        <div className={`group relative bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col transition-all duration-200 h-full ${finding.is_bundle ? 'border-r-2 border-r-purple-500' : ''}`}>
+            {/* Image Area - Reduced Height */}
+            <div className="h-16 w-full bg-gray-100 dark:bg-gray-700 relative overflow-hidden flex items-center justify-center">
                 {finding.reference_image ? (
                     <img 
                         src={finding.reference_image} 
@@ -456,72 +512,48 @@ const FindingCardItem: React.FC<{
                         style={{ objectPosition: finding.reference_image_position || 'center' }}
                     />
                 ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-300 dark:text-gray-600">
+                    <div className="flex flex-col items-center justify-center text-gray-300 dark:text-gray-600">
                         {finding.is_bundle ? (
-                            <Icon name="sparkles" className="w-10 h-10 mb-2 opacity-50 text-purple-400" />
+                            <Icon name="sparkles" className="w-5 h-5 mb-0.5 opacity-50 text-purple-400" />
                         ) : (
-                            <Icon name="camera" className="w-10 h-10 mb-2 opacity-50" />
+                            <Icon name="camera" className="w-5 h-5 mb-0.5 opacity-50" />
                         )}
-                        <span className="text-xs">{finding.is_bundle ? 'حزمة بنود' : 'لا توجد صورة'}</span>
+                        <span className="text-[8px]">{finding.is_bundle ? 'حزمة' : 'صورة'}</span>
                     </div>
                 )}
                 
-                {/* Hover Overlay Actions */}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-[1px]">
+                {/* Overlay Actions - Always visible on touch, hover on desktop */}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 backdrop-blur-[1px]">
                     <button 
                         onClick={() => onEdit(finding)} 
-                        className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 shadow-lg transform hover:scale-110 transition-all"
-                        title="تعديل البند"
+                        className="p-1 bg-white text-gray-900 rounded-full hover:bg-gray-100 shadow-md transform hover:scale-110 transition-all"
                     >
-                        <Icon name="edit" className="w-5 h-5"/>
+                        <Icon name="edit" className="w-3 h-3"/>
                     </button>
                     <button 
                         onClick={() => onDelete(finding.id)} 
-                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg transform hover:scale-110 transition-all"
-                        title="حذف البند"
+                        className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md transform hover:scale-110 transition-all"
                     >
-                        <Icon name="delete" className="w-5 h-5"/>
+                        <Icon name="delete" className="w-3 h-3"/>
                     </button>
                 </div>
             </div>
             
-            {/* Content Area */}
-            <div className="p-3 flex-grow flex flex-col relative">
-                <h5 className="font-bold text-sm text-gray-900 dark:text-gray-100 mb-1 line-clamp-1 flex items-center gap-1" title={finding.name}>
-                    {finding.is_bundle && <Icon name="sparkles" className="w-3 h-3 text-purple-500" />}
+            {/* Content Area - Compact */}
+            <div className="p-1.5 flex-grow flex flex-col relative">
+                <h5 className="font-bold text-[10px] text-gray-900 dark:text-gray-100 mb-0.5 line-clamp-1 flex items-center gap-1" title={finding.name}>
+                    {finding.is_bundle && <Icon name="sparkles" className="w-2 h-2 text-purple-500" />}
                     {finding.name}
                 </h5>
-                <div className="mt-auto pt-2 border-t dark:border-gray-700 flex justify-between items-center">
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1 max-w-[50%]">
-                        {finding.is_bundle ? `تشمل ${finding.linked_finding_ids?.length || 0} بنود` : finding.options.join('، ')}
+                <div className="mt-auto pt-1 border-t dark:border-gray-700 flex justify-between items-center">
+                    <p className="text-[8px] text-gray-500 dark:text-gray-400 line-clamp-1 max-w-[60%]">
+                        {finding.is_bundle ? `(${finding.linked_finding_ids?.length || 0})` : finding.options.join(',')}
                     </p>
-                    {/* Ordering Controls */}
-                    <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5 items-center">
-                        <button 
-                            onClick={() => onMove(finding.id, 'right')}
-                            className="p-1 rounded hover:bg-white dark:hover:bg-gray-600 text-gray-500 hover:text-blue-500 transition-colors"
-                            title="نقل لليمين (سابق)"
-                        >
-                            <Icon name="chevron-right" className="w-3 h-3" />
-                        </button>
-                        
-                        <input 
-                            type="number"
-                            value={localOrder}
-                            onChange={(e) => setLocalOrder(e.target.value)}
-                            onBlur={handleOrderBlur}
-                            onKeyDown={handleOrderKeyDown}
-                            className="w-10 text-center text-xs font-semibold bg-white dark:bg-slate-600 border border-transparent focus:border-blue-500 dark:text-white rounded py-0.5 px-0 no-spinner outline-none"
-                            title="رقم الترتيب"
-                        />
-
-                        <button 
-                            onClick={() => onMove(finding.id, 'left')}
-                            className="p-1 rounded hover:bg-white dark:hover:bg-gray-600 text-gray-500 hover:text-blue-500 transition-colors"
-                            title="نقل لليسار (تالي)"
-                        >
-                            <Icon name="chevron-right" className="w-3 h-3 transform rotate-180" />
-                        </button>
+                    {/* Ordering Controls - Mini */}
+                    <div className="flex gap-0.5 bg-gray-100 dark:bg-gray-700 rounded p-0.5 items-center">
+                        <button onClick={() => onMove(finding.id, 'right')} className="p-0.5 hover:text-blue-500 text-gray-400"><Icon name="chevron-right" className="w-2 h-2" /></button>
+                        <input type="text" value={localOrder} onChange={(e) => setLocalOrder(e.target.value)} onBlur={handleOrderBlur} onKeyDown={handleOrderKeyDown} className="w-5 text-center text-[9px] bg-transparent border-none p-0 focus:ring-0 text-gray-700 dark:text-gray-300 font-mono" />
+                        <button onClick={() => onMove(finding.id, 'left')} className="p-0.5 hover:text-blue-500 text-gray-400"><Icon name="chevron-right" className="w-2 h-2 rotate-180" /></button>
                     </div>
                 </div>
             </div>

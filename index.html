@@ -145,6 +145,34 @@
       }
       .animate-scale-in { animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
 
+      /* Continuous Sidebar Animation (Logo & Text) */
+      @keyframes revealLoop {
+        0%, 15% {
+          max-width: 0;
+          opacity: 0;
+          margin-right: 0;
+          transform: translateX(10px);
+        }
+        25%, 85% {
+          max-width: 150px;
+          opacity: 1;
+          margin-right: 0.75rem; /* Gap-3 equivalent */
+          transform: translateX(0);
+        }
+        95%, 100% {
+          max-width: 0;
+          opacity: 0;
+          margin-right: 0;
+          transform: translateX(10px);
+        }
+      }
+      
+      .animate-reveal-loop {
+        animation: revealLoop 8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+
       .lined-paper {
           background-size: 100% 2.5rem;
           background-image: linear-gradient(to bottom, transparent calc(2.5rem - 1px), #e2e8f0 calc(2.5rem - 1px));
@@ -226,21 +254,19 @@
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "vite": "https://aistudiocdn.com/vite@^7.1.12",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.84.0",
-    "react-datepicker": "https://aistudiocdn.com/react-datepicker@^8.10.0",
-    "vite-plugin-pwa": "https://aistudiocdn.com/vite-plugin-pwa@^1.2.0",
-    "path": "https://esm.sh/path@^0.12.7",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.37.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "process": "https://esm.sh/process@^0.11.10"
+    "path": "https://esm.sh/path@^0.12.7",
+    "process": "https://esm.sh/process@^0.11.10",
+    "vite-plugin-pwa": "https://esm.sh/vite-plugin-pwa@^1.2.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.90.1"
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="background-container" class="fixed top-0 left-0 -z-10 h-full w-full bg-slate-50 dark:bg-slate-900 bg-cover bg-center transition-colors duration-500">

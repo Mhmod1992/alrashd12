@@ -12,6 +12,7 @@ import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import FilterIcon from '../components/icons/FilterIcon';
 import CalendarIcon from '../components/icons/HistoryIcon';
 import DollarSignIcon from '../components/icons/DollarSignIcon';
+import WhatsappIcon from '../components/icons/WhatsappIcon';
 import { uuidv4 } from '../lib/utils';
 import { Skeleton, SkeletonTable } from '../components/Skeleton';
 
@@ -43,7 +44,7 @@ const Clients: React.FC = () => {
     const [isLoadingClientRequests, setIsLoadingClientRequests] = useState(false);
 
     // New filter state for Request History
-    const [historyFilterType, setHistoryFilterType] = useState<'all' | 'today' | 'yesterday' | 'month' | 'custom'>('all');
+    const [historyFilterType, setHistoryFilterType] = useState<'all' | 'today' | 'yesterday' | 'month' | 'custom'>('month');
     const [historyStartDate, setHistoryStartDate] = useState('');
     const [historyEndDate, setHistoryEndDate] = useState('');
     const [paymentStatusFilter, setPaymentStatusFilter] = useState<'all' | 'unpaid'>('all');
@@ -317,8 +318,9 @@ const Clients: React.FC = () => {
                 setClientsList(prev => [newClient, ...prev]);
             }
             setIsModalOpen(false);
-        } catch (error) {
-            addNotification({ title: 'خطأ', message: 'فشلت عملية الحفظ.', type: 'error' });
+        } catch (error: any) {
+            console.error("Save Client Error:", error);
+            addNotification({ title: 'خطأ', message: error.message || 'فشلت عملية الحفظ. تحقق من البيانات.', type: 'error' });
         }
     };
     
@@ -329,8 +331,9 @@ const Clients: React.FC = () => {
             await updateClient({ ...selectedClient, is_vip: newStatus });
             setClientsList(prev => prev.map(c => c.id === selectedClient.id ? { ...c, is_vip: newStatus } : c));
             addNotification({ title: 'نجاح', message: newStatus ? `تم تمييز ${selectedClient.name} كعميل مميز.` : 'تم إزالة تمييز العميل.', type: 'success' });
-        } catch (error) {
-            addNotification({ title: 'خطأ', message: 'فشل تحديث حالة العميل.', type: 'error' });
+        } catch (error: any) {
+            console.error("Toggle VIP Error:", error);
+            addNotification({ title: 'خطأ', message: error.message || 'فشل تحديث حالة العميل. تأكد من إعداد قاعدة البيانات.', type: 'error' });
         }
     };
 
@@ -347,6 +350,17 @@ const Clients: React.FC = () => {
         
         const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
+    };
+    
+    const handleOpenWhatsappChat = () => {
+        if (!selectedClient) return;
+        let phone = selectedClient.phone.replace(/\D/g, '');
+        if (phone.startsWith('05')) {
+            phone = '966' + phone.substring(1);
+        } else if (phone.length === 9 && phone.startsWith('5')) {
+            phone = '966' + phone;
+        }
+        window.open(`https://wa.me/${phone}`, '_blank');
     };
 
     const primaryColor = design === 'classic' ? 'teal' : design === 'glass' ? 'indigo' : 'blue';
@@ -423,9 +437,16 @@ const Clients: React.FC = () => {
                                         <div className="flex items-center gap-2 mt-2 text-slate-600 dark:text-slate-300">
                                             <PhoneIcon className="w-5 h-5"/>
                                             <span>{selectedClient.phone}</span>
-                                            <a href={`tel:${selectedClient.phone}`} className="p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50" title="اتصال">
-                                                <Icon name="phone" className="w-5 h-5 text-green-500"/>
+                                            <a href={`tel:${selectedClient.phone}`} className="p-1.5 rounded-md bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/50 text-green-600 dark:text-green-400 transition-colors" title="اتصال">
+                                                <Icon name="phone" className="w-5 h-5"/>
                                             </a>
+                                            <button 
+                                                onClick={handleOpenWhatsappChat} 
+                                                className="p-1.5 rounded-md bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] transition-colors" 
+                                                title="محادثة واتساب"
+                                            >
+                                                <WhatsappIcon className="w-5 h-5"/>
+                                            </button>
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-end gap-2">
@@ -496,9 +517,9 @@ const Clients: React.FC = () => {
                                         <div className="mb-4 bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-100 dark:border-slate-600 space-y-3">
                                             <div className="flex flex-wrap gap-2 items-center">
                                                 <span className="text-xs font-bold text-slate-500 flex items-center gap-1"><CalendarIcon className="w-3 h-3"/> التاريخ:</span>
+                                                <button onClick={() => setHistoryFilterType('month')} className={`px-3 py-1 rounded text-xs transition-colors ${filterButtonClass(historyFilterType === 'month')}`}>هذا الشهر</button>
                                                 <button onClick={() => setHistoryFilterType('today')} className={`px-3 py-1 rounded text-xs transition-colors ${filterButtonClass(historyFilterType === 'today')}`}>اليوم</button>
                                                 <button onClick={() => setHistoryFilterType('yesterday')} className={`px-3 py-1 rounded text-xs transition-colors ${filterButtonClass(historyFilterType === 'yesterday')}`}>أمس</button>
-                                                <button onClick={() => setHistoryFilterType('month')} className={`px-3 py-1 rounded text-xs transition-colors ${filterButtonClass(historyFilterType === 'month')}`}>هذا الشهر</button>
                                                 <button onClick={() => setHistoryFilterType('all')} className={`px-3 py-1 rounded text-xs transition-colors ${filterButtonClass(historyFilterType === 'all')}`}>الكل</button>
                                                 <button onClick={() => setHistoryFilterType('custom')} className={`px-3 py-1 rounded text-xs transition-colors ${filterButtonClass(historyFilterType === 'custom')}`}>مخصص</button>
                                             </div>
