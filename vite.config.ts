@@ -3,7 +3,6 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-// FIX: Import process to provide correct typings for process.cwd() in a modular context.
 import process from 'process';
 
 export default defineConfig(({ mode }) => {
@@ -20,10 +19,10 @@ export default defineConfig(({ mode }) => {
           registerType: 'autoUpdate',
           injectRegister: 'auto',
           devOptions: {
-            enabled: true, // تفعيل PWA في وضع التطوير للاختبار
+            enabled: true, // مهم جداً: تفعيل PWA أثناء التطوير للاختبار
             type: 'module',
           },
-          includeAssets: ['icon.svg'], 
+          includeAssets: ['icon.svg', 'robots.txt'], 
           manifest: {
             id: '/',
             name: 'نظام إدارة الورشة',
@@ -36,10 +35,18 @@ export default defineConfig(({ mode }) => {
             start_url: '/',
             orientation: 'portrait',
             icons: [
-              { src: 'icon.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },
-              { src: 'icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
-              { src: 'icon.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'maskable' },
-              { src: 'icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' }
+              {
+                src: 'icon.svg',
+                sizes: '192x192',
+                type: 'image/svg+xml',
+                purpose: 'any maskable'
+              },
+              {
+                src: 'icon.svg',
+                sizes: '512x512',
+                type: 'image/svg+xml',
+                purpose: 'any maskable'
+              }
             ]
           },
           workbox: {
@@ -52,7 +59,7 @@ export default defineConfig(({ mode }) => {
                 handler: 'CacheFirst',
                 options: {
                   cacheName: 'supabase-images-cache',
-                  expiration: { maxEntries: 1000, maxAgeSeconds: 30 * 24 * 60 * 60 }, // 30 days
+                  expiration: { maxEntries: 1000, maxAgeSeconds: 30 * 24 * 60 * 60 },
                   cacheableResponse: { statuses: [0, 200] }
                 }
               },
@@ -61,17 +68,7 @@ export default defineConfig(({ mode }) => {
                 handler: 'CacheFirst',
                 options: {
                   cacheName: 'google-fonts-cache',
-                  expiration: { maxEntries: 30, maxAgeSeconds: 365 * 24 * 60 * 60 } // 1 year
-                }
-              },
-              {
-                urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\/.*/i,
-                handler: 'NetworkFirst',
-                options: {
-                  cacheName: 'supabase-api-cache',
-                  networkTimeoutSeconds: 3,
-                  expiration: { maxEntries: 200, maxAgeSeconds: 5 * 60 }, // 5 minutes
-                  cacheableResponse: { statuses: [0, 200] }
+                  expiration: { maxEntries: 30, maxAgeSeconds: 365 * 24 * 60 * 60 }
                 }
               }
             ]
