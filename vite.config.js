@@ -11,15 +11,15 @@ export default ({ mode }) => {
         registerType: 'autoUpdate',
         injectRegister: 'auto',
         devOptions: {
-          enabled: true, // 🔴 تعطيل الـ PWA في وضع التطوير (Dev Mode)
+          enabled: false, // 🔴 تعطيل الـ PWA في وضع التطوير (Dev Mode)
           type: 'module',
         },
         includeAssets: ['icon.svg'], 
         manifest: {
           id: '/',
           name: 'نظام إدارة ورشة سيارات',
-          short_name: 'الراشــد',
-          description: 'نظام شامل لإدارة ورش فحص السيارات ',
+          short_name: 'Aero Workshop',
+          description: 'نظام شامل لإدارة ورش صيانة السيارات والفحص الفني',
           theme_color: '#3b82f6',
           background_color: '#ffffff',
           display: 'standalone',

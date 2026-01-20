@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { FinancialStats } from '../types';
@@ -99,7 +100,7 @@ const ExecutiveKpiCard: React.FC<{
     title: string;
     value: string;
     trend?: number;
-    icon: React.ReactElement<{ className?: string }>;
+    icon: React.ReactNode;
     colorClass: string; // Tailwind text color class
     bgClass: string; // Tailwind bg color class
     isLoading?: boolean;
@@ -112,7 +113,7 @@ const ExecutiveKpiCard: React.FC<{
 
             <div className="flex justify-between items-start mb-2 relative z-10">
                 <div className={`p-2 rounded-lg ${bgClass} ${colorClass}`}>
-                    {React.cloneElement(icon, { className: 'w-5 h-5' })}
+                    {React.cloneElement(icon as React.ReactElement, { className: 'w-5 h-5' })}
                 </div>
                 {trend !== undefined && (
                     <div className={`flex items-center gap-0.5 text-[10px] font-bold ${trend >= 0 ? 'text-emerald-600' : 'text-rose-500'} bg-slate-50 dark:bg-slate-900 px-1.5 py-0.5 rounded`}>
