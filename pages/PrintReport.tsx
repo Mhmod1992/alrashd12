@@ -8,8 +8,59 @@ import WhatsappIcon from '../components/icons/WhatsappIcon';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import SparklesIcon from '../components/icons/SparklesIcon';
 import ReportTranslationModal from '../components/ReportTranslationModal';
-import Modal from '../components/Modal'; // Ensure Modal is imported
+import Modal from '../components/Modal'; 
 import { InspectionRequest, ReportSettings, CustomFindingCategory } from '../types';
+import DocumentScannerModal from '../components/DocumentScannerModal';
+import CameraIcon from '../components/icons/CameraIcon';
+import UploadIcon from '../components/icons/UploadIcon';
+import TrashIcon from '../components/icons/TrashIcon';
+
+// --- Image Optimization Helper ---
+const optimizeDocumentImage = async (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => {
+            const maxWidth = 1200; 
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                reject(new Error('Canvas context not available'));
+                return;
+            }
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.filter = 'grayscale(100%) contrast(120%)';
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error('Blob creation failed'));
+                    return;
+                }
+                const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' });
+                resolve(newFile);
+            }, 'image/jpeg', 0.6);
+            
+            URL.revokeObjectURL(img.src);
+        };
+        img.onerror = (err) => {
+            URL.revokeObjectURL(img.src);
+            reject(err);
+        };
+    });
+};
 
 const ensureLibraries = async (): Promise<void> => {
     const isLoaded = () => (window as any).jspdf && (window as any).html2canvas;
@@ -85,7 +136,7 @@ const PrintReport: React.FC = () => {
         selectedRequestId, requests, clients, cars, carMakes, 
         carModels, inspectionTypes, setPage, predefinedFindings, 
         customFindingCategories, settings, addNotification, goBack,
-        fetchAndUpdateSingleRequest, updateRequest, uploadImage
+        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
@@ -101,6 +152,9 @@ const PrintReport: React.FC = () => {
     // Paper Archive State
     const [isPaperModalOpen, setIsPaperModalOpen] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [scannerFile, setScannerFile] = useState<File | null>(null);
 
     const [isDataReady, setIsDataReady] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -145,6 +199,90 @@ const PrintReport: React.FC = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    // --- Upload Handlers ---
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || !originalRequest) return;
+        const files: File[] = Array.from(e.target.files);
+
+        if (files.length === 1 && files[0].type.startsWith('image/')) {
+             setScannerFile(files[0]);
+             setIsScannerOpen(true);
+             e.target.value = '';
+             return;
+        }
+
+        processFiles(files);
+        e.target.value = '';
+    };
+
+    const handleScannerConfirm = (processedFile: File) => {
+        setIsScannerOpen(false);
+        setScannerFile(null);
+        processFiles([processedFile]);
+    };
+
+    const processFiles = async (files: File[]) => {
+        if (!originalRequest) return;
+        setIsUploading(true);
+
+        try {
+            const newAttachments = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                let optimizedFile = file;
+                
+                if (!file.name.startsWith('scanned_')) {
+                     optimizedFile = await optimizeDocumentImage(file);
+                }
+
+                // Changed to 'attached_files' bucket
+                const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
+                
+                newAttachments.push({
+                    name: `req_${originalRequest.request_number}_page_${Date.now()}_${i}.jpg`,
+                    type: 'manual_paper',
+                    data: publicUrl
+                });
+            }
+
+            const existingFiles = originalRequest.attached_files || [];
+            const updatedFiles = [...existingFiles, ...newAttachments];
+            
+            await updateRequest({
+                id: originalRequest.id,
+                attached_files: updatedFiles
+            });
+            
+            // Re-fetch to ensure UI is in sync if needed, but context update should handle it
+            addNotification({ title: 'تم الحفظ', message: `تم إضافة ${newAttachments.length} صفحات للأرشيف.`, type: 'success' });
+
+        } catch (error: any) {
+            console.error(error);
+            addNotification({ title: 'خطأ', message: `فشل رفع الصور: ${error.message}`, type: 'error' });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleDeleteImage = async (fileUrl: string) => {
+        if (!originalRequest) return;
+        const confirm = window.confirm("هل أنت متأكد من حذف هذه الصفحة من الأرشيف؟");
+        if (!confirm) return;
+
+        try {
+            await deleteImage(fileUrl);
+            const updatedFiles = (originalRequest.attached_files || []).filter(f => f.data !== fileUrl);
+            await updateRequest({
+                id: originalRequest.id,
+                attached_files: updatedFiles
+            });
+             addNotification({ title: 'تم الحذف', message: 'تم حذف الصفحة.', type: 'info' });
+        } catch (error) {
+             addNotification({ title: 'خطأ', message: 'فشل الحذف.', type: 'error' });
+        }
+    };
+
+
     const client = request ? clients.find(c => c.id === request.client_id) : undefined;
     const car = request ? cars.find(c => c.id === request.car_id) : undefined;
     const carModel = car ? carModels.find(m => m.id === car.model_id) : undefined;
@@ -176,6 +314,7 @@ const PrintReport: React.FC = () => {
     };
 
     const generatePdfInstance = async () => {
+        // ... (Existing implementation remains unchanged) ...
         if (!reportRef.current) return null;
         
         setIsGenerating(true);
@@ -191,29 +330,9 @@ const PrintReport: React.FC = () => {
             const originalElement = reportRef.current;
             const clone = originalElement.cloneNode(true) as HTMLElement;
             
-            // =========================================================
-            // 🛠️ منطقة التحكم في التصميم (الترتيب الطبقي) 🛠️
-            // =========================================================
-            
-            /* 1. إعدادات البطاقة الكلية (الحاوية الرئيسية) */
-            const MAIN_CARD = {
-                minHeight: '200px',
-                margin: '8px 0',
-                padding: '6px',
-                bgColor: '#ffffff',
-                borderColor: '#e2e8f0',
-                borderRadius: '8px'
-            };
+            const MAIN_CARD = { minHeight: '200px', margin: '8px 0', padding: '6px', bgColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px' };
+            const IMAGE_CONFIG = { height: '130px', marginBottom: '4px' };
 
-            /* 2. إعدادات الصورة */
-            const IMAGE_CONFIG = {
-                height: '130px',
-                marginBottom: '4px'
-            };
-
-            // =========================================================
-
-            // --- 🛠️ معالجة النصوص الملونة ---
             const coloredSpans = clone.querySelectorAll('span[style*="background-color"]');
             coloredSpans.forEach((span) => {
                 const originalText = span.innerHTML;
@@ -228,137 +347,22 @@ const PrintReport: React.FC = () => {
             clone.style.zIndex = '-9999';
             clone.style.background = '#ffffff';
             clone.style.overflow = 'visible';
-            
-            // Apply Direction
             clone.style.direction = reportDirection;
             clone.style.textAlign = reportDirection === 'rtl' ? 'right' : 'left';
             
             const style = document.createElement('style');
             style.innerHTML = `
-                /* Reset */
-                .print-clone * { 
-                    box-sizing: border-box !important; 
-                    font-family: 'Tajawal', sans-serif !important; 
-                }
-
-                /* --- CARD CONTAINER --- */
-                .print-clone .finding-item { 
-                    position: relative !important; 
-                    display: flex !important; 
-                    flex-direction: column !important;
-                    align-items: center !important; 
-                    justify-content: flex-start !important;
-                    min-height: ${MAIN_CARD.minHeight} !important;
-                    height: auto !important;
-                    margin: ${MAIN_CARD.margin} !important;
-                    padding: ${MAIN_CARD.padding} !important;
-                    border: 1px solid ${MAIN_CARD.borderColor} !important; 
-                    background: ${MAIN_CARD.bgColor} !important; 
-                    border-radius: ${MAIN_CARD.borderRadius} !important;
-                    box-shadow: none !important;
-                    page-break-inside: avoid !important;
-                }
-                
-                /* --- 1. IMAGE --- */
-                .print-clone .finding-img-container { 
-                    order: 1 !important;
-                    position: relative !important;
-                    display: flex !important; 
-                    align-items: center !important; 
-                    justify-content: center !important; 
-                    width: 100% !important;
-                    height: ${IMAGE_CONFIG.height} !important;
-                    background: transparent !important; 
-                    margin-bottom: ${IMAGE_CONFIG.marginBottom} !important;
-                    overflow: hidden !important;
-                }
-                
-                .print-clone .finding-img-container img { 
-                    width: auto !important; height: auto !important;
-                    max-width: 100% !important; max-height: 100% !important;
-                    object-fit: contain !important;
-                }
-
-                /* --- 2. WRAPPER (Container for Text) --- */
-                .print-clone .finding-text-wrapper {
-                    order: 2 !important;
-                    position: static !important;
-                    display: flex !important;
-                    flex-direction: column !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    width: 98% !important;
-                    /* إزالة تنسيق الصندوق الموحد */
-                    background-color: transparent !important;
-                    border: none !important;
-                    padding: 0 !important;
-                    min-height: 50px !important;
-                    overflow: visible !important;
-                }
-
-                /* Name Style (Floating Top Layer - Badge) */
-                .print-clone .finding-text-wrapper h4 {
-                    position: relative !important;
-                    z-index: 10 !important; /* طبقة علوية */
-                    
-                    /* مظهر الشارة */
-                    background-color: #ffffff !important;
-                    border: 1px solid #cbd5e1 !important;
-                    border-radius: 12px !important;
-                    padding: 2px 10px !important;
-                    box-shadow: 0 2px 3px rgba(0,0,0,0.05) !important;
-                    
-                    /* التموضع */
-                    margin: 0 !important;
-                    margin-bottom: -10px !important; /* تداخل سلبي ليسقط فوق العنصر التالي */
-                    top: -2mm !important; /* 🟢 رفع الاسم 2 مم للأعلى */
-                    
-                    /* النص */
-                    font-size: 10px !important;
-                    color: #1e293b !important;
-                    font-weight: bold !important;
-                    text-align: center !important;
-                    width: auto !important;
-                    max-width: 95% !important;
-                }
-                
-                /* Status Style (Base Bottom Layer - Card) */
-                .print-clone .finding-text-wrapper p {
-                    position: relative !important;
-                    z-index: 5 !important; /* طبقة سفلية */
-                    
-                    /* مظهر الصندوق */
-                    background-color: #f8fafc !important;
-                    border: 1px solid #e2e8f0 !important;
-                    border-radius: 6px !important;
-                    
-                    /* الحواشي (مع زيادة الحاشية العلوية لاستيعاب الاسم المتداخل) */
-                    padding: 12px 8px 4px 8px !important; 
-                    margin: 0 !important;
-                    
-                    /* النص */
-                    width: 100% !important;
-                    text-align: center !important;
-                    font-size: 11px !important;
-                    font-weight: bold !important;
-                    color: #334155 !important;
-                    white-space: nowrap !important;
-                }
-
-                /* Hide unwanted containers */
+                .print-clone * { box-sizing: border-box !important; font-family: 'Tajawal', sans-serif !important; }
+                .print-clone .finding-item { position: relative !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-start !important; min-height: ${MAIN_CARD.minHeight} !important; height: auto !important; margin: ${MAIN_CARD.margin} !important; padding: ${MAIN_CARD.padding} !important; border: 1px solid ${MAIN_CARD.borderColor} !important; background: ${MAIN_CARD.bgColor} !important; border-radius: ${MAIN_CARD.borderRadius} !important; box-shadow: none !important; page-break-inside: avoid !important; }
+                .print-clone .finding-img-container { order: 1 !important; position: relative !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: ${IMAGE_CONFIG.height} !important; background: transparent !important; margin-bottom: ${IMAGE_CONFIG.marginBottom} !important; overflow: hidden !important; }
+                .print-clone .finding-img-container img { width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
+                .print-clone .finding-text-wrapper { order: 2 !important; position: static !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; width: 98% !important; background-color: transparent !important; border: none !important; padding: 0 !important; min-height: 50px !important; overflow: visible !important; }
+                .print-clone .finding-text-wrapper h4 { position: relative !important; z-index: 10 !important; background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 12px !important; padding: 2px 10px !important; box-shadow: 0 2px 3px rgba(0,0,0,0.05) !important; margin: 0 !important; margin-bottom: -10px !important; top: -2mm !important; font-size: 10px !important; color: #1e293b !important; font-weight: bold !important; text-align: center !important; width: auto !important; max-width: 95% !important; }
+                .print-clone .finding-text-wrapper p { position: relative !important; z-index: 5 !important; background-color: #f8fafc !important; border: 1px solid #e2e8f0 !important; border-radius: 6px !important; padding: 12px 8px 4px 8px !important; margin: 0 !important; width: 100% !important; text-align: center !important; font-size: 11px !important; font-weight: bold !important; color: #334155 !important; white-space: nowrap !important; }
                 .print-clone .finding-content { display: contents !important; }
-
-                /* Fix Headers & Layout */
                 .print-clone .info-block { top: 2px !important; position: relative !important; }
                 .print-clone .finding-category h3 { top: -4px !important; position: relative !important; }
-
-                /* Colored Text Fix */
-                .print-clone span[style*="background-color"] {
-                     position: relative !important; display: inline-block !important;
-                     top: -1px !important; padding: 0 4px !important; line-height: 1.4 !important;
-                }
-
-                /* Logo Fixes */
+                .print-clone span[style*="background-color"] { position: relative !important; display: inline-block !important; top: -1px !important; padding: 0 4px !important; line-height: 1.4 !important; }
                 .print-clone img { object-fit: contain !important; }
                 .print-clone .target-logo { height: 90px !important; width: auto !important; }
                 .print-clone .target-car-logo img { height: 60px !important; width: auto !important; }
@@ -366,7 +370,6 @@ const PrintReport: React.FC = () => {
             `;
             clone.appendChild(style);
             clone.classList.add('print-clone');
-            
             document.body.appendChild(clone);
 
             const qrContainer = clone.querySelector('.target-qr');
@@ -475,18 +478,16 @@ const PrintReport: React.FC = () => {
                         <span className="hidden sm:inline ms-1">العودة</span>
                     </Button>
                     
-                    {/* Paper Archive Viewer Button */}
-                    {paperImages.length > 0 && (
-                        <Button
-                            variant="secondary"
-                            onClick={() => setIsPaperModalOpen(true)}
-                            size="sm"
-                            className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
-                        >
-                            <Icon name="folder-open" className="w-4 h-4" />
-                            <span className="hidden sm:inline ms-1">المرفقات ({paperImages.length})</span>
-                        </Button>
-                    )}
+                    {/* Updated Paper Archive Viewer Button */}
+                    <Button
+                        variant="secondary"
+                        onClick={() => setIsPaperModalOpen(true)}
+                        size="sm"
+                        className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                    >
+                        <Icon name="folder-open" className="w-4 h-4" />
+                        <span className="hidden sm:inline ms-1">أرشيف الطلب ({paperImages.length})</span>
+                    </Button>
 
                     {translatedRequest ? (
                         <Button onClick={handleClearTranslation} variant="secondary" size="sm" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100">
@@ -562,34 +563,79 @@ const PrintReport: React.FC = () => {
                 />
             )}
 
-            {/* Paper Archive Viewer Modal */}
-            <Modal isOpen={isPaperModalOpen} onClose={() => setIsPaperModalOpen(false)} title="الأرشيف الورقي المرفق" size="3xl">
-                <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg min-h-[50vh]">
-                    {paperImages.length > 0 ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            {paperImages.map((file, idx) => (
-                                <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 bg-white shadow-sm cursor-pointer" onClick={() => setPreviewImage(file.data)}>
-                                    <img src={file.data} alt={`Paper ${idx + 1}`} className="w-full h-48 object-cover transition-transform hover:scale-105" />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <Icon name="eye" className="w-8 h-8 text-white" />
+            {/* Paper Archive Viewer & Manager Modal */}
+            <Modal isOpen={isPaperModalOpen} onClose={() => setIsPaperModalOpen(false)} title="أرشيف الطلب (المرفقات)" size="4xl">
+                <div className="flex flex-col h-[75vh]">
+                    <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
+                        {/* Right: Gallery */}
+                        <div className="md:w-2/3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 flex flex-col overflow-hidden order-2 md:order-1">
+                            <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
+                                <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة ({paperImages.length})
+                            </h4>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
+                                {paperImages.length > 0 ? (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        {paperImages.map((file, idx) => (
+                                            <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm aspect-[3/4] cursor-pointer" onClick={() => setPreviewImage(file.data)}>
+                                                <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                    <button onClick={(e) => { e.stopPropagation(); setPreviewImage(file.data); }} className="p-2 bg-white rounded-full text-slate-800 hover:bg-blue-50 transition-colors">
+                                                        <Icon name="eye" className="w-4 h-4" />
+                                                    </button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(file.data); }} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50 transition-colors">
+                                                        <TrashIcon className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                                <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] p-1 text-center truncate">
+                                                    {file.name}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] p-1 text-center truncate">
-                                        {file.name}
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <Icon name="folder-open" className="w-12 h-12 mb-2 opacity-20" />
+                                        <p className="text-sm">لا توجد صفحات مؤرشفة.</p>
                                     </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Left: Upload Actions */}
+                        <div className="md:w-1/3 flex flex-col gap-4 order-1 md:order-2 flex-shrink-0">
+                            <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-4 shadow-sm">
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">إضافة مستندات</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-1 gap-3">
+                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'}`}>
+                                        <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
+                                        {isUploading ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <UploadIcon className="w-5 h-5" />}
+                                        <span className="font-bold text-sm">رفع ملفات</span>
+                                    </label>
+
+                                    <button onClick={() => setIsScannerOpen(true)} className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'}`}>
+                                        <CameraIcon className="w-5 h-5" />
+                                        <span className="font-bold text-sm">الماسح الذكي</span>
+                                    </button>
                                 </div>
-                            ))}
+                                <p className="text-[10px] text-slate-400 mt-2 text-center">
+                                    يدعم رفع الصور (JPG, PNG) أو التصوير المباشر.
+                                </p>
+                            </div>
                         </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-                            <Icon name="folder-open" className="w-16 h-16 mb-2 opacity-20" />
-                            <p>لا توجد صور مؤرشفة لهذا الطلب.</p>
-                        </div>
-                    )}
-                </div>
-                <div className="flex justify-end pt-4 mt-2 border-t dark:border-slate-700">
-                    <Button variant="secondary" onClick={() => setIsPaperModalOpen(false)}>إغلاق</Button>
+                    </div>
+                    <div className="pt-4 mt-4 border-t dark:border-slate-700 flex justify-end flex-shrink-0">
+                        <Button variant="secondary" onClick={() => setIsPaperModalOpen(false)}>إغلاق</Button>
+                    </div>
                 </div>
             </Modal>
+
+            {/* Smart Scanner Modal */}
+            <DocumentScannerModal 
+                isOpen={isScannerOpen} 
+                onClose={() => setIsScannerOpen(false)} 
+                imageFile={scannerFile} 
+                onConfirm={handleScannerConfirm} 
+            />
 
             {/* Lightbox Modal for Zooming */}
             <Modal isOpen={!!previewImage} onClose={() => setPreviewImage(null)} title="معاينة الصورة" size="4xl">
