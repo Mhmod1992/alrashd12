@@ -15,16 +15,23 @@ interface DocumentScannerModalProps {
 
 const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onClose, imageFile, onConfirm }) => {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
+    
+    // Transform State
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [rotation, setRotation] = useState(0);
+    const [isLandscape, setIsLandscape] = useState(false);
+    
+    // Processing State
     const [isProcessing, setIsProcessing] = useState(false);
     const [filterType, setFilterType] = useState<'original' | 'document' | 'bw'>('document');
     
+    // Refs
     const containerRef = useRef<HTMLDivElement>(null);
     const imageRef = useRef<HTMLImageElement>(null);
     const isDragging = useRef(false);
     const startPos = useRef({ x: 0, y: 0 });
+    const lastPos = useRef({ x: 0, y: 0 });
 
     useEffect(() => {
         if (imageFile) {
@@ -35,27 +42,33 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
             setPosition({ x: 0, y: 0 });
             setRotation(0);
             setFilterType('document');
+            setIsLandscape(false);
             
             return () => URL.revokeObjectURL(url);
         }
     }, [imageFile]);
 
-    // --- Drag & Zoom Logic ---
+    // --- Interaction Logic ---
     const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
         isDragging.current = true;
         const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-        startPos.current = { x: clientX - position.x, y: clientY - position.y };
+        startPos.current = { x: clientX, y: clientY };
+        lastPos.current = { ...position };
     };
 
     const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (!isDragging.current) return;
-        e.preventDefault();
+        e.preventDefault(); // Prevent scrolling on touch
         const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+        
+        const deltaX = clientX - startPos.current.x;
+        const deltaY = clientY - startPos.current.y;
+        
         setPosition({
-            x: clientX - startPos.current.x,
-            y: clientY - startPos.current.y
+            x: lastPos.current.x + deltaX,
+            y: lastPos.current.y + deltaY
         });
     };
 
@@ -66,7 +79,7 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
     const handleWheel = (e: React.WheelEvent) => {
         e.preventDefault();
         const newScale = scale - e.deltaY * 0.001;
-        setScale(Math.min(Math.max(0.5, newScale), 5));
+        setScale(Math.min(Math.max(0.1, newScale), 5));
     };
 
     // --- Processing Logic ---
@@ -75,76 +88,57 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
         setIsProcessing(true);
 
         try {
+            // 1. Determine Output Size (A4 High Quality)
+            const A4_WIDTH = 1240;
+            const A4_HEIGHT = 1754;
+            
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('No canvas context');
 
-            // 1. Setup Canvas based on Crop Area (The visible container area)
-            // We want high res, so we base it on the container size multiplied by a factor or the image natural size
-            // Strategy: Render the visible portion of the image at high resolution
-            
-            const containerRect = containerRef.current.getBoundingClientRect();
-            const outputWidth = 1200; // Fixed high res width
-            const outputHeight = Math.round(outputWidth * (containerRect.height / containerRect.width));
-            
-            canvas.width = outputWidth;
-            canvas.height = outputHeight;
+            // Set canvas size based on orientation
+            canvas.width = isLandscape ? A4_HEIGHT : A4_WIDTH;
+            canvas.height = isLandscape ? A4_WIDTH : A4_HEIGHT;
 
-            // Fill white background
+            // Fill white background (for edges)
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 2. Draw Image with transforms
-            // Calculate mapping from Screen Pixels to Canvas Pixels
-            const ratio = outputWidth / containerRect.width;
+            // 2. Calculate Mapping
+            // Use containerRef (the A4 box) for viewport dimensions
+            const viewportRect = containerRef.current.getBoundingClientRect();
             
-            ctx.save();
-            // Move to center of canvas
-            ctx.translate(outputWidth / 2, outputHeight / 2);
-            ctx.rotate((rotation * Math.PI) / 180);
-            ctx.scale(scale, scale);
-            ctx.translate(position.x * ratio / scale, position.y * ratio / scale); // Apply Pan
-            
-            // Draw image centered
-            const img = imageRef.current;
-            // We draw the image centered at (0,0) of the transformed context
-            // Note: rotation resets center logic slightly, simplified:
-            // Just draw the image such that the center of the image aligns with current context origin (which is modified by pan/zoom)
-            // Actually, position is screen pixels. 
-            
-            // Re-think:
-            // The image is visually at: center_of_container + position
-            // We need to draw it on canvas at: center_of_canvas + (position * ratio)
-            
-            // Correct Transforms:
-            // 1. Translate to Center
-            // 2. Apply Pan (scaled to canvas)
-            // 3. Apply Scale
-            // 4. Apply Rotation
-            // 5. Draw Image offset by -width/2, -height/2
-            
-            // Reset transforms for a cleaner approach
-            ctx.restore();
+            // Calculate ratio between Output Canvas and Visual Viewport
+            const ratio = canvas.width / viewportRect.width;
+
+            // Calculate the "Base Scale" from the DOM rendered size vs Natural size.
+            // clientWidth/Height gives us the size of the image as it sits in the container (before CSS transform scale).
+            // This accounts for the 'contain' style automatically.
+            const renderedWidth = imageRef.current.clientWidth;
+            const domScale = renderedWidth / imageRef.current.naturalWidth;
+
             ctx.save();
             
-            // Center of canvas
-            const cx = canvas.width / 2;
-            const cy = canvas.height / 2;
+            // Move origin to center of canvas
+            ctx.translate(canvas.width / 2, canvas.height / 2);
             
-            ctx.translate(cx, cy);
-            
-            // Apply visual offsets (position is relative to visual center usually, but here it's absolute drag)
-            // Let's assume start position (0,0) means image center is at container center.
-            // Our drag logic `setPosition` modifies x/y.
-            
+            // Apply visual transforms (Position -> Rotate -> Scale)
+            // 1. Translate (Pan)
             ctx.translate(position.x * ratio, position.y * ratio);
-            ctx.scale(scale, scale);
+            
+            // 2. Rotate
             ctx.rotate((rotation * Math.PI) / 180);
             
-            ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+            // 3. Scale
+            // Final Scale = (Base Render Scale) * (User Zoom Scale) * (Screen-to-Canvas Ratio)
+            const finalScale = domScale * scale * ratio;
+            ctx.scale(finalScale, finalScale);
+            
+            // Draw centered
+            ctx.drawImage(imageRef.current, -imageRef.current.naturalWidth / 2, -imageRef.current.naturalHeight / 2);
             ctx.restore();
 
-            // 3. Apply Filters (Document Scanner Effect)
+            // 3. Apply Filters
             if (filterType !== 'original') {
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const data = imageData.data;
@@ -154,28 +148,20 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                     const g = data[i + 1];
                     const b = data[i + 2];
                     
-                    // Grayscale
                     const v = 0.299 * r + 0.587 * g + 0.114 * b;
                     
                     if (filterType === 'bw') {
-                        // Hard Threshold
                         const bw = v > 128 ? 255 : 0;
                         data[i] = bw;
                         data[i + 1] = bw;
                         data[i + 2] = bw;
                     } else {
-                        // Document Enhance (High Contrast + White Background)
-                        // Increase contrast
-                        const contrast = 1.2;
+                        // High Contrast Document
+                        const contrast = 1.3;
                         const intercept = 128 * (1 - contrast);
                         let nv = v * contrast + intercept;
-                        
-                        // Smart White Level (Clip light grays to white)
-                        if (nv > 200) nv = 255;
-                        // Smart Black Level (Darken text)
-                        if (nv < 50) nv = 0;
-                        
-                        // Clamp
+                        if (nv > 210) nv = 255; 
+                        if (nv < 60) nv = 0;   
                         nv = Math.min(255, Math.max(0, nv));
                         
                         data[i] = nv;
@@ -189,7 +175,7 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
             // 4. Export
             canvas.toBlob((blob) => {
                 if (blob) {
-                    const newFile = new File([blob], `scanned_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                    const newFile = new File([blob], `scanned_a4_${Date.now()}.jpg`, { type: 'image/jpeg' });
                     onConfirm(newFile);
                 }
                 setIsProcessing(false);
@@ -199,132 +185,141 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
             console.error(e);
             setIsProcessing(false);
         }
-    }, [scale, position, rotation, filterType, imageFile, onConfirm]);
+    }, [scale, position, rotation, filterType, isLandscape, imageFile, onConfirm]);
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="الماسح الضوئي الذكي" size="lg">
-            <div className="flex flex-col h-[70vh] select-none">
-                {/* Toolbar */}
-                <div className="flex justify-center gap-2 mb-4 p-2 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
-                    <button 
-                        onClick={() => setFilterType('original')} 
-                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${filterType === 'original' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
-                    >
-                        أصلي
-                    </button>
-                    <button 
-                        onClick={() => setFilterType('document')} 
-                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${filterType === 'document' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
-                    >
-                        تحسين مستند
-                    </button>
-                    <button 
-                        onClick={() => setFilterType('bw')} 
-                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${filterType === 'bw' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
-                    >
-                        أبيض وأسود
-                    </button>
+        <Modal isOpen={isOpen} onClose={onClose} title="الماسح الضوئي (A4)" size="xl">
+            <div className="flex flex-col h-[80vh] select-none bg-slate-100 dark:bg-slate-900 rounded-lg overflow-hidden">
+                
+                {/* --- Toolbar --- */}
+                <div className="flex flex-wrap items-center justify-between p-3 bg-white dark:bg-slate-800 border-b dark:border-slate-700 gap-2 z-10 shadow-sm">
+                    <div className="flex gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setFilterType('original')} 
+                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'original' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
+                        >
+                            أصلي
+                        </button>
+                        <button 
+                            onClick={() => setFilterType('document')} 
+                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'document' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
+                        >
+                            مستند
+                        </button>
+                        <button 
+                            onClick={() => setFilterType('bw')} 
+                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'bw' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
+                        >
+                            أبيض/أسود
+                        </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                        <button onClick={() => setRotation(r => r - 90)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300" title="تدوير يسار">
+                            <Icon name="refresh-cw" className="w-4 h-4 -scale-x-100" />
+                        </button>
+                        <button onClick={() => setRotation(r => r + 90)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300" title="تدوير يمين">
+                            <Icon name="refresh-cw" className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setIsLandscape(!isLandscape)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-bold text-xs w-20" title="قلب الإطار">
+                            {isLandscape ? 'عرضي' : 'طولي'}
+                        </button>
+                    </div>
                 </div>
 
-                {/* Viewport */}
-                <div 
-                    ref={containerRef}
-                    className="flex-1 bg-slate-900 overflow-hidden relative cursor-move rounded-lg border-2 border-slate-700 shadow-inner group"
-                    onMouseDown={handleMouseDown}
-                    onTouchStart={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onTouchMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onTouchEnd={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onWheel={handleWheel}
-                >
-                    {/* Grid Overlay / Crop Hints */}
-                    <div className="absolute inset-0 pointer-events-none z-10 opacity-30">
-                        <div className="w-full h-full border-2 border-blue-500/50 box-border"></div>
-                        <div className="absolute top-1/3 left-0 w-full h-px bg-white/20"></div>
-                        <div className="absolute top-2/3 left-0 w-full h-px bg-white/20"></div>
-                        <div className="absolute left-1/3 top-0 h-full w-px bg-white/20"></div>
-                        <div className="absolute left-2/3 top-0 h-full w-px bg-white/20"></div>
-                        {/* Corner Markers */}
-                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500"></div>
-                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500"></div>
-                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500"></div>
-                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500"></div>
-                    </div>
-                    
-                    {/* Instruction Overlay */}
-                    <div className="absolute bottom-4 left-0 right-0 text-center pointer-events-none z-20 transition-opacity duration-300 opacity-50 group-hover:opacity-0">
-                        <span className="bg-black/60 text-white text-xs px-3 py-1.5 rounded-full">
-                            اسحب للتحريك &bull; استخدم العجلة للتكبير
-                        </span>
-                    </div>
+                {/* --- Main Workspace --- */}
+                <div className="flex-1 relative overflow-hidden bg-slate-800 flex items-center justify-center p-8">
+                    {/* Dark Background Backdrop */}
+                    <div className="absolute inset-0 bg-black/50 pointer-events-none z-0"></div>
 
-                    {/* Image Container */}
+                    {/* The A4 Viewport Container */}
                     <div 
-                        className="w-full h-full flex items-center justify-center transition-transform duration-75"
+                        ref={containerRef}
+                        className="relative z-10 shadow-2xl flex items-center justify-center overflow-hidden bg-gray-300 border-4 border-white/20 ring-4 ring-black/20"
                         style={{
-                            transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`
+                            aspectRatio: isLandscape ? '297/210' : '210/297',
+                            height: isLandscape ? 'auto' : '90%',
+                            width: isLandscape ? '90%' : 'auto',
+                            maxHeight: '100%',
+                            maxWidth: '100%'
                         }}
+                        onMouseDown={handleMouseDown}
+                        onTouchStart={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onTouchMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onTouchEnd={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                        onWheel={handleWheel}
                     >
+                        {/* Reference for visual grid only */}
+                        <div className="absolute inset-0 pointer-events-none border border-blue-500/30 z-20">
+                            {/* Grid Lines */}
+                            <div className="w-full h-1/3 border-b border-blue-500/20 absolute top-0"></div>
+                            <div className="w-full h-2/3 border-b border-blue-500/20 absolute top-0"></div>
+                            <div className="h-full w-1/3 border-r border-blue-500/20 absolute left-0"></div>
+                            <div className="h-full w-2/3 border-r border-blue-500/20 absolute left-0"></div>
+                        </div>
+
+                        {/* Image Container */}
                         {imageUrl && (
                             <img 
                                 ref={imageRef}
                                 src={imageUrl} 
-                                alt="Scan Preview" 
-                                className="max-w-none max-h-none pointer-events-none shadow-2xl"
+                                alt="Source" 
+                                className="absolute transition-transform duration-75 ease-linear cursor-move"
                                 style={{
-                                    // Image is displayed naturally, but constrained by initial load logic which is CSS based for preview
-                                    // For accurate transform, we rely on the div wrapper transform
+                                    transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
+                                    // Use contain logic: fit image within container by default
+                                    maxWidth: '100%',
+                                    maxHeight: '100%',
+                                    width: 'auto',
+                                    height: 'auto',
                                 }}
+                                draggable={false}
                             />
                         )}
+                        
+                        {/* Instructional Overlay (Fades out) */}
+                         <div className="absolute bottom-4 left-0 right-0 text-center pointer-events-none z-30 opacity-70">
+                            <span className="bg-black/60 text-white text-[10px] px-3 py-1 rounded-full backdrop-blur-sm shadow-sm">
+                                اسحب الصورة لضبطها داخل إطار A4
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                {/* Footer Controls */}
-                <div className="mt-4 flex flex-col gap-4">
-                     {/* Rotate & Zoom Controls */}
-                    <div className="flex items-center justify-between px-2">
-                        <div className="flex gap-2">
-                             <button onClick={() => setRotation(r => r - 90)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300">
-                                <Icon name="refresh-cw" className="w-4 h-4 -scale-x-100" />
-                            </button>
-                            <button onClick={() => setRotation(r => r + 90)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300">
-                                <Icon name="refresh-cw" className="w-4 h-4" />
-                            </button>
-                        </div>
-                        
-                        <div className="flex items-center gap-2 flex-1 max-w-xs mx-4">
-                             <Icon name="search" className="w-4 h-4 text-slate-400" />
-                             <input 
-                                type="range" 
-                                min="0.5" 
-                                max="3" 
-                                step="0.1" 
-                                value={scale} 
-                                onChange={e => setScale(parseFloat(e.target.value))} 
-                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700"
-                             />
-                        </div>
-
-                         <button onClick={() => { setScale(1); setPosition({x:0, y:0}); setRotation(0); }} className="text-xs text-blue-600 font-bold hover:underline">
-                             إعادة ضبط
+                {/* --- Footer --- */}
+                <div className="p-4 bg-white dark:bg-slate-800 border-t dark:border-slate-700 flex flex-col gap-4 z-10 shadow-lg">
+                    {/* Zoom Slider */}
+                    <div className="flex items-center gap-4 px-2">
+                         <Icon name="search" className="w-4 h-4 text-slate-400" />
+                         <input 
+                            type="range" 
+                            min="0.2" 
+                            max="3" 
+                            step="0.05" 
+                            value={scale} 
+                            onChange={e => setScale(parseFloat(e.target.value))} 
+                            className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-blue-600"
+                         />
+                         <button onClick={() => { setScale(1); setPosition({x:0, y:0}); setRotation(0); }} className="text-xs text-blue-600 font-bold hover:underline whitespace-nowrap">
+                             ضبط تلقائي
                          </button>
                     </div>
 
-                    <div className="flex justify-end gap-2 pt-2 border-t dark:border-slate-700">
+                    <div className="flex justify-between items-center pt-2 border-t dark:border-slate-700/50">
                         <Button variant="secondary" onClick={onClose} disabled={isProcessing}>إلغاء</Button>
-                        <Button onClick={processImage} disabled={isProcessing} className="min-w-[120px]">
+                        <Button onClick={processImage} disabled={isProcessing} className="px-8 shadow-lg shadow-blue-500/20">
                             {isProcessing ? (
                                 <>
                                     <RefreshCwIcon className="w-4 h-4 animate-spin me-2" />
-                                    جاري المعالجة...
+                                    جاري القص والحفظ...
                                 </>
                             ) : (
                                 <>
                                     <CheckCircleIcon className="w-4 h-4 me-2" />
-                                    حفظ المستند
+                                    حفظ A4
                                 </>
                             )}
                         </Button>

@@ -187,11 +187,6 @@ const PaperArchive: React.FC = () => {
                 const file = files[i];
                 totalOriginalSize += file.size;
 
-                // Even though the scanner returns an optimized file, we might run this just to be safe/consistent
-                // or skip if it's already optimized. Let's assume files from Scanner are good to go,
-                // but standard uploads need optimization.
-                // The optimizeDocumentImage function is fast, we can run it again or assume it's fine.
-                // Since scanner returns a JPEG, we can check.
                 
                 let optimizedFile = file;
                 // Only optimize if it hasn't been processed by scanner (simple name check or assumption)
@@ -201,7 +196,8 @@ const PaperArchive: React.FC = () => {
                 
                 totalOptimizedSize += optimizedFile.size;
 
-                const publicUrl = await uploadImage(optimizedFile, 'note_images'); 
+                // Changed from 'note_images' to 'attached_files'
+                const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
                 
                 newAttachments.push({
                     name: `req_${selectedRequest.request_number}_page_${Date.now()}_${i}.jpg`,
@@ -382,20 +378,21 @@ const PaperArchive: React.FC = () => {
 
             {/* Upload / View Modal */}
             <Modal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} title={`أرشفة الطلب رقم #${selectedRequest?.request_number}`} size="4xl">
-                <div className="flex flex-col h-[70vh]">
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0">
-                        {/* Right: Existing Images */}
-                        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 flex flex-col overflow-hidden">
-                            <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                <div className="flex flex-col h-[85vh] md:h-[70vh]">
+                    <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
+                        
+                        {/* Right Column: Existing Images (Main Content) */}
+                        <div className="md:w-2/3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 flex flex-col overflow-hidden order-2 md:order-1">
+                            <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
                                 <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة ({paperImages.length})
                             </h4>
                             
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
                                 {paperImages.length > 0 ? (
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                         {paperImages.map((file, idx) => (
-                                            <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm">
-                                                <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-40 object-cover" />
+                                            <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm aspect-[3/4]">
+                                                <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
                                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                     <a href={file.data} target="_blank" rel="noopener noreferrer" className="p-2 bg-white rounded-full text-slate-800 hover:bg-blue-50 transition-colors">
                                                         <Icon name="eye" className="w-4 h-4" />
@@ -404,7 +401,7 @@ const PaperArchive: React.FC = () => {
                                                         <TrashIcon className="w-4 h-4" />
                                                     </button>
                                                 </div>
-                                                <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] p-1 text-center truncate">
+                                                <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] p-1 text-center truncate">
                                                     {file.name}
                                                 </div>
                                             </div>
@@ -412,64 +409,63 @@ const PaperArchive: React.FC = () => {
                                     </div>
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                                        <p>لا توجد صفحات مؤرشفة.</p>
+                                        <Icon name="folder-open" className="w-12 h-12 mb-2 opacity-20" />
+                                        <p className="text-sm">لا توجد صفحات مؤرشفة.</p>
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Left: Upload Actions */}
-                        <div className="flex flex-col justify-center gap-6 p-4">
-                            <div className="text-center mb-4">
-                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">إضافة صفحات جديدة</h3>
-                                <p className="text-sm text-slate-500">يمكنك رفع ملفات جاهزة أو استخدام الماسح الذكي لتصوير المستندات.</p>
+                        {/* Left Column: Actions (Sidebar on Desktop, Top on Mobile) */}
+                        <div className="md:w-1/3 flex flex-col gap-4 order-1 md:order-2 flex-shrink-0">
+                            
+                            {/* Actions Buttons */}
+                            <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-4 shadow-sm">
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">إضافة مستندات</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-1 gap-3">
+                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'}`}>
+                                        <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
+                                        {isUploading ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <UploadIcon className="w-5 h-5" />}
+                                        <span className="font-bold text-sm">رفع ملفات</span>
+                                    </label>
+
+                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'}`}>
+                                        <input type="file" accept="image/*" capture="environment" onChange={handleFileUpload} className="hidden" />
+                                        <CameraIcon className="w-5 h-5" />
+                                        <span className="font-bold text-sm">الماسح الذكي</span>
+                                    </label>
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-2 text-center">
+                                    يدعم رفع الصور (JPG, PNG) أو التصوير المباشر مع المعالجة.
+                                </p>
                             </div>
-
-                            <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-2xl cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                                <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
-                                <div className="p-4 bg-white dark:bg-slate-800 rounded-full shadow-md mb-3 group-hover:scale-110 transition-transform text-blue-600">
-                                    {isUploading ? <RefreshCwIcon className="w-8 h-8 animate-spin" /> : <UploadIcon className="w-8 h-8" />}
-                                </div>
-                                <span className="font-bold text-blue-700 dark:text-blue-300">رفع ملفات (صور جاهزة)</span>
-                                <span className="text-xs text-blue-500 mt-1">اضغط لاختيار الصور</span>
-                            </label>
-
-                            <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed border-purple-300 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 rounded-2xl cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                                {/* Capture environment for camera */}
-                                <input type="file" accept="image/*" capture="environment" onChange={handleFileUpload} className="hidden" />
-                                <div className="p-4 bg-white dark:bg-slate-800 rounded-full shadow-md mb-3 group-hover:scale-110 transition-transform text-purple-600">
-                                    <CameraIcon className="w-8 h-8" />
-                                </div>
-                                <span className="font-bold text-purple-700 dark:text-purple-300">الماسح الذكي (كاميرا)</span>
-                                <span className="text-xs text-purple-500 mt-1">تصوير، قص، وتحسين المستند</span>
-                            </label>
 
                             {/* --- Upload Statistics Display --- */}
                             {uploadStats && (
-                                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg animate-fade-in">
+                                <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg animate-fade-in shadow-sm">
                                     <h5 className="text-xs font-bold text-green-800 dark:text-green-300 mb-2 flex items-center gap-2">
-                                        <CheckCircleIcon className="w-4 h-4"/>
-                                        إحصائيات المعالجة (آخر عملية)
+                                        <CheckCircleIcon className="w-3.5 h-3.5"/>
+                                        إحصائيات الضغط
                                     </h5>
-                                    <div className="grid grid-cols-2 gap-2 text-xs">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500 dark:text-slate-400">الحجم الأصلي:</span>
-                                            <span className="font-mono font-bold text-red-600 dark:text-red-400">{uploadStats.original}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500 dark:text-slate-400">بعد المعالجة:</span>
-                                            <span className="font-mono font-bold text-green-600 dark:text-green-400">{uploadStats.compressed}</span>
-                                        </div>
+                                    <div className="flex justify-between items-end">
+                                         <div>
+                                             <span className="block text-[10px] text-slate-500">قبل</span>
+                                             <span className="font-mono text-xs text-red-500 line-through">{uploadStats.original}</span>
+                                         </div>
+                                         <div className="text-left">
+                                             <span className="block text-[10px] text-slate-500">بعد</span>
+                                             <span className="font-mono text-xs text-green-600 font-bold">{uploadStats.compressed}</span>
+                                         </div>
                                     </div>
-                                    <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800/50 text-center">
-                                        <span className="text-[10px] font-bold text-green-700 dark:text-green-300">تم توفير {uploadStats.savings}% من المساحة</span>
+                                    <div className="mt-1.5 pt-1 border-t border-green-200 dark:border-green-800/50 text-center">
+                                        <span className="text-[10px] font-bold text-green-700 dark:text-green-300">توفير {uploadStats.savings}%</span>
                                     </div>
                                 </div>
                             )}
                         </div>
                     </div>
                     
-                    <div className="pt-4 mt-4 border-t dark:border-slate-700 flex justify-end">
+                    <div className="pt-4 mt-4 border-t dark:border-slate-700 flex justify-end flex-shrink-0">
                         <Button variant="secondary" onClick={() => setIsUploadModalOpen(false)}>إغلاق</Button>
                     </div>
                 </div>
