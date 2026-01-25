@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import InspectionReport from '../components/InspectionReport';
 import Icon from '../components/Icon';
@@ -8,6 +8,7 @@ import WhatsappIcon from '../components/icons/WhatsappIcon';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import SparklesIcon from '../components/icons/SparklesIcon';
 import ReportTranslationModal from '../components/ReportTranslationModal';
+import Modal from '../components/Modal'; // Ensure Modal is imported
 import { InspectionRequest, ReportSettings, CustomFindingCategory } from '../types';
 
 const ensureLibraries = async (): Promise<void> => {
@@ -97,6 +98,10 @@ const PrintReport: React.FC = () => {
     const [reportDirection, setReportDirection] = useState<'rtl' | 'ltr'>('rtl');
     const [isTranslationModalOpen, setIsTranslationModalOpen] = useState(false);
 
+    // Paper Archive State
+    const [isPaperModalOpen, setIsPaperModalOpen] = useState(false);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
+
     const [isDataReady, setIsDataReady] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [loadingState, setLoadingState] = useState('');
@@ -106,6 +111,11 @@ const PrintReport: React.FC = () => {
     const request = translatedRequest || originalRequest;
     const reportSettings = translatedSettings || settings.reportSettings;
     const effectiveCategories = translatedCategories || customFindingCategories;
+
+    // Get Archived Paper Images
+    const paperImages = useMemo(() => {
+        return originalRequest?.attached_files?.filter(f => f.type === 'manual_paper') || [];
+    }, [originalRequest]);
 
     useEffect(() => {
         if (request && typeof request.inspection_data !== 'undefined') {
@@ -465,6 +475,19 @@ const PrintReport: React.FC = () => {
                         <span className="hidden sm:inline ms-1">العودة</span>
                     </Button>
                     
+                    {/* Paper Archive Viewer Button */}
+                    {paperImages.length > 0 && (
+                        <Button
+                            variant="secondary"
+                            onClick={() => setIsPaperModalOpen(true)}
+                            size="sm"
+                            className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                        >
+                            <Icon name="folder-open" className="w-4 h-4" />
+                            <span className="hidden sm:inline ms-1">المرفقات ({paperImages.length})</span>
+                        </Button>
+                    )}
+
                     {translatedRequest ? (
                         <Button onClick={handleClearTranslation} variant="secondary" size="sm" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100">
                             <Icon name="refresh-cw" className="w-4 h-4" />
@@ -538,6 +561,47 @@ const PrintReport: React.FC = () => {
                     onTranslateComplete={handleTranslateComplete}
                 />
             )}
+
+            {/* Paper Archive Viewer Modal */}
+            <Modal isOpen={isPaperModalOpen} onClose={() => setIsPaperModalOpen(false)} title="الأرشيف الورقي المرفق" size="3xl">
+                <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg min-h-[50vh]">
+                    {paperImages.length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            {paperImages.map((file, idx) => (
+                                <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 bg-white shadow-sm cursor-pointer" onClick={() => setPreviewImage(file.data)}>
+                                    <img src={file.data} alt={`Paper ${idx + 1}`} className="w-full h-48 object-cover transition-transform hover:scale-105" />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Icon name="eye" className="w-8 h-8 text-white" />
+                                    </div>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] p-1 text-center truncate">
+                                        {file.name}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                            <Icon name="folder-open" className="w-16 h-16 mb-2 opacity-20" />
+                            <p>لا توجد صور مؤرشفة لهذا الطلب.</p>
+                        </div>
+                    )}
+                </div>
+                <div className="flex justify-end pt-4 mt-2 border-t dark:border-slate-700">
+                    <Button variant="secondary" onClick={() => setIsPaperModalOpen(false)}>إغلاق</Button>
+                </div>
+            </Modal>
+
+            {/* Lightbox Modal for Zooming */}
+            <Modal isOpen={!!previewImage} onClose={() => setPreviewImage(null)} title="معاينة الصورة" size="4xl">
+                <div className="flex justify-center items-center bg-black/90 p-4 rounded-lg">
+                    {previewImage && (
+                        <img src={previewImage} alt="Preview" className="max-w-full max-h-[80vh] object-contain" />
+                    )}
+                </div>
+                <div className="flex justify-end pt-4">
+                    <Button variant="secondary" onClick={() => setPreviewImage(null)}>إغلاق</Button>
+                </div>
+            </Modal>
         </div>
     );
 };

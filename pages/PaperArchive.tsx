@@ -92,6 +92,7 @@ const PaperArchive: React.FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [filteredRequests, setFilteredRequests] = useState<InspectionRequest[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
 
     // Initial Fetch for "Today"
     useEffect(() => {
@@ -113,6 +114,13 @@ const PaperArchive: React.FC = () => {
         };
         load();
     }, [dateFilter, customDate, requests, fetchRequestsByDateRange]);
+
+    // Reset stats when modal closes or request changes
+    useEffect(() => {
+        if (!isUploadModalOpen) {
+            setUploadStats(null);
+        }
+    }, [isUploadModalOpen]);
 
     const displayedRequests = useMemo(() => {
         let data = filteredRequests;
@@ -150,6 +158,7 @@ const PaperArchive: React.FC = () => {
     const processFiles = async (files: File[]) => {
         if (!selectedRequest) return;
         setIsUploading(true);
+        setUploadStats(null);
         let totalOriginalSize = 0;
         let totalOptimizedSize = 0;
 
@@ -163,8 +172,9 @@ const PaperArchive: React.FC = () => {
                 const optimizedFile = await optimizeDocumentImage(file);
                 totalOptimizedSize += optimizedFile.size;
 
-                // Upload
-                const publicUrl = await uploadImage(optimizedFile, 'attached_files'); // Assuming bucket exists
+                // Upload - Using 'note_images' bucket as backup, or try 'attached_files' if it exists
+                // We use 'note_images' here for consistency based on previous context fix
+                const publicUrl = await uploadImage(optimizedFile, 'note_images'); 
                 
                 newAttachments.push({
                     name: `req_${selectedRequest.request_number}_page_${Date.now()}_${i}.jpg`,
@@ -188,15 +198,21 @@ const PaperArchive: React.FC = () => {
 
             const savings = totalOriginalSize > 0 ? Math.round(((totalOriginalSize - totalOptimizedSize) / totalOriginalSize) * 100) : 0;
             
+            setUploadStats({
+                original: formatBytes(totalOriginalSize),
+                compressed: formatBytes(totalOptimizedSize),
+                savings: savings
+            });
+
             addNotification({ 
                 title: 'تم الحفظ والأرشفة', 
-                message: `تم رفع ${newAttachments.length} صفحة. تم ضغط الحجم من ${formatBytes(totalOriginalSize)} إلى ${formatBytes(totalOptimizedSize)} (توفير ${savings}%)`, 
+                message: `تم رفع ${newAttachments.length} صفحة بنجاح.`, 
                 type: 'success' 
             });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            addNotification({ title: 'خطأ', message: 'فشل رفع الصور.', type: 'error' });
+            addNotification({ title: 'خطأ', message: `فشل رفع الصور: ${error.message}`, type: 'error' });
         } finally {
             setIsUploading(false);
         }
@@ -208,7 +224,13 @@ const PaperArchive: React.FC = () => {
         if (!confirm) return;
 
         try {
-            await deleteImage(fileUrl);
+            // Try to delete from storage, but do not block if it fails (e.g. file already gone)
+            try {
+                await deleteImage(fileUrl);
+            } catch (storageError) {
+                console.warn("Storage deletion warning:", storageError);
+            }
+
             const updatedFiles = (selectedRequest.attached_files || []).filter(f => f.data !== fileUrl);
             
             await updateRequest({
@@ -222,7 +244,8 @@ const PaperArchive: React.FC = () => {
              
              addNotification({ title: 'تم الحذف', message: 'تم حذف الصفحة.', type: 'info' });
         } catch (error) {
-             addNotification({ title: 'خطأ', message: 'فشل حذف الصورة.', type: 'error' });
+             console.error("DB update failed:", error);
+             addNotification({ title: 'خطأ', message: 'فشل تحديث سجل الطلب.', type: 'error' });
         }
     };
 
@@ -348,7 +371,7 @@ const PaperArchive: React.FC = () => {
                                 {paperImages.length > 0 ? (
                                     <div className="grid grid-cols-2 gap-3">
                                         {paperImages.map((file, idx) => (
-                                            <div key={idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm">
+                                            <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm">
                                                 <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-40 object-cover" />
                                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                     <a href={file.data} target="_blank" rel="noopener noreferrer" className="p-2 bg-white rounded-full text-slate-800 hover:bg-blue-50 transition-colors">
@@ -396,6 +419,29 @@ const PaperArchive: React.FC = () => {
                                 <span className="font-bold text-purple-700 dark:text-purple-300">تصوير بالكاميرا</span>
                                 <span className="text-xs text-purple-500 mt-1">التقاط صورة مباشرة للورقة</span>
                             </label>
+
+                            {/* --- Upload Statistics Display --- */}
+                            {uploadStats && (
+                                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg animate-fade-in">
+                                    <h5 className="text-xs font-bold text-green-800 dark:text-green-300 mb-2 flex items-center gap-2">
+                                        <CheckCircleIcon className="w-4 h-4"/>
+                                        إحصائيات الضغط (آخر عملية)
+                                    </h5>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500 dark:text-slate-400">الحجم الأصلي:</span>
+                                            <span className="font-mono font-bold text-red-600 dark:text-red-400">{uploadStats.original}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500 dark:text-slate-400">بعد الضغط:</span>
+                                            <span className="font-mono font-bold text-green-600 dark:text-green-400">{uploadStats.compressed}</span>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800/50 text-center">
+                                        <span className="text-[10px] font-bold text-green-700 dark:text-green-300">تم توفير {uploadStats.savings}% من المساحة</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                     
