@@ -1,6 +1,6 @@
 
 
-export type Page = 'dashboard' | 'requests' | 'waiting-requests' | 'clients' | 'settings' | 'fill-request' | 'print-report' | 'financials' | 'request-draft' | 'profile' | 'brokers' | 'expenses' | 'revenues' | 'mailbox' | 'archive' | 'employees' | 'reservations';
+export type Page = 'dashboard' | 'requests' | 'waiting-requests' | 'clients' | 'settings' | 'fill-request' | 'print-report' | 'financials' | 'request-draft' | 'profile' | 'brokers' | 'expenses' | 'revenues' | 'mailbox' | 'archive' | 'paper-archive' | 'employees' | 'reservations';
 
 export enum RequestStatus {
   IN_PROGRESS = 'قيد التنفيذ',
@@ -36,6 +36,7 @@ export const PERMISSIONS = {
   view_request_info: 'عرض بطاقة معلومات الطلب',
   view_car_history_on_create: 'عرض سجل السيارة عند إنشاء طلب',
   view_archive: 'عرض أرشيف الفحص الشامل',
+  manage_paper_archive: 'إدارة أرشيف الورقيات',
   manage_notes: 'إدارة الملاحظات (إضافة/تعديل/حذف)',
   manage_findings: 'إدارة بنود الفحص (إضافة/تعديل/حذف)',
   view_activity_log: 'عرض سجل النشاط',

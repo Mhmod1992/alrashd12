@@ -15,6 +15,7 @@ import DownloadIcon from './icons/DownloadIcon';
 import TrendingUpIcon from './icons/TrendingUpIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import CalendarClockIcon from './icons/CalendarClockIcon';
+import FolderOpenIcon from './icons/FolderOpenIcon';
 
 interface SidebarProps {
   isSidebarOpen: boolean;
@@ -61,6 +62,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
     
     if (can('view_archive')) {
         operationsItems.push({ id: 'archive', label: 'أرشيف الفحص', icon: ArchiveIcon });
+    }
+    
+    if (can('manage_paper_archive')) {
+        operationsItems.push({ id: 'paper-archive', label: 'أرشيف الورقيات', icon: FolderOpenIcon });
     }
 
     if (can('manage_clients') && authUser?.role !== 'receptionist') {

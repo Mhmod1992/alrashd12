@@ -43,10 +43,11 @@ import CalendarClockIcon from './icons/CalendarClockIcon';
 import CalendarCheckIcon from './icons/CalendarCheckIcon';
 import UploadIcon from './icons/UploadIcon';
 import ChevronUpIcon from './icons/ChevronUpIcon';
+import FolderOpenIcon from './icons/FolderOpenIcon';
 
 
 interface IconProps {
-  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up';
+  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open';
   className?: string;
 }
 
@@ -139,6 +140,8 @@ const Icon: React.FC<IconProps> = ({ name, className }) => {
         return <CalendarCheckIcon className={className} />;
     case 'upload':
         return <UploadIcon className={className} />;
+    case 'folder-open':
+        return <FolderOpenIcon className={className} />;
     default:
       return null;
   }

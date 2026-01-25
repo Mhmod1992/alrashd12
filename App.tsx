@@ -32,6 +32,7 @@ const Expenses = lazy(() => import('./pages/Expenses'));
 const OtherRevenues = lazy(() => import('./pages/OtherRevenues'));
 const Mailbox = lazy(() => import('./pages/Mailbox'));
 const Archive = lazy(() => import('./pages/Archive'));
+const PaperArchive = lazy(() => import('./pages/PaperArchive')); // Import Paper Archive
 const WaitingForPaymentRequests = lazy(() => import('./pages/WaitingForPaymentRequests'));
 const Employees = lazy(() => import('./pages/Employees')); // Import Employees Page
 const Reservations = lazy(() => import('./pages/Reservations')); // Import Reservations Page
@@ -173,6 +174,8 @@ const AppContent: React.FC = () => {
         return <WaitingForPaymentRequests />;
       case 'archive':
         return <Archive />;
+      case 'paper-archive':
+        return <PaperArchive />;
       case 'clients':
         return <Clients />;
       case 'brokers':
