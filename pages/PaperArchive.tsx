@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { InspectionRequest, AttachedFile } from '../types';
+import { InspectionRequest } from '../types';
 import Button from '../components/Button';
 import Icon from '../components/Icon';
 import Modal from '../components/Modal';
@@ -14,9 +14,10 @@ import TrashIcon from '../components/icons/TrashIcon';
 import XIcon from '../components/icons/XIcon';
 import { SkeletonTable } from '../components/Skeleton';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
-import { formatBytes } from '../lib/utils'; // Import formatBytes
+import { formatBytes } from '../lib/utils';
+import DocumentScannerModal from '../components/DocumentScannerModal'; // Import the new modal
 
-// --- Image Optimization Helper ---
+// --- Image Optimization Helper (Still used for fallback/bulk) ---
 const optimizeDocumentImage = async (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -40,7 +41,7 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
                 return;
             }
 
-            // Draw white background (for transparent PNGs)
+            // Draw white background
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, width, height);
 
@@ -49,7 +50,6 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
             
             ctx.drawImage(img, 0, 0, width, height);
             
-            // Export as JPEG with lower quality (60%) for compression
             canvas.toBlob((blob) => {
                 if (!blob) {
                     reject(new Error('Blob creation failed'));
@@ -94,19 +94,20 @@ const PaperArchive: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
 
+    // Scanner States
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [scannerFile, setScannerFile] = useState<File | null>(null);
+
     // Initial Fetch for "Today"
     useEffect(() => {
         const load = async () => {
             if (dateFilter === 'all') {
-                // Client side filtering for 'all' based on loaded requests (limited) or search
                  setFilteredRequests(requests);
             } else {
                 setIsLoading(true);
                 const date = dateFilter === 'today' ? new Date() : new Date(customDate);
                 const start = new Date(date); start.setHours(0,0,0,0);
                 const end = new Date(date); end.setHours(23,59,59,999);
-                
-                // Fetch specifically for the date range to ensure we have all data
                 const fetched = await fetchRequestsByDateRange(start.toISOString(), end.toISOString());
                 setFilteredRequests(fetched);
                 setIsLoading(false);
@@ -115,10 +116,10 @@ const PaperArchive: React.FC = () => {
         load();
     }, [dateFilter, customDate, requests, fetchRequestsByDateRange]);
 
-    // Reset stats when modal closes or request changes
     useEffect(() => {
         if (!isUploadModalOpen) {
             setUploadStats(null);
+            setScannerFile(null); // Clear scanner file if modal closes
         }
     }, [isUploadModalOpen]);
 
@@ -131,7 +132,6 @@ const PaperArchive: React.FC = () => {
                 const car = cars.find(c => c.id === r.car_id);
                 const make = carMakes.find(m => m.id === car?.make_id);
                 const model = carModels.find(m => m.id === car?.model_id);
-                
                 return (
                     r.request_number.toString().includes(q) ||
                     client?.name.toLowerCase().includes(q) ||
@@ -152,7 +152,26 @@ const PaperArchive: React.FC = () => {
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || !selectedRequest) return;
         const files: File[] = Array.from(e.target.files);
+
+        // If single file and specifically camera capture (or just single upload where user might want to crop),
+        // we can trigger the scanner. Let's trigger scanner for single file uploads to allow checking/cropping.
+        if (files.length === 1 && files[0].type.startsWith('image/')) {
+             setScannerFile(files[0]);
+             setIsScannerOpen(true);
+             // Reset input value to allow re-selection
+             e.target.value = '';
+             return;
+        }
+
+        // Bulk or non-image processing
         processFiles(files);
+        e.target.value = '';
+    };
+
+    const handleScannerConfirm = (processedFile: File) => {
+        setIsScannerOpen(false);
+        setScannerFile(null);
+        processFiles([processedFile]);
     };
 
     const processFiles = async (files: File[]) => {
@@ -168,12 +187,20 @@ const PaperArchive: React.FC = () => {
                 const file = files[i];
                 totalOriginalSize += file.size;
 
-                // Optimize
-                const optimizedFile = await optimizeDocumentImage(file);
+                // Even though the scanner returns an optimized file, we might run this just to be safe/consistent
+                // or skip if it's already optimized. Let's assume files from Scanner are good to go,
+                // but standard uploads need optimization.
+                // The optimizeDocumentImage function is fast, we can run it again or assume it's fine.
+                // Since scanner returns a JPEG, we can check.
+                
+                let optimizedFile = file;
+                // Only optimize if it hasn't been processed by scanner (simple name check or assumption)
+                if (!file.name.startsWith('scanned_')) {
+                     optimizedFile = await optimizeDocumentImage(file);
+                }
+                
                 totalOptimizedSize += optimizedFile.size;
 
-                // Upload - Using 'note_images' bucket as backup, or try 'attached_files' if it exists
-                // We use 'note_images' here for consistency based on previous context fix
                 const publicUrl = await uploadImage(optimizedFile, 'note_images'); 
                 
                 newAttachments.push({
@@ -183,7 +210,6 @@ const PaperArchive: React.FC = () => {
                 });
             }
 
-            // Update Request
             const existingFiles = selectedRequest.attached_files || [];
             const updatedFiles = [...existingFiles, ...newAttachments];
             
@@ -192,7 +218,6 @@ const PaperArchive: React.FC = () => {
                 attached_files: updatedFiles
             });
 
-            // Update local state immediately
             setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles }) : null);
             setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles } : r));
 
@@ -224,7 +249,6 @@ const PaperArchive: React.FC = () => {
         if (!confirm) return;
 
         try {
-            // Try to delete from storage, but do not block if it fails (e.g. file already gone)
             try {
                 await deleteImage(fileUrl);
             } catch (storageError) {
@@ -238,7 +262,6 @@ const PaperArchive: React.FC = () => {
                 attached_files: updatedFiles
             });
             
-             // Update local state
              setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles }) : null);
              setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles } : r));
              
@@ -399,7 +422,7 @@ const PaperArchive: React.FC = () => {
                         <div className="flex flex-col justify-center gap-6 p-4">
                             <div className="text-center mb-4">
                                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">إضافة صفحات جديدة</h3>
-                                <p className="text-sm text-slate-500">سيتم معالجة الصور تلقائياً (أبيض وأسود، ضغط الحجم) للحفاظ على مساحة التخزين.</p>
+                                <p className="text-sm text-slate-500">يمكنك رفع ملفات جاهزة أو استخدام الماسح الذكي لتصوير المستندات.</p>
                             </div>
 
                             <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-2xl cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -407,17 +430,18 @@ const PaperArchive: React.FC = () => {
                                 <div className="p-4 bg-white dark:bg-slate-800 rounded-full shadow-md mb-3 group-hover:scale-110 transition-transform text-blue-600">
                                     {isUploading ? <RefreshCwIcon className="w-8 h-8 animate-spin" /> : <UploadIcon className="w-8 h-8" />}
                                 </div>
-                                <span className="font-bold text-blue-700 dark:text-blue-300">رفع ملفات (ماسح ضوئي)</span>
-                                <span className="text-xs text-blue-500 mt-1">اختر صور من الجهاز</span>
+                                <span className="font-bold text-blue-700 dark:text-blue-300">رفع ملفات (صور جاهزة)</span>
+                                <span className="text-xs text-blue-500 mt-1">اضغط لاختيار الصور</span>
                             </label>
 
                             <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed border-purple-300 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 rounded-2xl cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                                {/* Capture environment for camera */}
                                 <input type="file" accept="image/*" capture="environment" onChange={handleFileUpload} className="hidden" />
                                 <div className="p-4 bg-white dark:bg-slate-800 rounded-full shadow-md mb-3 group-hover:scale-110 transition-transform text-purple-600">
                                     <CameraIcon className="w-8 h-8" />
                                 </div>
-                                <span className="font-bold text-purple-700 dark:text-purple-300">تصوير بالكاميرا</span>
-                                <span className="text-xs text-purple-500 mt-1">التقاط صورة مباشرة للورقة</span>
+                                <span className="font-bold text-purple-700 dark:text-purple-300">الماسح الذكي (كاميرا)</span>
+                                <span className="text-xs text-purple-500 mt-1">تصوير، قص، وتحسين المستند</span>
                             </label>
 
                             {/* --- Upload Statistics Display --- */}
@@ -425,7 +449,7 @@ const PaperArchive: React.FC = () => {
                                 <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg animate-fade-in">
                                     <h5 className="text-xs font-bold text-green-800 dark:text-green-300 mb-2 flex items-center gap-2">
                                         <CheckCircleIcon className="w-4 h-4"/>
-                                        إحصائيات الضغط (آخر عملية)
+                                        إحصائيات المعالجة (آخر عملية)
                                     </h5>
                                     <div className="grid grid-cols-2 gap-2 text-xs">
                                         <div className="flex justify-between">
@@ -433,7 +457,7 @@ const PaperArchive: React.FC = () => {
                                             <span className="font-mono font-bold text-red-600 dark:text-red-400">{uploadStats.original}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-slate-500 dark:text-slate-400">بعد الضغط:</span>
+                                            <span className="text-slate-500 dark:text-slate-400">بعد المعالجة:</span>
                                             <span className="font-mono font-bold text-green-600 dark:text-green-400">{uploadStats.compressed}</span>
                                         </div>
                                     </div>
@@ -450,6 +474,14 @@ const PaperArchive: React.FC = () => {
                     </div>
                 </div>
             </Modal>
+            
+            {/* Smart Scanner Modal */}
+            <DocumentScannerModal 
+                isOpen={isScannerOpen} 
+                onClose={() => setIsScannerOpen(false)} 
+                imageFile={scannerFile} 
+                onConfirm={handleScannerConfirm} 
+            />
         </div>
     );
 };
