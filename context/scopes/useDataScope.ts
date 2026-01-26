@@ -60,6 +60,7 @@ export const useDataScope = (
     const fetchAllData = useCallback(async () => {
         setIsRefreshing(true);
         try {
+            // Added 'attached_files' to the select list
             const [
                 { data: reqs, error: reqError }, { data: mks }, { data: types },
                 { data: brks }, { data: cats }, { data: finds }, { data: exps },
@@ -67,7 +68,7 @@ export const useDataScope = (
                 { data: res }
             ] = await Promise.all([
                 supabase.from('inspection_requests')
-                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at')
+                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files')
                     .order('created_at', { ascending: false })
                     .limit(REQUESTS_PAGE_SIZE),
                 supabase.from('car_makes').select('*'),
@@ -107,7 +108,6 @@ export const useDataScope = (
             setReservations(res || []);
 
             // --- PROACTIVE LOADING FOR INITIAL BATCH ---
-            // If some requests point to cars/clients NOT in the recent 100, fetch them now.
             const missingCarIds = Array.from(new Set(requestsData.map(r => r.car_id)))
                 .filter(id => id && !carsData.some(c => c.id === id));
 
@@ -221,18 +221,13 @@ export const useDataScope = (
     }, [clients, cars]);
 
     const markNotificationAsRead = useCallback(async (id: string) => {
-        // Optimistic update: creates a new array reference to ensure UI re-renders
         setAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-        
-        // Server update
         const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
         if (error) console.error("Failed to mark notification as read", error);
     }, []);
 
     const markAllNotificationsAsRead = useCallback(async () => {
-        // Optimistic update: mark all current ones as read
         setAppNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-        
         if (authUser) {
             const { error } = await supabase.from('notifications')
                 .update({ is_read: true })
@@ -246,6 +241,40 @@ export const useDataScope = (
         if (!authUser) return null;
         return { id: uuidv4(), timestamp: new Date().toISOString(), employeeId: authUser.id, employeeName: authUser.name, action, details, imageUrl, link_id, link_page };
     }, [authUser]);
+
+    const fetchRequestByRequestNumber = useCallback(async (reqNum: number): Promise<InspectionRequest | null> => {
+        // select('*') ensures attached_files is fetched
+        const { data, error } = await supabase.from('inspection_requests').select('*').eq('request_number', reqNum).single();
+        if (error && !data) {
+            setRequests(prev => prev.filter(r => r.request_number !== reqNum));
+            return null;
+        }
+        if (data) {
+            await ensureEntitiesLoaded([data]);
+            setRequests(prev => {
+                const exists = prev.some(r => r.id === data.id);
+                if (exists) return prev.map(r => r.id === data.id ? data : r);
+                const newRequests = [data, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                return newRequests.slice(0, REQUESTS_PAGE_SIZE + 10);
+            });
+        }
+        return data;
+    }, [ensureEntitiesLoaded]);
+
+    const fetchRequestsByDateRange = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
+        // Added 'attached_files' to select list
+        const { data, error } = await supabase.from('inspection_requests')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files')
+            .gte('created_at', startDate)
+            .lte('created_at', endDate)
+            .order('created_at', { ascending: false });
+        if (error) {
+            addNotification({ title: 'خطأ', message: 'فشل تحميل الطلبات حسب التاريخ.', type: 'error' });
+            return [];
+        }
+        if (data) await ensureEntitiesLoaded(data);
+        return data || [];
+    }, [addNotification, ensureEntitiesLoaded]);
 
     return {
         requests, setRequests,
@@ -281,6 +310,8 @@ export const useDataScope = (
         createActivityLog,
         addNotification,
         markNotificationAsRead,
-        markAllNotificationsAsRead
+        markAllNotificationsAsRead,
+        fetchRequestByRequestNumber,
+        fetchRequestsByDateRange
     };
 };

@@ -15,7 +15,8 @@ import XIcon from '../components/icons/XIcon';
 import { SkeletonTable } from '../components/Skeleton';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import { formatBytes } from '../lib/utils';
-import DocumentScannerModal from '../components/DocumentScannerModal'; // Import the new modal
+import DocumentScannerModal from '../components/DocumentScannerModal';
+import CameraPage from '../components/CameraPage'; // Import CameraPage
 
 // --- Image Optimization Helper (Still used for fallback/bulk) ---
 const optimizeDocumentImage = async (file: File): Promise<File> => {
@@ -81,7 +82,8 @@ const PaperArchive: React.FC = () => {
         uploadImage, 
         deleteImage,
         fetchRequestsByDateRange,
-        isRefreshing
+        isRefreshing,
+        fetchRequestByRequestNumber
     } = useAppContext();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -94,9 +96,15 @@ const PaperArchive: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
 
+    // New State for modal data loading
+    const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+
     // Scanner States
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [scannerFile, setScannerFile] = useState<File | null>(null);
+    
+    // Camera State
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
 
     // Initial Fetch for "Today"
     useEffect(() => {
@@ -144,28 +152,45 @@ const PaperArchive: React.FC = () => {
         return data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }, [filteredRequests, searchQuery, clients, cars, carMakes, carModels]);
 
-    const openUploadModal = (request: InspectionRequest) => {
+    const openUploadModal = async (request: InspectionRequest) => {
         setSelectedRequest(request);
         setIsUploadModalOpen(true);
+        setIsLoadingDetails(true);
+        
+        try {
+             // Fetch fresh data for this request to ensure attachments are up-to-date
+            const freshRequest = await fetchRequestByRequestNumber(request.request_number);
+            
+            if (freshRequest) {
+                setSelectedRequest(freshRequest);
+                // Also update the item in the list view to reflect "Archived" status if changed
+                setFilteredRequests(prev => prev.map(r => r.id === freshRequest.id ? freshRequest : r));
+            }
+        } catch (error) {
+            console.error("Failed to load request details", error);
+        } finally {
+            setIsLoadingDetails(false);
+        }
     };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || !selectedRequest) return;
         const files: File[] = Array.from(e.target.files);
 
-        // If single file and specifically camera capture (or just single upload where user might want to crop),
-        // we can trigger the scanner. Let's trigger scanner for single file uploads to allow checking/cropping.
         if (files.length === 1 && files[0].type.startsWith('image/')) {
              setScannerFile(files[0]);
              setIsScannerOpen(true);
-             // Reset input value to allow re-selection
              e.target.value = '';
              return;
         }
 
-        // Bulk or non-image processing
         processFiles(files);
         e.target.value = '';
+    };
+
+    const handleCameraCapture = (file: File) => {
+        setScannerFile(file);
+        setIsScannerOpen(true); // Open the editor with the captured file
     };
 
     const handleScannerConfirm = (processedFile: File) => {
@@ -189,14 +214,12 @@ const PaperArchive: React.FC = () => {
 
                 
                 let optimizedFile = file;
-                // Only optimize if it hasn't been processed by scanner (simple name check or assumption)
                 if (!file.name.startsWith('scanned_')) {
                      optimizedFile = await optimizeDocumentImage(file);
                 }
                 
                 totalOptimizedSize += optimizedFile.size;
 
-                // Changed from 'note_images' to 'attached_files'
                 const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
                 
                 newAttachments.push({
@@ -273,11 +296,13 @@ const PaperArchive: React.FC = () => {
     }
 
     const getRequestStatus = (req: InspectionRequest) => {
-        const hasPaper = req.attached_files?.some(f => f.type === 'manual_paper');
+        // Consider both manual_paper AND internal_draft as "Archived" activity
+        const hasPaper = req.attached_files?.some(f => f.type === 'manual_paper' || f.type === 'internal_draft');
         return hasPaper;
     };
 
-    const paperImages = selectedRequest?.attached_files?.filter(f => f.type === 'manual_paper') || [];
+    // Include both types in the paperImages list for this page as well
+    const paperImages = selectedRequest?.attached_files?.filter(f => f.type === 'manual_paper' || f.type === 'internal_draft') || [];
 
     return (
         <div className="container mx-auto animate-fade-in pb-20">
@@ -377,15 +402,23 @@ const PaperArchive: React.FC = () => {
             </div>
 
             {/* Upload / View Modal */}
-            <Modal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} title={`أرشفة الطلب رقم #${selectedRequest?.request_number}`} size="4xl">
+            <Modal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} title={`أرشيف الطلب رقم #${selectedRequest?.request_number}`} size="4xl">
                 <div className="flex flex-col h-[85vh] md:h-[70vh]">
                     <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
                         
                         {/* Right Column: Existing Images (Main Content) */}
                         <div className="md:w-2/3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 flex flex-col overflow-hidden order-2 md:order-1">
-                            <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
-                                <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة ({paperImages.length})
-                            </h4>
+                            <div className="flex justify-between items-center mb-3 flex-shrink-0">
+                                <h4 className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                    <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة ({paperImages.length})
+                                </h4>
+                                {isLoadingDetails && (
+                                    <div className="text-xs text-blue-500 flex items-center gap-1 animate-pulse">
+                                        <RefreshCwIcon className="w-3 h-3 animate-spin"/>
+                                        جاري التحديث...
+                                    </div>
+                                )}
+                            </div>
                             
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
                                 {paperImages.length > 0 ? (
@@ -403,6 +436,7 @@ const PaperArchive: React.FC = () => {
                                                 </div>
                                                 <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] p-1 text-center truncate">
                                                     {file.name}
+                                                    {file.type === 'internal_draft' && <span className="block text-[8px] text-yellow-300">(مسودة)</span>}
                                                 </div>
                                             </div>
                                         ))}
@@ -429,11 +463,13 @@ const PaperArchive: React.FC = () => {
                                         <span className="font-bold text-sm">رفع ملفات</span>
                                     </label>
 
-                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'}`}>
-                                        <input type="file" accept="image/*" capture="environment" onChange={handleFileUpload} className="hidden" />
+                                    <button 
+                                        onClick={() => setIsCameraOpen(true)}
+                                        className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'}`}
+                                    >
                                         <CameraIcon className="w-5 h-5" />
                                         <span className="font-bold text-sm">الماسح الذكي</span>
-                                    </label>
+                                    </button>
                                 </div>
                                 <p className="text-[10px] text-slate-400 mt-2 text-center">
                                     يدعم رفع الصور (JPG, PNG) أو التصوير المباشر مع المعالجة.
@@ -477,6 +513,13 @@ const PaperArchive: React.FC = () => {
                 onClose={() => setIsScannerOpen(false)} 
                 imageFile={scannerFile} 
                 onConfirm={handleScannerConfirm} 
+            />
+            
+            {/* Full Screen Camera */}
+            <CameraPage 
+                isOpen={isCameraOpen} 
+                onClose={() => setIsCameraOpen(false)} 
+                onCapture={handleCameraCapture} 
             />
         </div>
     );

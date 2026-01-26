@@ -140,6 +140,9 @@ const PrintReport: React.FC = () => {
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
+    // Ref for the hidden file input
+    const internalUploadRef = useRef<HTMLInputElement>(null);
+
     const originalRequest = requests.find(r => r.id === selectedRequestId);
     
     // Translation State
@@ -155,6 +158,9 @@ const PrintReport: React.FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [scannerFile, setScannerFile] = useState<File | null>(null);
+    // Track where the scanner call came from to assign correct type
+    const [scannerTargetType, setScannerTargetType] = useState<'manual_paper' | 'internal_draft'>('manual_paper');
+    const [activeArchiveTab, setActiveArchiveTab] = useState<'all' | 'public' | 'internal'>('all');
 
     const [isDataReady, setIsDataReady] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -168,8 +174,18 @@ const PrintReport: React.FC = () => {
 
     // Get Archived Paper Images
     const paperImages = useMemo(() => {
-        return originalRequest?.attached_files?.filter(f => f.type === 'manual_paper') || [];
+        return originalRequest?.attached_files?.filter(f => f.type === 'manual_paper' || f.type === 'internal_draft') || [];
     }, [originalRequest]);
+
+    // Split Images based on type
+    const publicImages = useMemo(() => paperImages.filter(f => f.type !== 'internal_draft'), [paperImages]);
+    const internalImages = useMemo(() => paperImages.filter(f => f.type === 'internal_draft'), [paperImages]);
+    
+    const displayedImages = useMemo(() => {
+        if (activeArchiveTab === 'all') return paperImages;
+        if (activeArchiveTab === 'public') return publicImages;
+        return internalImages;
+    }, [activeArchiveTab, paperImages, publicImages, internalImages]);
 
     useEffect(() => {
         if (request && typeof request.inspection_data !== 'undefined') {
@@ -200,28 +216,30 @@ const PrintReport: React.FC = () => {
     }, []);
 
     // --- Upload Handlers ---
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'manual_paper' | 'internal_draft' = 'manual_paper') => {
         if (!e.target.files || !originalRequest) return;
         const files: File[] = Array.from(e.target.files);
 
+        // If single image file, offer scanner/crop
         if (files.length === 1 && files[0].type.startsWith('image/')) {
              setScannerFile(files[0]);
+             setScannerTargetType(type);
              setIsScannerOpen(true);
              e.target.value = '';
              return;
         }
 
-        processFiles(files);
+        processFiles(files, type);
         e.target.value = '';
     };
 
     const handleScannerConfirm = (processedFile: File) => {
         setIsScannerOpen(false);
         setScannerFile(null);
-        processFiles([processedFile]);
+        processFiles([processedFile], scannerTargetType);
     };
 
-    const processFiles = async (files: File[]) => {
+    const processFiles = async (files: File[], type: string) => {
         if (!originalRequest) return;
         setIsUploading(true);
 
@@ -239,8 +257,8 @@ const PrintReport: React.FC = () => {
                 const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
                 
                 newAttachments.push({
-                    name: `req_${originalRequest.request_number}_page_${Date.now()}_${i}.jpg`,
-                    type: 'manual_paper',
+                    name: `req_${originalRequest.request_number}_${type}_${Date.now()}_${i}.jpg`,
+                    type: type, // 'manual_paper' or 'internal_draft'
                     data: publicUrl
                 });
             }
@@ -253,8 +271,14 @@ const PrintReport: React.FC = () => {
                 attached_files: updatedFiles
             });
             
-            // Re-fetch to ensure UI is in sync if needed, but context update should handle it
-            addNotification({ title: 'تم الحفظ', message: `تم إضافة ${newAttachments.length} صفحات للأرشيف.`, type: 'success' });
+            const msg = type === 'internal_draft' ? 'تم حفظ المسودة الداخلية.' : 'تمت الأرشفة بنجاح.';
+            addNotification({ title: 'تم الحفظ', message: msg, type: 'success' });
+            
+            // Switch to the appropriate tab to show the new file if specific tab is active, else stay on 'all'
+            if (activeArchiveTab !== 'all') {
+                if (type === 'internal_draft') setActiveArchiveTab('internal');
+                else setActiveArchiveTab('public');
+            }
 
         } catch (error: any) {
             console.error(error);
@@ -314,7 +338,6 @@ const PrintReport: React.FC = () => {
     };
 
     const generatePdfInstance = async () => {
-        // ... (Existing implementation remains unchanged) ...
         if (!reportRef.current) return null;
         
         setIsGenerating(true);
@@ -414,6 +437,50 @@ const PrintReport: React.FC = () => {
 
             const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: [pdfWidth, pdfHeight] });
             pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+            // --- APPEND ATTACHMENTS (Excluding 'internal_draft') ---
+            const attachments = originalRequest?.attached_files || [];
+            const validAttachments = attachments.filter(f => f.type !== 'internal_draft');
+
+            if (validAttachments.length > 0) {
+                setLoadingState(`جاري إرفاق المستندات (${validAttachments.length})...`);
+                
+                for (let i = 0; i < validAttachments.length; i++) {
+                    const file = validAttachments[i];
+                    try {
+                        const imgBase64 = await urlToBase64(file.data);
+                        
+                        // Add new A4 page
+                        pdf.addPage([210, 297], 'p');
+                        
+                        // Calculate dimensions to fit image within A4 while maintaining aspect ratio
+                        const imgProps = pdf.getImageProperties(imgBase64);
+                        const pdfPageWidth = 210;
+                        const pdfPageHeight = 297;
+                        const margin = 0; // Full page
+                        
+                        const availWidth = pdfPageWidth - (margin * 2);
+                        const availHeight = pdfPageHeight - (margin * 2);
+                        
+                        const widthRatio = availWidth / imgProps.width;
+                        const heightRatio = availHeight / imgProps.height;
+                        const ratio = Math.min(widthRatio, heightRatio);
+                        
+                        const finalW = imgProps.width * ratio;
+                        const finalH = imgProps.height * ratio;
+                        
+                        // Center the image
+                        const x = margin + (availWidth - finalW) / 2;
+                        const y = margin + (availHeight - finalH) / 2;
+
+                        pdf.addImage(imgBase64, 'JPEG', x, y, finalW, finalH, undefined, 'FAST');
+                        
+                    } catch (err) {
+                        console.error(`Failed to add attachment ${file.name} to PDF`, err);
+                    }
+                }
+            }
+            // -----------------------------------------------------
             
             return pdf;
         } catch(e: any) {
@@ -488,6 +555,27 @@ const PrintReport: React.FC = () => {
                         <Icon name="folder-open" className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">أرشيف الطلب ({paperImages.length})</span>
                     </Button>
+                    
+                    {/* New Distinct Button for Internal Drafts */}
+                    <Button
+                        variant="secondary"
+                        onClick={() => internalUploadRef.current?.click()}
+                        size="sm"
+                        className="bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100"
+                        disabled={isUploading}
+                    >
+                        <Icon name="edit" className="w-4 h-4" />
+                        <span className="hidden sm:inline ms-1">مسودة يدوية</span>
+                    </Button>
+                    {/* Hidden Input for Internal Drafts */}
+                    <input 
+                        type="file" 
+                        ref={internalUploadRef} 
+                        className="hidden" 
+                        accept="image/*" 
+                        multiple 
+                        onChange={(e) => handleFileUpload(e, 'internal_draft')} 
+                    />
 
                     {translatedRequest ? (
                         <Button onClick={handleClearTranslation} variant="secondary" size="sm" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100">
@@ -570,12 +658,35 @@ const PrintReport: React.FC = () => {
                         {/* Right: Gallery */}
                         <div className="md:w-2/3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 flex flex-col overflow-hidden order-2 md:order-1">
                             <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
-                                <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة ({paperImages.length})
+                                <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة
                             </h4>
+                            
+                            {/* --- New Tab Bar --- */}
+                            <div className="flex border-b dark:border-slate-700 mb-4">
+                                <button
+                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'all' ? 'border-b-2 border-slate-600 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    onClick={() => setActiveArchiveTab('all')}
+                                >
+                                     الكل ({paperImages.length})
+                                </button>
+                                <button
+                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'public' ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    onClick={() => setActiveArchiveTab('public')}
+                                >
+                                     مرفقات التقرير ({publicImages.length})
+                                </button>
+                                <button
+                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'internal' ? 'border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                     onClick={() => setActiveArchiveTab('internal')}
+                                >
+                                     مسودات داخلية ({internalImages.length})
+                                </button>
+                            </div>
+
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
-                                {paperImages.length > 0 ? (
+                                {displayedImages.length > 0 ? (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                        {paperImages.map((file, idx) => (
+                                        {displayedImages.map((file, idx) => (
                                             <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm aspect-[3/4] cursor-pointer" onClick={() => setPreviewImage(file.data)}>
                                                 <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
                                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -588,6 +699,7 @@ const PrintReport: React.FC = () => {
                                                 </div>
                                                 <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] p-1 text-center truncate">
                                                     {file.name}
+                                                    {file.type === 'internal_draft' && <span className="block text-[8px] text-yellow-300">(مسودة داخلية)</span>}
                                                 </div>
                                             </div>
                                         ))}
@@ -595,7 +707,7 @@ const PrintReport: React.FC = () => {
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                         <Icon name="folder-open" className="w-12 h-12 mb-2 opacity-20" />
-                                        <p className="text-sm">لا توجد صفحات مؤرشفة.</p>
+                                        <p className="text-sm">لا توجد صفحات في هذا القسم.</p>
                                     </div>
                                 )}
                             </div>
@@ -607,18 +719,24 @@ const PrintReport: React.FC = () => {
                                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">إضافة مستندات</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-1 gap-3">
                                     <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'}`}>
-                                        <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
+                                        <input type="file" accept="image/*" multiple onChange={(e) => handleFileUpload(e, 'manual_paper')} className="hidden" />
                                         {isUploading ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <UploadIcon className="w-5 h-5" />}
                                         <span className="font-bold text-sm">رفع ملفات</span>
                                     </label>
 
-                                    <button onClick={() => setIsScannerOpen(true)} className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'}`}>
+                                    <button onClick={() => { setIsScannerOpen(true); setScannerTargetType('manual_paper'); }} className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'}`}>
                                         <CameraIcon className="w-5 h-5" />
                                         <span className="font-bold text-sm">الماسح الذكي</span>
                                     </button>
+
+                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'}`}>
+                                        <input type="file" accept="image/*" multiple onChange={(e) => handleFileUpload(e, 'internal_draft')} className="hidden" />
+                                        <Icon name="edit" className="w-5 h-5" />
+                                        <span className="font-bold text-sm">مسودة (داخلي)</span>
+                                    </label>
                                 </div>
                                 <p className="text-[10px] text-slate-400 mt-2 text-center">
-                                    يدعم رفع الصور (JPG, PNG) أو التصوير المباشر.
+                                    الملفات المرفوعة كـ "مسودة" لن تظهر للعميل.
                                 </p>
                             </div>
                         </div>
