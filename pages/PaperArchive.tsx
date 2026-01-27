@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { InspectionRequest } from '../types';
 import Button from '../components/Button';
@@ -16,7 +16,7 @@ import { SkeletonTable } from '../components/Skeleton';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import { formatBytes } from '../lib/utils';
 import DocumentScannerModal from '../components/DocumentScannerModal';
-import CameraPage from '../components/CameraPage'; // Import CameraPage
+import CameraPage from '../components/CameraPage';
 
 // --- Image Optimization Helper (Still used for fallback/bulk) ---
 const optimizeDocumentImage = async (file: File): Promise<File> => {
@@ -71,7 +71,6 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
 
 const PaperArchive: React.FC = () => {
     const { 
-        requests, 
         clients, 
         cars, 
         carMakes, 
@@ -81,53 +80,98 @@ const PaperArchive: React.FC = () => {
         updateRequest, 
         uploadImage, 
         deleteImage,
-        fetchRequestsByDateRange,
-        isRefreshing,
+        fetchPaperArchiveRequests,
+        fetchAllPaperArchiveRequests,
         fetchRequestByRequestNumber
     } = useAppContext();
 
     const [searchQuery, setSearchQuery] = useState('');
-    const [dateFilter, setDateFilter] = useState<'today' | 'all' | 'custom'>('today');
-    const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
+    const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'month' | 'custom' | 'all'>('today');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
+
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<InspectionRequest | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [filteredRequests, setFilteredRequests] = useState<InspectionRequest[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
 
-    // New State for modal data loading
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-
-    // Scanner States
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [scannerFile, setScannerFile] = useState<File | null>(null);
-    
-    // Camera State
     const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [activeArchiveTab, setActiveArchiveTab] = useState<'all' | 'public' | 'internal'>('all');
 
-    // Initial Fetch for "Today"
-    useEffect(() => {
-        const load = async () => {
+    const [isSourceChoiceModalOpen, setIsSourceChoiceModalOpen] = useState(false);
+    const [currentUploadType, setCurrentUploadType] = useState<'manual_paper' | 'internal_draft'>('manual_paper');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+
+    // Fetch Logic
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
             if (dateFilter === 'all') {
-                 setFilteredRequests(requests);
-            } else {
-                setIsLoading(true);
-                const date = dateFilter === 'today' ? new Date() : new Date(customDate);
-                const start = new Date(date); start.setHours(0,0,0,0);
-                const end = new Date(date); end.setHours(23,59,59,999);
-                const fetched = await fetchRequestsByDateRange(start.toISOString(), end.toISOString());
-                setFilteredRequests(fetched);
+                const data = await fetchAllPaperArchiveRequests();
+                setFilteredRequests(data);
                 setIsLoading(false);
+                return;
             }
-        };
-        load();
-    }, [dateFilter, customDate, requests, fetchRequestsByDateRange]);
+
+            const now = new Date();
+            let start = new Date();
+            let end = new Date();
+
+            switch (dateFilter) {
+                case 'today':
+                    start.setHours(0, 0, 0, 0);
+                    end.setHours(23, 59, 59, 999);
+                    break;
+                case 'yesterday':
+                    start.setDate(now.getDate() - 1);
+                    start.setHours(0, 0, 0, 0);
+                    end.setDate(now.getDate() - 1);
+                    end.setHours(23, 59, 59, 999);
+                    break;
+                case 'month':
+                    start = new Date(now.getFullYear(), now.getMonth(), 1);
+                    end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+                    break;
+                case 'custom':
+                    if (customStartDate && customEndDate) {
+                         start = new Date(customStartDate);
+                         start.setHours(0, 0, 0, 0);
+                         end = new Date(customEndDate);
+                         end.setHours(23, 59, 59, 999);
+                    } else {
+                        setIsLoading(false);
+                        setFilteredRequests([]);
+                        return;
+                    }
+                    break;
+            }
+
+            const data = await fetchPaperArchiveRequests(start.toISOString(), end.toISOString());
+            setFilteredRequests(data);
+
+        } catch (error) {
+             console.error("Failed to load archive data", error);
+             addNotification({ title: 'خطأ', message: 'فشل تحميل البيانات.', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Trigger load on filter change
+    useEffect(() => {
+        loadData();
+    }, [dateFilter, customStartDate, customEndDate]);
 
     useEffect(() => {
         if (!isUploadModalOpen) {
             setUploadStats(null);
-            setScannerFile(null); // Clear scanner file if modal closes
+            setScannerFile(null);
         }
     }, [isUploadModalOpen]);
 
@@ -158,12 +202,9 @@ const PaperArchive: React.FC = () => {
         setIsLoadingDetails(true);
         
         try {
-             // Fetch fresh data for this request to ensure attachments are up-to-date
             const freshRequest = await fetchRequestByRequestNumber(request.request_number);
-            
             if (freshRequest) {
                 setSelectedRequest(freshRequest);
-                // Also update the item in the list view to reflect "Archived" status if changed
                 setFilteredRequests(prev => prev.map(r => r.id === freshRequest.id ? freshRequest : r));
             }
         } catch (error) {
@@ -172,34 +213,41 @@ const PaperArchive: React.FC = () => {
             setIsLoadingDetails(false);
         }
     };
-
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    
+    const handleUploadClick = (type: 'manual_paper' | 'internal_draft') => {
+        setCurrentUploadType(type);
+        setIsSourceChoiceModalOpen(true);
+    };
+    
+    const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || !selectedRequest) return;
         const files: File[] = Array.from(e.target.files);
 
+        // Single image goes to scanner
         if (files.length === 1 && files[0].type.startsWith('image/')) {
              setScannerFile(files[0]);
              setIsScannerOpen(true);
-             e.target.value = '';
+             e.target.value = ''; // Reset input
              return;
         }
 
-        processFiles(files);
-        e.target.value = '';
+        // Multiple files processed directly
+        processFiles(files, currentUploadType);
+        e.target.value = ''; // Reset input
     };
-
+    
     const handleCameraCapture = (file: File) => {
         setScannerFile(file);
-        setIsScannerOpen(true); // Open the editor with the captured file
+        setIsScannerOpen(true);
     };
 
     const handleScannerConfirm = (processedFile: File) => {
         setIsScannerOpen(false);
         setScannerFile(null);
-        processFiles([processedFile]);
+        processFiles([processedFile], currentUploadType);
     };
 
-    const processFiles = async (files: File[]) => {
+    const processFiles = async (files: File[], type: string) => {
         if (!selectedRequest) return;
         setIsUploading(true);
         setUploadStats(null);
@@ -212,7 +260,6 @@ const PaperArchive: React.FC = () => {
                 const file = files[i];
                 totalOriginalSize += file.size;
 
-                
                 let optimizedFile = file;
                 if (!file.name.startsWith('scanned_')) {
                      optimizedFile = await optimizeDocumentImage(file);
@@ -223,8 +270,8 @@ const PaperArchive: React.FC = () => {
                 const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
                 
                 newAttachments.push({
-                    name: `req_${selectedRequest.request_number}_page_${Date.now()}_${i}.jpg`,
-                    type: 'manual_paper',
+                    name: `req_${selectedRequest.request_number}_${type}_${Date.now()}_${i}.jpg`,
+                    type: type,
                     data: publicUrl
                 });
             }
@@ -253,6 +300,11 @@ const PaperArchive: React.FC = () => {
                 message: `تم رفع ${newAttachments.length} صفحة بنجاح.`, 
                 type: 'success' 
             });
+
+            if (activeArchiveTab !== 'all') {
+                if (type === 'internal_draft') setActiveArchiveTab('internal');
+                else setActiveArchiveTab('public');
+            }
 
         } catch (error: any) {
             console.error(error);
@@ -296,34 +348,50 @@ const PaperArchive: React.FC = () => {
     }
 
     const getRequestStatus = (req: InspectionRequest) => {
-        // Consider both manual_paper AND internal_draft as "Archived" activity
-        const hasPaper = req.attached_files?.some(f => f.type === 'manual_paper' || f.type === 'internal_draft');
+        const hasPaper = req.attached_files && req.attached_files.length > 0;
         return hasPaper;
     };
 
-    // Include both types in the paperImages list for this page as well
     const paperImages = selectedRequest?.attached_files?.filter(f => f.type === 'manual_paper' || f.type === 'internal_draft') || [];
+    const publicImages = paperImages.filter(f => f.type !== 'internal_draft');
+    const internalImages = paperImages.filter(f => f.type === 'internal_draft');
+    
+    const displayedImages = activeArchiveTab === 'all' ? paperImages : (activeArchiveTab === 'public' ? publicImages : internalImages);
 
     return (
-        <div className="container mx-auto animate-fade-in pb-20">
+        <div className="container mx-auto animate-fade-in p-4 pb-20">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-3">
                     <Icon name="folder-open" className="w-8 h-8 text-blue-600" />
                     أرشيف الورقيات
                 </h2>
                 
-                <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
+                <div className="flex flex-wrap gap-2 items-center bg-slate-200 dark:bg-slate-700 p-1.5 rounded-xl">
                     <button onClick={() => setDateFilter('today')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'today' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>اليوم</button>
+                    <button onClick={() => setDateFilter('yesterday')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'yesterday' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>أمس</button>
+                    <button onClick={() => setDateFilter('month')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'month' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>هذا الشهر</button>
                     <button onClick={() => setDateFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>الكل</button>
-                     <div className="relative flex items-center px-2">
-                        <input type="date" value={customDate} onChange={e => { setCustomDate(e.target.value); setDateFilter('custom'); }} className="bg-transparent border-none text-xs font-bold text-slate-600 dark:text-slate-300 focus:ring-0 p-0" />
-                    </div>
+                    <button onClick={() => setDateFilter('custom')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'custom' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>مخصص</button>
                 </div>
             </div>
 
+            {dateFilter === 'custom' && (
+                <div className="mb-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap gap-4 items-end animate-fade-in">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">من تاريخ</label>
+                        <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:border-slate-600 text-sm" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">إلى تاريخ</label>
+                        <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:border-slate-600 text-sm" />
+                    </div>
+                    <Button onClick={loadData} disabled={isLoading || !customStartDate || !customEndDate} size="sm">تطبيق</Button>
+                </div>
+            )}
+
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex gap-4">
-                     <div className="relative flex-grow max-w-md">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col md:flex-row gap-4 justify-between items-center">
+                     <div className="relative flex-grow w-full md:max-w-md">
                         <Icon name="search" className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
                         <input 
                             type="text" 
@@ -333,12 +401,16 @@ const PaperArchive: React.FC = () => {
                             className="w-full pr-9 pl-4 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                         />
                     </div>
+                    <div className="text-xs text-slate-500 font-bold bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg">
+                        {displayedRequests.length} طلبات
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">
-                    {isLoading || isRefreshing ? (
-                         <div className="p-6">
-                            <SkeletonTable rows={5} />
+                    {isLoading ? (
+                         <div className="p-12 text-center">
+                            <RefreshCwIcon className="w-10 h-10 animate-spin text-blue-500 mx-auto mb-2" />
+                            <p className="text-slate-500 text-sm">جاري تحميل البيانات...</p>
                         </div>
                     ) : (
                         <table className="w-full text-sm text-right">
@@ -369,28 +441,28 @@ const PaperArchive: React.FC = () => {
                                             <td className="px-6 py-4 text-center">
                                                 {isArchived ? (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
-                                                        <CheckCircleIcon className="w-3.5 h-3.5" /> مؤرشف
+                                                        <CheckCircleIcon className="w-3.5 h-3.5" /> مؤرشة ({req.attached_files?.length})
                                                     </span>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
-                                                        <XIcon className="w-3.5 h-3.5" /> غير مؤرشف
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                                        <XIcon className="w-3.5 h-3.5" /> فارغ
                                                     </span>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 text-center">
-                                                 <button className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-colors">
-                                                    <Icon name="upload" className="w-4 h-4" />
+                                                 <button className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-colors" title="فتح">
+                                                    <Icon name="folder-open" className="w-4 h-4" />
                                                  </button>
                                             </td>
                                         </tr>
                                     );
                                 })}
-                                {displayedRequests.length === 0 && (
+                                {displayedRequests.length === 0 && !isLoading && (
                                     <tr>
                                         <td colSpan={6} className="text-center py-12 text-slate-400">
                                             <div className="flex flex-col items-center justify-center">
                                                 <Icon name="folder-open" className="w-12 h-12 mb-3 opacity-20" />
-                                                <p>لا توجد طلبات للعرض.</p>
+                                                <p>لا توجد طلبات للعرض في الفترة المحددة.</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -401,12 +473,10 @@ const PaperArchive: React.FC = () => {
                 </div>
             </div>
 
-            {/* Upload / View Modal */}
             <Modal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} title={`أرشيف الطلب رقم #${selectedRequest?.request_number}`} size="4xl">
                 <div className="flex flex-col h-[85vh] md:h-[70vh]">
                     <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
                         
-                        {/* Right Column: Existing Images (Main Content) */}
                         <div className="md:w-2/3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 flex flex-col overflow-hidden order-2 md:order-1">
                             <div className="flex justify-between items-center mb-3 flex-shrink-0">
                                 <h4 className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
@@ -420,10 +490,31 @@ const PaperArchive: React.FC = () => {
                                 )}
                             </div>
                             
+                            <div className="flex border-b dark:border-slate-700 mb-4">
+                                <button
+                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'all' ? 'border-b-2 border-slate-600 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    onClick={() => setActiveArchiveTab('all')}
+                                >
+                                     الكل ({paperImages.length})
+                                </button>
+                                <button
+                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'public' ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    onClick={() => setActiveArchiveTab('public')}
+                                >
+                                     مرفقات التقرير ({publicImages.length})
+                                </button>
+                                <button
+                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'internal' ? 'border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                     onClick={() => setActiveArchiveTab('internal')}
+                                >
+                                     مسودات داخلية ({internalImages.length})
+                                </button>
+                            </div>
+
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
-                                {paperImages.length > 0 ? (
+                                {displayedImages.length > 0 ? (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                        {paperImages.map((file, idx) => (
+                                        {displayedImages.map((file, idx) => (
                                             <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm aspect-[3/4]">
                                                 <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
                                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -444,39 +535,32 @@ const PaperArchive: React.FC = () => {
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                         <Icon name="folder-open" className="w-12 h-12 mb-2 opacity-20" />
-                                        <p className="text-sm">لا توجد صفحات مؤرشفة.</p>
+                                        <p className="text-sm">لا توجد صفحات في هذا القسم.</p>
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Left Column: Actions (Sidebar on Desktop, Top on Mobile) */}
                         <div className="md:w-1/3 flex flex-col gap-4 order-1 md:order-2 flex-shrink-0">
-                            
-                            {/* Actions Buttons */}
                             <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-4 shadow-sm">
                                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">إضافة مستندات</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-1 gap-3">
-                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'}`}>
-                                        <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
-                                        {isUploading ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <UploadIcon className="w-5 h-5" />}
+                                    {/* These are now simple buttons */}
+                                    <button onClick={() => handleUploadClick('manual_paper')} disabled={isUploading} className="flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
+                                        <UploadIcon className="w-5 h-5" />
                                         <span className="font-bold text-sm">رفع ملفات</span>
-                                    </label>
-
-                                    <button 
-                                        onClick={() => setIsCameraOpen(true)}
-                                        className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'}`}
-                                    >
-                                        <CameraIcon className="w-5 h-5" />
-                                        <span className="font-bold text-sm">الماسح الذكي</span>
                                     </button>
+                                    <button onClick={() => handleUploadClick('internal_draft')} disabled={isUploading} className="flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800">
+                                        <Icon name="edit" className="w-5 h-5" />
+                                        <span className="font-bold text-sm">مسودة (داخلي)</span>
+                                    </button>
+                                    <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={handleFileSelected} className="hidden" />
                                 </div>
                                 <p className="text-[10px] text-slate-400 mt-2 text-center">
-                                    يدعم رفع الصور (JPG, PNG) أو التصوير المباشر مع المعالجة.
+                                    الملفات المرفوعة كـ "مسودة" لن تظهر للعميل.
                                 </p>
                             </div>
 
-                            {/* --- Upload Statistics Display --- */}
                             {uploadStats && (
                                 <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg animate-fade-in shadow-sm">
                                     <h5 className="text-xs font-bold text-green-800 dark:text-green-300 mb-2 flex items-center gap-2">
@@ -506,16 +590,26 @@ const PaperArchive: React.FC = () => {
                     </div>
                 </div>
             </Modal>
+
+            <Modal isOpen={isSourceChoiceModalOpen} onClose={() => setIsSourceChoiceModalOpen(false)} title="اختر مصدر الصورة" size="sm">
+                <div className="p-4 flex flex-col gap-4">
+                    <Button onClick={() => { setIsSourceChoiceModalOpen(false); setIsCameraOpen(true); }} className="w-full py-4 text-lg justify-center" variant="secondary" leftIcon={<CameraIcon className="w-6 h-6"/>}>
+                        من الكاميرا
+                    </Button>
+                    <Button onClick={() => { setIsSourceChoiceModalOpen(false); fileInputRef.current?.click(); }} className="w-full py-4 text-lg justify-center" variant="secondary" leftIcon={<UploadIcon className="w-6 h-6"/>}>
+                        من الجهاز
+                    </Button>
+                </div>
+            </Modal>
             
-            {/* Smart Scanner Modal */}
             <DocumentScannerModal 
                 isOpen={isScannerOpen} 
                 onClose={() => setIsScannerOpen(false)} 
                 imageFile={scannerFile} 
-                onConfirm={handleScannerConfirm} 
+                onConfirm={handleScannerConfirm}
+                forceFilter={currentUploadType === 'internal_draft' ? 'bw' : undefined}
             />
             
-            {/* Full Screen Camera */}
             <CameraPage 
                 isOpen={isCameraOpen} 
                 onClose={() => setIsCameraOpen(false)} 

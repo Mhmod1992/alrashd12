@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import InspectionReport from '../components/InspectionReport';
 import Icon from '../components/Icon';
@@ -11,6 +11,7 @@ import ReportTranslationModal from '../components/ReportTranslationModal';
 import Modal from '../components/Modal'; 
 import { InspectionRequest, ReportSettings, CustomFindingCategory } from '../types';
 import DocumentScannerModal from '../components/DocumentScannerModal';
+import CameraPage from '../components/CameraPage';
 import CameraIcon from '../components/icons/CameraIcon';
 import UploadIcon from '../components/icons/UploadIcon';
 import TrashIcon from '../components/icons/TrashIcon';
@@ -140,9 +141,6 @@ const PrintReport: React.FC = () => {
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
-    // Ref for the hidden file input
-    const internalUploadRef = useRef<HTMLInputElement>(null);
-
     const originalRequest = requests.find(r => r.id === selectedRequestId);
     
     // Translation State
@@ -158,9 +156,13 @@ const PrintReport: React.FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [scannerFile, setScannerFile] = useState<File | null>(null);
-    // Track where the scanner call came from to assign correct type
-    const [scannerTargetType, setScannerTargetType] = useState<'manual_paper' | 'internal_draft'>('manual_paper');
     const [activeArchiveTab, setActiveArchiveTab] = useState<'all' | 'public' | 'internal'>('all');
+
+    // New state for source choice logic
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [isSourceChoiceModalOpen, setIsSourceChoiceModalOpen] = useState(false);
+    const [currentUploadType, setCurrentUploadType] = useState<'manual_paper' | 'internal_draft'>('manual_paper');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [isDataReady, setIsDataReady] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -172,12 +174,10 @@ const PrintReport: React.FC = () => {
     const reportSettings = translatedSettings || settings.reportSettings;
     const effectiveCategories = translatedCategories || customFindingCategories;
 
-    // Get Archived Paper Images
     const paperImages = useMemo(() => {
         return originalRequest?.attached_files?.filter(f => f.type === 'manual_paper' || f.type === 'internal_draft') || [];
     }, [originalRequest]);
 
-    // Split Images based on type
     const publicImages = useMemo(() => paperImages.filter(f => f.type !== 'internal_draft'), [paperImages]);
     const internalImages = useMemo(() => paperImages.filter(f => f.type === 'internal_draft'), [paperImages]);
     
@@ -215,28 +215,10 @@ const PrintReport: React.FC = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // --- Upload Handlers ---
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'manual_paper' | 'internal_draft' = 'manual_paper') => {
-        if (!e.target.files || !originalRequest) return;
-        const files: File[] = Array.from(e.target.files);
-
-        // If single image file, offer scanner/crop
-        if (files.length === 1 && files[0].type.startsWith('image/')) {
-             setScannerFile(files[0]);
-             setScannerTargetType(type);
-             setIsScannerOpen(true);
-             e.target.value = '';
-             return;
-        }
-
-        processFiles(files, type);
-        e.target.value = '';
-    };
-
-    const handleScannerConfirm = (processedFile: File) => {
-        setIsScannerOpen(false);
-        setScannerFile(null);
-        processFiles([processedFile], scannerTargetType);
+    // --- Upload Handlers (Refactored to match PaperArchive) ---
+    const handleUploadClick = (type: 'manual_paper' | 'internal_draft') => {
+        setCurrentUploadType(type);
+        setIsSourceChoiceModalOpen(true);
     };
 
     const processFiles = async (files: File[], type: string) => {
@@ -253,12 +235,11 @@ const PrintReport: React.FC = () => {
                      optimizedFile = await optimizeDocumentImage(file);
                 }
 
-                // Changed to 'attached_files' bucket
                 const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
                 
                 newAttachments.push({
                     name: `req_${originalRequest.request_number}_${type}_${Date.now()}_${i}.jpg`,
-                    type: type, // 'manual_paper' or 'internal_draft'
+                    type: type,
                     data: publicUrl
                 });
             }
@@ -274,7 +255,6 @@ const PrintReport: React.FC = () => {
             const msg = type === 'internal_draft' ? 'تم حفظ المسودة الداخلية.' : 'تمت الأرشفة بنجاح.';
             addNotification({ title: 'تم الحفظ', message: msg, type: 'success' });
             
-            // Switch to the appropriate tab to show the new file if specific tab is active, else stay on 'all'
             if (activeArchiveTab !== 'all') {
                 if (type === 'internal_draft') setActiveArchiveTab('internal');
                 else setActiveArchiveTab('public');
@@ -286,6 +266,32 @@ const PrintReport: React.FC = () => {
         } finally {
             setIsUploading(false);
         }
+    };
+    
+    const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || !originalRequest) return;
+        const files: File[] = Array.from(e.target.files);
+
+        if (files.length === 1 && files[0].type.startsWith('image/')) {
+             setScannerFile(files[0]);
+             setIsScannerOpen(true);
+             e.target.value = '';
+             return;
+        }
+
+        processFiles(files, currentUploadType);
+        e.target.value = '';
+    };
+
+    const handleCameraCapture = (file: File) => {
+        setScannerFile(file);
+        setIsScannerOpen(true);
+    };
+
+    const handleScannerConfirm = (processedFile: File) => {
+        setIsScannerOpen(false);
+        setScannerFile(null);
+        processFiles([processedFile], currentUploadType);
     };
 
     const handleDeleteImage = async (fileUrl: string) => {
@@ -545,7 +551,6 @@ const PrintReport: React.FC = () => {
                         <span className="hidden sm:inline ms-1">العودة</span>
                     </Button>
                     
-                    {/* Updated Paper Archive Viewer Button */}
                     <Button
                         variant="secondary"
                         onClick={() => setIsPaperModalOpen(true)}
@@ -555,27 +560,6 @@ const PrintReport: React.FC = () => {
                         <Icon name="folder-open" className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">أرشيف الطلب ({paperImages.length})</span>
                     </Button>
-                    
-                    {/* New Distinct Button for Internal Drafts */}
-                    <Button
-                        variant="secondary"
-                        onClick={() => internalUploadRef.current?.click()}
-                        size="sm"
-                        className="bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100"
-                        disabled={isUploading}
-                    >
-                        <Icon name="edit" className="w-4 h-4" />
-                        <span className="hidden sm:inline ms-1">مسودة يدوية</span>
-                    </Button>
-                    {/* Hidden Input for Internal Drafts */}
-                    <input 
-                        type="file" 
-                        ref={internalUploadRef} 
-                        className="hidden" 
-                        accept="image/*" 
-                        multiple 
-                        onChange={(e) => handleFileUpload(e, 'internal_draft')} 
-                    />
 
                     {translatedRequest ? (
                         <Button onClick={handleClearTranslation} variant="secondary" size="sm" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100">
@@ -655,13 +639,11 @@ const PrintReport: React.FC = () => {
             <Modal isOpen={isPaperModalOpen} onClose={() => setIsPaperModalOpen(false)} title="أرشيف الطلب (المرفقات)" size="4xl">
                 <div className="flex flex-col h-[75vh]">
                     <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
-                        {/* Right: Gallery */}
                         <div className="md:w-2/3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 flex flex-col overflow-hidden order-2 md:order-1">
                             <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
                                 <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة
                             </h4>
                             
-                            {/* --- New Tab Bar --- */}
                             <div className="flex border-b dark:border-slate-700 mb-4">
                                 <button
                                     className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'all' ? 'border-b-2 border-slate-600 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
@@ -713,27 +695,18 @@ const PrintReport: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Left: Upload Actions */}
                         <div className="md:w-1/3 flex flex-col gap-4 order-1 md:order-2 flex-shrink-0">
                             <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-4 shadow-sm">
                                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">إضافة مستندات</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-1 gap-3">
-                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'}`}>
-                                        <input type="file" accept="image/*" multiple onChange={(e) => handleFileUpload(e, 'manual_paper')} className="hidden" />
-                                        {isUploading ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <UploadIcon className="w-5 h-5" />}
+                                    <button onClick={() => handleUploadClick('manual_paper')} disabled={isUploading} className="flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
+                                        <UploadIcon className="w-5 h-5" />
                                         <span className="font-bold text-sm">رفع ملفات</span>
-                                    </label>
-
-                                    <button onClick={() => { setIsScannerOpen(true); setScannerTargetType('manual_paper'); }} className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'}`}>
-                                        <CameraIcon className="w-5 h-5" />
-                                        <span className="font-bold text-sm">الماسح الذكي</span>
                                     </button>
-
-                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${isUploading ? 'opacity-50 pointer-events-none bg-slate-100' : 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'}`}>
-                                        <input type="file" accept="image/*" multiple onChange={(e) => handleFileUpload(e, 'internal_draft')} className="hidden" />
+                                    <button onClick={() => handleUploadClick('internal_draft')} disabled={isUploading} className="flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800">
                                         <Icon name="edit" className="w-5 h-5" />
                                         <span className="font-bold text-sm">مسودة (داخلي)</span>
-                                    </label>
+                                    </button>
                                 </div>
                                 <p className="text-[10px] text-slate-400 mt-2 text-center">
                                     الملفات المرفوعة كـ "مسودة" لن تظهر للعميل.
@@ -746,16 +719,34 @@ const PrintReport: React.FC = () => {
                     </div>
                 </div>
             </Modal>
+            
+            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelected} className="hidden" />
 
-            {/* Smart Scanner Modal */}
+            <Modal isOpen={isSourceChoiceModalOpen} onClose={() => setIsSourceChoiceModalOpen(false)} title="اختر مصدر الصورة" size="sm">
+                <div className="p-4 flex flex-col gap-4">
+                    <Button onClick={() => { setIsSourceChoiceModalOpen(false); setIsCameraOpen(true); }} className="w-full py-4 text-lg justify-center" variant="secondary" leftIcon={<CameraIcon className="w-6 h-6"/>}>
+                        من الكاميرا
+                    </Button>
+                    <Button onClick={() => { setIsSourceChoiceModalOpen(false); fileInputRef.current?.click(); }} className="w-full py-4 text-lg justify-center" variant="secondary" leftIcon={<UploadIcon className="w-6 h-6"/>}>
+                        من الجهاز
+                    </Button>
+                </div>
+            </Modal>
+
             <DocumentScannerModal 
                 isOpen={isScannerOpen} 
                 onClose={() => setIsScannerOpen(false)} 
                 imageFile={scannerFile} 
                 onConfirm={handleScannerConfirm} 
+                forceFilter={currentUploadType === 'internal_draft' ? 'bw' : undefined}
+            />
+            
+            <CameraPage 
+                isOpen={isCameraOpen} 
+                onClose={() => setIsCameraOpen(false)} 
+                onCapture={handleCameraCapture} 
             />
 
-            {/* Lightbox Modal for Zooming */}
             <Modal isOpen={!!previewImage} onClose={() => setPreviewImage(null)} title="معاينة الصورة" size="4xl">
                 <div className="flex justify-center items-center bg-black/90 p-4 rounded-lg">
                     {previewImage && (

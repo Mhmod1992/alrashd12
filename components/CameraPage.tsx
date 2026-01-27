@@ -92,7 +92,7 @@ const CameraPage: React.FC<CameraPageProps> = ({ isOpen, onClose, onCapture }) =
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center animate-fade-in" dir="ltr">
+    <div className="fixed inset-0 bg-black z-[110] flex flex-col items-center justify-center animate-fade-in" dir="ltr">
       <video ref={videoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" onClick={handleVideoClick} />
       
       {error && (

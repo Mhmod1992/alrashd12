@@ -92,7 +92,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createActivityLog,
         addNotification,
         markNotificationAsRead,
-        markAllNotificationsAsRead
+        markAllNotificationsAsRead,
+        fetchRequestByRequestNumber,
+        fetchRequestsByDateRange,
+        fetchPaperArchiveRequests,
+        fetchAllPaperArchiveRequests
     } = useDataScope(authUser);
 
     const {
@@ -777,40 +781,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         return results;
     }, [ensureEntitiesLoaded]);
-
-    const fetchRequestByRequestNumber = useCallback(async (reqNum: number): Promise<InspectionRequest | null> => {
-        const { data, error } = await supabase.from('inspection_requests').select('*').eq('request_number', reqNum).single();
-        if (error && !data) {
-            setRequests(prev => prev.filter(r => r.request_number !== reqNum));
-            return null;
-        }
-        if (data) {
-            await ensureEntitiesLoaded([data]);
-            setRequests(prev => {
-                const exists = prev.some(r => r.id === data.id);
-                if (exists) return prev.map(r => r.id === data.id ? data : r);
-                const newRequests = [data, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-                return newRequests.slice(0, REQUESTS_PAGE_SIZE + 10);
-            });
-        }
-        return data;
-    }, [ensureEntitiesLoaded]);
-
+    
     const fetchRequestByRequestNumberForAuth = useCallback(async (reqNum: number): Promise<InspectionRequest | null> => {
         const { data, error } = await supabase.from('inspection_requests').select('*').eq('request_number', reqNum).single();
         if (error || !data) return null;
         return data;
     }, []);
-
-    const fetchRequestsByDateRange = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
-        const { data, error } = await supabase.from('inspection_requests').select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at').gte('created_at', startDate).lte('created_at', endDate).order('created_at', { ascending: false });
-        if (error) {
-            addNotification({ title: 'خطأ', message: 'فشل تحميل الطلبات حسب التاريخ.', type: 'error' });
-            return [];
-        }
-        if (data) await ensureEntitiesLoaded(data);
-        return data || [];
-    }, [addNotification, ensureEntitiesLoaded]);
 
     const searchClients = useCallback(async (query: string): Promise<Client[]> => {
         if (!query || query.length < 2) return [];
@@ -1367,7 +1343,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         incomingRequest, setIncomingRequest,
         reservations, fetchReservations, addReservation, updateReservationStatus, updateReservation, deleteReservation, parseReservationText,
         fetchRequestTabContent, fetchFullRequestForSave, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
-        lastRemoteDeleteId, setLastRemoteDeleteId
+        lastRemoteDeleteId, setLastRemoteDeleteId,
+        fetchPaperArchiveRequests,
+        fetchAllPaperArchiveRequests
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

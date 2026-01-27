@@ -276,6 +276,47 @@ export const useDataScope = (
         return data || [];
     }, [addNotification, ensureEntitiesLoaded]);
 
+    const fetchPaperArchiveRequests = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
+        // Fetches ALL requests in a date range for archiving purposes
+        const { data, error } = await supabase.from('inspection_requests')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files')
+            .gte('created_at', startDate)
+            .lte('created_at', endDate)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            addNotification({ title: 'خطأ', message: 'فشل تحميل الأرشيف.', type: 'error' });
+            return [];
+        }
+        
+        const requestsData = data || [];
+        
+        if (requestsData.length > 0) {
+            await ensureEntitiesLoaded(requestsData);
+        }
+        return requestsData;
+    }, [addNotification, ensureEntitiesLoaded]);
+
+    const fetchAllPaperArchiveRequests = useCallback(async (): Promise<InspectionRequest[]> => {
+        // Fetches ALL requests up to a limit for archiving purposes
+        const { data, error } = await supabase.from('inspection_requests')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files')
+            .order('created_at', { ascending: false })
+            .limit(500);
+
+        if (error) {
+            addNotification({ title: 'خطأ', message: 'فشل تحميل الأرشيف الكامل.', type: 'error' });
+            return [];
+        }
+
+        const requestsData = data || [];
+
+        if (requestsData.length > 0) {
+            await ensureEntitiesLoaded(requestsData);
+        }
+        return requestsData;
+    }, [addNotification, ensureEntitiesLoaded]);
+
     return {
         requests, setRequests,
         requestsOffset, setRequestsOffset,
@@ -312,6 +353,8 @@ export const useDataScope = (
         markNotificationAsRead,
         markAllNotificationsAsRead,
         fetchRequestByRequestNumber,
-        fetchRequestsByDateRange
+        fetchRequestsByDateRange,
+        fetchPaperArchiveRequests,
+        fetchAllPaperArchiveRequests
     };
 };

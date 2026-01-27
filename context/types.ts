@@ -150,6 +150,8 @@ export interface AppContextType {
     fetchRequestByRequestNumber: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestByRequestNumberForAuth: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestsByDateRange: (startDate: string, endDate: string) => Promise<InspectionRequest[]>;
+    fetchPaperArchiveRequests: (startDate: string, endDate: string) => Promise<InspectionRequest[]>;
+    fetchAllPaperArchiveRequests: () => Promise<InspectionRequest[]>;
     checkCarHistory: (plateNumber: string | null, vin: string | null) => Promise<CarHistoryResult | null>;
     isOnline: boolean;
     realtimeStatus: 'connected' | 'connecting' | 'disconnected';

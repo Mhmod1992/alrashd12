@@ -11,9 +11,10 @@ interface DocumentScannerModalProps {
     onClose: () => void;
     imageFile: File | null;
     onConfirm: (processedFile: File) => void;
+    forceFilter?: 'original' | 'document' | 'bw';
 }
 
-const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onClose, imageFile, onConfirm }) => {
+const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onClose, imageFile, onConfirm, forceFilter }) => {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     
     // Transform State
@@ -41,12 +42,12 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
             setScale(1);
             setPosition({ x: 0, y: 0 });
             setRotation(0);
-            setFilterType('document');
+            setFilterType(forceFilter || 'document');
             setIsLandscape(false);
             
             return () => URL.revokeObjectURL(url);
         }
-    }, [imageFile]);
+    }, [imageFile, forceFilter]);
 
     // --- Interaction Logic ---
     const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
@@ -193,26 +194,34 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                 
                 {/* --- Toolbar --- */}
                 <div className="flex flex-wrap items-center justify-between p-3 bg-white dark:bg-slate-800 border-b dark:border-slate-700 gap-2 z-10 shadow-sm">
-                    <div className="flex gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
-                        <button 
-                            onClick={() => setFilterType('original')} 
-                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'original' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
-                        >
-                            أصلي
-                        </button>
-                        <button 
-                            onClick={() => setFilterType('document')} 
-                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'document' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
-                        >
-                            مستند
-                        </button>
-                        <button 
-                            onClick={() => setFilterType('bw')} 
-                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'bw' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
-                        >
-                            أبيض/أسود
-                        </button>
-                    </div>
+                    {forceFilter ? (
+                        <div className="flex gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                            <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-white dark:bg-slate-600 shadow text-blue-600">
+                                {forceFilter === 'bw' ? 'أبيض وأسود (إجباري)' : 'مستند (إجباري)'}
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="flex gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                            <button 
+                                onClick={() => setFilterType('original')} 
+                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'original' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
+                            >
+                                ملون
+                            </button>
+                            <button 
+                                onClick={() => setFilterType('document')} 
+                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'document' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
+                            >
+                                مستند
+                            </button>
+                            <button 
+                                onClick={() => setFilterType('bw')} 
+                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'bw' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
+                            >
+                                أبيض/أسود
+                            </button>
+                        </div>
+                    )}
 
                     <div className="flex gap-2">
                         <button onClick={() => setRotation(r => r - 90)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300" title="تدوير يسار">
