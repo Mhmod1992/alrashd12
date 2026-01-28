@@ -8,7 +8,7 @@ import WhatsappIcon from '../components/icons/WhatsappIcon';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import SparklesIcon from '../components/icons/SparklesIcon';
 import ReportTranslationModal from '../components/ReportTranslationModal';
-import Modal from '../components/Modal'; 
+import Modal from '../components/Modal';
 import { InspectionRequest, ReportSettings, CustomFindingCategory } from '../types';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
@@ -22,7 +22,7 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
         const img = new Image();
         img.src = URL.createObjectURL(file);
         img.onload = () => {
-            const maxWidth = 1200; 
+            const maxWidth = 1200;
             let width = img.width;
             let height = img.height;
 
@@ -44,7 +44,7 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
             ctx.fillRect(0, 0, width, height);
             ctx.filter = 'grayscale(100%) contrast(120%)';
             ctx.drawImage(img, 0, 0, width, height);
-            
+
             canvas.toBlob((blob) => {
                 if (!blob) {
                     reject(new Error('Blob creation failed'));
@@ -53,7 +53,7 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
                 const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' });
                 resolve(newFile);
             }, 'image/jpeg', 0.6);
-            
+
             URL.revokeObjectURL(img.src);
         };
         img.onerror = (err) => {
@@ -65,7 +65,7 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
 
 const ensureLibraries = async (): Promise<void> => {
     const isLoaded = () => (window as any).jspdf && (window as any).html2canvas;
-    
+
     if (isLoaded()) return Promise.resolve();
 
     return new Promise((resolve, reject) => {
@@ -75,7 +75,7 @@ const ensureLibraries = async (): Promise<void> => {
             if (isLoaded()) {
                 clearInterval(interval);
                 resolve();
-            } else if (attempts > 100) { 
+            } else if (attempts > 100) {
                 clearInterval(interval);
                 const script1 = document.createElement('script');
                 script1.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
@@ -96,7 +96,7 @@ const ensureFonts = async () => {
     await document.fonts.ready;
     const font = "16px 'Tajawal'";
     if (!document.fonts.check(font)) {
-        await new Promise(r => setTimeout(r, 1000)); 
+        await new Promise(r => setTimeout(r, 1000));
     }
 };
 
@@ -133,16 +133,16 @@ const urlToBase64 = async (url: string): Promise<string> => {
 };
 
 const PrintReport: React.FC = () => {
-    const { 
-        selectedRequestId, requests, clients, cars, carMakes, 
-        carModels, inspectionTypes, setPage, predefinedFindings, 
+    const {
+        selectedRequestId, requests, clients, cars, carMakes,
+        carModels, inspectionTypes, setPage, predefinedFindings,
         customFindingCategories, settings, addNotification, goBack,
         fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
     const originalRequest = requests.find(r => r.id === selectedRequestId);
-    
+
     // Translation State
     const [translatedRequest, setTranslatedRequest] = useState<InspectionRequest | null>(null);
     const [translatedSettings, setTranslatedSettings] = useState<ReportSettings | null>(null);
@@ -168,7 +168,7 @@ const PrintReport: React.FC = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [loadingState, setLoadingState] = useState('');
     const [previewScale, setPreviewScale] = useState(1);
-    
+
     // Effective Data (Original OR Translated)
     const request = translatedRequest || originalRequest;
     const reportSettings = translatedSettings || settings.reportSettings;
@@ -180,7 +180,7 @@ const PrintReport: React.FC = () => {
 
     const publicImages = useMemo(() => paperImages.filter(f => f.type !== 'internal_draft'), [paperImages]);
     const internalImages = useMemo(() => paperImages.filter(f => f.type === 'internal_draft'), [paperImages]);
-    
+
     const displayedImages = useMemo(() => {
         if (activeArchiveTab === 'all') return paperImages;
         if (activeArchiveTab === 'public') return publicImages;
@@ -201,8 +201,8 @@ const PrintReport: React.FC = () => {
     useEffect(() => {
         const handleResize = () => {
             const screenWidth = window.innerWidth;
-            const a4WidthPx = 794; 
-            const padding = 32; 
+            const a4WidthPx = 794;
+            const padding = 32;
             const availableWidth = screenWidth - padding;
             if (availableWidth < a4WidthPx) {
                 setPreviewScale(availableWidth / a4WidthPx);
@@ -211,7 +211,7 @@ const PrintReport: React.FC = () => {
             }
         };
         window.addEventListener('resize', handleResize);
-        handleResize(); 
+        handleResize();
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
@@ -230,13 +230,13 @@ const PrintReport: React.FC = () => {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 let optimizedFile = file;
-                
+
                 if (!file.name.startsWith('scanned_')) {
-                     optimizedFile = await optimizeDocumentImage(file);
+                    optimizedFile = await optimizeDocumentImage(file);
                 }
 
-                const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
-                
+                const publicUrl = await uploadImage(optimizedFile, 'attached_files');
+
                 newAttachments.push({
                     name: `req_${originalRequest.request_number}_${type}_${Date.now()}_${i}.jpg`,
                     type: type,
@@ -246,15 +246,15 @@ const PrintReport: React.FC = () => {
 
             const existingFiles = originalRequest.attached_files || [];
             const updatedFiles = [...existingFiles, ...newAttachments];
-            
+
             await updateRequest({
                 id: originalRequest.id,
                 attached_files: updatedFiles
             });
-            
+
             const msg = type === 'internal_draft' ? 'تم حفظ المسودة الداخلية.' : 'تمت الأرشفة بنجاح.';
             addNotification({ title: 'تم الحفظ', message: msg, type: 'success' });
-            
+
             if (activeArchiveTab !== 'all') {
                 if (type === 'internal_draft') setActiveArchiveTab('internal');
                 else setActiveArchiveTab('public');
@@ -267,16 +267,16 @@ const PrintReport: React.FC = () => {
             setIsUploading(false);
         }
     };
-    
+
     const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || !originalRequest) return;
         const files: File[] = Array.from(e.target.files);
 
         if (files.length === 1 && files[0].type.startsWith('image/')) {
-             setScannerFile(files[0]);
-             setIsScannerOpen(true);
-             e.target.value = '';
-             return;
+            setScannerFile(files[0]);
+            setIsScannerOpen(true);
+            e.target.value = '';
+            return;
         }
 
         processFiles(files, currentUploadType);
@@ -306,9 +306,9 @@ const PrintReport: React.FC = () => {
                 id: originalRequest.id,
                 attached_files: updatedFiles
             });
-             addNotification({ title: 'تم الحذف', message: 'تم حذف الصفحة.', type: 'info' });
+            addNotification({ title: 'تم الحذف', message: 'تم حذف الصفحة.', type: 'info' });
         } catch (error) {
-             addNotification({ title: 'خطأ', message: 'فشل الحذف.', type: 'error' });
+            addNotification({ title: 'خطأ', message: 'فشل الحذف.', type: 'error' });
         }
     };
 
@@ -324,9 +324,9 @@ const PrintReport: React.FC = () => {
     };
 
     const handleTranslateComplete = (
-        newRequest: InspectionRequest, 
-        newSettings: ReportSettings, 
-        direction: 'rtl' | 'ltr', 
+        newRequest: InspectionRequest,
+        newSettings: ReportSettings,
+        direction: 'rtl' | 'ltr',
         newCategories: CustomFindingCategory[]
     ) => {
         setTranslatedRequest(newRequest);
@@ -345,7 +345,7 @@ const PrintReport: React.FC = () => {
 
     const generatePdfInstance = async () => {
         if (!reportRef.current) return null;
-        
+
         setIsGenerating(true);
         setLoadingState('جاري التحضير...');
 
@@ -358,7 +358,7 @@ const PrintReport: React.FC = () => {
 
             const originalElement = reportRef.current;
             const clone = originalElement.cloneNode(true) as HTMLElement;
-            
+
             const MAIN_CARD = { minHeight: '200px', margin: '8px 0', padding: '6px', bgColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px' };
             const IMAGE_CONFIG = { height: '130px', marginBottom: '4px' };
 
@@ -368,7 +368,7 @@ const PrintReport: React.FC = () => {
                 span.innerHTML = `<span class="inner-text-mover">${originalText}</span>`;
             });
 
-            clone.style.width = '794px'; 
+            clone.style.width = '794px';
             clone.style.minHeight = '1123px';
             clone.style.position = 'fixed';
             clone.style.left = '0';
@@ -378,16 +378,61 @@ const PrintReport: React.FC = () => {
             clone.style.overflow = 'visible';
             clone.style.direction = reportDirection;
             clone.style.textAlign = reportDirection === 'rtl' ? 'right' : 'left';
-            
+
             const style = document.createElement('style');
             style.innerHTML = `
                 .print-clone * { box-sizing: border-box !important; font-family: 'Tajawal', sans-serif !important; }
                 .print-clone .finding-item { position: relative !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-start !important; min-height: ${MAIN_CARD.minHeight} !important; height: auto !important; margin: ${MAIN_CARD.margin} !important; padding: ${MAIN_CARD.padding} !important; border: 1px solid ${MAIN_CARD.borderColor} !important; background: ${MAIN_CARD.bgColor} !important; border-radius: ${MAIN_CARD.borderRadius} !important; box-shadow: none !important; page-break-inside: avoid !important; }
                 .print-clone .finding-img-container { order: 1 !important; position: relative !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: ${IMAGE_CONFIG.height} !important; background: transparent !important; margin-bottom: ${IMAGE_CONFIG.marginBottom} !important; overflow: hidden !important; }
                 .print-clone .finding-img-container img { width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
-                .print-clone .finding-text-wrapper { order: 2 !important; position: static !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; width: 98% !important; background-color: transparent !important; border: none !important; padding: 0 !important; min-height: 50px !important; overflow: visible !important; }
-                .print-clone .finding-text-wrapper h4 { position: relative !important; z-index: 10 !important; background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 12px !important; padding: 2px 10px !important; box-shadow: 0 2px 3px rgba(0,0,0,0.05) !important; margin: 0 !important; margin-bottom: -12px !important; top: -3mm !important; font-size: 10px !important; color: #1e293b !important; font-weight: bold !important; text-align: center !important; width: 95% !important; white-space: normal !important; line-height: 1.3 !important; min-height: 18px !important; }
-                .print-clone .finding-text-wrapper p { position: relative !important; z-index: 5 !important; background-color: #f8fafc !important; border: 1px solid #e2e8f0 !important; border-radius: 6px !important; padding: 14px 8px 4px 8px !important; margin: 0 !important; width: 100% !important; text-align: center !important; font-size: 11px !important; font-weight: bold !important; color: #334155 !important; white-space: normal !important; line-height: 1.4 !important; }
+                .print-clone .finding-item { position: relative !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-start !important; min-height: ${MAIN_CARD.minHeight} !important; height: auto !important; margin: ${MAIN_CARD.margin} !important; padding: ${MAIN_CARD.padding} !important; border: 1px solid ${MAIN_CARD.borderColor} !important; background: ${MAIN_CARD.bgColor} !important; border-radius: ${MAIN_CARD.borderRadius} !important; box-shadow: none !important; page-break-inside: avoid !important; padding-top: 25px !important; overflow: visible !important; }
+                .print-clone .finding-img-container { order: 1 !important; position: relative !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: ${IMAGE_CONFIG.height} !important; background: transparent !important; margin-bottom: 2px !important; overflow: hidden !important; z-index: 1 !important; }
+                .print-clone .finding-img-container img { width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
+                .print-clone .finding-text-wrapper { order: 2 !important; position: static !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-start !important; width: 100% !important; background-color: transparent !important; border: none !important; padding: 0 !important; min-height: auto !important; overflow: visible !important; }
+                /* Absolute positioning for the Title to force it to be the top layer */
+                .print-clone .finding-text-wrapper h4 { 
+                    position: absolute !important;
+                    top: -12px !important; 
+                    left: 0 !important; 
+                    right: 0 !important;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                    z-index: 100 !important; 
+                    background-color: #ffffff !important; 
+                    border: 1px solid #cbd5e1 !important; 
+                    border-radius: 12px !important; 
+                    /* Control text vertical position: Top Rigth Bottom Left*/
+                    padding: 1px 12px 5px 12px !important; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; 
+                    font-size: 11px !important; 
+                    color: #1e293b !important; 
+                    font-weight: bold !important; 
+                    text-align: center !important; 
+                    width: 90% !important; 
+                    white-space: normal !important; 
+                    line-height: normal !important; 
+                    min-height: auto !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                }
+                .print-clone .finding-text-wrapper p { 
+                    position: relative !important; 
+                    z-index: 5 !important; 
+                    background-color: #f8fafc !important; 
+                    border: 1px solid #e2e8f0 !important; 
+                    border-radius: 6px !important; 
+                    padding: 8px 6px 4px 6px !important; 
+                    margin: 0 !important; 
+                    margin-top: 4px !important; /* Visual separation from image */
+                    width: 100% !important; 
+                    text-align: center !important; 
+                    font-size: 11px !important; 
+                    font-weight: bold !important; 
+                    color: #334155 !important; 
+                    white-space: normal !important; 
+                    line-height: 1.4 !important; 
+                }
                 .print-clone .finding-content { display: contents !important; }
                 .print-clone .info-block { top: 2px !important; position: relative !important; }
                 .print-clone .finding-category h3 { top: -4px !important; position: relative !important; }
@@ -430,7 +475,7 @@ const PrintReport: React.FC = () => {
             const canvas = await (window as any).html2canvas(clone, {
                 useCORS: true, allowTaint: true, logging: false, scale: 2, windowWidth: 794, width: 794,
                 scrollY: 0, scrollX: 0, x: 0, y: 0, backgroundColor: '#ffffff',
-                onclone: (doc: Document) => { const el = doc.querySelector('.print-clone') as HTMLElement; if(el) el.style.transform = 'none'; }
+                onclone: (doc: Document) => { const el = doc.querySelector('.print-clone') as HTMLElement; if (el) el.style.transform = 'none'; }
             }) as HTMLCanvasElement;
 
             document.body.removeChild(clone);
@@ -438,7 +483,7 @@ const PrintReport: React.FC = () => {
 
             const { jsPDF } = (window as any).jspdf;
             const imgData = canvas.toDataURL('image/jpeg', 0.85);
-            const pdfWidth = 210; 
+            const pdfWidth = 210;
             const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
             const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: [pdfWidth, pdfHeight] });
@@ -450,46 +495,46 @@ const PrintReport: React.FC = () => {
 
             if (validAttachments.length > 0) {
                 setLoadingState(`جاري إرفاق المستندات (${validAttachments.length})...`);
-                
+
                 for (let i = 0; i < validAttachments.length; i++) {
                     const file = validAttachments[i];
                     try {
                         const imgBase64 = await urlToBase64(file.data);
-                        
+
                         // Add new A4 page
                         pdf.addPage([210, 297], 'p');
-                        
+
                         // Calculate dimensions to fit image within A4 while maintaining aspect ratio
                         const imgProps = pdf.getImageProperties(imgBase64);
                         const pdfPageWidth = 210;
                         const pdfPageHeight = 297;
                         const margin = 0; // Full page
-                        
+
                         const availWidth = pdfPageWidth - (margin * 2);
                         const availHeight = pdfPageHeight - (margin * 2);
-                        
+
                         const widthRatio = availWidth / imgProps.width;
                         const heightRatio = availHeight / imgProps.height;
                         const ratio = Math.min(widthRatio, heightRatio);
-                        
+
                         const finalW = imgProps.width * ratio;
                         const finalH = imgProps.height * ratio;
-                        
+
                         // Center the image
                         const x = margin + (availWidth - finalW) / 2;
                         const y = margin + (availHeight - finalH) / 2;
 
-                        pdf.addImage(imgBase64, 'JPEG', x, y, finalW, finalH, undefined, 'FAST');
-                        
+                        pdf.addImage(imgBase64, imgProps.fileType, x, y, finalW, finalH, undefined, 'FAST');
+
                     } catch (err) {
                         console.error(`Failed to add attachment ${file.name} to PDF`, err);
                     }
                 }
             }
             // -----------------------------------------------------
-            
+
             return pdf;
-        } catch(e: any) {
+        } catch (e: any) {
             addNotification({ title: 'خطأ', message: 'فشل إنشاء الملف.', type: 'error' });
             return null;
         } finally {
@@ -506,7 +551,7 @@ const PrintReport: React.FC = () => {
             const blob = pdf.output('blob');
             const file = new File([blob], `Report_${request?.request_number}.pdf`, { type: 'application/pdf' });
             const publicUrl = await uploadImage(file, 'reports');
-            if (originalRequest && !translatedRequest) { 
+            if (originalRequest && !translatedRequest) {
                 await updateRequest({ id: originalRequest.id, report_url: publicUrl, report_generated_at: new Date().toISOString() });
             }
             openWhatsapp(publicUrl);
@@ -515,7 +560,7 @@ const PrintReport: React.FC = () => {
     };
 
     const openWhatsapp = (link: string) => {
-        let phone = client?.phone.replace(/\D/g, '') || ''; 
+        let phone = client?.phone.replace(/\D/g, '') || '';
         if (phone.startsWith('05')) phone = '966' + phone.substring(1);
         else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
         const carName = request?.car_snapshot ? `${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}` : 'السيارة';
@@ -532,8 +577,8 @@ const PrintReport: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center h-screen text-center p-4">
                 <RefreshCwIcon className="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" />
-                <p className="text-xl text-gray-700 dark:text-gray-300">{ request ? 'جاري تحميل بيانات التقرير...' : 'لم يتم العثور على الطلب.' }</p>
-                { !request && <Button onClick={() => setPage('requests')} className="mt-4">العودة</Button> }
+                <p className="text-xl text-gray-700 dark:text-gray-300">{request ? 'جاري تحميل بيانات التقرير...' : 'لم يتم العثور على الطلب.'}</p>
+                {!request && <Button onClick={() => setPage('requests')} className="mt-4">العودة</Button>}
             </div>
         );
     }
@@ -550,7 +595,7 @@ const PrintReport: React.FC = () => {
                         <Icon name="back" className="w-4 h-4 transform scale-x-[-1]" />
                         <span className="hidden sm:inline ms-1">العودة</span>
                     </Button>
-                    
+
                     <Button
                         variant="secondary"
                         onClick={() => setIsPaperModalOpen(true)}
@@ -577,7 +622,7 @@ const PrintReport: React.FC = () => {
                         <WhatsappIcon className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">إرسال</span>
                     </Button>
-                     <Button variant="secondary" onClick={handlePrint} size="sm" disabled={isGenerating}>
+                    <Button variant="secondary" onClick={handlePrint} size="sm" disabled={isGenerating}>
                         <Icon name="print" className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">طباعة</span>
                     </Button>
@@ -587,7 +632,7 @@ const PrintReport: React.FC = () => {
                     </Button>
                 </div>
             </header>
-            
+
             {isGenerating && (
                 <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
                     <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
@@ -595,12 +640,12 @@ const PrintReport: React.FC = () => {
                     <p className="text-sm opacity-75">يرجى الانتظار...</p>
                 </div>
             )}
-            
+
             <main className="flex-1 bg-gray-200 dark:bg-gray-900/50 py-8 overflow-auto print-container print:py-0 print:bg-white print:overflow-visible" dir={reportDirection}>
                 <div className="flex justify-center w-full min-h-full print:block print:w-full print:h-auto">
                     <div className="origin-top transition-transform duration-200 print-reset-transform" style={{ transform: `scale(${previewScale})`, marginBottom: `-${(1 - previewScale) * 100}%` }}>
                         <div className="report-wrapper bg-white shadow-2xl print:shadow-none mx-auto overflow-hidden print:overflow-visible print:h-auto print:min-h-0 print:w-full" style={{ width: '210mm', minHeight: '297mm' }}>
-                            { client && car && inspectionType ?
+                            {client && car && inspectionType ?
                                 <InspectionReport
                                     ref={reportRef}
                                     request={request}
@@ -615,7 +660,7 @@ const PrintReport: React.FC = () => {
                                     isPrintView={true}
                                     reportDirection={reportDirection}
                                 />
-                                 : <div className="p-8 text-center">جاري تحميل البيانات...</div>
+                                : <div className="p-8 text-center">جاري تحميل البيانات...</div>
                             }
                         </div>
                     </div>
@@ -623,7 +668,7 @@ const PrintReport: React.FC = () => {
             </main>
 
             {originalRequest && (
-                <ReportTranslationModal 
+                <ReportTranslationModal
                     isOpen={isTranslationModalOpen}
                     onClose={() => setIsTranslationModalOpen(false)}
                     originalRequest={originalRequest}
@@ -643,25 +688,25 @@ const PrintReport: React.FC = () => {
                             <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
                                 <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة
                             </h4>
-                            
+
                             <div className="flex border-b dark:border-slate-700 mb-4">
                                 <button
                                     className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'all' ? 'border-b-2 border-slate-600 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
                                     onClick={() => setActiveArchiveTab('all')}
                                 >
-                                     الكل ({paperImages.length})
+                                    الكل ({paperImages.length})
                                 </button>
                                 <button
                                     className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'public' ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
                                     onClick={() => setActiveArchiveTab('public')}
                                 >
-                                     مرفقات التقرير ({publicImages.length})
+                                    مرفقات التقرير ({publicImages.length})
                                 </button>
                                 <button
                                     className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'internal' ? 'border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                     onClick={() => setActiveArchiveTab('internal')}
+                                    onClick={() => setActiveArchiveTab('internal')}
                                 >
-                                     مسودات داخلية ({internalImages.length})
+                                    مسودات داخلية ({internalImages.length})
                                 </button>
                             </div>
 
@@ -719,32 +764,32 @@ const PrintReport: React.FC = () => {
                     </div>
                 </div>
             </Modal>
-            
+
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelected} className="hidden" />
 
             <Modal isOpen={isSourceChoiceModalOpen} onClose={() => setIsSourceChoiceModalOpen(false)} title="اختر مصدر الصورة" size="sm">
                 <div className="p-4 flex flex-col gap-4">
-                    <Button onClick={() => { setIsSourceChoiceModalOpen(false); setIsCameraOpen(true); }} className="w-full py-4 text-lg justify-center" variant="secondary" leftIcon={<CameraIcon className="w-6 h-6"/>}>
+                    <Button onClick={() => { setIsSourceChoiceModalOpen(false); setIsCameraOpen(true); }} className="w-full py-4 text-lg justify-center" variant="secondary" leftIcon={<CameraIcon className="w-6 h-6" />}>
                         من الكاميرا
                     </Button>
-                    <Button onClick={() => { setIsSourceChoiceModalOpen(false); fileInputRef.current?.click(); }} className="w-full py-4 text-lg justify-center" variant="secondary" leftIcon={<UploadIcon className="w-6 h-6"/>}>
+                    <Button onClick={() => { setIsSourceChoiceModalOpen(false); fileInputRef.current?.click(); }} className="w-full py-4 text-lg justify-center" variant="secondary" leftIcon={<UploadIcon className="w-6 h-6" />}>
                         من الجهاز
                     </Button>
                 </div>
             </Modal>
 
-            <DocumentScannerModal 
-                isOpen={isScannerOpen} 
-                onClose={() => setIsScannerOpen(false)} 
-                imageFile={scannerFile} 
-                onConfirm={handleScannerConfirm} 
+            <DocumentScannerModal
+                isOpen={isScannerOpen}
+                onClose={() => setIsScannerOpen(false)}
+                imageFile={scannerFile}
+                onConfirm={handleScannerConfirm}
                 forceFilter={currentUploadType === 'internal_draft' ? 'bw' : undefined}
             />
-            
-            <CameraPage 
-                isOpen={isCameraOpen} 
-                onClose={() => setIsCameraOpen(false)} 
-                onCapture={handleCameraCapture} 
+
+            <CameraPage
+                isOpen={isCameraOpen}
+                onClose={() => setIsCameraOpen(false)}
+                onCapture={handleCameraCapture}
             />
 
             <Modal isOpen={!!previewImage} onClose={() => setPreviewImage(null)} title="معاينة الصورة" size="4xl">
