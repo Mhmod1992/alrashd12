@@ -359,8 +359,8 @@ const PrintReport: React.FC = () => {
             const originalElement = reportRef.current;
             const clone = originalElement.cloneNode(true) as HTMLElement;
 
-            const MAIN_CARD = { minHeight: '200px', margin: '8px 0', padding: '6px', bgColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px' };
-            const IMAGE_CONFIG = { height: '130px', marginBottom: '4px' };
+            const MAIN_CARD = { minHeight: '125px', margin: '8px 0', padding: '6px', bgColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px' };
+            const IMAGE_CONFIG = { height: '75px', marginBottom: '4px' };
 
             const coloredSpans = clone.querySelectorAll('span[style*="background-color"]');
             coloredSpans.forEach((span) => {
@@ -382,13 +382,41 @@ const PrintReport: React.FC = () => {
             const style = document.createElement('style');
             style.innerHTML = `
                 .print-clone * { box-sizing: border-box !important; font-family: 'Tajawal', sans-serif !important; }
-                .print-clone .finding-item { position: relative !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-start !important; min-height: ${MAIN_CARD.minHeight} !important; height: auto !important; margin: ${MAIN_CARD.margin} !important; padding: ${MAIN_CARD.padding} !important; border: 1px solid ${MAIN_CARD.borderColor} !important; background: ${MAIN_CARD.bgColor} !important; border-radius: ${MAIN_CARD.borderRadius} !important; box-shadow: none !important; page-break-inside: avoid !important; }
-                .print-clone .finding-img-container { order: 1 !important; position: relative !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: ${IMAGE_CONFIG.height} !important; background: transparent !important; margin-bottom: ${IMAGE_CONFIG.marginBottom} !important; overflow: hidden !important; }
-                .print-clone .finding-img-container img { width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
                 .print-clone .finding-item { position: relative !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-start !important; min-height: ${MAIN_CARD.minHeight} !important; height: auto !important; margin: ${MAIN_CARD.margin} !important; padding: ${MAIN_CARD.padding} !important; border: 1px solid ${MAIN_CARD.borderColor} !important; background: ${MAIN_CARD.bgColor} !important; border-radius: ${MAIN_CARD.borderRadius} !important; box-shadow: none !important; page-break-inside: avoid !important; padding-top: 25px !important; overflow: visible !important; }
                 .print-clone .finding-img-container { order: 1 !important; position: relative !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: ${IMAGE_CONFIG.height} !important; background: transparent !important; margin-bottom: 2px !important; overflow: hidden !important; z-index: 1 !important; }
                 .print-clone .finding-img-container img { width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
                 .print-clone .finding-text-wrapper { order: 2 !important; position: static !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-start !important; width: 100% !important; background-color: transparent !important; border: none !important; padding: 0 !important; min-height: auto !important; overflow: visible !important; }
+                
+                /* Image Note Cards Styles to prevent stretching */
+                .print-clone .image-note-card { 
+                    break-inside: avoid !important; 
+                    height: auto !important; 
+                    overflow: visible !important; 
+                    background-color: #ffffff !important;
+                    display: block !important;
+                }
+
+                /* --- إعدادات التحكم اليدوي في أبعاد صور المرفقات --- */
+                /* استخدم القيم التالية لضبط عرض وارتفاع الصور إذا ظهرت ممتدة */
+                .print-clone .image-note-card img { 
+                    width: 80% !important; /* يمكنك تقليل النسبة المئوية إذا كانت الصورة عريضة جداً */
+                    height: 150px !important; /* تحكم في الارتفاع من هنا لضبط التمدد العرضي */
+                    max-height: none !important;
+                    object-fit: cover !important; /* جرب تغييرها إلى contain إذا أردت رؤية كامل الصورة بدون قص */
+                    display: block !important;
+                    background-color: #f1f5f9 !important;
+                    margin: 0 auto !important;
+                }
+                /* -------------------------------------------------- */
+
+                /* Use natural spacing instead of forcing Grid to stretch items */
+                .print-clone .grid-cols-3 { 
+                    display: grid !important; 
+                    grid-template-columns: repeat(3, 1fr) !important; 
+                    gap: 10px !important; 
+                    align-items: start !important; 
+                }
+
                 /* Absolute positioning for the Title to force it to be the top layer */
                 .print-clone .finding-text-wrapper h4 { 
                     position: absolute !important;
@@ -401,7 +429,6 @@ const PrintReport: React.FC = () => {
                     background-color: #ffffff !important; 
                     border: 1px solid #cbd5e1 !important; 
                     border-radius: 12px !important; 
-                    /* Control text vertical position: Top Rigth Bottom Left*/
                     padding: 1px 12px 5px 12px !important; 
                     box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; 
                     font-size: 11px !important; 
@@ -433,10 +460,40 @@ const PrintReport: React.FC = () => {
                     white-space: normal !important; 
                     line-height: 1.4 !important; 
                 }
+
+                /* --- إعدادات التحكم في رفع ونزول نصوص الملاحظات --- */
+                /* 1. قم بتغيير قيمة top لرفع النص (سالب) أو خفضه (موجب) */
+                /* 2. قم بتعديل line-height للتحكم في المسافة بين السطور */
+                .print-clone div[data-setting-section="text-disclaimer"] div {
+                    position: relative !important;
+                    top: -3px !important; /* ارفع النص للأعلى بقيمة سالبة، أو انزله بقيمة موجبة */
+                    line-height: 1.3 !important; /* تحكم في تدفق الأسطر لمنع الغرق */
+                }
+
+                /* --- إعدادات التحكم في رفع وخفض خلفية النص الملون (Highlighter) --- */
+                /* تحكم في مكان الخلفية الملونة فقط */
+                .print-clone span[style*="background-color"] {
+                    position: relative !important;
+                    display: inline-block !important;
+                    top: 7px !important; /* ارفع أو انزل "اللون" فقط من هنا */
+                    padding: 0 4px !important;
+                    line-height: 1.4 !important;
+                    z-index: 1 !important;
+                }
+
+                /* تحكم في مكان "النص" داخل اللون فقط */
+                /* استخدم هذا الخيار لإعادة النص لمكانه إذا قمت بتحريك اللون أعلاه */
+                .print-clone .inner-text-mover {
+                    position: relative !important;
+                    top: -7px !important; /* ارفع أو انزل "النص" فقط من هنا */
+                    display: inline-block !important;
+                    z-index: 2 !important;
+                }
+                /* ------------------------------------------------ */
+
                 .print-clone .finding-content { display: contents !important; }
                 .print-clone .info-block { top: 2px !important; position: relative !important; }
                 .print-clone .finding-category h3 { top: -4px !important; position: relative !important; }
-                .print-clone span[style*="background-color"] { position: relative !important; display: inline-block !important; top: -1px !important; padding: 0 4px !important; line-height: 1.4 !important; }
                 .print-clone img { object-fit: contain !important; }
                 .print-clone .target-logo { height: 90px !important; width: auto !important; }
                 .print-clone .target-car-logo img { height: 60px !important; width: auto !important; }
