@@ -106,36 +106,17 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // 2. Calculate Mapping
-            // Use containerRef (the A4 box) for viewport dimensions
             const viewportRect = containerRef.current.getBoundingClientRect();
-            
-            // Calculate ratio between Output Canvas and Visual Viewport
             const ratio = canvas.width / viewportRect.width;
-
-            // Calculate the "Base Scale" from the DOM rendered size vs Natural size.
-            // clientWidth/Height gives us the size of the image as it sits in the container (before CSS transform scale).
-            // This accounts for the 'contain' style automatically.
             const renderedWidth = imageRef.current.clientWidth;
             const domScale = renderedWidth / imageRef.current.naturalWidth;
 
             ctx.save();
-            
-            // Move origin to center of canvas
             ctx.translate(canvas.width / 2, canvas.height / 2);
-            
-            // Apply visual transforms (Position -> Rotate -> Scale)
-            // 1. Translate (Pan)
             ctx.translate(position.x * ratio, position.y * ratio);
-            
-            // 2. Rotate
             ctx.rotate((rotation * Math.PI) / 180);
-            
-            // 3. Scale
-            // Final Scale = (Base Render Scale) * (User Zoom Scale) * (Screen-to-Canvas Ratio)
             const finalScale = domScale * scale * ratio;
             ctx.scale(finalScale, finalScale);
-            
-            // Draw centered
             ctx.drawImage(imageRef.current, -imageRef.current.naturalWidth / 2, -imageRef.current.naturalHeight / 2);
             ctx.restore();
 
@@ -149,20 +130,29 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                     const g = data[i + 1];
                     const b = data[i + 2];
                     
-                    const v = 0.299 * r + 0.587 * g + 0.114 * b;
+                    let v = 0.299 * r + 0.587 * g + 0.114 * b;
                     
-                    if (filterType === 'bw') {
-                        const bw = v > 128 ? 255 : 0;
-                        data[i] = bw;
-                        data[i + 1] = bw;
-                        data[i + 2] = bw;
-                    } else {
-                        // High Contrast Document
+                    if (filterType === 'document') { // Enhanced Document Filter
+                        // Lighten shadows/mid-tones using gamma correction
+                        v = 255 * Math.pow(v / 255, 0.7);
+                        
+                        // Apply high contrast
+                        const contrast = 1.6;
+                        const intercept = 128 * (1 - contrast);
+                        v = v * contrast + intercept;
+                        
+                        v = Math.min(255, Math.max(0, v));
+
+                        data[i] = v;
+                        data[i + 1] = v;
+                        data[i + 2] = v;
+
+                    } else if (filterType === 'bw') { // Standard Document Filter (old 'document')
                         const contrast = 1.3;
                         const intercept = 128 * (1 - contrast);
                         let nv = v * contrast + intercept;
-                        if (nv > 210) nv = 255; 
-                        if (nv < 60) nv = 0;   
+                        if (nv > 220) nv = 255; 
+                        if (nv < 40) nv = 0;   
                         nv = Math.min(255, Math.max(0, nv));
                         
                         data[i] = nv;
@@ -197,7 +187,7 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                     {forceFilter ? (
                         <div className="flex gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
                             <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-white dark:bg-slate-600 shadow text-blue-600">
-                                {forceFilter === 'bw' ? 'أبيض وأسود (إجباري)' : 'مستند (إجباري)'}
+                                {forceFilter === 'bw' ? 'مستند (إجباري)' : 'مستند محسن (إجباري)'}
                             </span>
                         </div>
                     ) : (
@@ -212,13 +202,13 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                                 onClick={() => setFilterType('document')} 
                                 className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'document' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
                             >
-                                مستند
+                                مستند محسن
                             </button>
                             <button 
                                 onClick={() => setFilterType('bw')} 
                                 className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'bw' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
                             >
-                                أبيض/أسود
+                                مستند
                             </button>
                         </div>
                     )}
@@ -238,10 +228,7 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
 
                 {/* --- Main Workspace --- */}
                 <div className="flex-1 relative overflow-hidden bg-slate-800 flex items-center justify-center p-8">
-                    {/* Dark Background Backdrop */}
                     <div className="absolute inset-0 bg-black/50 pointer-events-none z-0"></div>
-
-                    {/* The A4 Viewport Container */}
                     <div 
                         ref={containerRef}
                         className="relative z-10 shadow-2xl flex items-center justify-center overflow-hidden bg-gray-300 border-4 border-white/20 ring-4 ring-black/20"
@@ -261,16 +248,13 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                         onMouseLeave={handleMouseUp}
                         onWheel={handleWheel}
                     >
-                        {/* Reference for visual grid only */}
                         <div className="absolute inset-0 pointer-events-none border border-blue-500/30 z-20">
-                            {/* Grid Lines */}
                             <div className="w-full h-1/3 border-b border-blue-500/20 absolute top-0"></div>
                             <div className="w-full h-2/3 border-b border-blue-500/20 absolute top-0"></div>
                             <div className="h-full w-1/3 border-r border-blue-500/20 absolute left-0"></div>
                             <div className="h-full w-2/3 border-r border-blue-500/20 absolute left-0"></div>
                         </div>
 
-                        {/* Image Container */}
                         {imageUrl && (
                             <img 
                                 ref={imageRef}
@@ -279,7 +263,6 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                                 className="absolute transition-transform duration-75 ease-linear cursor-move"
                                 style={{
                                     transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
-                                    // Use contain logic: fit image within container by default
                                     maxWidth: '100%',
                                     maxHeight: '100%',
                                     width: 'auto',
@@ -289,7 +272,6 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                             />
                         )}
                         
-                        {/* Instructional Overlay (Fades out) */}
                          <div className="absolute bottom-4 left-0 right-0 text-center pointer-events-none z-30 opacity-70">
                             <span className="bg-black/60 text-white text-[10px] px-3 py-1 rounded-full backdrop-blur-sm shadow-sm">
                                 اسحب الصورة لضبطها داخل إطار A4
@@ -300,7 +282,6 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
 
                 {/* --- Footer --- */}
                 <div className="p-4 bg-white dark:bg-slate-800 border-t dark:border-slate-700 flex flex-col gap-4 z-10 shadow-lg">
-                    {/* Zoom Slider */}
                     <div className="flex items-center gap-4 px-2">
                          <Icon name="search" className="w-4 h-4 text-slate-400" />
                          <input 

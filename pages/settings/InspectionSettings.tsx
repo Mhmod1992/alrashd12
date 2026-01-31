@@ -15,7 +15,7 @@ const InspectionSettingsTab: React.FC = () => {
         inspectionTypes, addInspectionType, updateInspectionType, deleteInspectionType,
         customFindingCategories, addFindingCategory, updateFindingCategory, deleteFindingCategory,
         predefinedFindings, addPredefinedFinding, updatePredefinedFinding, deletePredefinedFinding,
-        settings
+        settings, addNotification, showConfirmModal
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState<'packages' | 'findings'>('packages');
@@ -85,6 +85,21 @@ const InspectionSettingsTab: React.FC = () => {
         setModalTitle('تعديل بند الفحص');
         setModalContent(<FindingForm key={finding.id} finding={finding} onClose={() => setIsModalOpen(false)} onSave={(data) => updatePredefinedFinding({ ...data, id: finding.id })} />);
         setIsModalOpen(true);
+    };
+
+    const handleDeleteFinding = (finding: PredefinedFinding) => {
+        showConfirmModal({
+            title: `حذف البند: ${finding.name}`,
+            message: 'هل أنت متأكد من حذف هذا البند؟ لا يمكن التراجع عن هذا الإجراء.',
+            onConfirm: async () => {
+                try {
+                    await deletePredefinedFinding(finding.id);
+                    addNotification({ title: 'تم الحذف', message: 'تم حذف البند بنجاح.', type: 'success' });
+                } catch (error: any) {
+                    addNotification({ title: 'خطأ', message: error.message || 'فشل حذف البند.', type: 'error' });
+                }
+            }
+        });
     };
 
     // Filter findings based on selected category AND sort by orderIndex
@@ -395,7 +410,7 @@ const InspectionSettingsTab: React.FC = () => {
                                                                         key={finding.id} 
                                                                         finding={finding} 
                                                                         onEdit={handleEditFinding} 
-                                                                        onDelete={deletePredefinedFinding}
+                                                                        onDelete={handleDeleteFinding}
                                                                         onMove={handleMoveFinding}
                                                                         onOrderChange={handleManualOrderChange}
                                                                     />
@@ -430,7 +445,7 @@ const InspectionSettingsTab: React.FC = () => {
                                                                         <FindingCardItem 
                                                                             finding={finding} 
                                                                             onEdit={handleEditFinding} 
-                                                                            onDelete={deletePredefinedFinding}
+                                                                            onDelete={handleDeleteFinding}
                                                                             onMove={handleMoveFinding}
                                                                             onOrderChange={handleManualOrderChange}
                                                                         />
@@ -473,7 +488,7 @@ const InspectionSettingsTab: React.FC = () => {
 const FindingCardItem: React.FC<{ 
     finding: PredefinedFinding; 
     onEdit: (f: PredefinedFinding) => void; 
-    onDelete: (id: string) => void;
+    onDelete: (f: PredefinedFinding) => void;
     onMove: (id: string, dir: 'left' | 'right') => void;
     onOrderChange: (id: string, newIndex: number) => void;
 }> = ({ finding, onEdit, onDelete, onMove, onOrderChange }) => {
@@ -531,7 +546,7 @@ const FindingCardItem: React.FC<{
                         <Icon name="edit" className="w-3 h-3"/>
                     </button>
                     <button 
-                        onClick={() => onDelete(finding.id)} 
+                        onClick={() => onDelete(finding)} 
                         className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md transform hover:scale-110 transition-all"
                     >
                         <Icon name="delete" className="w-3 h-3"/>
