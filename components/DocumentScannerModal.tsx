@@ -25,7 +25,6 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
     
     // Processing State
     const [isProcessing, setIsProcessing] = useState(false);
-    // 'document' is now the Enhanced filter (default), 'bw' is the old high-contrast filter
     const [filterType, setFilterType] = useState<'original' | 'document' | 'bw'>('document');
     
     // Refs
@@ -43,7 +42,6 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
             setScale(1);
             setPosition({ x: 0, y: 0 });
             setRotation(0);
-            // Default to Enhanced Document unless forced
             setFilterType(forceFilter || 'document');
             setIsLandscape(false);
             
@@ -132,31 +130,27 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                     const g = data[i + 1];
                     const b = data[i + 2];
                     
-                    // Grayscale base
                     let v = 0.299 * r + 0.587 * g + 0.114 * b;
                     
-                    if (filterType === 'document') { // Enhanced Document Filter (Smart)
-                        // 1. Lighten shadows/mid-tones using Gamma Correction
-                        // Gamma < 1.0 (e.g., 0.7) brightens dark areas while keeping white white.
+                    if (filterType === 'document') { // Enhanced Document Filter
+                        // Lighten shadows/mid-tones using gamma correction
                         v = 255 * Math.pow(v / 255, 0.7);
                         
-                        // 2. Apply S-Curve or Linear Contrast
-                        const contrast = 1.6; // High contrast
+                        // Apply high contrast
+                        const contrast = 1.6;
                         const intercept = 128 * (1 - contrast);
                         v = v * contrast + intercept;
                         
-                        // 3. Clamp
                         v = Math.min(255, Math.max(0, v));
 
                         data[i] = v;
                         data[i + 1] = v;
                         data[i + 2] = v;
 
-                    } else if (filterType === 'bw') { // Standard/Old Document Filter
+                    } else if (filterType === 'bw') { // Standard Document Filter (old 'document')
                         const contrast = 1.3;
                         const intercept = 128 * (1 - contrast);
                         let nv = v * contrast + intercept;
-                        // Harder clipping for B/W effect
                         if (nv > 220) nv = 255; 
                         if (nv < 40) nv = 0;   
                         nv = Math.min(255, Math.max(0, nv));
