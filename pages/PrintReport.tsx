@@ -15,14 +15,16 @@ import CameraPage from '../components/CameraPage';
 import CameraIcon from '../components/icons/CameraIcon';
 import UploadIcon from '../components/icons/UploadIcon';
 import TrashIcon from '../components/icons/TrashIcon';
+import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 
 // --- Image Optimization Helper ---
-const optimizeDocumentImage = async (file: File): Promise<File> => {
+// Updated to accept 'grayscale' parameter. Default is true for backward compatibility with 'document' style.
+const optimizeDocumentImage = async (file: File, grayscale: boolean = true): Promise<File> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.src = URL.createObjectURL(file);
         img.onload = () => {
-            const maxWidth = 1200; 
+            const maxWidth = 1200; // Max width for documents
             let width = img.width;
             let height = img.height;
 
@@ -40,9 +42,18 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
                 return;
             }
 
+            // Draw white background (prevents transparency issues)
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, width, height);
-            ctx.filter = 'grayscale(100%) contrast(120%)';
+
+            // Apply filters based on mode
+            if (grayscale) {
+                ctx.filter = 'grayscale(100%) contrast(120%)';
+            } else {
+                // Slight contrast boost for color documents, but no grayscale
+                ctx.filter = 'contrast(105%)';
+            }
+            
             ctx.drawImage(img, 0, 0, width, height);
             
             canvas.toBlob((blob) => {
@@ -52,7 +63,7 @@ const optimizeDocumentImage = async (file: File): Promise<File> => {
                 }
                 const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' });
                 resolve(newFile);
-            }, 'image/jpeg', 0.6);
+            }, 'image/jpeg', 0.7); // Slightly higher quality for potential color images
             
             URL.revokeObjectURL(img.src);
         };
@@ -168,6 +179,8 @@ const PrintReport: React.FC = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [loadingState, setLoadingState] = useState('');
     const [previewScale, setPreviewScale] = useState(1);
+    const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
+    const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     
     // Effective Data (Original OR Translated)
     const request = translatedRequest || originalRequest;
@@ -215,7 +228,7 @@ const PrintReport: React.FC = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // --- Upload Handlers (Refactored to match PaperArchive) ---
+    // --- Upload Handlers ---
     const handleUploadClick = (type: 'manual_paper' | 'internal_draft') => {
         setCurrentUploadType(type);
         setIsSourceChoiceModalOpen(true);
@@ -224,16 +237,26 @@ const PrintReport: React.FC = () => {
     const processFiles = async (files: File[], type: string) => {
         if (!originalRequest) return;
         setIsUploading(true);
+        setUploadStats(null);
+        let totalOriginalSize = 0;
+        let totalOptimizedSize = 0;
 
         try {
             const newAttachments = [];
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
+                totalOriginalSize += file.size;
+
                 let optimizedFile = file;
                 
+                // Don't optimize already scanned files, but optimize direct uploads
                 if (!file.name.startsWith('scanned_')) {
-                     optimizedFile = await optimizeDocumentImage(file);
+                     // Pass true for grayscale only if internal draft
+                     const shouldGrayscale = type === 'internal_draft';
+                     optimizedFile = await optimizeDocumentImage(file, shouldGrayscale);
                 }
+
+                totalOptimizedSize += optimizedFile.size;
 
                 const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
                 
@@ -251,10 +274,19 @@ const PrintReport: React.FC = () => {
                 id: originalRequest.id,
                 attached_files: updatedFiles
             });
+
+            const savings = totalOriginalSize > 0 ? Math.round(((totalOriginalSize - totalOptimizedSize) / totalOriginalSize) * 100) : 0;
+            
+            setUploadStats({
+                original: (totalOriginalSize / 1024 / 1024).toFixed(2) + ' MB',
+                compressed: (totalOptimizedSize / 1024 / 1024).toFixed(2) + ' MB',
+                savings: savings
+            });
             
             const msg = type === 'internal_draft' ? 'تم حفظ المسودة الداخلية.' : 'تمت الأرشفة بنجاح.';
             addNotification({ title: 'تم الحفظ', message: msg, type: 'success' });
             
+            // Switch tab to show the new files
             if (activeArchiveTab !== 'all') {
                 if (type === 'internal_draft') setActiveArchiveTab('internal');
                 else setActiveArchiveTab('public');
@@ -272,6 +304,7 @@ const PrintReport: React.FC = () => {
         if (!e.target.files || !originalRequest) return;
         const files: File[] = Array.from(e.target.files);
 
+        // Single image goes to scanner to allow cropping/adjusting
         if (files.length === 1 && files[0].type.startsWith('image/')) {
              setScannerFile(files[0]);
              setIsScannerOpen(true);
@@ -279,6 +312,7 @@ const PrintReport: React.FC = () => {
              return;
         }
 
+        // Multiple files processed directly
         processFiles(files, currentUploadType);
         e.target.value = '';
     };
@@ -618,7 +652,7 @@ const PrintReport: React.FC = () => {
                                     />
                                     {publicImages.length > 0 && (
                                         <div className="w-full mt-4 border-t-2 border-slate-200 pt-8 print:break-before-page p-4">
-                                            <h3 className="text-xl font-bold mb-4 text-slate-800" style={{ fontFamily: reportSettings.fontFamily }}>
+                                            <h3 className="text-xl font-bold mb-4 text-slate-800 print:hidden" style={{ fontFamily: reportSettings.fontFamily }}>
                                                 المرفقات ({publicImages.length})
                                             </h3>
                                             <div className="flex flex-col gap-4">
@@ -653,83 +687,117 @@ const PrintReport: React.FC = () => {
 
             {/* Paper Archive Viewer & Manager Modal */}
             <Modal isOpen={isPaperModalOpen} onClose={() => setIsPaperModalOpen(false)} title="أرشيف الطلب (المرفقات)" size="4xl">
-                <div className="flex flex-col h-[75vh]">
-                    <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
-                        <div className="md:w-2/3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 flex flex-col overflow-hidden order-2 md:order-1">
-                            <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
-                                <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة
+                <div className="flex flex-col h-[85vh] md:h-[70vh]">
+                    <div className="flex-1 flex flex-col min-h-0 bg-slate-50 dark:bg-slate-900/50 rounded-xl border dark:border-slate-700 p-4 overflow-hidden">
+                        
+                        {/* Header */}
+                        <div className="flex justify-between items-center mb-3 flex-shrink-0">
+                            <h4 className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                <Icon name="gallery" className="w-4 h-4" /> الصفحات المحفوظة ({displayedImages.length})
                             </h4>
-                            
-                            <div className="flex border-b dark:border-slate-700 mb-4">
-                                <button
-                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'all' ? 'border-b-2 border-slate-600 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                    onClick={() => setActiveArchiveTab('all')}
-                                >
-                                     الكل ({paperImages.length})
-                                </button>
-                                <button
-                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'public' ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                    onClick={() => setActiveArchiveTab('public')}
-                                >
-                                     مرفقات التقرير ({publicImages.length})
-                                </button>
-                                <button
-                                    className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'internal' ? 'border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                     onClick={() => setActiveArchiveTab('internal')}
-                                >
-                                     مسودات داخلية ({internalImages.length})
-                                </button>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
-                                {displayedImages.length > 0 ? (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                        {displayedImages.map((file, idx) => (
-                                            <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm aspect-[3/4] cursor-pointer" onClick={() => setPreviewImage(file.data)}>
-                                                <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                    <button onClick={(e) => { e.stopPropagation(); setPreviewImage(file.data); }} className="p-2 bg-white rounded-full text-slate-800 hover:bg-blue-50 transition-colors">
-                                                        <Icon name="eye" className="w-4 h-4" />
-                                                    </button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(file.data); }} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50 transition-colors">
-                                                        <TrashIcon className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                                <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] p-1 text-center truncate">
-                                                    {file.name}
-                                                    {file.type === 'internal_draft' && <span className="block text-[8px] text-yellow-300">(مسودة داخلية)</span>}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                                        <Icon name="folder-open" className="w-12 h-12 mb-2 opacity-20" />
-                                        <p className="text-sm">لا توجد صفحات في هذا القسم.</p>
-                                    </div>
-                                )}
-                            </div>
+                            {isLoadingDetails && (
+                                <div className="text-xs text-blue-500 flex items-center gap-1 animate-pulse">
+                                    <RefreshCwIcon className="w-3 h-3 animate-spin"/>
+                                    جاري التحديث...
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Tabs */}
+                        <div className="flex border-b dark:border-slate-700 mb-4">
+                            <button
+                                className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'all' ? 'border-b-2 border-slate-600 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                onClick={() => setActiveArchiveTab('all')}
+                            >
+                                    الكل ({paperImages.length})
+                            </button>
+                            <button
+                                className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'public' ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                onClick={() => setActiveArchiveTab('public')}
+                            >
+                                    مرفقات التقرير ({publicImages.length})
+                            </button>
+                            <button
+                                className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'internal' ? 'border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    onClick={() => setActiveArchiveTab('internal')}
+                            >
+                                    مسودات داخلية ({internalImages.length})
+                            </button>
                         </div>
 
-                        <div className="md:w-1/3 flex flex-col gap-4 order-1 md:order-2 flex-shrink-0">
-                            <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-4 shadow-sm">
-                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">إضافة مستندات</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-1 gap-3">
-                                    <button onClick={() => handleUploadClick('manual_paper')} disabled={isUploading} className="flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
+                        {/* NEW: Contextual Actions Toolbar */}
+                        <div className="mb-4 flex flex-col gap-3">
+                            {activeArchiveTab === 'public' && (
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleUploadClick('manual_paper')} disabled={isUploading} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
                                         <UploadIcon className="w-5 h-5" />
-                                        <span className="font-bold text-sm">رفع ملفات</span>
+                                        <span className="font-bold text-sm">إضافة مرفق جديد (ملون)</span>
                                     </button>
-                                    <button onClick={() => handleUploadClick('internal_draft')} disabled={isUploading} className="flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800">
-                                        <Icon name="edit" className="w-5 h-5" />
-                                        <span className="font-bold text-sm">مسودة (داخلي)</span>
-                                    </button>
+                                    <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={handleFileSelected} className="hidden" />
                                 </div>
-                                <p className="text-[10px] text-slate-400 mt-2 text-center">
-                                    الملفات المرفوعة كـ "مسودة" لن تظهر للعميل.
-                                </p>
-                            </div>
+                            )}
+                            
+                            {activeArchiveTab === 'internal' && (
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleUploadClick('internal_draft')} disabled={isUploading} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800">
+                                        <Icon name="edit" className="w-5 h-5" />
+                                        <span className="font-bold text-sm">إضافة مسودة (داخلي)</span>
+                                    </button>
+                                    <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={handleFileSelected} className="hidden" />
+                                </div>
+                            )}
+
+                            {activeArchiveTab === 'all' && (
+                                <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg text-center text-slate-500 text-sm">
+                                    يرجى اختيار تبويب "مرفقات التقرير" أو "مسودات داخلية" لإضافة ملفات جديدة.
+                                </div>
+                            )}
+
+                            {/* Upload Stats */}
+                            {uploadStats && (
+                                <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg animate-fade-in shadow-sm flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <CheckCircleIcon className="w-4 h-4 text-green-600"/>
+                                        <span className="text-xs font-bold text-green-700 dark:text-green-300">تم الرفع بنجاح (توفير {uploadStats.savings}%)</span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500">
+                                        {uploadStats.original} ➜ <span className="font-bold text-green-600">{uploadStats.compressed}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Gallery Grid */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
+                            {displayedImages.length > 0 ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {displayedImages.map((file, idx) => (
+                                        <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm aspect-[3/4]">
+                                            <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                <a href={file.data} target="_blank" rel="noopener noreferrer" className="p-2 bg-white rounded-full text-slate-800 hover:bg-blue-50 transition-colors">
+                                                    <Icon name="eye" className="w-4 h-4" />
+                                                </a>
+                                                <button onClick={() => handleDeleteImage(file.data)} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50 transition-colors">
+                                                    <TrashIcon className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] p-1 text-center truncate">
+                                                {file.name}
+                                                {file.type === 'internal_draft' && <span className="block text-[8px] text-yellow-300">(مسودة)</span>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <Icon name="folder-open" className="w-12 h-12 mb-2 opacity-20" />
+                                    <p className="text-sm">لا توجد صفحات في هذا القسم.</p>
+                                </div>
+                            )}
                         </div>
                     </div>
+                    
                     <div className="pt-4 mt-4 border-t dark:border-slate-700 flex justify-end flex-shrink-0">
                         <Button variant="secondary" onClick={() => setIsPaperModalOpen(false)}>إغلاق</Button>
                     </div>
@@ -748,7 +816,7 @@ const PrintReport: React.FC = () => {
                     </Button>
                 </div>
             </Modal>
-
+            
             <DocumentScannerModal 
                 isOpen={isScannerOpen} 
                 onClose={() => setIsScannerOpen(false)} 
