@@ -14,6 +14,7 @@ import StepClient from './new-request/StepClient';
 import StepCar from './new-request/StepCar';
 import StepDetails from './new-request/StepDetails';
 import StepBroker from './new-request/StepBroker';
+import ClientWelcomeCard from './new-request/ClientWelcomeCard';
 
 interface NewRequestFormProps {
     clients: Client[];
@@ -42,7 +43,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         settings, authUser, addClient, addCar, addRequest, addNotification,
         addCarMake, addCarModel, addBroker, showNewRequestSuccessModal, hideNewRequestSuccessModal, showConfirmModal,
         searchClients, searchCarMakes, searchCarModels, checkCarHistory,
-        ensureLocalClient, clients, fetchCarModelsByMake, getClientFinancialSummary,
+        ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars
     } = useAppContext();
@@ -113,8 +114,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [foundHistory, setFoundHistory] = useState<{ car: Car; previousRequests: InspectionRequest[]; lastClient?: Client } | null>(null);
     const historyDebounceRef = useRef<number | null>(null);
 
-    // Debt Logic
+    // Debt Logic & Existing Client Info
     const [unpaidDebtAlert, setUnpaidDebtAlert] = useState<any[] | null>(null);
+    const [existingClientSummary, setExistingClientSummary] = useState<{ count: number; lastVisit: string; name: string; isVip?: boolean } | null>(null);
+    const [isWelcomeCardVisible, setIsWelcomeCardVisible] = useState(false);
     const [isCheckingDebt, setIsCheckingDebt] = useState(false);
     const debtDebounceRef = useRef<number | null>(null);
 
@@ -481,10 +484,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
     }, [plateChars, plateNums, useChassisNumber, chassisNumber, checkCarHistory, can, isEditMode]);
 
-    // --- Unpaid Debt Check Effect ---
+    // --- Unpaid Debt & Existing Client Check Effect ---
     useEffect(() => {
         if (!clientPhone || clientPhone.length < 9) {
             setUnpaidDebtAlert(null);
+            setExistingClientSummary(null);
+            setIsWelcomeCardVisible(false); // Hide if phone cleared
             setIsCheckingDebt(false);
             return;
         }
@@ -499,18 +504,37 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 const exactClient = foundClients.find(c => c.phone.includes(clientPhone));
 
                 if (exactClient) {
-                    // Use the lightweight summary fetching
-                    const debts = await getClientFinancialSummary(exactClient.id);
+                    // Fetch full history to determine visit count & debts
+                    const history = await fetchClientRequests(exactClient.id);
+                    
+                    // Set Summary
+                    setExistingClientSummary({
+                        count: history.length,
+                        lastVisit: history.length > 0 ? history[0].created_at : '',
+                        name: exactClient.name,
+                        isVip: exactClient.is_vip
+                    });
+                    
+                    setIsWelcomeCardVisible(true); // Show Floating Card
+
+                    // Filter Debts
+                    const debts = history.filter(r => 
+                         r.status === RequestStatus.WAITING_PAYMENT || 
+                         (r.payment_type === PaymentType.Unpaid && r.status !== RequestStatus.COMPLETE)
+                    );
 
                     if (debts.length > 0) {
                         setUnpaidDebtAlert(debts);
-                        // Auto-fill name if empty to confirm identity
-                        if (!clientName) setClientName(exactClient.name);
                     } else {
                         setUnpaidDebtAlert(null);
                     }
+
+                    // Auto-fill name if empty
+                    if (!clientName) setClientName(exactClient.name);
                 } else {
                     setUnpaidDebtAlert(null);
+                    setExistingClientSummary(null);
+                    setIsWelcomeCardVisible(false);
                 }
             } catch (error) {
                 console.error("Debt check failed", error);
@@ -518,7 +542,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 setIsCheckingDebt(false);
             }
         }, 600);
-    }, [clientPhone, searchClients, getClientFinancialSummary, clientName]);
+    }, [clientPhone, searchClients, fetchClientRequests, clientName]);
 
 
     const handleFillCarData = () => {
@@ -670,7 +694,24 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
         setIsCheckingDebt(true);
         try {
-            const debts = await getClientFinancialSummary(client.id);
+             // 1. Fetch History
+             const history = await fetchClientRequests(client.id);
+             
+             setExistingClientSummary({
+                 count: history.length,
+                 lastVisit: history.length > 0 ? history[0].created_at : '',
+                 name: client.name,
+                 isVip: client.is_vip
+             });
+             
+             setIsWelcomeCardVisible(true);
+
+             // 2. Check Debts
+             const debts = history.filter(r => 
+                r.status === RequestStatus.WAITING_PAYMENT || 
+                (r.payment_type === PaymentType.Unpaid && r.status !== RequestStatus.COMPLETE)
+             );
+
             if (debts.length > 0) {
                 setUnpaidDebtAlert(debts);
                 if (clientSectionRef.current) {
@@ -690,7 +731,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 }
             }
         } catch (error) {
-            console.error("Error checking debt:", error);
+            console.error("Error checking client history:", error);
         } finally {
             setIsCheckingDebt(false);
         }
@@ -1162,6 +1203,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         onClientSelection={handleClientSelection}
                         unpaidDebtAlert={unpaidDebtAlert}
                         getInputClass={getInputClass}
+                        existingClientSummary={existingClientSummary}
                     />
                 </div>
 
@@ -1295,6 +1337,18 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     </div>
                 </div>
             </form>
+            
+            {/* Render Floating Card */}
+            {existingClientSummary && (
+                <ClientWelcomeCard 
+                    isVisible={isWelcomeCardVisible}
+                    clientName={existingClientSummary.name}
+                    visitCount={existingClientSummary.count}
+                    lastVisit={existingClientSummary.lastVisit}
+                    isVip={existingClientSummary.isVip}
+                    onClose={() => setIsWelcomeCardVisible(false)}
+                />
+            )}
 
             <CameraScannerModal
                 isOpen={isScannerOpen}

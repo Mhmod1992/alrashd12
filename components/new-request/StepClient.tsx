@@ -2,6 +2,8 @@
 import React from 'react';
 import RefreshCwIcon from '../icons/RefreshCwIcon';
 import AlertTriangleIcon from '../icons/AlertTriangleIcon';
+import UserCircleIcon from '../icons/UserCircleIcon';
+import HistoryIcon from '../icons/HistoryIcon';
 import { Client } from '../../types';
 
 interface StepClientProps {
@@ -27,6 +29,7 @@ interface StepClientProps {
     onClientSelection: (client: Client, nextInput?: HTMLElement) => void;
     unpaidDebtAlert: any[] | null;
     getInputClass: (name: string) => string;
+    existingClientSummary?: { count: number; lastVisit: string; name: string } | null;
 }
 
 const StepClient: React.FC<StepClientProps> = (props) => {
@@ -113,6 +116,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                 </div>
             </div>
 
+            {/* Unpaid Debt Alert (Red) - Appears Below Info */}
             {props.unpaidDebtAlert && props.unpaidDebtAlert.length > 0 && (
                 <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg animate-fade-in shadow-sm">
                     <div className="flex items-start gap-2">
