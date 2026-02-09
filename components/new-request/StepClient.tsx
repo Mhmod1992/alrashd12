@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import RefreshCwIcon from '../icons/RefreshCwIcon';
 import AlertTriangleIcon from '../icons/AlertTriangleIcon';
 import UserCircleIcon from '../icons/UserCircleIcon';
@@ -33,6 +33,13 @@ interface StepClientProps {
 }
 
 const StepClient: React.FC<StepClientProps> = (props) => {
+    
+    // Calculate total debt amount
+    const totalDebt = useMemo(() => {
+        if (!props.unpaidDebtAlert) return 0;
+        return props.unpaidDebtAlert.reduce((sum, req) => sum + (Number(req.price) || 0), 0);
+    }, [props.unpaidDebtAlert]);
+
     return (
         <fieldset className="bg-white dark:bg-slate-800/50 p-4 sm:p-6 rounded-lg shadow-sm">
             <legend className="text-lg font-semibold mb-4 text-slate-700 dark:text-slate-200 flex items-center gap-2">
@@ -122,7 +129,12 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                     <div className="flex items-start gap-2">
                         <AlertTriangleIcon className="w-6 h-6 text-red-600 mt-0.5" />
                         <div className="flex-1">
-                            <h4 className="font-bold text-red-700 dark:text-red-400 text-sm">تنبيه: مديونية سابقة ({props.unpaidDebtAlert.length})</h4>
+                            <div className="flex flex-wrap items-baseline gap-2">
+                                <h4 className="font-bold text-red-700 dark:text-red-400 text-sm">تنبيه: مديونية سابقة ({props.unpaidDebtAlert.length})</h4>
+                                <span className="text-xs font-bold bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200 px-2 py-0.5 rounded-full">
+                                    الإجمالي: {totalDebt.toLocaleString('en-US')} ريال
+                                </span>
+                            </div>
                             <p className="text-xs text-red-600 dark:text-red-300 mt-1">
                                 هذا العميل لديه طلبات سابقة معلقة أو غير مدفوعة.
                             </p>
