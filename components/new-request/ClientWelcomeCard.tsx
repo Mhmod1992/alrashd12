@@ -38,7 +38,7 @@ const ClientWelcomeCard: React.FC<ClientWelcomeCardProps> = ({
         <div 
             className="fixed z-50 animate-slide-in-down md:animate-slide-in-up
                        top-4 left-4 right-4 
-                       md:top-auto md:bottom-6 md:left-6 md:right-auto md:w-80"
+                       md:top-auto md:bottom-6 md:right-6 md:left-auto md:w-80"
         >
             <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border-l-4 border-l-blue-500 rounded-lg shadow-2xl dark:shadow-black/50 p-4 flex items-start gap-4 border border-slate-200 dark:border-slate-700 relative overflow-hidden">
                 
