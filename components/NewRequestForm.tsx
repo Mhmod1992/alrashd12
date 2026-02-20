@@ -7,6 +7,7 @@ import { uuidv4 } from '../lib/utils';
 import Modal from './Modal';
 import CameraScannerModal from './CameraScannerModal';
 import ChevronRightIcon from './icons/ChevronRightIcon';
+import { supabase } from '../lib/supabaseClient';
 
 // Sub-components
 import ReservationReviewCard from './new-request/ReservationReviewCard';
@@ -45,7 +46,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         searchClients, searchCarMakes, searchCarModels, checkCarHistory,
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
-        can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars
+        can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
+        fetchAndUpdateSingleRequest
     } = useAppContext();
 
     // Responsive Logic
@@ -992,8 +994,21 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             }
 
             // Construct Common Data
-            const make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
-            const model = contextCarModels.find(m => m.id === carModelId) || modelSuggestions.find(m => m.id === carModelId);
+            let make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
+            let model = contextCarModels.find(m => m.id === carModelId) || modelSuggestions.find(m => m.id === carModelId);
+
+            // --- FIX START ---
+            // If editing a request with a make/model not in the current loaded context (e.g. pagination limits), fetch it directly.
+            if (!make && carMakeId) {
+                const { data } = await supabase.from('car_makes').select('*').eq('id', carMakeId).single();
+                if (data) make = data;
+            }
+
+            if (!model && carModelId) {
+                const { data } = await supabase.from('car_models').select('*').eq('id', carModelId).single();
+                if (data) model = data;
+            }
+            // --- FIX END ---
 
             if (!make || !model) throw new Error('Selected make or model not found in context.');
 
@@ -1020,6 +1035,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 price: Number(inspectionPrice),
                 status: newStatus,
                 broker: (!isReceptionist && useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : null,
+                updated_at: new Date().toISOString() // Force update timestamp
             };
 
             if (isEditMode && initialData) {
@@ -1038,6 +1054,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         request: requestData as any
                     }
                 });
+
+                // Force fetch the specific request to update global state immediately
+                await fetchAndUpdateSingleRequest(initialData.id);
+
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
                 onCancel();
