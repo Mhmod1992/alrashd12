@@ -162,6 +162,9 @@ const GeneralManagerSetup: React.FC = () => {
                 setupCompleted: true
             };
             
+            // Persist setup completion locally to avoid re-prompting on connection issues
+            localStorage.setItem('app_setup_complete', 'true');
+            
             await updateSettings(newSettings);
             addNotification({ title: 'أهلاً بك!', message: 'تم إعداد النظام بنجاح.', type: 'success' });
             

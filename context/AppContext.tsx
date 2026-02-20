@@ -365,8 +365,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                 if (mounted) {
                     setGlobalSettings(finalGlobalSettings);
-                    setIsSetupComplete(!!finalGlobalSettings.setupCompleted);
+                    
+                    // Check LocalStorage for setup completion flag
+                    const localSetupComplete = localStorage.getItem('app_setup_complete') === 'true';
+                    const dbSetupComplete = !!finalGlobalSettings.setupCompleted;
+                    const isComplete = dbSetupComplete || localSetupComplete;
+
+                    setIsSetupComplete(isComplete);
                     setSettings(finalGlobalSettings);
+
+                    // Sync to localStorage if DB confirms it
+                    if (dbSetupComplete && !localSetupComplete) {
+                        localStorage.setItem('app_setup_complete', 'true');
+                    }
                 }
 
                 // 2. Background Session Verification
