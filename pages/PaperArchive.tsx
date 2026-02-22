@@ -422,9 +422,9 @@ const PaperArchive: React.FC = () => {
                         <table className="w-full text-sm text-right">
                             <thead className="bg-slate-50 dark:bg-slate-900/50 text-xs font-bold text-slate-500 uppercase border-b dark:border-slate-700">
                                 <tr>
-                                    <th className="px-6 py-4">رقم الطلب</th>
+                                    <th className="px-4 py-4 sticky right-0 z-20 bg-slate-50 dark:bg-slate-900 w-[100px] text-center">رقم الطلب</th>
+                                    <th className="px-6 py-4 sticky right-[100px] z-20 bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700">السيارة</th>
                                     <th className="px-6 py-4">العميل</th>
-                                    <th className="px-6 py-4">السيارة</th>
                                     <th className="px-6 py-4">التاريخ</th>
                                     <th className="px-6 py-4 text-center">حالة الأرشفة</th>
                                     <th className="px-6 py-4 text-center">إجراءات</th>
@@ -438,11 +438,20 @@ const PaperArchive: React.FC = () => {
                                     const model = carModels.find(m => m.id === car?.model_id);
                                     const isArchived = getRequestStatus(req);
 
+                                    const makeEn = req.car_snapshot?.make_en || make?.name_en || '-';
+                                    const modelEn = req.car_snapshot?.model_en || model?.name_en || '-';
+                                    const makeAr = req.car_snapshot?.make_ar || make?.name_ar || '-';
+                                    const modelAr = req.car_snapshot?.model_ar || model?.name_ar || '-';
+                                    const year = req.car_snapshot?.year || car?.year || '-';
+
                                     return (
                                         <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group cursor-pointer" onClick={() => openUploadModal(req)}>
-                                            <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">#{req.request_number}</td>
+                                            <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200 sticky right-0 z-10 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 w-[100px] text-center">#{req.request_number}</td>
+                                            <td className="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs sticky right-[100px] z-10 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 border-l border-slate-200 dark:border-slate-700">
+                                                <div className="font-bold text-sm" dir="ltr">{makeEn} {modelEn} ({year})</div>
+                                                <div className="text-slate-400 text-[10px] mt-1">{makeAr} {modelAr}</div>
+                                            </td>
                                             <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{client?.name || '-'}</td>
-                                            <td className="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs">{make?.name_ar} {model?.name_ar} {car?.year}</td>
                                             <td className="px-6 py-4 font-mono text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
                                             <td className="px-6 py-4 text-center">
                                                 {isArchived ? (
