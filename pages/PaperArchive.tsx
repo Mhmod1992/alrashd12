@@ -440,16 +440,15 @@ const PaperArchive: React.FC = () => {
 
                                     const makeEn = req.car_snapshot?.make_en || make?.name_en || '-';
                                     const modelEn = req.car_snapshot?.model_en || model?.name_en || '-';
-                                    const makeAr = req.car_snapshot?.make_ar || make?.name_ar || '-';
-                                    const modelAr = req.car_snapshot?.model_ar || model?.name_ar || '-';
                                     const year = req.car_snapshot?.year || car?.year || '-';
+                                    const plate = car?.plate_number_en || car?.plate_number || '-';
 
                                     return (
                                         <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group cursor-pointer" onClick={() => openUploadModal(req)}>
                                             <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200 sticky right-0 z-10 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 w-[100px] text-center">#{req.request_number}</td>
                                             <td className="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs sticky right-[100px] z-10 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 border-l border-slate-200 dark:border-slate-700">
                                                 <div className="font-bold text-sm" dir="ltr">{makeEn} {modelEn} ({year})</div>
-                                                <div className="text-slate-400 text-[10px] mt-1">{makeAr} {modelAr}</div>
+                                                <div className="text-slate-500 text-[10px] mt-1 font-mono bg-slate-100 dark:bg-slate-700 inline-block px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">{plate}</div>
                                             </td>
                                             <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{client?.name || '-'}</td>
                                             <td className="px-6 py-4 font-mono text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
