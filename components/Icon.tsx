@@ -47,7 +47,7 @@ import FolderOpenIcon from './icons/FolderOpenIcon';
 
 
 interface IconProps {
-  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open';
+  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan';
   className?: string;
 }
 
@@ -109,6 +109,7 @@ const Icon: React.FC<IconProps> = ({ name, className }) => {
     case 'appearance':
         return <PaintBrushIcon className={className} />;
     case 'scan-plate':
+    case 'scan':
         return <ViewfinderIcon className={className} />;
     case 'sparkles':
         return <SparklesIcon className={className} />;

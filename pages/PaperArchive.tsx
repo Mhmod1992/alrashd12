@@ -17,6 +17,7 @@ import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import { formatBytes } from '../lib/utils';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
+import InAppScannerModal from '../components/InAppScannerModal';
 
 // --- Image Optimization Helper ---
 const optimizeDocumentImage = async (file: File, grayscale: boolean = true): Promise<File> => {
@@ -110,6 +111,7 @@ const PaperArchive: React.FC = () => {
 
     const [isSourceChoiceModalOpen, setIsSourceChoiceModalOpen] = useState(false);
     const [currentUploadType, setCurrentUploadType] = useState<'manual_paper' | 'internal_draft'>('manual_paper');
+    const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
 
@@ -252,6 +254,52 @@ const PaperArchive: React.FC = () => {
         setIsScannerOpen(false);
         setScannerFile(null);
         processFiles([processedFile], currentUploadType);
+    };
+
+    const handleQRScan = async (decodedText: string) => {
+        setIsQRScannerOpen(false);
+        
+        // Try to extract request number if it's a URL or complex string
+        // Assuming format might be just number or "REQ-123" or full URL
+        let requestNumberStr = decodedText;
+        
+        // Simple heuristic: if it contains "req_" or similar, try to parse. 
+        // For now, let's assume the QR code contains the request number directly or as part of a string.
+        // If your QR codes have a specific format (e.g., JSON or URL), parse it here.
+        
+        // Example: If QR is "https://app.com/requests/123", extract 123.
+        // Example: If QR is "123", use 123.
+        
+        // Try to find a number in the string
+        const match = decodedText.match(/\d+/);
+        if (match) {
+            requestNumberStr = match[0];
+        }
+
+        const requestNumber = parseInt(requestNumberStr);
+
+        if (isNaN(requestNumber)) {
+            addNotification({ title: 'خطأ', message: 'لم يتم العثور على رقم طلب صالح في الكود.', type: 'error' });
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const req = await fetchRequestByRequestNumber(requestNumber);
+            if (req) {
+                openUploadModal(req);
+                setActiveArchiveTab('internal');
+                setCurrentUploadType('internal_draft');
+                addNotification({ title: 'نجاح', message: `تم العثور على الطلب #${requestNumber}`, type: 'success' });
+            } else {
+                addNotification({ title: 'تنبيه', message: `الطلب رقم #${requestNumber} غير موجود.`, type: 'warning' });
+            }
+        } catch (error) {
+            console.error("Error fetching request by QR:", error);
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء البحث عن الطلب.', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const processFiles = async (files: File[], type: string) => {
@@ -397,15 +445,24 @@ const PaperArchive: React.FC = () => {
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col md:flex-row gap-4 justify-between items-center">
-                     <div className="relative flex-grow w-full md:max-w-md">
-                        <Icon name="search" className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
-                        <input 
-                            type="text" 
-                            placeholder="بحث برقم الطلب أو اسم العميل..." 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pr-9 pl-4 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
+                     <div className="relative flex-grow w-full md:max-w-md flex gap-2">
+                        <div className="relative flex-grow">
+                            <Icon name="search" className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
+                            <input 
+                                type="text" 
+                                placeholder="بحث برقم الطلب أو اسم العميل..." 
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pr-9 pl-4 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <button 
+                            onClick={() => setIsQRScannerOpen(true)}
+                            className="bg-slate-800 text-white p-2 rounded-lg hover:bg-slate-700 transition-colors flex items-center justify-center"
+                            title="مسح كود QR"
+                        >
+                            <Icon name="scan" className="w-5 h-5" />
+                        </button>
                     </div>
                     <div className="text-xs text-slate-500 font-bold bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg">
                         {displayedRequests.length} طلبات
@@ -629,6 +686,12 @@ const PaperArchive: React.FC = () => {
                 isOpen={isCameraOpen} 
                 onClose={() => setIsCameraOpen(false)} 
                 onCapture={handleCameraCapture} 
+            />
+            
+            <InAppScannerModal
+                isOpen={isQRScannerOpen}
+                onClose={() => setIsQRScannerOpen(false)}
+                onScanSuccess={handleQRScan}
             />
         </div>
     );
