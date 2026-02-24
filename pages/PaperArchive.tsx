@@ -114,6 +114,12 @@ const PaperArchive: React.FC = () => {
     const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Delete Confirmation Modal State
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [deleteTargetFile, setDeleteTargetFile] = useState<{ data: string, type: string } | null>(null);
+    const [deletePassword, setDeletePassword] = useState('');
+    const [deleteError, setDeleteError] = useState('');
+
 
     // Fetch Logic
     const loadData = async () => {
@@ -368,19 +374,31 @@ const PaperArchive: React.FC = () => {
         }
     };
     
-    const handleDeleteImage = async (fileUrl: string) => {
-        if (!selectedRequest) return;
-        const confirm = window.confirm("هل أنت متأكد من حذف هذه الصفحة من الأرشيف؟");
-        if (!confirm) return;
+    const initiateDelete = (file: { data: string, type: string }) => {
+        setDeleteTargetFile(file);
+        setDeletePassword('');
+        setDeleteError('');
+        setIsDeleteModalOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!selectedRequest || !deleteTargetFile) return;
+
+        if (deleteTargetFile.type === 'internal_draft') {
+            if (deletePassword !== selectedRequest.request_number.toString()) {
+                setDeleteError('كلمة المرور غير صحيحة.');
+                return;
+            }
+        }
 
         try {
             try {
-                await deleteImage(fileUrl);
+                await deleteImage(deleteTargetFile.data);
             } catch (storageError) {
                 console.warn("Storage deletion warning:", storageError);
             }
 
-            const updatedFiles = (selectedRequest.attached_files || []).filter(f => f.data !== fileUrl);
+            const updatedFiles = (selectedRequest.attached_files || []).filter(f => f.data !== deleteTargetFile.data);
             
             await updateRequest({
                 id: selectedRequest.id,
@@ -391,6 +409,8 @@ const PaperArchive: React.FC = () => {
              setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles } : r));
              
              addNotification({ title: 'تم الحذف', message: 'تم حذف الصفحة.', type: 'info' });
+             setIsDeleteModalOpen(false);
+             setDeleteTargetFile(null);
         } catch (error) {
              console.error("DB update failed:", error);
              addNotification({ title: 'خطأ', message: 'فشل تحديث سجل الطلب.', type: 'error' });
@@ -637,7 +657,7 @@ const PaperArchive: React.FC = () => {
                                                 <a href={file.data} target="_blank" rel="noopener noreferrer" className="p-2 bg-white rounded-full text-slate-800 hover:bg-blue-50 transition-colors">
                                                     <Icon name="eye" className="w-4 h-4" />
                                                 </a>
-                                                <button onClick={() => handleDeleteImage(file.data)} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50 transition-colors">
+                                                <button onClick={() => initiateDelete(file)} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50 transition-colors">
                                                     <TrashIcon className="w-4 h-4" />
                                                 </button>
                                             </div>
@@ -693,6 +713,42 @@ const PaperArchive: React.FC = () => {
                 onClose={() => setIsQRScannerOpen(false)}
                 onScanSuccess={handleQRScan}
             />
+
+            <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="تأكيد الحذف" size="sm">
+                <div className="p-4">
+                    {deleteTargetFile?.type === 'internal_draft' ? (
+                        <div className="space-y-4">
+                            <p className="text-slate-600 dark:text-slate-300">يرجى إدخال كلمة المرور لتأكيد الحذف.</p>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">كلمة المرور</label>
+                                <input 
+                                    type="text" 
+                                    value={deletePassword} 
+                                    onChange={(e) => {
+                                        setDeletePassword(e.target.value);
+                                        setDeleteError('');
+                                    }}
+                                    className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:border-slate-600 focus:ring-2 focus:ring-red-500 outline-none"
+                                    placeholder="أدخل كلمة المرور"
+                                />
+                                {deleteError && <p className="text-red-500 text-xs mt-1">{deleteError}</p>}
+                            </div>
+                            <div className="flex gap-2 justify-end pt-2">
+                                <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>إلغاء</Button>
+                                <Button variant="danger" onClick={confirmDelete}>حذف المسودة</Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <p className="text-slate-600 dark:text-slate-300">هل أنت متأكد من حذف هذه الصفحة من الأرشيف؟ لا يمكن التراجع عن هذا الإجراء.</p>
+                            <div className="flex gap-2 justify-end pt-2">
+                                <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>إلغاء</Button>
+                                <Button variant="danger" onClick={confirmDelete}>تأكيد الحذف</Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 };

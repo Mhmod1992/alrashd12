@@ -202,14 +202,19 @@ const Requests: React.FC = () => {
         executeSearch(term);
     };
 
+    const searchInitialized = useRef(false);
+
     // Initialize search from URL params
     useEffect(() => {
+        if (searchInitialized.current) return;
+
         const params = new URLSearchParams(window.location.search);
         const searchParam = params.get('search');
         if (searchParam) {
             setComprehensiveQuery(searchParam);
             setDateFilter('all');
             executeSearch(searchParam);
+            searchInitialized.current = true;
         }
     }, [executeSearch]);
 
