@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { supabase } from '../lib/supabaseClient';
 import { InspectionRequest, RequestStatus, Car, PaymentType, Reservation } from '../types';
 import Button from '../components/Button';
 import PlusIcon from '../components/icons/PlusIcon';
@@ -200,6 +201,17 @@ const Requests: React.FC = () => {
         if (requestNumberQuery) setRequestNumberQuery('');
         executeSearch(term);
     };
+
+    // Initialize search from URL params
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const searchParam = params.get('search');
+        if (searchParam) {
+            setComprehensiveQuery(searchParam);
+            setDateFilter('all');
+            executeSearch(searchParam);
+        }
+    }, [executeSearch]);
 
     // --- SERVER SIDE DATE FETCHING LOGIC ---
     const executeDateFetch = useCallback(async (start: string, end: string) => {
@@ -572,6 +584,55 @@ const Requests: React.FC = () => {
     }, [requests, searchedRequests, serverFetchedData, statusFilter, employeeFilter, authUser, waitingSearchTerm, can]);
 
 
+    const [serverCarsWithHistory, setServerCarsWithHistory] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        const fetchHistory = async () => {
+             const uniqueCarIds = Array.from(new Set(dataToDisplay.map(r => r.car_id))).filter(Boolean);
+             if (uniqueCarIds.length === 0) return;
+
+             const chunks = [];
+             const chunkSize = 20;
+             for (let i = 0; i < uniqueCarIds.length; i += chunkSize) {
+                 chunks.push(uniqueCarIds.slice(i, i + chunkSize));
+             }
+
+             const newHistorySet = new Set<string>();
+
+             for (const chunk of chunks) {
+                 const { data } = await supabase
+                     .from('inspection_requests')
+                     .select('car_id')
+                     .in('car_id', chunk);
+                 
+                 if (data) {
+                     const counts = new Map<string, number>();
+                     data.forEach((row: any) => {
+                         counts.set(row.car_id, (counts.get(row.car_id) || 0) + 1);
+                     });
+                     counts.forEach((count, id) => {
+                         if (count > 1) newHistorySet.add(id);
+                     });
+                 }
+             }
+             
+             setServerCarsWithHistory(prev => {
+                 const next = new Set(prev);
+                 newHistorySet.forEach(id => next.add(id));
+                 return next;
+             });
+        };
+
+        const timeoutId = setTimeout(fetchHistory, 1000);
+        return () => clearTimeout(timeoutId);
+    }, [dataToDisplay]);
+
+    const combinedCarsWithHistory = useMemo(() => {
+        const combined = new Set(carsWithHistory);
+        serverCarsWithHistory.forEach(id => combined.add(id));
+        return combined;
+    }, [carsWithHistory, serverCarsWithHistory]);
+
     const totalCount = dataToDisplay.length + waitingPaymentRequests.length;
     const newCount = dataToDisplay.filter(r => r.status === RequestStatus.NEW).length;
     const inProgressCount = dataToDisplay.filter(r => r.status === RequestStatus.IN_PROGRESS).length;
@@ -901,7 +962,7 @@ const Requests: React.FC = () => {
                         isRefreshing={isRefreshing}
                         isLive={true}
                         onHistoryClick={handleOpenHistoryModal}
-                        carsWithHistory={carsWithHistory}
+                        carsWithHistory={combinedCarsWithHistory}
                         onProcessPayment={can('process_payment') ? handleProcessPaymentClick : undefined}
                         onResendWhatsApp={handleResendWhatsApp}
                         onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
@@ -926,7 +987,7 @@ const Requests: React.FC = () => {
                     isLive={true}
                     onRowClick={handleRowClick}
                     onHistoryClick={handleOpenHistoryModal}
-                    carsWithHistory={carsWithHistory}
+                    carsWithHistory={combinedCarsWithHistory}
                     onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
                 />
             )}

@@ -35,6 +35,7 @@ interface StepCarProps {
     setIsCarScannerOpen: (val: boolean) => void;
     foundHistory: { car: Car; previousRequests: InspectionRequest[]; lastClient?: Client } | null;
     handleViewPreviousReport: (id: string) => void;
+    handleViewCarHistory: () => void;
     handleFillCarData: () => void;
     canViewHistory: boolean;
     carMakeSearchTerm: string;
@@ -205,6 +206,13 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                                     عرض آخر تقرير
                                 </button>
                             )}
+                            <button
+                                type="button"
+                                onClick={props.handleViewCarHistory}
+                                className="text-xs bg-white dark:bg-slate-700 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 px-3 py-1.5 rounded-md hover:bg-amber-50 transition-colors"
+                            >
+                                عرض سجلات الزيارة
+                            </button>
                             <button
                                 type="button"
                                 onClick={props.handleFillCarData}

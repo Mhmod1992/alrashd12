@@ -152,8 +152,8 @@ const RequestTable: React.FC<RequestTableProps> = ({
   
   const handlePrint = (e: React.MouseEvent, requestId: string) => {
     e.stopPropagation();
-    setSelectedRequestId(requestId);
-    setPage('print-report');
+    const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${requestId}`;
+    window.open(url, '_blank');
   };
   
   const handleViewDraft = (e: React.MouseEvent, requestId: string) => {

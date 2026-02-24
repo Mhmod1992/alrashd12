@@ -58,6 +58,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [selectedRequestId, setSelectedRequestId] = useLocalStorage<string | null>('selectedRequestId', null);
     const [selectedClientId, setSelectedClientId] = useLocalStorage<string | null>('selectedClientId', null);
 
+    // Initialize from URL params if present (e.g. for print window)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const requestIdParam = params.get('requestId');
+        if (requestIdParam) {
+            setSelectedRequestId(requestIdParam);
+        }
+    }, [setSelectedRequestId]);
+
     const {
         requests, setRequests,
         requestsOffset, setRequestsOffset,
@@ -657,13 +666,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
 
             const cleanQuery = query.replace(/\s/g, '');
-            const spacedQuery = query.split('').join(' ');
+            
+            // Extract letters and numbers for smart plate search
+            const letters = query.replace(/[0-9\s]/g, '');
+            const numbers = query.replace(/[^0-9]/g, '');
+            
+            const variations = new Set<string>();
+            variations.add(query.trim());
+            variations.add(cleanQuery);
+            
+            if (letters && numbers) {
+                // Connected letters + space + numbers (e.g. "حلك 2876")
+                variations.add(`${letters} ${numbers}`);
+                
+                // Spaced letters + space + numbers (e.g. "ح ل ك 2876")
+                const spacedLetters = letters.split('').join(' ');
+                variations.add(`${spacedLetters} ${numbers}`);
+                
+                // Spaced letters + no space + numbers (e.g. "ح ل ك2876")
+                variations.add(`${spacedLetters}${numbers}`);
+            }
+            
+            const uniqueVariations = Array.from(variations);
+            
+            const orConditions = uniqueVariations.flatMap(v => [
+                `plate_number.ilike.%${v}%`,
+                `plate_number_en.ilike.%${v}%`
+            ]);
+            
+            // Add VIN search
+            orConditions.push(`vin.ilike.%${cleanQuery}%`);
+            
+            const orString = orConditions.join(',');
 
             // 1. Search Cars
             const { data: carsByPlate } = await supabase
                 .from('cars')
                 .select('id')
-                .or(`plate_number.ilike.%${cleanQuery}%,plate_number.ilike.%${spacedQuery}%,plate_number_en.ilike.%${cleanQuery}%,plate_number_en.ilike.%${spacedQuery}%,vin.ilike.%${cleanQuery}%`)
+                .or(orString)
                 .limit(50);
 
             let carIds = carsByPlate?.map(c => c.id) || [];

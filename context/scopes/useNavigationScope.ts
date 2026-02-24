@@ -6,6 +6,12 @@ import { ROOT_PAGES, PARENT_MAP } from '../constants';
 export const useNavigationScope = () => {
     const [history, setHistory] = useState<Page[]>(() => {
         try {
+            const params = new URLSearchParams(window.location.search);
+            const pageParam = params.get('page') as Page | null;
+            if (pageParam) {
+                return [pageParam];
+            }
+
             const item = window.sessionStorage.getItem('pageHistory');
             return item ? JSON.parse(item) : ['dashboard'];
         } catch {

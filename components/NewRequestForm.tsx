@@ -1109,9 +1109,16 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const handleViewPreviousReport = (reqId: string) => {
-        onCancel();
-        setSelectedRequestId(reqId);
-        setPage('print-report');
+        const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${reqId}`;
+        window.open(url, '_blank');
+    };
+
+    const handleViewCarHistory = () => {
+        if (!foundHistory) return;
+        const searchTerm = foundHistory.car.plate_number || foundHistory.car.vin || '';
+        if (!searchTerm) return;
+        const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(searchTerm)}`;
+        window.open(url, '_blank');
     };
 
     const getStepTitle = (step: number) => {
@@ -1253,6 +1260,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         setIsCarScannerOpen={setIsCarScannerOpen}
                         foundHistory={foundHistory}
                         handleViewPreviousReport={handleViewPreviousReport}
+                        handleViewCarHistory={handleViewCarHistory}
                         handleFillCarData={handleFillCarData}
                         canViewHistory={can('view_car_history_on_create')}
                         carMakeSearchTerm={carMakeSearchTerm}
