@@ -416,7 +416,7 @@ export const FillRequest: React.FC = () => {
     const latestRequestRef = useRef(request);
     useEffect(() => { latestRequestRef.current = request; }, [request]);
 
-    const performSave = useCallback(async (isFinalSave = false, finalStatus?: RequestStatus, overrides?: { activityLog?: ActivityLog[], structuredFindings?: StructuredFinding[] }) => {
+    const performSave = useCallback(async (isFinalSave = false, finalStatus?: RequestStatus, overrides?: { activityLog?: ActivityLog[], structuredFindings?: StructuredFinding[], deletedFindingIds?: string[] }) => {
         const currentRequest = latestRequestRef.current;
         if (!currentRequest) return;
         if (isLocked && !finalStatus) return;
@@ -590,6 +590,11 @@ export const FillRequest: React.FC = () => {
             serverFindings.forEach(f => mergedFindingsMap.set(f.findingId, f));
             localUnsavedFindings.forEach(f => mergedFindingsMap.set(f.findingId, f)); // Local overrides server for same finding ID
             
+            // Apply Deletions
+            if (overrides?.deletedFindingIds) {
+                overrides.deletedFindingIds.forEach(id => mergedFindingsMap.delete(id));
+            }
+
             updates.structured_findings = clean(Array.from(mergedFindingsMap.values())) as StructuredFinding[];
             
             // Merge Voice Memos (Simplified - assuming append only for now)
@@ -1627,7 +1632,7 @@ export const FillRequest: React.FC = () => {
         // 3. IMMEDIATE SAVE with Override: 
         // Pass the new list directly to performSave to bypass any state/ref race conditions.
         // This ensures the backend gets the list *without* the deleted item.
-        performSave(false, undefined, { structuredFindings: newStructuredFindings });
+        performSave(false, undefined, { structuredFindings: newStructuredFindings, deletedFindingIds: [findingId] });
 
     }, [structuredFindings, request, customFindingCategories, addActivityLogEntry, isLocked, performSave]);
 
@@ -1644,13 +1649,14 @@ export const FillRequest: React.FC = () => {
 
                 const categoryName = customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
                 const newStructuredFindings = structuredFindings.filter(sf => sf.categoryId !== categoryId);
+                const deletedIds = findingsInCategory.map(f => f.findingId);
 
                 // Optimistic UI updates
                 setStructuredFindings(newStructuredFindings);
                 addActivityLogEntry('حذف جماعي', `تم حذف جميع البنود من قسم "${categoryName}"`);
 
                 // Immediate Save
-                performSave(false, undefined, { structuredFindings: newStructuredFindings });
+                performSave(false, undefined, { structuredFindings: newStructuredFindings, deletedFindingIds: deletedIds });
 
                 addNotification({ title: 'نجاح', message: 'تم حذف البنود.', type: 'success' });
             }
