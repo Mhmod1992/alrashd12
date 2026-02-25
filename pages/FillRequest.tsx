@@ -2486,52 +2486,51 @@ export const FillRequest: React.FC = () => {
             <Drawer
                 isOpen={isActivityDrawerOpen}
                 onClose={() => setIsActivityDrawerOpen(false)}
-                title={
-                    <div className="flex flex-col gap-3 w-full">
-                        <div className="flex items-center justify-between gap-4">
-                            <span className="font-bold text-lg">سجل النشاط</span>
-                            <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">الموظف:</span>
-                                    <select
-                                        value={activityLogFilter}
-                                        onChange={(e) => setActivityLogFilter(e.target.value)}
-                                        className={`text-[11px] p-1.5 pr-6 rounded-lg bg-slate-100 dark:bg-slate-700 border-none focus:ring-2 focus:ring-${themeColor}-500/20 font-bold`}
-                                    >
-                                        <option value="all">الكل</option>
-                                        {logParticipants.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex items-center gap-1.5 border-r dark:border-slate-700 pr-2 mr-1">
-                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">القسم:</span>
-                                    <select
-                                        value={activityLogCategoryFilter}
-                                        onChange={(e) => setActivityLogCategoryFilter(e.target.value)}
-                                        className={`text-[11px] p-1.5 pr-6 rounded-lg bg-slate-100 dark:bg-slate-700 border-none focus:ring-2 focus:ring-${themeColor}-500/20 font-bold`}
-                                    >
-                                        <option value="all">الكل</option>
-                                        {logCategories.map(cat => (
-                                            <option key={cat} value={cat}>{cat}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                title={<span className="font-bold text-lg">سجل النشاط</span>}
+            >
+                <div className="flex flex-col gap-3 w-full mb-6 border-b dark:border-slate-700 pb-4">
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2 w-full">
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap hidden sm:inline">الموظف:</span>
+                                <select
+                                    value={activityLogFilter}
+                                    onChange={(e) => setActivityLogFilter(e.target.value)}
+                                    className={`text-[11px] p-1.5 pr-6 w-full rounded-lg bg-slate-100 dark:bg-slate-700 border-none focus:ring-2 focus:ring-${themeColor}-500/20 font-bold truncate`}
+                                >
+                                    <option value="all">الكل</option>
+                                    {logParticipants.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0 border-r dark:border-slate-700 pr-2 mr-1">
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap hidden sm:inline">القسم:</span>
+                                <select
+                                    value={activityLogCategoryFilter}
+                                    onChange={(e) => setActivityLogCategoryFilter(e.target.value)}
+                                    className={`text-[11px] p-1.5 pr-6 w-full rounded-lg bg-slate-100 dark:bg-slate-700 border-none focus:ring-2 focus:ring-${themeColor}-500/20 font-bold truncate`}
+                                >
+                                    <option value="all">الكل</option>
+                                    {logCategories.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
-                        <div className="relative">
-                            <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <input
-                                type="text"
-                                value={activityLogSearch}
-                                onChange={(e) => setActivityLogSearch(e.target.value)}
-                                placeholder="ابحث في السجل..."
-                                className={`w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-${themeColor}-500/20 focus:border-${themeColor}-500 transition-all font-medium`}
-                            />
-                        </div>
                     </div>
-                }
-            >
+                    <div className="relative">
+                        <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                            type="text"
+                            value={activityLogSearch}
+                            onChange={(e) => setActivityLogSearch(e.target.value)}
+                            placeholder="ابحث في السجل..."
+                            className={`w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-${themeColor}-500/20 focus:border-${themeColor}-500 transition-all font-medium`}
+                        />
+                    </div>
+                </div>
+
                 <div className="space-y-6 pb-20">
                     {filteredActivityLog.length > 0 ? (
                         groupLogsByDate(filteredActivityLog).map(([dateGroup, logs]) => (

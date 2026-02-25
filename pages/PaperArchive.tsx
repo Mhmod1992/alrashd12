@@ -441,8 +441,56 @@ const PaperArchive: React.FC = () => {
                 </h2>
                 
                 <div className="flex flex-wrap gap-2 items-center bg-slate-200 dark:bg-slate-700 p-1.5 rounded-xl">
+                    <button onClick={() => {
+                        const prevDay = new Date();
+                        if (dateFilter === 'today') {
+                            prevDay.setDate(prevDay.getDate() - 1);
+                            setDateFilter('yesterday');
+                        } else if (dateFilter === 'yesterday') {
+                            prevDay.setDate(prevDay.getDate() - 2);
+                            setCustomStartDate(prevDay.toISOString().split('T')[0]);
+                            setCustomEndDate(prevDay.toISOString().split('T')[0]);
+                            setDateFilter('custom');
+                        } else if (dateFilter === 'custom' && customStartDate === customEndDate) {
+                            const current = new Date(customStartDate);
+                            current.setDate(current.getDate() - 1);
+                            setCustomStartDate(current.toISOString().split('T')[0]);
+                            setCustomEndDate(current.toISOString().split('T')[0]);
+                            loadData();
+                        } else {
+                             // Default fallback from other filters to yesterday
+                             setDateFilter('yesterday');
+                        }
+                    }} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-600 hover:text-blue-600 dark:hover:text-blue-300 transition-all" title="اليوم السابق">
+                        <Icon name="chevron-right" className="w-5 h-5" />
+                    </button>
+
                     <button onClick={() => setDateFilter('today')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'today' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>اليوم</button>
                     <button onClick={() => setDateFilter('yesterday')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'yesterday' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>أمس</button>
+                    
+                    <button onClick={() => {
+                         const nextDay = new Date();
+                         if (dateFilter === 'yesterday') {
+                             setDateFilter('today');
+                         } else if (dateFilter === 'custom' && customStartDate === customEndDate) {
+                             const current = new Date(customStartDate);
+                             current.setDate(current.getDate() + 1);
+                             const today = new Date();
+                             today.setHours(0,0,0,0);
+                             if (current > today) {
+                                 setDateFilter('today');
+                             } else {
+                                 setCustomStartDate(current.toISOString().split('T')[0]);
+                                 setCustomEndDate(current.toISOString().split('T')[0]);
+                                 loadData();
+                             }
+                         }
+                    }} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-600 hover:text-blue-600 dark:hover:text-blue-300 transition-all" title="اليوم التالي" disabled={dateFilter === 'today'}>
+                        <Icon name="chevron-left" className="w-5 h-5" />
+                    </button>
+
+                    <div className="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-1"></div>
+
                     <button onClick={() => setDateFilter('month')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'month' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>هذا الشهر</button>
                     <button onClick={() => setDateFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>الكل</button>
                     <button onClick={() => setDateFilter('custom')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'custom' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>مخصص</button>
@@ -489,77 +537,101 @@ const PaperArchive: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="p-4">
                     {isLoading ? (
                          <div className="p-12 text-center">
                             <RefreshCwIcon className="w-10 h-10 animate-spin text-blue-500 mx-auto mb-2" />
                             <p className="text-slate-500 text-sm">جاري تحميل البيانات...</p>
                         </div>
                     ) : (
-                        <table className="w-full text-sm text-right">
-                            <thead className="bg-slate-50 dark:bg-slate-900/50 text-xs font-bold text-slate-500 uppercase border-b dark:border-slate-700">
-                                <tr>
-                                    <th className="px-4 py-4 sticky right-0 z-20 bg-slate-50 dark:bg-slate-900 w-[100px] text-center">رقم الطلب</th>
-                                    <th className="px-6 py-4 sticky right-[100px] z-20 bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700">السيارة</th>
-                                    <th className="px-6 py-4">العميل</th>
-                                    <th className="px-6 py-4">التاريخ</th>
-                                    <th className="px-6 py-4 text-center">حالة الأرشفة</th>
-                                    <th className="px-6 py-4 text-center">إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {displayedRequests.map(req => {
-                                    const client = clients.find(c => c.id === req.client_id);
-                                    const car = cars.find(c => c.id === req.car_id);
-                                    const make = carMakes.find(m => m.id === car?.make_id);
-                                    const model = carModels.find(m => m.id === car?.model_id);
-                                    const isArchived = getRequestStatus(req);
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {displayedRequests.map(req => {
+                                const client = clients.find(c => c.id === req.client_id);
+                                const car = cars.find(c => c.id === req.car_id);
+                                const make = carMakes.find(m => m.id === car?.make_id);
+                                const model = carModels.find(m => m.id === car?.model_id);
+                                const isArchived = getRequestStatus(req);
 
-                                    const makeEn = req.car_snapshot?.make_en || make?.name_en || '-';
-                                    const modelEn = req.car_snapshot?.model_en || model?.name_en || '-';
-                                    const year = req.car_snapshot?.year || car?.year || '-';
-                                    const plate = car?.plate_number_en || car?.plate_number || '-';
+                                const makeEn = req.car_snapshot?.make_en || make?.name_en || '-';
+                                const modelEn = req.car_snapshot?.model_en || model?.name_en || '-';
+                                const year = req.car_snapshot?.year || car?.year || '-';
+                                const plate = car?.plate_number_en || car?.plate_number || '-';
 
-                                    return (
-                                        <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group cursor-pointer" onClick={() => openUploadModal(req)}>
-                                            <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200 sticky right-0 z-10 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 w-[100px] text-center">#{req.request_number}</td>
-                                            <td className="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs sticky right-[100px] z-10 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 border-l border-slate-200 dark:border-slate-700">
-                                                <div className="font-bold text-sm" dir="ltr">{makeEn} {modelEn} ({year})</div>
-                                                <div className="text-slate-500 text-[10px] mt-1 font-mono bg-slate-100 dark:bg-slate-700 inline-block px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">{plate}</div>
-                                            </td>
-                                            <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{client?.name || '-'}</td>
-                                            <td className="px-6 py-4 font-mono text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
-                                            <td className="px-6 py-4 text-center">
-                                                {isArchived ? (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
-                                                        <CheckCircleIcon className="w-3.5 h-3.5" /> مؤرشة ({req.attached_files?.length})
+                                return (
+                                    <div 
+                                        key={req.id} 
+                                        onClick={() => openUploadModal(req)}
+                                        className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 hover:shadow-xl hover:border-blue-300 dark:hover:border-blue-800 transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between h-full"
+                                    >
+                                        {/* Request Number Badge */}
+                                        <div className="absolute top-0 left-0 bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-br-xl text-[10px] font-bold text-slate-500">
+                                            #{req.request_number}
+                                        </div>
+
+                                        {/* Status Indicator */}
+                                        <div className="absolute top-4 left-4">
+                                            {isArchived ? (
+                                                <div className="flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2 py-1 rounded-full text-[10px] font-bold border border-green-100 dark:border-green-800">
+                                                    <CheckCircleIcon className="w-3 h-3" />
+                                                    <span>مؤرشة ({req.attached_files?.length})</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/40 text-slate-400 px-2 py-1 rounded-full text-[10px] font-bold border border-slate-100 dark:border-slate-800">
+                                                    <XIcon className="w-3 h-3" />
+                                                    <span>فارغ</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="mt-8 space-y-4 flex-grow">
+                                            {/* Car Info */}
+                                            <div>
+                                                <div className="font-black text-slate-800 dark:text-slate-100 text-lg leading-tight tracking-tight mb-1" dir="ltr">
+                                                    {makeEn} {modelEn}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-slate-400">{year}</span>
+                                                    <span className="text-[10px] font-mono bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-800 text-blue-600 dark:text-blue-400">
+                                                        {plate}
                                                     </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">
-                                                        <XIcon className="w-3.5 h-3.5" /> فارغ
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                 <button className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-colors" title="فتح">
-                                                    <Icon name="folder-open" className="w-4 h-4" />
-                                                 </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {displayedRequests.length === 0 && !isLoading && (
-                                    <tr>
-                                        <td colSpan={6} className="text-center py-12 text-slate-400">
-                                            <div className="flex flex-col items-center justify-center">
-                                                <Icon name="folder-open" className="w-12 h-12 mb-3 opacity-20" />
-                                                <p>لا توجد طلبات للعرض في الفترة المحددة.</p>
+                                                </div>
                                             </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+
+                                            {/* Client Info */}
+                                            <div className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-900/30 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                                                <div className="w-8 h-8 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center shadow-sm">
+                                                    <Icon name="employee" className="w-4 h-4 text-slate-400" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">العميل</p>
+                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">{client?.name || '-'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Footer */}
+                                        <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                                            <div className="flex items-center gap-1.5 text-slate-400">
+                                                <Icon name="calendar-clock" className="w-3.5 h-3.5" />
+                                                <span className="text-[10px] font-mono">
+                                                    {new Date(req.created_at).toLocaleDateString('en-GB')}
+                                                </span>
+                                            </div>
+                                            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform">
+                                                <Icon name="folder-open" className="w-4 h-4" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {displayedRequests.length === 0 && !isLoading && (
+                                <div className="col-span-full text-center py-20 bg-slate-50 dark:bg-slate-900/20 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700">
+                                    <Icon name="folder-open" className="w-16 h-16 mb-4 opacity-10 mx-auto" />
+                                    <p className="text-slate-500 font-bold">لا توجد طلبات للعرض في هذه الفترة</p>
+                                    <p className="text-slate-400 text-xs mt-1">جرب تغيير الفلتر أو البحث بكلمة أخرى</p>
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

@@ -49,11 +49,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
         operationsItems.push({ id: 'waiting-requests', label: 'طلبات بانتظار الدفع', icon: DollarSignIcon });
     }
 
-    const canAccessRequests = can('create_requests') || can('fill_requests') || can('update_requests_data') || can('delete_requests');
-    if (canAccessRequests) {
-        if (authUser?.role !== 'receptionist') {
-            operationsItems.push({ id: 'requests', label: 'إدارة الطلبات', icon: FileTextIcon });
-        }
+    if (can('view_requests_list') && authUser?.role !== 'receptionist') {
+        operationsItems.push({ id: 'requests', label: 'إدارة الطلبات', icon: FileTextIcon });
     }
     
     if (can('manage_reservations')) {
@@ -96,8 +93,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
       adminItems.push({ id: 'brokers', label: 'إدارة السماسرة', icon: BriefcaseIcon });
     }
 
-    const canManageOtherSettings = can('manage_settings_general') || can('manage_settings_technical') || can('manage_appearance');
-    if (canManageOtherSettings) {
+    if (can('view_settings')) {
       adminItems.push({ id: 'settings', label: 'الإعدادات', icon: SettingsIcon });
     }
 

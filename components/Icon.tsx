@@ -10,6 +10,7 @@ import DocumentReportIcon from './icons/DocumentReportIcon';
 import SettingsIcon from './icons/SettingsIcon';
 import SaveIcon from './icons/SaveIcon';
 import ChevronRightIcon from './icons/ChevronRightIcon';
+import ChevronLeftIcon from './icons/ChevronLeftIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import BriefcaseIcon from './icons/BriefcaseIcon';
 import ClipboardListIcon from './icons/ClipboardListIcon';
@@ -47,7 +48,7 @@ import FolderOpenIcon from './icons/FolderOpenIcon';
 
 
 interface IconProps {
-  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan';
+  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'chevron-left' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan';
   className?: string;
 }
 
@@ -75,6 +76,8 @@ const Icon: React.FC<IconProps> = ({ name, className }) => {
         return <SaveIcon className={className} />;
     case 'chevron-right':
         return <ChevronRightIcon className={className} />;
+    case 'chevron-left':
+        return <ChevronLeftIcon className={className} />;
     case 'employee':
         return <UserCircleIcon className={className} />;
     case 'broker':

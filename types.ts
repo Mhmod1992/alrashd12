@@ -55,6 +55,8 @@ export const PERMISSIONS = {
   manage_appearance: 'إدارة المظهر',
   manage_api_keys: 'إدارة مفاتيح الربط (API Keys)',
   manage_reservations: 'إدارة الحجوزات الواردة',
+  view_requests_list: 'عرض صفحة إدارة الطلبات',
+  view_settings: 'عرض صفحة الإعدادات',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

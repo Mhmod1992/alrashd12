@@ -138,7 +138,13 @@ const Requests: React.FC = () => {
         // 1. Update Existing items
         newData = newData.map(localItem => {
             const freshItem = requests.find(r => r.id === localItem.id);
-            if (freshItem && (freshItem.status !== localItem.status || freshItem.updated_at !== localItem.updated_at)) {
+            if (freshItem && (
+                freshItem.status !== localItem.status || 
+                freshItem.updated_at !== localItem.updated_at ||
+                JSON.stringify(freshItem.report_stamps) !== JSON.stringify(localItem.report_stamps) ||
+                freshItem.payment_type !== localItem.payment_type ||
+                freshItem.price !== localItem.price
+            )) {
                 hasChanges = true;
                 return freshItem;
             }

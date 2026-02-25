@@ -29,20 +29,21 @@ const defaultPermissionsByRole: Record<Role, Permission[]> = {
         'fill_requests', 'update_requests_data', 'delete_requests', 'view_request_info', 'print_request',
         'view_activity_log', 'view_archive', 'manage_notes', 'manage_findings', 'change_request_status', 'mark_request_complete', 'manage_brokers',
         'view_login_notifications', 'manage_appearance', 'edit_request_price', 'export_data', 'send_internal_messages', 'process_payment',
-        'view_waiting_requests', 'view_car_history_on_create'
+        'view_waiting_requests', 'view_car_history_on_create', 'view_requests_list', 'view_settings',
+        'manage_paper_archive', 'manage_revenues', 'manage_expenses'
     ],
     // Employee/Technician: No Dashboard, No Financials, No Archive by default.
-    employee: ['create_requests', 'fill_requests', 'view_request_info', 'manage_notes', 'manage_findings', 'send_internal_messages', 'mark_request_complete'],
+    employee: ['create_requests', 'fill_requests', 'view_request_info', 'manage_notes', 'manage_findings', 'send_internal_messages', 'mark_request_complete', 'view_requests_list'],
     // Receptionist: No Dashboard, No Financials.
-    receptionist: ['create_requests', 'manage_clients', 'send_internal_messages', 'process_payment', 'view_waiting_requests', 'manage_reservations']
+    receptionist: ['create_requests', 'manage_clients', 'send_internal_messages', 'process_payment', 'view_waiting_requests', 'manage_reservations', 'view_requests_list']
 };
 
 const categorizedPermissions: Record<string, Permission[]> = {
-    'الوصول الأساسي': ['view_dashboard', 'view_login_notifications', 'send_internal_messages'],
-    'إدارة العمليات والطلبات': ['create_requests', 'view_completed_requests', 'view_waiting_requests', 'manage_reservations', 'update_requests_data', 'change_request_status', 'mark_request_complete', 'print_request', 'delete_requests', 'export_data', 'view_archive', 'view_car_history_on_create'],
-    'الجانب الفني والفحص': ['fill_requests', 'view_request_info', 'manage_notes', 'manage_findings', 'view_activity_log'],
-    'الإدارة المالية': ['view_financials', 'manage_expenses', 'delete_expenses', 'edit_request_price', 'process_payment'],
-    'إدارة النظام والإعدادات': ['manage_clients', 'manage_employees', 'manage_brokers', 'manage_settings_general', 'manage_settings_technical', 'manage_appearance', 'manage_api_keys']
+    'صلاحيات العرض والقوائم': ['view_dashboard', 'view_waiting_requests', 'view_requests_list', 'view_completed_requests', 'manage_reservations', 'view_archive', 'manage_paper_archive', 'manage_clients'],
+    'المالية والتقارير': ['view_financials', 'manage_revenues', 'manage_expenses'],
+    'الإدارة والإعدادات': ['manage_employees', 'manage_brokers', 'view_settings'],
+    'إجراءات الطلبات والعمليات': ['create_requests', 'fill_requests', 'update_requests_data', 'change_request_status', 'mark_request_complete', 'delete_requests', 'print_request', 'view_request_info', 'view_car_history_on_create', 'manage_notes', 'manage_findings', 'view_activity_log'],
+    'إجراءات أخرى وإعدادات تفصيلية': ['send_internal_messages', 'view_login_notifications', 'export_data', 'edit_request_price', 'process_payment', 'delete_expenses', 'manage_settings_general', 'manage_settings_technical', 'manage_appearance', 'manage_api_keys']
 };
 
 const EmployeesManagement: React.FC = () => {
