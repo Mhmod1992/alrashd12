@@ -10,6 +10,7 @@ import FileTextIcon from './icons/FileTextIcon';
 import UndoIcon from './icons/UndoIcon';
 import CheckCircleIcon from './icons/CheckCircleIcon';
 import SparklesIcon from './icons/SparklesIcon';
+import AlertTriangleIcon from './icons/AlertTriangleIcon';
 import HistoryIcon from './icons/HistoryIcon';
 import DollarSignIcon from './icons/DollarSignIcon';
 import WhatsappIcon from './icons/WhatsappIcon';
@@ -348,9 +349,12 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                             <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                                                 <span>{carDisplayName}</span>
                                                 {request.report_stamps?.includes('CUSTOMER_REQUEST_INCOMPLETE') && (
-                                                    <span className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 text-xs font-semibold px-2 py-0.5 rounded-full">
-                                                        مختوم
-                                                    </span>
+                                                    <div className="relative group">
+                                                        <AlertTriangleIcon className="w-5 h-5 text-red-500" />
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-black/80 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity z-50">
+                                                            لم يكمل الفحص
+                                                        </span>
+                                                    </div>
                                                 )}
                                             </div>
                                             <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono dir-ltr">{carInfo.plate}</div>
