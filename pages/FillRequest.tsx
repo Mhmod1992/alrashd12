@@ -48,6 +48,7 @@ import { highlightColors } from './FillRequest/constants';
 
 // FillRequest Utils
 import { formatLogDetails, getActionIcon, groupLogsByDate, formatLogTimestamp } from './FillRequest/utils/activityLog';
+import { supabase } from '../lib/supabaseClient';
 import { clean, cleanCategoryNotes, cleanVoiceMemos, updateStatusToError, cleanDataForComparison, updateItemsAfterSave } from './FillRequest/utils/helpers';
 
 
@@ -689,13 +690,112 @@ export const FillRequest: React.FC = () => {
         inspectionDataRef.current = { generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog };
     }, [generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog]);
 
-    // --- MAIN SYNC LOGIC ---
-    useEffect(() => {
-        if (!request) return;
+    const handleServerUpdate = useCallback((serverRequest: InspectionRequest) => {
+        // --- PREVENT SYNC WARS: Skip sync if user just interacted ---
+        if (Date.now() - lastInteractionRef.current < 2000) {
+            return;
+        }
 
         const cleanDataForComparison = (data: any) => JSON.stringify(data, (key, value) =>
             ['status', 'localFile', 'localBlob', 'isTranscribing', 'isEditingTranscription', 'originalText', 'translations', 'displayTranslation'].includes(key) ? undefined : value
         );
+
+        // 1. General Notes
+        const serverGeneralNotes = serverRequest.general_notes || [];
+        setGeneralNotes(prev => {
+            const unsaved = prev.filter(n => n.status === 'error' || n.status === 'saving');
+            const merged = [...serverGeneralNotes];
+            unsaved.forEach(n => {
+                if (!merged.find(sn => sn.id === n.id)) merged.push(n);
+            });
+
+            if (cleanDataForComparison(merged) !== cleanDataForComparison(prev)) return merged;
+            return prev;
+        });
+
+        // 2. Category Notes
+        const serverCategoryNotes = serverRequest.category_notes || {};
+        setCategoryNotes(prev => {
+            const newMap = { ...serverCategoryNotes };
+            let changed = false;
+
+            // Check for unsaved local notes in each category
+            Object.keys(prev).forEach(catId => {
+                const unsaved = prev[catId].filter(n => n.status === 'error' || n.status === 'saving');
+                if (unsaved.length > 0) {
+                    if (!newMap[catId]) newMap[catId] = [];
+                    newMap[catId] = [...newMap[catId]]; // Clone to avoid mutation
+                    const currentServerList = newMap[catId];
+                    unsaved.forEach(n => {
+                        if (!currentServerList.find((sn: Note) => sn.id === n.id)) {
+                            currentServerList.push(n);
+                            changed = true;
+                        }
+                    });
+                }
+            });
+
+            if (!changed && cleanDataForComparison(newMap) === cleanDataForComparison(prev)) return prev;
+            return newMap;
+        });
+
+        // 3. Findings
+        const serverFindings = serverRequest.structured_findings || [];
+        setStructuredFindings(prev => {
+            const unsaved = prev.filter(f => f.status === 'error' || f.status === 'saving');
+            const mergedMap = new Map();
+            serverFindings.forEach(f => mergedMap.set(f.findingId, { ...f, status: 'saved' }));
+            unsaved.forEach(f => mergedMap.set(f.findingId, f));
+
+            const newArr = Array.from(mergedMap.values());
+            // @ts-ignore
+            if (cleanDataForComparison(newArr) !== cleanDataForComparison(prev)) return newArr;
+            return prev;
+        });
+
+        // 4. Activity Log
+        const serverActivityLog = serverRequest.activity_log || [];
+        setActivityLog(prev => {
+            const combined = [...serverActivityLog];
+            prev.forEach(l => {
+                if (!combined.find(sl => sl.id === l.id)) combined.push(l);
+            });
+            combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            if (JSON.stringify(combined) !== JSON.stringify(prev)) return combined;
+            return prev;
+        });
+
+    }, []);
+
+    // --- REALTIME SUBSCRIPTION ---
+    useEffect(() => {
+        if (!request?.id) return;
+
+        const channel = supabase
+            .channel(`request-${request.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'inspection_requests',
+                    filter: `id=eq.${request.id}`
+                },
+                (payload) => {
+                    const newRequest = payload.new as InspectionRequest;
+                    handleServerUpdate(newRequest);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [request?.id, handleServerUpdate]);
+
+    // --- MAIN SYNC LOGIC ---
+    useEffect(() => {
+        if (!request) return;
 
         // 1. Initial Load (or Request Change)
         if (request.id !== prevRequestRef.current?.id) {
@@ -706,10 +806,6 @@ export const FillRequest: React.FC = () => {
             if (draftStr) {
                 try {
                     const draft = JSON.parse(draftStr);
-                    // Merge Strategy: Use draft, but if draft is empty/old, use server? 
-                    // Actually, if we switch requests, we should load from server mostly, unless there was a crash.
-                    // But to be safe, let's load server, then overlay local 'error/saving' items.
-
                     // Base: Server Data
                     const combinedGeneral = [...(request.general_notes || [])];
                     const combinedCategories = { ...(request.category_notes || {}) };
@@ -772,80 +868,9 @@ export const FillRequest: React.FC = () => {
             return;
         }
 
-        // --- PREVENT SYNC WARS: Skip sync if user just interacted ---
-        if (Date.now() - lastInteractionRef.current < 2000) {
-            return;
-        }
+        handleServerUpdate(request);
 
-        // --- MERGE LOGIC (Server Updates) ---
-        // This ensures that if the server updates (e.g. from another user), we don't wipe out local unsaved work.
-
-        // 1. General Notes
-        const serverGeneralNotes = request.general_notes || [];
-        setGeneralNotes(prev => {
-            const unsaved = prev.filter(n => n.status === 'error' || n.status === 'saving');
-            // If server data is different from what we thought was 'saved'
-            // Ideally we should do a smart diff. 
-            // Simple approach: Take server notes, append local unsaved ones that aren't in server.
-            const merged = [...serverGeneralNotes];
-            unsaved.forEach(n => {
-                if (!merged.find(sn => sn.id === n.id)) merged.push(n);
-            });
-
-            // Check if visually different to avoid re-renders
-            if (cleanDataForComparison(merged) !== cleanDataForComparison(prev)) return merged;
-            return prev;
-        });
-
-        // 2. Category Notes
-        const serverCategoryNotes = request.category_notes || {};
-        setCategoryNotes(prev => {
-            const newMap = { ...serverCategoryNotes };
-            let changed = false;
-
-            // Check for unsaved local notes in each category
-            for (const catId in prev) {
-                const unsaved = prev[catId].filter(n => n.status === 'error' || n.status === 'saving');
-                if (unsaved.length > 0) {
-                    if (!newMap[catId]) newMap[catId] = [];
-                    const currentServerList = newMap[catId];
-                    unsaved.forEach(n => {
-                        if (!currentServerList.find((sn: Note) => sn.id === n.id)) {
-                            currentServerList.push(n);
-                            changed = true;
-                        }
-                    });
-                }
-            }
-
-            // Also check if server has new categories not in prev
-            if (!changed && cleanDataForComparison(newMap) === cleanDataForComparison(prev)) return prev;
-            return newMap;
-        });
-
-        // 3. Findings
-        const serverFindings = request.structured_findings || [];
-        setStructuredFindings(prev => {
-            const unsaved = prev.filter(f => f.status === 'error' || f.status === 'saving');
-            const mergedMap = new Map();
-            serverFindings.forEach(f => mergedMap.set(f.findingId, { ...f, status: 'saved' }));
-            // Local unsaved overrides server (e.g. user just changed value but api failed)
-            unsaved.forEach(f => mergedMap.set(f.findingId, f));
-
-            const newArr = Array.from(mergedMap.values());
-            // @ts-ignore
-            if (cleanDataForComparison(newArr) !== cleanDataForComparison(prev)) return newArr;
-            return prev;
-        });
-
-        // 4. Voice Memos (Simplified)
-        const serverMemos = request.voice_memos || {};
-        // Logic similar to category notes... (omitted for brevity, assume less frequent conflict)
-        // Ideally implement same merge pattern.
-
-        prevRequestRef.current = request;
-
-    }, [request, loadedTabs, addNotification, isInitialDataLoaded, getDefaultTab, deletingFindingIds.size]); // Dependencies
+    }, [request, getDraftKey, getDefaultTab, setHasUnsavedChanges, handleServerUpdate]);
 
     const client = clients.find(c => c.id === request?.client_id);
     const car = cars.find(c => c.id === request?.car_id);
