@@ -68,7 +68,7 @@ export const useDataScope = (
                 { data: res }
             ] = await Promise.all([
                 supabase.from('inspection_requests')
-                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps')
+                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files')
                     .order('created_at', { ascending: false })
                     .limit(REQUESTS_PAGE_SIZE),
                 supabase.from('car_makes').select('*'),
@@ -264,7 +264,7 @@ export const useDataScope = (
     const fetchRequestsByDateRange = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
         // Added 'attached_files' to select list
         const { data, error } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files')
             .gte('created_at', startDate)
             .lte('created_at', endDate)
             .order('created_at', { ascending: false });
