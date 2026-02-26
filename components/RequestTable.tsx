@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { InspectionRequest, RequestStatus, Client, Car, CarMake, CarModel, InspectionType, Employee, PaymentType } from '../types';
 import { useAppContext } from '../context/AppContext';
 import EditIcon from './icons/EditIcon';
@@ -14,6 +14,9 @@ import AlertTriangleIcon from './icons/AlertTriangleIcon';
 import HistoryIcon from './icons/HistoryIcon';
 import DollarSignIcon from './icons/DollarSignIcon';
 import WhatsappIcon from './icons/WhatsappIcon';
+import Modal from './Modal';
+import SearchIcon from './icons/SearchIcon';
+import CarIcon from './icons/CarIcon';
 
 interface RequestTableProps {
   requests: InspectionRequest[];
@@ -89,6 +92,9 @@ const RequestTable: React.FC<RequestTableProps> = ({
   const design = settings.design || 'aero';
   const isWaitingTable = title === 'طلبات بانتظار الدفع';
 
+  // State for Car Search Modal - Removed
+
+
 
   const getClientInfo = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
@@ -100,30 +106,51 @@ const RequestTable: React.FC<RequestTableProps> = ({
   
   const getCarInfo = (carId: string) => {
     const car = cars.find(c => c.id === carId);
-    if (!car) return { name: 'غير معروف', plate: '' };
-    const make = carMakes.find(m => m.id === car.make_id)?.name_en;
-    const model = carModels.find(m => m.id === car.model_id)?.name_en;
+    if (!car) return { name: 'غير معروف', plate: '', raw: null };
+    
+    const makeObj = carMakes.find(m => m.id === car.make_id);
+    const modelObj = carModels.find(m => m.id === car.model_id);
+
+    const makeEn = makeObj?.name_en;
+    const makeAr = makeObj?.name;
+    const modelEn = modelObj?.name_en;
+    const modelAr = modelObj?.name;
+
+    // Prefer English for search query, fallback to Arabic
+    const searchMake = makeEn || makeAr || '';
+    const searchModel = modelEn || modelAr || '';
+
+    const raw = {
+        make: searchMake,
+        model: searchModel,
+        year: car.year
+    };
+
+    const displayName = `${makeEn || makeAr || ''} ${modelEn || modelAr || ''} (${car.year})`;
 
     // VIN Display Logic
     if (car.vin) {
         return {
-          name: `${make || ''} ${model || ''} (${car.year})`,
+          name: displayName,
           plate: `شاصي: ${car.vin}`,
+          raw
         };
     }
 
     if (!car.plate_number) {
          return {
-          name: `${make || ''} ${model || ''} (${car.year})`,
+          name: displayName,
           plate: 'بدون لوحة',
+          raw
         };
     }
 
     // Support legacy "شاصي" in plate_number just in case
     if (car.plate_number.startsWith('شاصي')) {
         return {
-          name: `${make || ''} ${model || ''} (${car.year})`,
+          name: displayName,
           plate: car.plate_number,
+          raw
         };
     }
 
@@ -146,8 +173,9 @@ const RequestTable: React.FC<RequestTableProps> = ({
     const plateDisplay = [finalPlateLetters, plateNumbers].filter(Boolean).join('  ');
 
     return {
-      name: `${make || ''} ${model || ''} (${car.year})`,
+      name: displayName,
       plate: plateDisplay,
+      raw
     };
   };
   
@@ -200,6 +228,26 @@ const RequestTable: React.FC<RequestTableProps> = ({
         }
     });
 };
+
+  const handleCarClick = (e: React.MouseEvent, carInfo: any) => {
+      e.stopPropagation();
+      if (carInfo.raw) {
+          const query = `${carInfo.raw.make} ${carInfo.raw.model} ${carInfo.raw.year}`;
+          const url = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`;
+          
+          // Open in a centered popup window
+          const width = 1024;
+          const height = 800;
+          const left = (window.screen.width - width) / 2;
+          const top = (window.screen.height - height) / 2;
+          
+          window.open(
+              url, 
+              'GoogleImageSearch', 
+              `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes,status=yes`
+          );
+      }
+  };
 
 
   const primaryColor = design === 'classic' ? 'teal' : design === 'glass' ? 'indigo' : 'blue';
@@ -299,6 +347,17 @@ const RequestTable: React.FC<RequestTableProps> = ({
                         const carDisplayName = request.car_snapshot
                             ? `${request.car_snapshot.make_en} ${request.car_snapshot.model_en} (${request.car_snapshot.year})`
                             : carInfo.name;
+                        
+                        // Construct search data prioritizing snapshot
+                        const searchData = request.car_snapshot ? {
+                            name: carDisplayName,
+                            raw: {
+                                make: request.car_snapshot.make_en || request.car_snapshot.make || '',
+                                model: request.car_snapshot.model_en || request.car_snapshot.model || '',
+                                year: request.car_snapshot.year
+                            }
+                        } : carInfo;
+
                         const isWaitingPayment = request.status === RequestStatus.WAITING_PAYMENT;
                         const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);
                         
@@ -346,7 +405,11 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                             </button>
                                         )}
                                         <div>
-                                            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                            <div 
+                                                className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                                onClick={(e) => handleCarClick(e, searchData)}
+                                                title="اضغط للبحث عن صور السيارة"
+                                            >
                                                 <span>{carDisplayName}</span>
                                                 {request.report_stamps?.includes('CUSTOMER_REQUEST_INCOMPLETE') && (
                                                     <div className="relative group">
@@ -490,6 +553,8 @@ const RequestTable: React.FC<RequestTableProps> = ({
             <p className="font-medium">لا توجد طلبات لعرضها.</p>
          </div>
       )}
+
+      {/* Car Search Modal - Removed */}
     </div>
   );
 };

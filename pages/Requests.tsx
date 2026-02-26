@@ -272,7 +272,7 @@ const Requests: React.FC = () => {
 
         executeDateFetch(start.toISOString(), end.toISOString());
 
-    }, [dateFilter, executeDateFetch]);
+    }, [dateFilter]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
     const handleApplyCustomRange = () => {
         if (!rangeStartDate || !rangeEndDate) return;
