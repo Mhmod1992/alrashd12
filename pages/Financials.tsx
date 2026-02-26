@@ -914,9 +914,75 @@ const Financials: React.FC = () => {
 
                     {/* Detailed Lists */}
                     <div className="space-y-8">
+                        {/* 0. All Requests Details (Added per request) */}
+                        {stats.filteredRequests.length > 0 && (
+                            <div>
+                                <h3 className="font-bold text-sm text-slate-800 border-r-4 border-slate-800 pr-3 mb-3 uppercase tracking-wider">تفاصيل جميع الطلبات ({stats.filteredRequests.length})</h3>
+                                <table className="w-full text-xs text-center border-collapse border border-slate-300 mb-8">
+                                    <thead className="bg-slate-50 text-slate-700 border-b border-slate-300">
+                                        <tr>
+                                            <th className="p-2 font-bold border-l border-slate-200">رقم الطلب</th>
+                                            <th className="p-2 font-bold border-l border-slate-200">التاريخ</th>
+                                            <th className="p-2 font-bold border-l border-slate-200">العميل</th>
+                                            <th className="p-2 font-bold border-l border-slate-200">السيارة</th>
+                                            <th className="p-2 font-bold border-l border-slate-200">طريقة الدفع</th>
+                                            <th className="p-2 font-bold">المبلغ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200">
+                                        {stats.filteredRequests.map((req, idx) => {
+                                            const client = clients.find(c => c.id === req.client_id);
+                                            const car = cars.find(c => c.id === req.car_id);
+                                            const make = carMakes.find(m => m.id === car?.make_id)?.name || '';
+                                            const model = carModels.find(m => m.id === car?.model_id)?.name || '';
+                                            
+                                            let paymentLabel = req.payment_type as string;
+                                            let paymentClass = "text-slate-600";
+
+                                            if (req.payment_type === PaymentType.Cash) {
+                                                paymentLabel = 'نقدي';
+                                                paymentClass = "text-emerald-700 bg-emerald-100 print:bg-emerald-100";
+                                            }
+                                            else if (req.payment_type === PaymentType.Card) {
+                                                paymentLabel = 'شبكة';
+                                                paymentClass = "text-blue-700 bg-blue-100 print:bg-blue-100";
+                                            }
+                                            else if (req.payment_type === PaymentType.Transfer) {
+                                                paymentLabel = 'تحويل';
+                                                paymentClass = "text-amber-700 bg-amber-100 print:bg-amber-100";
+                                            }
+                                            else if (req.payment_type === PaymentType.Unpaid) {
+                                                paymentLabel = 'آجل';
+                                                paymentClass = "text-rose-700 bg-rose-100 print:bg-rose-100";
+                                            }
+                                            else if (req.payment_type === PaymentType.Split) {
+                                                paymentLabel = 'مقسم';
+                                                paymentClass = "text-purple-700 bg-purple-100 print:bg-purple-100";
+                                            }
+
+                                            return (
+                                                <tr key={idx} className="hover:bg-slate-50">
+                                                    <td className="p-2 font-mono text-slate-600 border-l border-slate-100">#{req.request_number}</td>
+                                                    <td className="p-2 font-mono text-slate-500 border-l border-slate-100">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
+                                                    <td className="p-2 font-bold text-slate-900 border-l border-slate-100">{client?.name || '-'}</td>
+                                                    <td className="p-2 text-slate-600 border-l border-slate-100">{make} {model} {car?.year}</td>
+                                                    <td className="p-2 border-l border-slate-100">
+                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${paymentClass} inline-block min-w-[50px]`}>
+                                                            {paymentLabel}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-2 font-mono font-bold text-slate-800">{req.price.toLocaleString('en-US')}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
                         {/* 1. Receivables */}
                         {stats.filteredRequests.filter(r => r.payment_type === PaymentType.Unpaid).length > 0 && (
-                            <div className="break-inside-avoid">
+                            <div>
                                 <h3 className="font-bold text-sm text-slate-800 border-r-4 border-slate-800 pr-3 mb-3 uppercase tracking-wider">الذمم المدينة (غير المحصل)</h3>
                                 <table className="w-full text-xs text-center border-collapse border border-slate-300">
                                     <thead className="bg-slate-50 text-slate-700 border-b border-slate-300">
@@ -945,7 +1011,7 @@ const Financials: React.FC = () => {
                         )}
 
                         {/* 2. Salary Summary (ALL active Employees) */}
-                        <div className="break-inside-avoid">
+                        <div>
                             <h3 className="font-bold text-sm text-slate-800 border-r-4 border-slate-800 pr-3 mb-3 uppercase tracking-wider">ملخص الرواتب والمكافآت (حسب الموظف)</h3>
                             <table className="w-full text-xs text-center border-collapse border border-slate-300">
                                 <thead className="bg-slate-50 text-slate-700 border-b border-slate-300">
@@ -986,7 +1052,7 @@ const Financials: React.FC = () => {
 
                         {/* 3. Operational Expenses */}
                         {stats.filteredExpenses.filter(e => e.category !== 'رواتب' && e.category !== 'مكافآت' && e.category !== 'سلف' && e.category !== 'خصومات').length > 0 && (
-                            <div className="break-inside-avoid">
+                            <div>
                                 <h3 className="font-bold text-sm text-slate-800 border-r-4 border-slate-800 pr-3 mb-3 uppercase tracking-wider">المصروفات التشغيلية</h3>
                                 <table className="w-full text-xs text-center border-collapse border border-slate-300">
                                     <thead className="bg-slate-50 text-slate-700 border-b border-slate-300">
@@ -1015,7 +1081,7 @@ const Financials: React.FC = () => {
 
 
                     {/* Footer Signature */}
-                    <div className="mt-20 flex justify-between items-end px-10 page-break-avoid">
+                    <div className="mt-20 flex justify-between items-end px-10 break-inside-avoid">
                         <div className="text-center">
                             <p className="mb-6 font-bold text-sm text-slate-500 uppercase tracking-widest">المحاسب المسؤول</p>
                             <div className="w-48 border-b border-slate-300"></div>

@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
   <head>
@@ -211,40 +210,57 @@
           }
         }
         
-        body {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
+        html, body {
+          height: auto !important;
+          overflow: visible !important;
           background-color: white !important;
           margin: 0 !important;
           padding: 0 !important;
+        }
+
+        #root {
+          height: auto !important;
           overflow: visible !important;
         }
 
-        .no-print { display: none !important; }
+        #background-container, .no-print { display: none !important; }
         
-        body * { visibility: hidden; }
-        .print-container, .print-container * { visibility: visible; }
+        /* Hide everything by default using visibility to keep flow but hide content */
+        body * { 
+          visibility: hidden; 
+        }
+
+        /* Show print container and ALL its descendants */
+        .print-container, .print-container * { 
+          visibility: visible;
+          overflow: visible !important; /* Critical: allows content to spill to next pages */
+        }
 
         .print-container {
-          position: absolute;
-          left: 0;
-          top: 0;
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
           width: 100% !important;
           margin: 0 !important;
           padding: 0 !important;
           background-color: white !important;
-          overflow: visible !important;
-          height: auto !important;
           display: block !important;
+          z-index: 9999;
+          float: none !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
 
-        .report-wrapper {
-           box-shadow: none !important;
-           border: none !important;
-           width: 100% !important;
-           margin: 0 !important;
-           padding: 0 !important;
+        /* Reset specific tailwind overflow classes that might clip content */
+        .overflow-x-auto, .overflow-y-auto, .overflow-hidden {
+          overflow: visible !important;
         }
+        
+        /* Ensure tables break correctly */
+        table { page-break-inside: auto; }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
       }
     </style>
     <script src="https://unpkg.com/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>

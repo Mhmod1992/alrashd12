@@ -54,7 +54,7 @@ const Requests: React.FC = () => {
     const [requestNumberQuery, setRequestNumberQuery] = useState('');
     const [comprehensiveQuery, setComprehensiveQuery] = useState('');
     const [waitingSearchTerm, setWaitingSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<RequestStatus | 'الكل'>('الكل');
+    const [statusFilter, setStatusFilter] = useState<RequestStatus | 'الكل' | 'active'>('الكل');
     const [employeeFilter, setEmployeeFilter] = useState<string>('الكل');
 
     // Date Filter State
@@ -579,7 +579,11 @@ const Requests: React.FC = () => {
             waitingReqs = waitingReqs.filter(r => String(r.request_number).includes(waitingSearchTerm.trim()));
         }
 
-        let statusFilteredReqs = otherReqs.filter(req => statusFilter === 'الكل' || req.status === statusFilter);
+        let statusFilteredReqs = otherReqs.filter(req => {
+            if (statusFilter === 'الكل') return true;
+            if (statusFilter === 'active') return req.status === RequestStatus.NEW || req.status === RequestStatus.IN_PROGRESS;
+            return req.status === statusFilter;
+        });
 
         if (employeeFilter !== 'الكل') {
             statusFilteredReqs = statusFilteredReqs.filter(req => req.employee_id === employeeFilter);
@@ -881,10 +885,11 @@ const Requests: React.FC = () => {
                             </span>
                             <select
                                 value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value as RequestStatus | 'الكل')}
+                                onChange={(e) => setStatusFilter(e.target.value as RequestStatus | 'الكل' | 'active')}
                                 className={`${searchInputClasses} appearance-none`}
                             >
                                 <option value="الكل">فلترة حسب الحالة (الكل)</option>
+                                <option value="active">نشط (جديد + قيد التنفيذ)</option>
                                 <option value={RequestStatus.NEW}>جديد</option>
                                 <option value={RequestStatus.IN_PROGRESS}>قيد التنفيذ</option>
                                 <option value={RequestStatus.COMPLETE}>مكتمل</option>
