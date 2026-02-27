@@ -48,7 +48,7 @@ const Requests: React.FC = () => {
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels,
-        lastRemoteDeleteId
+        lastRemoteDeleteId, fetchAllData
     } = useAppContext();
 
     const [requestNumberQuery, setRequestNumberQuery] = useState('');
@@ -982,6 +982,7 @@ const Requests: React.FC = () => {
                         onProcessPayment={can('process_payment') ? handleProcessPaymentClick : undefined}
                         onResendWhatsApp={handleResendWhatsApp}
                         onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
+                        onRefresh={fetchAllData}
                     />
                 </div>
             )}
@@ -1005,6 +1006,7 @@ const Requests: React.FC = () => {
                     onHistoryClick={handleOpenHistoryModal}
                     carsWithHistory={combinedCarsWithHistory}
                     onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
+                    onRefresh={fetchAllData}
                 />
             )}
 

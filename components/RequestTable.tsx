@@ -37,7 +37,8 @@ interface RequestTableProps {
   carsWithHistory?: Set<string>;
   onProcessPayment?: (request: InspectionRequest) => void;
   onResendWhatsApp?: (request: InspectionRequest) => void;
-  onDeleteSuccess?: (requestId: string) => void; 
+  onDeleteSuccess?: (requestId: string) => void;
+  onRefresh?: () => void;
 }
 
 const StatusBadge: React.FC<{ status: RequestStatus }> = ({ status }) => {
@@ -82,7 +83,7 @@ const StatusBadge: React.FC<{ status: RequestStatus }> = ({ status }) => {
 const RequestTable: React.FC<RequestTableProps> = ({ 
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
   title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
-  onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess
+  onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
@@ -264,12 +265,23 @@ const RequestTable: React.FC<RequestTableProps> = ({
         }
         if (isLive) {
             return (
-                <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-semibold bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full border border-green-100 dark:border-green-900/30" title="تحديثات مباشرة">
-                    <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                    </span>
-                    <span>مباشر</span>
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-semibold bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full border border-green-100 dark:border-green-900/30" title="تحديثات مباشرة">
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        <span>مباشر</span>
+                    </div>
+                    {onRefresh && (
+                        <button
+                            onClick={onRefresh}
+                            className="p-1.5 rounded-full text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-600"
+                            title="تحديث البيانات يدوياً"
+                        >
+                            <RefreshCwIcon className="w-3.5 h-3.5" />
+                        </button>
+                    )}
                 </div>
             );
         }

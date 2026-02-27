@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { PredefinedFinding } from '../../../types';
 import { uuidv4 } from '../../../lib/utils';
 import Icon from '../../../components/Icon';
@@ -21,6 +21,8 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
     const [galleryValues, setGalleryValues] = useState<Record<string, string>>({});
     const [searchTerm, setSearchTerm] = useState('');
     const [defaultValue, setDefaultValue] = useState('');
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const quickWords = ['يسار', 'يمين', 'أمام', 'خلف', 'كبوت', 'شنطة', 'سقف'];
 
     const handleAddRow = () => { setRows(prev => [...prev, { id: uuidv4(), findingId: '', value: '' }]); };
     const handleRemoveRow = (id: string) => { if (rows.length === 1) { setRows([{ id: uuidv4(), findingId: '', value: '' }]); } else { setRows(prev => prev.filter(r => r.id !== id)); } };
@@ -138,15 +140,32 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
                     </button>
                 </div>
 
-                <div className="relative w-64">
-                    <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="ابحث باسم البند..."
-                        className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-900 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
+                <div className="flex flex-col items-end gap-2">
+                    <div className="relative w-64">
+                        <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder="ابحث باسم البند..."
+                            className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-900 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                    </div>
+                    <div className="flex flex-wrap gap-1 justify-end w-64">
+                        {quickWords.map(word => (
+                            <button
+                                key={word}
+                                onClick={() => {
+                                    setSearchTerm(word);
+                                    searchInputRef.current?.focus();
+                                }}
+                                className="px-2 py-1 text-[10px] font-medium bg-slate-100 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-blue-900 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-600 transition-colors"
+                            >
+                                {word}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
