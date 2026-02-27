@@ -272,15 +272,32 @@ const PrintStyles = () => (
     {`
       @media print {
         @page {
-          margin: 0;
-          size: auto;
-        }
-        
-        body {
-          margin: 0;
-          padding: 0;
+          margin: 10mm; /* Standard margin to allow browser header/footer (page numbers) */
+          size: A4;
         }
 
+        body {
+          margin: 0;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        /* Ensure the report wrapper fits nicely */
+        .report-wrapper {
+          width: 100% !important;
+          max-width: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          box-shadow: none !important;
+          overflow: visible !important;
+          min-height: auto !important;
+        }
+        
+        /* Hide scrollbars */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        
         /* Force browsers to render background colors and box shadows */
         * {
           -webkit-print-color-adjust: exact !important;
@@ -290,6 +307,11 @@ const PrintStyles = () => (
         /* Tailwind CSS class overrides for printing */
         .border-dashed {
           border-style: dashed !important;
+        }
+        
+        /* Hide elements marked with no-print class */
+        .no-print {
+            display: none !important;
         }
       }
     `}

@@ -311,7 +311,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
     return (
         <div style={{ backgroundColor: reportSettings.pageBackgroundColor, color: reportSettings.textColor, fontFamily: reportSettings.fontFamily }}>
-            <div ref={ref} className={`relative ${isPrintView ? 'p-[10mm]' : 'p-4 sm:p-6 print:p-[10mm]'}`} dir={reportDirection}>
+            <div ref={ref} className={`relative ${isPrintView ? 'p-[10mm] pb-[20mm]' : 'p-4 sm:p-6 print:p-[10mm] print:pb-[20mm]'}`} dir={reportDirection}>
                 {request.report_stamps && request.report_stamps.length > 0 && (
                     <div className={`absolute inset-0 z-10 flex flex-col ${reportDirection === 'ltr' ? 'items-start' : 'items-end'} justify-start gap-8 pointer-events-none p-12 pt-40`}>
                         {request.report_stamps.map(stamp => <div key={stamp} className="border-2 border-red-500/90 text-red-500/90 p-3 rounded-md transform -rotate-12 text-center [filter:drop-shadow(0_4px_3px_rgba(0,0,0,0.5))] max-w-xs"><span className="text-2xl font-black tracking-wider leading-tight">{getStampText(stamp)}</span></div>)}
@@ -425,7 +425,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         </FindingCategorySection>
                     )}
 
-                    <footer className={`border-t-2 flex justify-between items-start gap-4 ${isPrintView ? 'mt-4 pt-2' : 'mt-6 pt-4'}`} style={{ borderColor: reportSettings.borderColor }}>
+                    <footer className={`border-t-2 flex justify-between items-start gap-4 break-inside-avoid ${isPrintView ? 'mt-4 pt-2' : 'mt-6 pt-4'}`} style={{ borderColor: reportSettings.borderColor }}>
                         <div className="flex-grow" style={{ color: reportSettings.textColor, opacity: 0.8 }}>
                             <p data-setting-section="text-disclaimer" className={`break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.disclaimer) : fontSizes.disclaimer}`}><span className="font-bold">{reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}</span> {reportSettings.disclaimerText}</p>
                         </div>

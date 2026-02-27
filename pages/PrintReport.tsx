@@ -652,8 +652,8 @@ const PrintReport: React.FC = () => {
             
             <main className="flex-1 bg-gray-200 dark:bg-gray-900/50 py-8 overflow-auto print-container print:py-0 print:bg-white print:overflow-visible" dir={reportDirection}>
                 <div className="flex justify-center w-full min-h-full print:block print:w-full print:h-auto">
-                    <div className="origin-top transition-transform duration-200 print-reset-transform" style={{ transform: `scale(${previewScale})`, marginBottom: `-${(1 - previewScale) * 100}%` }}>
-                        <div className="report-wrapper bg-white shadow-2xl print:shadow-none mx-auto overflow-hidden print:overflow-visible print:h-auto print:min-h-0 print:w-full" style={{ width: '210mm', minHeight: '297mm' }}>
+                    <div className="origin-top transition-transform duration-200 print:transform-none print:m-0" style={{ transform: `scale(${previewScale})`, marginBottom: `-${(1 - previewScale) * 100}%` }}>
+                        <div className="report-wrapper bg-white shadow-2xl print:shadow-none mx-auto overflow-hidden print:overflow-visible print:h-auto print:min-h-0 print:w-full print:max-w-none print:mb-12" style={{ width: '210mm', minHeight: '297mm' }}>
                             { client && car && inspectionType ?
                                 <>
                                     <InspectionReport
