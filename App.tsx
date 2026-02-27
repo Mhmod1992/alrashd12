@@ -271,6 +271,16 @@ const PrintStyles = () => (
   <style type="text/css">
     {`
       @media print {
+        @page {
+          margin: 0;
+          size: auto;
+        }
+        
+        body {
+          margin: 0;
+          padding: 0;
+        }
+
         /* Force browsers to render background colors and box shadows */
         * {
           -webkit-print-color-adjust: exact !important;
