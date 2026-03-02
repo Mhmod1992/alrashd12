@@ -1078,11 +1078,17 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     await addCar(car);
                     carId = car.id;
                 }
+                // Custom Date Logic: If before 4 AM, count as previous day
+                const requestDate = new Date();
+                if (requestDate.getHours() < 4) {
+                    requestDate.setDate(requestDate.getDate() - 1);
+                }
+
                 const newReq = {
                     id: uuidv4(),
                     ...requestData,
                     car_id: carId,
-                    created_at: new Date().toISOString(),
+                    created_at: requestDate.toISOString(),
                     employee_id: authUser.id,
                     inspection_data: {},
                     general_notes: [],
