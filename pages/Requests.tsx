@@ -133,7 +133,13 @@ const Requests: React.FC = () => {
 
         let hasChanges = false;
         let newData = [...serverFetchedData];
-        const todayStr = new Date().toLocaleDateString('en-CA');
+        
+        // Custom Date Logic: Day starts at 4 AM
+        const now = new Date();
+        if (now.getHours() < 4) {
+            now.setDate(now.getDate() - 1);
+        }
+        const todayStr = now.toLocaleDateString('en-CA');
 
         // 1. Update Existing items
         newData = newData.map(localItem => {
@@ -244,9 +250,17 @@ const Requests: React.FC = () => {
     }, [fetchRequestsByDateRange, clearSearchedRequests, addNotification]);
 
     useEffect(() => {
+        // Custom Date Logic: Day starts at 4 AM
         const now = new Date();
-        let start = new Date();
-        let end = new Date();
+        const currentHour = now.getHours();
+        
+        // If before 4 AM, we are still in the "previous" day logically
+        if (currentHour < 4) {
+            now.setDate(now.getDate() - 1);
+        }
+
+        let start = new Date(now);
+        let end = new Date(now);
 
         if (dateFilter === 'all') {
             setServerFetchedData(null); 
