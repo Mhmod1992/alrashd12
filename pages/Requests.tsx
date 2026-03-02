@@ -169,7 +169,14 @@ const Requests: React.FC = () => {
         }
 
         if (hasChanges) {
-            newData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            newData.sort((a, b) => {
+                const dateA = new Date(a.created_at);
+                const dateB = new Date(b.created_at);
+                // Adjust for 4 AM shift start: treat 00:00-03:59 as "next day" (add 24h) for sorting
+                if (dateA.getHours() < 4) dateA.setHours(dateA.getHours() + 24);
+                if (dateB.getHours() < 4) dateB.setHours(dateB.getHours() + 24);
+                return dateB.getTime() - dateA.getTime();
+            });
             setServerFetchedData(newData);
         }
 
@@ -607,7 +614,14 @@ const Requests: React.FC = () => {
             statusFilteredReqs = statusFilteredReqs.filter(req => req.status !== RequestStatus.COMPLETE);
         }
 
-        statusFilteredReqs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        statusFilteredReqs.sort((a, b) => {
+            const dateA = new Date(a.created_at);
+            const dateB = new Date(b.created_at);
+            // Adjust for 4 AM shift start: treat 00:00-03:59 as "next day" (add 24h) for sorting
+            if (dateA.getHours() < 4) dateA.setHours(dateA.getHours() + 24);
+            if (dateB.getHours() < 4) dateB.setHours(dateB.getHours() + 24);
+            return dateB.getTime() - dateA.getTime();
+        });
 
         return { dataToDisplay: statusFilteredReqs, waitingPaymentRequests: waitingReqs, carsWithHistory: carsWithHistorySet };
     }, [requests, searchedRequests, serverFetchedData, statusFilter, employeeFilter, authUser, waitingSearchTerm, can]);
