@@ -933,8 +933,8 @@ const Financials: React.FC = () => {
                                         {stats.filteredRequests.map((req, idx) => {
                                             const client = clients.find(c => c.id === req.client_id);
                                             const car = cars.find(c => c.id === req.car_id);
-                                            const make = carMakes.find(m => m.id === car?.make_id)?.name || '';
-                                            const model = carModels.find(m => m.id === car?.model_id)?.name || '';
+                                            const make = carMakes.find(m => m.id === car?.make_id)?.name_ar || '';
+                                            const model = carModels.find(m => m.id === car?.model_id)?.name_ar || '';
                                             
                                             let paymentLabel = req.payment_type as string;
                                             let paymentClass = "text-slate-600";

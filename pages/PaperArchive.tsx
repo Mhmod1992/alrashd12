@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { supabase } from '../lib/supabaseClient';
 import { InspectionRequest } from '../types';
 import Button from '../components/Button';
 import Icon from '../components/Icon';
@@ -92,6 +93,8 @@ const PaperArchive: React.FC = () => {
     } = useAppContext();
 
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+    const [archiveStatusFilter, setArchiveStatusFilter] = useState<'all' | 'archived' | 'not_archived'>('all');
     const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'month' | 'custom' | 'all'>('today');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
@@ -120,52 +123,143 @@ const PaperArchive: React.FC = () => {
     const [deletePassword, setDeletePassword] = useState('');
     const [deleteError, setDeleteError] = useState('');
 
+    // Debounce search query
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
 
     // Fetch Logic
     const loadData = async () => {
         setIsLoading(true);
         try {
-            if (dateFilter === 'all') {
-                const data = await fetchAllPaperArchiveRequests();
-                setFilteredRequests(data);
+            // If searching, use search endpoint (client-side filter for now as per existing logic, or enhance context)
+            // The user requested "Search directly from database". 
+            // The existing 'fetchPaperArchiveRequests' filters by date.
+            // We need a way to search globally without date constraints if a query exists.
+            
+            if (debouncedSearchQuery) {
+                // Perform a global search using the existing searchRequestByNumber logic but adapted for this view
+                // Since searchRequestByNumber updates 'searchedRequests' in context, we might want to use a local fetch here
+                // to avoid messing with the global search state if possible, OR just use the global search function 
+                // and map the results.
+                
+                // Let's use a direct supabase query here for the specific archive search requirements
+                // This mirrors the logic in AppContext.tsx searchRequestByNumber but returns data directly
+                
+                const query = debouncedSearchQuery.trim();
+                let data: InspectionRequest[] = [];
+
+                // 1. Search by Request Number
+                if (/^\d+$/.test(query)) {
+                    const { data: byNum } = await supabase
+                        .from('inspection_requests')
+                        .select('*')
+                        .eq('request_number', Number(query));
+                    if (byNum) data = [...data, ...byNum];
+                }
+
+                // 2. Search by Client Name/Phone
+                const { data: clientsFound } = await supabase
+                    .from('clients')
+                    .select('id')
+                    .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
+                    .limit(50);
+                
+                if (clientsFound && clientsFound.length > 0) {
+                    const clientIds = clientsFound.map(c => c.id);
+                    const { data: byClient } = await supabase
+                        .from('inspection_requests')
+                        .select('*')
+                        .in('client_id', clientIds)
+                        .order('created_at', { ascending: false })
+                        .limit(50);
+                    if (byClient) data = [...data, ...byClient];
+                }
+
+                // 3. Search by Car (Plate/VIN) - Simplified for this view
+                const { data: carsFound } = await supabase
+                    .from('cars')
+                    .select('id')
+                    .or(`plate_number.ilike.%${query}%,plate_number_en.ilike.%${query}%,vin.ilike.%${query}%`)
+                    .limit(50);
+
+                if (carsFound && carsFound.length > 0) {
+                    const carIds = carsFound.map(c => c.id);
+                    const { data: byCar } = await supabase
+                        .from('inspection_requests')
+                        .select('*')
+                        .in('car_id', carIds)
+                        .order('created_at', { ascending: false })
+                        .limit(50);
+                    if (byCar) data = [...data, ...byCar];
+                }
+
+                // Deduplicate
+                const uniqueData = Array.from(new Map(data.map(item => [item.id, item])).values());
+                
+                // Apply Archive Filter locally since we fetched by search
+                let finalData = uniqueData;
+                if (archiveStatusFilter === 'archived') {
+                    finalData = uniqueData.filter(r => r.attached_files && r.attached_files.length > 0);
+                } else if (archiveStatusFilter === 'not_archived') {
+                    finalData = uniqueData.filter(r => !r.attached_files || r.attached_files.length === 0);
+                }
+
+                setFilteredRequests(finalData);
                 setIsLoading(false);
                 return;
             }
 
-            const now = new Date();
-            let start = new Date();
-            let end = new Date();
+            // Normal Date-based Fetch
+            let data: InspectionRequest[] = [];
+            if (dateFilter === 'all') {
+                data = await fetchAllPaperArchiveRequests();
+            } else {
+                const now = new Date();
+                let start = new Date();
+                let end = new Date();
 
-            switch (dateFilter) {
-                case 'today':
-                    start.setHours(0, 0, 0, 0);
-                    end.setHours(23, 59, 59, 999);
-                    break;
-                case 'yesterday':
-                    start.setDate(now.getDate() - 1);
-                    start.setHours(0, 0, 0, 0);
-                    end.setDate(now.getDate() - 1);
-                    end.setHours(23, 59, 59, 999);
-                    break;
-                case 'month':
-                    start = new Date(now.getFullYear(), now.getMonth(), 1);
-                    end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-                    break;
-                case 'custom':
-                    if (customStartDate && customEndDate) {
-                         start = new Date(customStartDate);
-                         start.setHours(0, 0, 0, 0);
-                         end = new Date(customEndDate);
-                         end.setHours(23, 59, 59, 999);
-                    } else {
-                        setIsLoading(false);
-                        setFilteredRequests([]);
-                        return;
-                    }
-                    break;
+                switch (dateFilter) {
+                    case 'today':
+                        start.setHours(0, 0, 0, 0);
+                        end.setHours(23, 59, 59, 999);
+                        break;
+                    case 'yesterday':
+                        start.setDate(now.getDate() - 1);
+                        start.setHours(0, 0, 0, 0);
+                        end.setDate(now.getDate() - 1);
+                        end.setHours(23, 59, 59, 999);
+                        break;
+                    case 'month':
+                        start = new Date(now.getFullYear(), now.getMonth(), 1);
+                        end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+                        break;
+                    case 'custom':
+                        if (customStartDate && customEndDate) {
+                             start = new Date(customStartDate);
+                             start.setHours(0, 0, 0, 0);
+                             end = new Date(customEndDate);
+                             end.setHours(23, 59, 59, 999);
+                        } else {
+                            setIsLoading(false);
+                            setFilteredRequests([]);
+                            return;
+                        }
+                        break;
+                }
+                data = await fetchPaperArchiveRequests(start.toISOString(), end.toISOString());
             }
 
-            const data = await fetchPaperArchiveRequests(start.toISOString(), end.toISOString());
+            // Apply Archive Filter
+            if (archiveStatusFilter === 'archived') {
+                data = data.filter(r => r.attached_files && r.attached_files.length > 0);
+            } else if (archiveStatusFilter === 'not_archived') {
+                data = data.filter(r => !r.attached_files || r.attached_files.length === 0);
+            }
+
             setFilteredRequests(data);
 
         } catch (error) {
@@ -179,7 +273,7 @@ const PaperArchive: React.FC = () => {
     // Trigger load on filter change
     useEffect(() => {
         loadData();
-    }, [dateFilter, customStartDate, customEndDate]);
+    }, [dateFilter, customStartDate, customEndDate, debouncedSearchQuery, archiveStatusFilter]);
 
     useEffect(() => {
         if (!isUploadModalOpen) {
@@ -512,126 +606,152 @@ const PaperArchive: React.FC = () => {
             )}
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col md:flex-row gap-4 justify-between items-center">
-                     <div className="relative flex-grow w-full md:max-w-md flex gap-2">
-                        <div className="relative flex-grow">
-                            <Icon name="search" className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
-                            <input 
-                                type="text" 
-                                placeholder="بحث برقم الطلب أو اسم العميل..." 
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pr-9 pl-4 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
+                <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col gap-4">
+                    
+                    {/* Top Controls: Search & QR */}
+                    <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+                         <div className="relative flex-grow w-full md:max-w-md flex gap-2">
+                            <div className="relative flex-grow">
+                                <Icon name="search" className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    placeholder="بحث برقم الطلب، اسم العميل، اللوحة..." 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pr-9 pl-4 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                            <button 
+                                onClick={() => setIsQRScannerOpen(true)}
+                                className="bg-slate-800 text-white p-2 rounded-lg hover:bg-slate-700 transition-colors flex items-center justify-center"
+                                title="مسح كود QR"
+                            >
+                                <Icon name="scan" className="w-5 h-5" />
+                            </button>
                         </div>
-                        <button 
-                            onClick={() => setIsQRScannerOpen(true)}
-                            className="bg-slate-800 text-white p-2 rounded-lg hover:bg-slate-700 transition-colors flex items-center justify-center"
-                            title="مسح كود QR"
-                        >
-                            <Icon name="scan" className="w-5 h-5" />
-                        </button>
+                        <div className="text-xs text-slate-500 font-bold bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg">
+                            {filteredRequests.length} طلبات
+                        </div>
                     </div>
-                    <div className="text-xs text-slate-500 font-bold bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg">
-                        {displayedRequests.length} طلبات
+
+                    {/* Archive Status Filters */}
+                    <div className="flex gap-2 border-t border-slate-200 dark:border-slate-700 pt-4">
+                        <button 
+                            onClick={() => setArchiveStatusFilter('all')}
+                            className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${archiveStatusFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}
+                        >
+                            الكل
+                        </button>
+                        <button 
+                            onClick={() => setArchiveStatusFilter('archived')}
+                            className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${archiveStatusFilter === 'archived' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400'}`}
+                        >
+                            مؤرشف
+                        </button>
+                        <button 
+                            onClick={() => setArchiveStatusFilter('not_archived')}
+                            className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${archiveStatusFilter === 'not_archived' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400'}`}
+                        >
+                            غير مؤرشف
+                        </button>
                     </div>
                 </div>
 
-                <div className="p-4">
+                <div className="overflow-x-auto">
                     {isLoading ? (
                          <div className="p-12 text-center">
                             <RefreshCwIcon className="w-10 h-10 animate-spin text-blue-500 mx-auto mb-2" />
                             <p className="text-slate-500 text-sm">جاري تحميل البيانات...</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {displayedRequests.map(req => {
-                                const client = clients.find(c => c.id === req.client_id);
-                                const car = cars.find(c => c.id === req.car_id);
-                                const make = carMakes.find(m => m.id === car?.make_id);
-                                const model = carModels.find(m => m.id === car?.model_id);
-                                const isArchived = getRequestStatus(req);
+                        <table className="w-full text-right border-collapse">
+                            <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold">
+                                <tr>
+                                    <th className="p-4 border-b dark:border-slate-700">السيارة</th>
+                                    <th className="p-4 border-b dark:border-slate-700">رقم الطلب</th>
+                                    <th className="p-4 border-b dark:border-slate-700">العميل</th>
+                                    <th className="p-4 border-b dark:border-slate-700 text-center">الحالة</th>
+                                    <th className="p-4 border-b dark:border-slate-700 text-center">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                {filteredRequests.map(req => {
+                                    const client = clients.find(c => c.id === req.client_id);
+                                    const car = cars.find(c => c.id === req.car_id);
+                                    const make = carMakes.find(m => m.id === car?.make_id);
+                                    const model = carModels.find(m => m.id === car?.model_id);
+                                    const isArchived = getRequestStatus(req);
 
-                                const makeEn = req.car_snapshot?.make_en || make?.name_en || '-';
-                                const modelEn = req.car_snapshot?.model_en || model?.name_en || '-';
-                                const year = req.car_snapshot?.year || car?.year || '-';
-                                const plate = car?.plate_number_en || car?.plate_number || '-';
+                                    const makeEn = req.car_snapshot?.make_en || make?.name_en || '-';
+                                    const modelEn = req.car_snapshot?.model_en || model?.name_en || '-';
+                                    const year = req.car_snapshot?.year || car?.year || '-';
+                                    const plate = car?.plate_number_en || car?.plate_number || '-';
 
-                                return (
-                                    <div 
-                                        key={req.id} 
-                                        onClick={() => openUploadModal(req)}
-                                        className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 hover:shadow-xl hover:border-blue-300 dark:hover:border-blue-800 transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between h-full"
-                                    >
-                                        {/* Request Number Badge */}
-                                        <div className="absolute top-0 left-0 bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-br-xl text-[10px] font-bold text-slate-500">
-                                            #{req.request_number}
-                                        </div>
-
-                                        {/* Status Indicator */}
-                                        <div className="absolute top-4 left-4">
-                                            {isArchived ? (
-                                                <div className="flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2 py-1 rounded-full text-[10px] font-bold border border-green-100 dark:border-green-800">
-                                                    <CheckCircleIcon className="w-3 h-3" />
-                                                    <span>مؤرشة ({req.attached_files?.length})</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/40 text-slate-400 px-2 py-1 rounded-full text-[10px] font-bold border border-slate-100 dark:border-slate-800">
-                                                    <XIcon className="w-3 h-3" />
-                                                    <span>فارغ</span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="mt-8 space-y-4 flex-grow">
-                                            {/* Car Info */}
-                                            <div>
-                                                <div className="font-black text-slate-800 dark:text-slate-100 text-lg leading-tight tracking-tight mb-1" dir="ltr">
+                                    return (
+                                        <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+                                            <td className="p-4">
+                                                <div className="font-bold text-slate-800 dark:text-slate-200 text-sm" dir="ltr">
                                                     {makeEn} {modelEn}
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-slate-400">{year}</span>
-                                                    <span className="text-[10px] font-mono bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-800 text-blue-600 dark:text-blue-400">
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-xs text-slate-500">{year}</span>
+                                                    <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600">
                                                         {plate}
                                                     </span>
                                                 </div>
-                                            </div>
-
-                                            {/* Client Info */}
-                                            <div className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-900/30 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                                                <div className="w-8 h-8 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center shadow-sm">
-                                                    <Icon name="employee" className="w-4 h-4 text-slate-400" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">العميل</p>
-                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">{client?.name || '-'}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Footer */}
-                                        <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                                            <div className="flex items-center gap-1.5 text-slate-400">
-                                                <Icon name="calendar-clock" className="w-3.5 h-3.5" />
-                                                <span className="text-[10px] font-mono">
-                                                    {new Date(req.created_at).toLocaleDateString('en-GB')}
+                                            </td>
+                                            <td className="p-4">
+                                                <span className="font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600">
+                                                    #{req.request_number}
                                                 </span>
+                                                <div className="text-[10px] text-slate-400 mt-1">
+                                                    {new Date(req.created_at).toLocaleDateString('en-GB')}
+                                                </div>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">{client?.name || '-'}</div>
+                                                <div className="text-xs text-slate-500 font-mono mt-0.5 dir-ltr text-right">{client?.phone || '-'}</div>
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                {isArchived ? (
+                                                    <div className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2.5 py-1 rounded-full text-xs font-bold border border-green-100 dark:border-green-800">
+                                                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                                                        <span>مؤرشف ({req.attached_files?.length})</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full text-xs font-bold border border-slate-200 dark:border-slate-700">
+                                                        <XIcon className="w-3.5 h-3.5" />
+                                                        <span>غير مؤرشف</span>
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <Button 
+                                                    size="sm" 
+                                                    variant={isArchived ? "secondary" : "primary"}
+                                                    onClick={() => openUploadModal(req)}
+                                                    leftIcon={<Icon name="folder-open" className="w-4 h-4" />}
+                                                    className="shadow-sm"
+                                                >
+                                                    {isArchived ? 'عرض الملفات' : 'أرشفة'}
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredRequests.length === 0 && !isLoading && (
+                                    <tr>
+                                        <td colSpan={5} className="p-12 text-center">
+                                            <div className="flex flex-col items-center justify-center text-slate-400">
+                                                <Icon name="folder-open" className="w-16 h-16 mb-4 opacity-10" />
+                                                <p className="text-slate-500 font-bold">لا توجد طلبات للعرض</p>
+                                                <p className="text-slate-400 text-xs mt-1">جرب تغيير الفلتر أو البحث بكلمة أخرى</p>
                                             </div>
-                                            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform">
-                                                <Icon name="folder-open" className="w-4 h-4" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            {displayedRequests.length === 0 && !isLoading && (
-                                <div className="col-span-full text-center py-20 bg-slate-50 dark:bg-slate-900/20 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700">
-                                    <Icon name="folder-open" className="w-16 h-16 mb-4 opacity-10 mx-auto" />
-                                    <p className="text-slate-500 font-bold">لا توجد طلبات للعرض في هذه الفترة</p>
-                                    <p className="text-slate-400 text-xs mt-1">جرب تغيير الفلتر أو البحث بكلمة أخرى</p>
-                                </div>
-                            )}
-                        </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     )}
                 </div>
             </div>

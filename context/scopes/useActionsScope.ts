@@ -31,7 +31,7 @@ export const useActionsScope = (
     setAuthUser: React.Dispatch<React.SetStateAction<Employee | null>>,
     addNotification: (notification: Omit<Notification, 'id'>) => void,
     createActivityLog: (action: string, details: string, imageUrl?: string, link_id?: string, link_page?: Page) => ActivityLog | null,
-    fetchAllData: () => Promise<void>
+    fetchRequests: () => Promise<void>
 ) => {
 
     const sendSystemNotification = useCallback(async (notification: {
@@ -113,9 +113,10 @@ export const useActionsScope = (
         const { request_number, ...requestData } = request as any;
         const { data, error } = await supabase.from('inspection_requests').insert(requestData).select().single();
         if (error) throw error;
-        sendSystemNotification({ title: 'طلب جديد', message: `تم إنشاء طلب جديد برقم #${data.request_number}`, type: 'new_request', link: 'requests', link_id: data.id });
+        await fetchRequests();
+        addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return data;
-    }, [sendSystemNotification]);
+    }, [sendSystemNotification, fetchRequests, addNotification]);
 
 
     // --- CLIENTS ---
@@ -365,14 +366,14 @@ export const useActionsScope = (
     const addExpense = useCallback(async (expense: Omit<Expense, 'id'>) => {
         const { error } = await supabase.from('expenses').insert(expense);
         if (error) throw error;
-        fetchAllData();
-    }, [fetchAllData]);
+        fetchRequests();
+    }, [fetchRequests]);
 
     const updateExpense = useCallback(async (expense: Expense) => {
         const { error } = await supabase.from('expenses').update(expense).eq('id', expense.id);
         if (error) throw error;
-        fetchAllData();
-    }, [fetchAllData]);
+        fetchRequests();
+    }, [fetchRequests]);
 
     const deleteExpense = useCallback(async (id: string) => {
         const { error } = await supabase.from('expenses').delete().eq('id', id);

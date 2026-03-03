@@ -57,7 +57,7 @@ export const useDataScope = (
         setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
     }, []);
 
-    const fetchAllData = useCallback(async () => {
+    const fetchRequests = useCallback(async () => {
         setIsRefreshing(true);
         try {
             // Added 'attached_files' to the select list
@@ -344,7 +344,7 @@ export const useDataScope = (
         systemLogs, setSystemLogs,
         unreadMessagesCount, setUnreadMessagesCount,
         isRefreshing, setIsRefreshing,
-        fetchAllData,
+        fetchRequests,
         fetchCarModelsByMake,
         fetchCarMakes,
         ensureEntitiesLoaded,

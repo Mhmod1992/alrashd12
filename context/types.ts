@@ -147,6 +147,7 @@ export interface AppContextType {
     fetchClientRequestsFiltered: (clientId: string, startDate?: string, endDate?: string, onlyUnpaid?: boolean) => Promise<InspectionRequest[]>;
     getClientFinancialSummary: (clientId: string) => Promise<any[]>;
     fetchRequestsByCarId: (carId: string) => Promise<InspectionRequest[]>;
+    fetchRequests: () => Promise<void>;
     fetchRequestByRequestNumber: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestByRequestNumberForAuth: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestsByDateRange: (startDate: string, endDate: string) => Promise<InspectionRequest[]>;

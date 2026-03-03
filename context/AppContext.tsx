@@ -94,7 +94,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         systemLogs, setSystemLogs,
         unreadMessagesCount, setUnreadMessagesCount,
         isRefreshing, setIsRefreshing,
-        fetchAllData,
+        fetchRequests,
         fetchCarModelsByMake,
         fetchCarMakes,
         ensureEntitiesLoaded,
@@ -128,7 +128,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         requests, setRequests, setSearchedRequests, setClients, setCars, setCarMakes, setCarModels,
         setBrokers, employees, setEmployees, setTechnicians, setExpenses, setInspectionTypes,
         setCustomFindingCategories, setPredefinedFindings, setReservations, setUnreadMessagesCount,
-        setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchAllData
+        setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchRequests
     );
 
     // Override updateEmployee to sync with cache if we are updating the current user
@@ -327,7 +327,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 retryConnection();
 
                 // 3. Re-fetch all critical data
-                await fetchAllData();
+                await fetchRequests();
 
                 // 4. Update activity timestamp
                 localStorage.setItem('lastActiveTime', Date.now().toString());
@@ -345,7 +345,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } finally {
             setIsRefreshing(false);
         }
-    }, [retryConnection, fetchAllData, logout, addNotification]);
+    }, [retryConnection, fetchRequests, logout, addNotification]);
 
     // --- MAIN INITIALIZATION & RECOVERY ---
     useEffect(() => {
@@ -519,7 +519,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (requests.length === 0) {
                 // Don't set global isLoading to true here, as we want to show the dashboard shell.
                 // We use isRefreshing internally.
-                fetchAllData();
+                fetchRequests();
             }
             setupRealtimeSubscription();
         } else {
@@ -536,7 +536,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             cleanup();
             setRealtimeStatus('disconnected');
         }
-    }, [authUser, fetchAllData, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations]);
+    }, [authUser, fetchRequests, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations]);
 
     // Network Status & Reconnection
     useEffect(() => {
@@ -610,7 +610,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (!columns) return;
         const { data, error } = await supabase.from('inspection_requests').select(columns).eq('id', requestId).single();
         if (!error && data) {
-            setRequests(prev => prev.map(r => r.id === requestId ? { ...r, ...data } : r));
+            setRequests(prev => prev.map(r => r.id === requestId ? { ...r, ...(data as Partial<InspectionRequest>) } : r));
         }
     }, [setRequests]);
 
@@ -1032,10 +1032,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (error) throw error;
             }
             addNotification({ title: 'تم التصفير', message: 'تم مسح جميع العمليات والطلبات والبيانات المالية بنجاح.', type: 'success' });
-            fetchAllData();
+            fetchRequests();
         } catch (error: any) { addNotification({ title: 'فشل التصفير', message: error.message, type: 'error' }); }
         finally { setIsRefreshing(false); }
-    }, [addNotification, fetchAllData]);
+    }, [addNotification, fetchRequests]);
 
     const factoryResetFull = useCallback(async () => {
         setIsRefreshing(true);
@@ -1051,10 +1051,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (error) throw error;
             }
             addNotification({ title: 'تصفير شامل', message: 'تم مسح العمليات والعملاء والسيارات بنجاح.', type: 'success' });
-            fetchAllData();
+            fetchRequests();
         } catch (error: any) { addNotification({ title: 'فشل التصفير', message: error.message, type: 'error' }); }
         finally { setIsRefreshing(false); }
-    }, [addNotification, fetchAllData]);
+    }, [addNotification, fetchRequests]);
 
     const fetchServerFinancials = useCallback(async (startDate: string, endDate: string, includeCompletedOnly: boolean): Promise<FinancialStats> => {
         let query = supabase.from('inspection_requests').select('id, request_number, client_id, car_id, price, status, payment_type, split_payment_details, payment_note, broker, created_at').gte('created_at', startDate).lte('created_at', endDate);
@@ -1409,7 +1409,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchRequestTabContent, fetchFullRequestForSave, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
         lastRemoteDeleteId, setLastRemoteDeleteId,
         fetchPaperArchiveRequests,
-        fetchAllPaperArchiveRequests
+        fetchAllPaperArchiveRequests,
+        fetchRequests
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
