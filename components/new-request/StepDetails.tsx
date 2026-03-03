@@ -19,6 +19,7 @@ interface StepDetailsProps {
     typeInputRef: React.RefObject<HTMLSelectElement>;
     priceInputRef: React.RefObject<HTMLInputElement>;
     getInputClass: (name: string) => string;
+    onInspectionTypeFocus?: () => void;
 }
 
 const StepDetails: React.FC<StepDetailsProps> = (props) => {
@@ -37,6 +38,7 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                         ref={props.typeInputRef}
                         value={props.inspectionTypeId}
                         onChange={(e) => props.setInspectionTypeId(e.target.value)}
+                        onFocus={props.onInspectionTypeFocus}
                         required
                         className={props.getInputClass('inspectionType')}
                     >

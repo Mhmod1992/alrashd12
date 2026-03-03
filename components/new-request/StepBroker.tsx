@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Broker } from '../../types';
 
 interface StepBrokerProps {
@@ -17,6 +17,16 @@ const StepBroker: React.FC<StepBrokerProps> = ({
     brokerCommission, setBrokerCommission, brokers 
 }) => {
     const formInputClasses = "mt-1 block w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
+    const endRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (useBroker && endRef.current) {
+            // Small timeout to allow the DOM to update and the fields to appear
+            setTimeout(() => {
+                endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }, 100);
+        }
+    }, [useBroker]);
 
     return (
         <fieldset className="bg-white dark:bg-slate-800/50 p-4 sm:p-6 rounded-lg shadow-sm">
@@ -68,6 +78,7 @@ const StepBroker: React.FC<StepBrokerProps> = ({
                     </div>
                 </div>
             )}
+            <div ref={endRef} />
         </fieldset>
     );
 };

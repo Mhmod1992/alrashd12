@@ -16,7 +16,7 @@ import DollarSignIcon from './icons/DollarSignIcon';
 import WhatsappIcon from './icons/WhatsappIcon';
 import Modal from './Modal';
 import SearchIcon from './icons/SearchIcon';
-import CarIcon from './icons/CarIcon';
+import UserCheckIcon from './icons/UserCheckIcon';
 
 interface RequestTableProps {
   requests: InspectionRequest[];
@@ -39,6 +39,7 @@ interface RequestTableProps {
   onResendWhatsApp?: (request: InspectionRequest) => void;
   onDeleteSuccess?: (requestId: string) => void;
   onRefresh?: () => void;
+  isLoading?: boolean;
 }
 
 const StatusBadge: React.FC<{ status: RequestStatus }> = ({ status }) => {
@@ -83,7 +84,8 @@ const StatusBadge: React.FC<{ status: RequestStatus }> = ({ status }) => {
 const RequestTable: React.FC<RequestTableProps> = ({ 
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
   title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
-  onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh
+  onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh,
+  isLoading
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
@@ -311,7 +313,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
 
 
   return (
-    <div className={`bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden ${isWaitingTable ? 'border-purple-200 dark:border-purple-800 shadow-purple-100 dark:shadow-none' : ''}`}>
+    <div className={`bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden relative ${isWaitingTable ? 'border-purple-200 dark:border-purple-800 shadow-purple-100 dark:shadow-none' : ''}`}>
       <div className={`flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-700/50 ${isWaitingTable ? 'bg-purple-50/50 dark:bg-purple-900/20' : 'bg-slate-50/50 dark:bg-slate-800/50'}`}>
         <div className="flex items-center gap-3">
             <h3 className={`text-lg font-bold ${isWaitingTable ? 'text-purple-800 dark:text-purple-200' : 'text-slate-800 dark:text-slate-100'}`}>{title}</h3>
@@ -376,6 +378,15 @@ const RequestTable: React.FC<RequestTableProps> = ({
                         // Row styling based on payment
                         const rowClass = getRowClasses(request);
 
+                        // Check if client has multiple requests (history)
+                        // This is a simple check based on the current loaded requests. 
+                        // For a more robust check, we might need a separate prop or map, but this works for the current view context.
+                        // Ideally, 'clients' should have a 'request_count' or similar if we wanted to be 100% accurate without fetching all.
+                        // Here we filter the current 'requests' list or use a prop if available.
+                        // Let's count how many times this client_id appears in the full 'requests' list passed to the table.
+                        const clientRequestCount = requests.filter(r => r.client_id === request.client_id).length;
+                        const hasHistory = clientRequestCount > 1;
+
                         // Price column extras
                         let priceSuffix = null;
                         if (request.payment_type === PaymentType.Unpaid) {
@@ -397,7 +408,25 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                     </span>
                                 </td>
                                 <td className="px-6 py-4">
-                                    <div className="font-semibold text-slate-800 dark:text-slate-200">{clientInfo.name}</div>
+                                    <div 
+                                        className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors group/client"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(clientInfo.phone)}`;
+                                            window.open(url, '_blank');
+                                        }}
+                                        title="اضغط لعرض سجل طلبات العميل"
+                                    >
+                                        {clientInfo.name}
+                                        {hasHistory && (
+                                            <span 
+                                                className="inline-flex items-center justify-center p-1 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 opacity-80 group-hover/client:opacity-100 transition-opacity"
+                                                title="عميل سابق (لديه طلبات أخرى)"
+                                            >
+                                                <UserCheckIcon className="w-3.5 h-3.5" />
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{clientInfo.phone}</div>
                                     {creator && (
                                         <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
@@ -567,6 +596,15 @@ const RequestTable: React.FC<RequestTableProps> = ({
       )}
 
       {/* Car Search Modal - Removed */}
+      
+      {isLoading && (
+        <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="flex flex-col items-center gap-3 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700">
+                <RefreshCwIcon className="w-8 h-8 text-blue-600 animate-spin" />
+                <span className="text-sm font-medium text-slate-600 dark:text-slate-300">جاري البحث...</span>
+            </div>
+        </div>
+      )}
     </div>
   );
 };

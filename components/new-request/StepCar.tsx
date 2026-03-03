@@ -40,6 +40,7 @@ interface StepCarProps {
     canViewHistory: boolean;
     carMakeSearchTerm: string;
     handleMakeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    handleMakeFocus: () => void;
     setIsMakeDropdownOpen: (val: boolean) => void;
     handleKeyDown: (e: React.KeyboardEvent, type: 'make' | 'model') => void;
     isMakeDropdownOpen: boolean;
@@ -246,7 +247,7 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                             type="text"
                             value={props.carMakeSearchTerm}
                             onChange={props.handleMakeChange}
-                            onFocus={() => props.setIsMakeDropdownOpen(true)}
+                            onFocus={props.handleMakeFocus}
                             onKeyDown={(e) => props.handleKeyDown(e, 'make')}
                             placeholder="ابحث أو اختر"
                             required={!props.foundHistory}

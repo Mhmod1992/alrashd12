@@ -148,6 +148,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const chassisInputRef = useRef<HTMLInputElement>(null);
     const typeInputRef = useRef<HTMLSelectElement>(null);
     const priceInputRef = useRef<HTMLInputElement>(null);
+    const bottomRef = useRef<HTMLDivElement>(null);
 
     // Ref for Car Section (for auto scroll)
     const carSectionRef = useRef<HTMLDivElement>(null);
@@ -422,6 +423,19 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     useEffect(() => setModelSuggestionIndex(-1), [modelSuggestions]);
 
     // --- AUTO SCROLL EFFECTS ---
+    const scrollToBottom = () => {
+        // Only scroll if not mobile (as per user request "Large Screen") or if desired on both.
+        // User said "In the big screen", so let's check !isMobile or just do it generally as it's good UX.
+        // However, on mobile the keyboard might pop up, so scrolling to bottom might be jarring if not careful.
+        // Let's enable it for now, the browser handles scrollIntoView well.
+        if (bottomRef.current) {
+            // Use a small timeout to allow UI to settle if needed (e.g. keyboard opening)
+            setTimeout(() => {
+                bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }, 100);
+        }
+    };
+
     useEffect(() => {
         if (isMakeDropdownOpen && makeDropdownRef.current) {
             setTimeout(() => {
@@ -588,6 +602,13 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setClientName(name);
         setErrors(prev => ({ ...prev, clientName: false }));
 
+        // If phone is entered, do NOT search by name
+        if (clientPhone.trim().length > 0) {
+            setNameSuggestions([]);
+            setIsNameSuggestionsOpen(false);
+            return;
+        }
+
         if (name.trim().length < 3) {
             setNameSuggestions([]);
             setIsNameSuggestionsOpen(false);
@@ -676,6 +697,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const handleNameFocus = () => {
+        // If phone is entered, do NOT open name suggestions
+        if (clientPhone.trim().length > 0) return;
+
         if (clientName.trim().length >= 3 && nameSuggestions.length > 0) {
             setIsNameSuggestionsOpen(true);
         }
@@ -1323,6 +1347,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         typeInputRef={typeInputRef}
                         priceInputRef={priceInputRef}
                         getInputClass={getInputClass}
+                        onInspectionTypeFocus={scrollToBottom}
                     />
                 </div>
 
@@ -1370,6 +1395,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         )}
                     </div>
                 </div>
+                <div ref={bottomRef} />
             </form>
             
             {/* Render Floating Card */}

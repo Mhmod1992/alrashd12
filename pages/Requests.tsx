@@ -189,6 +189,8 @@ const Requests: React.FC = () => {
         }
     }, [lastRemoteDeleteId]);
 
+    const [isSearching, setIsSearching] = useState(false);
+
     // --- SEARCH EXECUTION ---
     const executeSearch = useCallback((term: string) => {
         const trimmedTerm = term.trim();
@@ -199,11 +201,14 @@ const Requests: React.FC = () => {
 
         if (trimmedTerm === '') {
             clearSearchedRequests();
+            setIsSearching(false);
             return;
         }
 
+        setIsSearching(true);
         searchDebounceRef.current = window.setTimeout(async () => {
             await searchRequestByNumber(trimmedTerm);
+            setIsSearching(false);
         }, 400);
     }, [searchRequestByNumber, clearSearchedRequests]);
 
@@ -1035,6 +1040,7 @@ const Requests: React.FC = () => {
                     carsWithHistory={combinedCarsWithHistory}
                     onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
                     onRefresh={fetchAllData}
+                    isLoading={isSearching}
                 />
             )}
 
