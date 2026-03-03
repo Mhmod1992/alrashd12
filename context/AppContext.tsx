@@ -649,25 +649,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsRefreshing(true);
         try {
             const isNumericQuery = /^\d+$/.test(query);
+            let requestsByNumber: InspectionRequest[] = [];
+
+            // 1. If numeric, search by Request Number first
             if (isNumericQuery) {
                 const { data, error } = await supabase
                     .from('inspection_requests')
                     .select('*')
                     .eq('request_number', Number(query))
                     .order('created_at', { ascending: false });
-                if (error) throw error;
-                if (data && data.length > 0) {
-                    await ensureEntitiesLoaded(data);
-                    setSearchedRequests(data);
-                } else {
-                    setSearchedRequests([]);
+                
+                if (!error && data) {
+                    requestsByNumber = data;
                 }
-                return;
             }
 
+            // 2. Search Clients by Phone (if numeric) or Name
+            let clientIds: string[] = [];
+            if (isNumericQuery) {
+                 // Search by Phone specifically
+                 const { data: foundClients } = await supabase
+                    .from('clients')
+                    .select('id')
+                    .ilike('phone', `%${query}%`)
+                    .limit(50);
+                 clientIds = foundClients?.map(c => c.id) || [];
+            } else {
+                 // Search by Name or Phone (mixed)
+                 const { data: foundClients } = await supabase
+                    .from('clients')
+                    .select('id')
+                    .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
+                    .limit(50);
+                 clientIds = foundClients?.map(c => c.id) || [];
+            }
+
+            // 3. Search Cars (Plate, VIN)
             const cleanQuery = query.replace(/\s/g, '');
-            
-            // Extract letters and numbers for smart plate search
             const letters = query.replace(/[0-9\s]/g, '');
             const numbers = query.replace(/[^0-9]/g, '');
             
@@ -676,30 +694,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             variations.add(cleanQuery);
             
             if (letters && numbers) {
-                // Connected letters + space + numbers (e.g. "حلك 2876")
                 variations.add(`${letters} ${numbers}`);
-                
-                // Spaced letters + space + numbers (e.g. "ح ل ك 2876")
                 const spacedLetters = letters.split('').join(' ');
                 variations.add(`${spacedLetters} ${numbers}`);
-                
-                // Spaced letters + no space + numbers (e.g. "ح ل ك2876")
                 variations.add(`${spacedLetters}${numbers}`);
             }
             
             const uniqueVariations = Array.from(variations);
-            
             const orConditions = uniqueVariations.flatMap(v => [
                 `plate_number.ilike.%${v}%`,
                 `plate_number_en.ilike.%${v}%`
             ]);
-            
-            // Add VIN search
             orConditions.push(`vin.ilike.%${cleanQuery}%`);
-            
             const orString = orConditions.join(',');
 
-            // 1. Search Cars
             const { data: carsByPlate } = await supabase
                 .from('cars')
                 .select('id')
@@ -708,67 +716,72 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             let carIds = carsByPlate?.map(c => c.id) || [];
 
-            // 2. Search Makes/Models
-            const { data: makes } = await supabase
-                .from('car_makes')
-                .select('id')
-                .or(`name_ar.ilike.%${query}%,name_en.ilike.%${query}%`);
-            const makeIds = makes?.map(m => m.id) || [];
-
-            const { data: models } = await supabase
-                .from('car_models')
-                .select('id')
-                .or(`name_ar.ilike.%${query}%,name_en.ilike.%${query}%`);
-            const modelIds = models?.map(m => m.id) || [];
-
-            if (makeIds.length > 0 || modelIds.length > 0) {
-                let carOrConditions: string[] = [];
-                if (makeIds.length > 0) carOrConditions.push(`make_id.in.(${makeIds.join(',')})`);
-                if (modelIds.length > 0) carOrConditions.push(`model_id.in.(${modelIds.join(',')})`);
-
-                const { data: carsByMakeModel } = await supabase
-                    .from('cars')
+            // 4. Search Makes/Models
+            if (!isNumericQuery) {
+                const { data: makes } = await supabase
+                    .from('car_makes')
                     .select('id')
-                    .or(carOrConditions.join(','))
-                    .limit(100);
+                    .or(`name_ar.ilike.%${query}%,name_en.ilike.%${query}%`);
+                const makeIds = makes?.map(m => m.id) || [];
 
-                const newCarIds = carsByMakeModel?.map(c => c.id) || [];
-                carIds = [...new Set([...carIds, ...newCarIds])];
+                const { data: models } = await supabase
+                    .from('car_models')
+                    .select('id')
+                    .or(`name_ar.ilike.%${query}%,name_en.ilike.%${query}%`);
+                const modelIds = models?.map(m => m.id) || [];
+
+                if (makeIds.length > 0 || modelIds.length > 0) {
+                    let carOrConditions: string[] = [];
+                    if (makeIds.length > 0) carOrConditions.push(`make_id.in.(${makeIds.join(',')})`);
+                    if (modelIds.length > 0) carOrConditions.push(`model_id.in.(${modelIds.join(',')})`);
+
+                    const { data: carsByMakeModel } = await supabase
+                        .from('cars')
+                        .select('id')
+                        .or(carOrConditions.join(','))
+                        .limit(100);
+
+                    const newCarIds = carsByMakeModel?.map(c => c.id) || [];
+                    carIds = [...new Set([...carIds, ...newCarIds])];
+                }
             }
 
-            // 3. Search Clients
-            const { data: foundClients } = await supabase
-                .from('clients')
-                .select('id')
-                .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
-                .limit(50);
-            const clientIds = foundClients?.map(c => c.id) || [];
-
-            // 4. Combine into Requests Search
-            if (carIds.length === 0 && clientIds.length === 0) {
-                setSearchedRequests([]);
-                return;
-            }
-
+            // 5. Combine Results
+            let finalRequests: InspectionRequest[] = [...requestsByNumber];
             let requestOrConditions: string[] = [];
+
             if (carIds.length > 0) requestOrConditions.push(`car_id.in.(${carIds.join(',')})`);
             if (clientIds.length > 0) requestOrConditions.push(`client_id.in.(${clientIds.join(',')})`);
 
-            const { data: finalRequests, error: reqError } = await supabase
-                .from('inspection_requests')
-                .select('*')
-                .or(requestOrConditions.join(','))
-                .order('created_at', { ascending: false })
-                .limit(50);
+            if (requestOrConditions.length > 0) {
+                const { data: relatedRequests, error: reqError } = await supabase
+                    .from('inspection_requests')
+                    .select('*')
+                    .or(requestOrConditions.join(','))
+                    .order('created_at', { ascending: false })
+                    .limit(50);
 
-            if (reqError) throw reqError;
+                if (!reqError && relatedRequests) {
+                    // Merge and remove duplicates
+                    const existingIds = new Set(finalRequests.map(r => r.id));
+                    relatedRequests.forEach(req => {
+                        if (!existingIds.has(req.id)) {
+                            finalRequests.push(req);
+                            existingIds.add(req.id);
+                        }
+                    });
+                }
+            }
 
-            if (finalRequests && finalRequests.length > 0) {
+            if (finalRequests.length > 0) {
+                // Sort combined results by date
+                finalRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                 await ensureEntitiesLoaded(finalRequests);
                 setSearchedRequests(finalRequests);
             } else {
                 setSearchedRequests([]);
             }
+
         } catch (e) {
             console.error("Search error:", e);
             setSearchedRequests([]);

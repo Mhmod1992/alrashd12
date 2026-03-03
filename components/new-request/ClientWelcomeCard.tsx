@@ -12,6 +12,7 @@ interface ClientWelcomeCardProps {
     lastVisit: string;
     isVip?: boolean;
     onClose: () => void;
+    onViewHistory?: () => void;
 }
 
 const ClientWelcomeCard: React.FC<ClientWelcomeCardProps> = ({
@@ -20,7 +21,8 @@ const ClientWelcomeCard: React.FC<ClientWelcomeCardProps> = ({
     visitCount,
     lastVisit,
     isVip,
-    onClose
+    onClose,
+    onViewHistory
 }) => {
     const [show, setShow] = useState(false);
 
@@ -86,6 +88,16 @@ const ClientWelcomeCard: React.FC<ClientWelcomeCardProps> = ({
                             </div>
                         )}
                     </div>
+                    
+                    {onViewHistory && (
+                        <button 
+                            onClick={onViewHistory}
+                            className="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                        >
+                            <HistoryIcon className="w-3 h-3" />
+                            عرض سجل الطلبات
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

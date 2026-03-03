@@ -1381,6 +1381,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     lastVisit={existingClientSummary.lastVisit}
                     isVip={existingClientSummary.isVip}
                     onClose={() => setIsWelcomeCardVisible(false)}
+                    onViewHistory={() => {
+                        const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(clientPhone)}`;
+                        window.open(url, '_blank');
+                    }}
                 />
             )}
 
