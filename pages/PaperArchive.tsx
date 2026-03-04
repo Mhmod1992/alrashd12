@@ -354,7 +354,15 @@ const PaperArchive: React.FC = () => {
     
     const handleUploadClick = (type: 'manual_paper' | 'internal_draft') => {
         setCurrentUploadType(type);
-        setIsSourceChoiceModalOpen(true);
+        
+        // Check if mobile device
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+        
+        if (isMobile) {
+            setIsCameraOpen(true);
+        } else {
+            setIsSourceChoiceModalOpen(true);
+        }
     };
     
     const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -830,8 +838,16 @@ const PaperArchive: React.FC = () => {
                             {activeArchiveTab === 'public' && (
                                 <div className="flex gap-2">
                                     <button onClick={() => handleUploadClick('manual_paper')} disabled={isUploading} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
-                                        <UploadIcon className="w-5 h-5" />
+                                        <CameraIcon className="w-5 h-5" />
                                         <span className="font-bold text-sm">إضافة مرفق جديد (ملون)</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => { setCurrentUploadType('manual_paper'); fileInputRef.current?.click(); }} 
+                                        disabled={isUploading}
+                                        className="p-3 rounded-lg border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition-all"
+                                        title="رفع من الجهاز"
+                                    >
+                                        <UploadIcon className="w-5 h-5" />
                                     </button>
                                     <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={handleFileSelected} className="hidden" />
                                 </div>
@@ -840,8 +856,16 @@ const PaperArchive: React.FC = () => {
                             {activeArchiveTab === 'internal' && (
                                 <div className="flex gap-2">
                                     <button onClick={() => handleUploadClick('internal_draft')} disabled={isUploading} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800">
-                                        <Icon name="edit" className="w-5 h-5" />
+                                        <CameraIcon className="w-5 h-5" />
                                         <span className="font-bold text-sm">إضافة مسودة (داخلي)</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => { setCurrentUploadType('internal_draft'); fileInputRef.current?.click(); }} 
+                                        disabled={isUploading}
+                                        className="p-3 rounded-lg border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition-all"
+                                        title="رفع من الجهاز"
+                                    >
+                                        <UploadIcon className="w-5 h-5" />
                                     </button>
                                     <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={handleFileSelected} className="hidden" />
                                 </div>
