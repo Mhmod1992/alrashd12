@@ -333,11 +333,21 @@ const PaperArchive: React.FC = () => {
         return data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }, [filteredRequests, searchQuery, clients, cars, carMakes, carModels]);
 
-    const openUploadModal = async (request: InspectionRequest) => {
+    const openUploadModal = async (request: InspectionRequest, autoCamera: boolean = false) => {
         setSelectedRequest(request);
         setIsUploadModalOpen(true);
         setIsLoadingDetails(true);
-        setActiveArchiveTab('all');
+        
+        // Check if mobile device
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+        
+        if (isMobile && autoCamera) {
+            setActiveArchiveTab('internal');
+            setCurrentUploadType('internal_draft');
+            setIsCameraOpen(true);
+        } else {
+            setActiveArchiveTab('all');
+        }
         
         try {
             const freshRequest = await fetchRequestByRequestNumber(request.request_number);
@@ -766,7 +776,7 @@ const PaperArchive: React.FC = () => {
                                                 <Button 
                                                     size="sm" 
                                                     variant={isArchived ? "secondary" : "primary"}
-                                                    onClick={() => openUploadModal(req)}
+                                                    onClick={() => openUploadModal(req, !isArchived)}
                                                     leftIcon={<Icon name="folder-open" className="w-4 h-4" />}
                                                     className="shadow-sm"
                                                 >
