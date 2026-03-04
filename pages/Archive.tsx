@@ -23,6 +23,9 @@ const Archive: React.FC = () => {
     
     // State
     const [startDate, setStartDate] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('carId')) return '2010-01-01'; // Old date for history
+
         const d = new Date();
         d.setFullYear(d.getFullYear() - 1); // Start from one year ago
         return d.toISOString().split('T')[0];
@@ -39,7 +42,7 @@ const Archive: React.FC = () => {
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [plateDisplayLanguage, setPlateDisplayLanguage] = useState<'ar' | 'en'>('ar');
 
-    const handleSearch = async () => {
+    const handleSearch = async (targetCarId?: string) => {
         if (!startDate || !endDate) {
             addNotification({ title: 'تنبيه', message: 'الرجاء تحديد نطاق التاريخ.', type: 'warning' });
             return;
@@ -56,7 +59,8 @@ const Archive: React.FC = () => {
             const data = await fetchArchiveData(
                 new Date(startDate).toISOString(),
                 end.toISOString(),
-                searchQuery.trim() || undefined
+                searchQuery.trim() || undefined,
+                targetCarId || undefined
             );
             
             setResults(data);
@@ -90,7 +94,19 @@ const Archive: React.FC = () => {
     
     // Automatically perform a search when the component mounts if an accordion was previously open.
     useEffect(() => {
-        handleSearch();
+        const init = async () => {
+            const params = new URLSearchParams(window.location.search);
+            const carIdParam = params.get('carId');
+            
+            await handleSearch(carIdParam || undefined);
+            
+            if (carIdParam) {
+                handleToggleDetails(carIdParam);
+            } else if (expandedArchiveCarId) {
+                handleToggleDetails(expandedArchiveCarId);
+            }
+        };
+        init();
     }, []);
 
     const formInputClasses = "block w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200 text-sm";

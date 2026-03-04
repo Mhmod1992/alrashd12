@@ -33,6 +33,15 @@ const WaitingForPaymentRequests: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [plateDisplayLanguage, setPlateDisplayLanguage] = useState<'ar' | 'en'>('ar');
 
+    // Handle search from URL
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const searchParam = params.get('search');
+        if (searchParam) {
+            setSearchTerm(searchParam);
+        }
+    }, []);
+
     // Payment Modal State
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [paymentRequest, setPaymentRequest] = useState<InspectionRequest | null>(null);

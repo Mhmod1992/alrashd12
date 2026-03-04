@@ -36,12 +36,20 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
         const html5QrcodeScanner = new Html5QrcodeScanner(
             "reader",
             {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
+                fps: 20, // Increased from 10 to 20 for faster detection
+                qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                    // Dynamic qrbox size: 70% of the smaller dimension
+                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                    const size = Math.floor(minEdge * 0.7);
+                    return { width: size, height: size };
+                },
+                aspectRatio: 1.0,
                 supportedScanTypes: [0], // SCAN_TYPE_CAMERA
+                disableFlip: true, // Performance boost
                 // Use videoConstraints for a stronger request for the back camera
                 videoConstraints: {
-                    facingMode: { exact: "environment" }
+                    facingMode: "environment", // Changed from { exact: "environment" } for better compatibility
+                    focusMode: "continuous", // Try to force continuous focus
                 }
             },
             /* verbose= */ false);

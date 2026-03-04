@@ -192,7 +192,7 @@ const Requests: React.FC = () => {
     const [isSearching, setIsSearching] = useState(false);
 
     // --- SEARCH EXECUTION ---
-    const executeSearch = useCallback((term: string) => {
+    const executeSearch = useCallback((term: string, exact: boolean = false) => {
         const trimmedTerm = term.trim();
 
         if (searchDebounceRef.current) {
@@ -207,7 +207,7 @@ const Requests: React.FC = () => {
 
         setIsSearching(true);
         searchDebounceRef.current = window.setTimeout(async () => {
-            await searchRequestByNumber(trimmedTerm);
+            await searchRequestByNumber(trimmedTerm, exact);
             setIsSearching(false);
         }, 400);
     }, [searchRequestByNumber, clearSearchedRequests]);
@@ -216,14 +216,14 @@ const Requests: React.FC = () => {
         const term = e.target.value.replace(/\D/g, '');
         setRequestNumberQuery(term);
         if (comprehensiveQuery) setComprehensiveQuery('');
-        executeSearch(term);
+        executeSearch(term, true);
     };
 
     const handleComprehensiveQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;
         setComprehensiveQuery(term);
         if (requestNumberQuery) setRequestNumberQuery('');
-        executeSearch(term);
+        executeSearch(term, false);
     };
 
     const searchInitialized = useRef(false);
@@ -839,32 +839,38 @@ const Requests: React.FC = () => {
             </Modal>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4 mb-6 space-y-4 animate-slide-in-down">
-                {showStats ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
-                        <StatBlock title="إجمالي المعروض" count={totalCount} icon={<FileTextIcon />} color="#3b82f6" />
-                        <StatBlock title="جديد" count={newCount} icon={<SparklesIcon className="animate-pulse" />} color="#8b5cf6" />
-                        <StatBlock title="قيد التنفيذ" count={inProgressCount} icon={<RefreshCwIcon className="animate-spin" />} color="#f59e0b" />
-                        <StatBlock title="مكتمل" count={completeCount} icon={<CheckCircleIcon />} color="#10b981" />
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Skeleton className="h-24 rounded-lg" />
-                        <Skeleton className="h-24 rounded-lg" />
-                        <Skeleton className="h-24 rounded-lg" />
-                        <Skeleton className="h-24 rounded-lg" />
-                    </div>
+                {searchedRequests === null && (
+                    <>
+                        {showStats ? (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
+                                <StatBlock title="إجمالي المعروض" count={totalCount} icon={<FileTextIcon />} color="#3b82f6" />
+                                <StatBlock title="جديد" count={newCount} icon={<SparklesIcon className="animate-pulse" />} color="#8b5cf6" />
+                                <StatBlock title="قيد التنفيذ" count={inProgressCount} icon={<RefreshCwIcon className="animate-spin" />} color="#f59e0b" />
+                                <StatBlock title="مكتمل" count={completeCount} icon={<CheckCircleIcon />} color="#10b981" />
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <Skeleton className="h-24 rounded-lg" />
+                                <Skeleton className="h-24 rounded-lg" />
+                                <Skeleton className="h-24 rounded-lg" />
+                                <Skeleton className="h-24 rounded-lg" />
+                            </div>
+                        )}
+                    </>
                 )}
 
-                <div className="border-t border-slate-200 dark:border-slate-700 pt-4 space-y-4">
-                    <div className="flex items-center bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner w-full">
-                        <DateFilterButton filter="today" label="اليوم" />
-                        <DateFilterButton filter="yesterday" label="أمس" />
-                        <DateFilterButton filter="month" label="هذا الشهر" />
-                        <DateFilterButton filter="range" label="نطاق محدد" />
-                        <DateFilterButton filter="all" label="الكل" />
-                    </div>
+                <div className={`${searchedRequests === null ? 'border-t border-slate-200 dark:border-slate-700 pt-4' : ''} space-y-4`}>
+                    {searchedRequests === null && (
+                        <div className="flex items-center bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner w-full">
+                            <DateFilterButton filter="today" label="اليوم" />
+                            <DateFilterButton filter="yesterday" label="أمس" />
+                            <DateFilterButton filter="month" label="هذا الشهر" />
+                            <DateFilterButton filter="range" label="نطاق محدد" />
+                            <DateFilterButton filter="all" label="الكل" />
+                        </div>
+                    )}
 
-                    {dateFilter === 'range' && (
+                    {searchedRequests === null && dateFilter === 'range' && (
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end pt-2 animate-fade-in">
                             <div>
                                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">من تاريخ</label>
@@ -883,7 +889,7 @@ const Requests: React.FC = () => {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                        <div className="relative md:col-span-2 flex items-center gap-2">
+                        <div className={`relative ${searchedRequests === null ? 'md:col-span-2' : 'md:col-span-4'} flex items-center gap-2`}>
                             <div className="relative flex-grow">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                                     <SearchIcon className="h-5 w-5 text-slate-400" />
@@ -912,40 +918,45 @@ const Requests: React.FC = () => {
                                 <Icon name="scan-plate" className="w-5 h-5" />
                             </Button>
                         </div>
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                <FilterIcon className="h-5 w-5 text-slate-400" />
-                            </span>
-                            <select
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value as RequestStatus | 'الكل' | 'active')}
-                                className={`${searchInputClasses} appearance-none`}
-                            >
-                                <option value="الكل">فلترة حسب الحالة (الكل)</option>
-                                <option value="active">نشط (جديد + قيد التنفيذ)</option>
-                                <option value={RequestStatus.NEW}>جديد</option>
-                                <option value={RequestStatus.IN_PROGRESS}>قيد التنفيذ</option>
-                                <option value={RequestStatus.COMPLETE}>مكتمل</option>
-                            </select>
-                        </div>
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                <Icon name="employee" className="h-5 w-5 text-slate-400" />
-                            </span>
-                            <select
-                                value={employeeFilter}
-                                onChange={(e) => setEmployeeFilter(e.target.value)}
-                                className={`${searchInputClasses} appearance-none`}
-                            >
-                                <option value="الكل">فلترة حسب الموظف (الكل)</option>
-                                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                            </select>
-                        </div>
-                        {isAnyFilterActive && (
-                            <Button variant="secondary" size="sm" onClick={clearFilters} className="p-2 h-full" title="مسح الفلاتر">
-                                <XIcon className="w-4 h-4" />
-                                <span className="hidden sm:inline">مسح الفلاتر</span>
-                            </Button>
+                        
+                        {searchedRequests === null && (
+                            <>
+                                <div className="relative">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <FilterIcon className="h-5 w-5 text-slate-400" />
+                                    </span>
+                                    <select
+                                        value={statusFilter}
+                                        onChange={(e) => setStatusFilter(e.target.value as RequestStatus | 'الكل' | 'active')}
+                                        className={`${searchInputClasses} appearance-none`}
+                                    >
+                                        <option value="الكل">فلترة حسب الحالة (الكل)</option>
+                                        <option value="active">نشط (جديد + قيد التنفيذ)</option>
+                                        <option value={RequestStatus.NEW}>جديد</option>
+                                        <option value={RequestStatus.IN_PROGRESS}>قيد التنفيذ</option>
+                                        <option value={RequestStatus.COMPLETE}>مكتمل</option>
+                                    </select>
+                                </div>
+                                <div className="relative">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <Icon name="employee" className="h-5 w-5 text-slate-400" />
+                                    </span>
+                                    <select
+                                        value={employeeFilter}
+                                        onChange={(e) => setEmployeeFilter(e.target.value)}
+                                        className={`${searchInputClasses} appearance-none`}
+                                    >
+                                        <option value="الكل">فلترة حسب الموظف (الكل)</option>
+                                        {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                                    </select>
+                                </div>
+                                {isAnyFilterActive && (
+                                    <Button variant="secondary" size="sm" onClick={clearFilters} className="p-2 h-full" title="مسح الفلاتر">
+                                        <XIcon className="w-4 h-4" />
+                                        <span className="hidden sm:inline">مسح الفلاتر</span>
+                                    </Button>
+                                )}
+                            </>
                         )}
                     </div>
 
@@ -961,13 +972,21 @@ const Requests: React.FC = () => {
                                     <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 font-medium">يتم عرض الطلبات التي تطابق معايير البحث فقط. اضغط على (X) للعودة.</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={clearSearchedRequests}
-                                className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-800 border-2 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-full hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/40 dark:hover:text-red-400 dark:hover:border-red-800 transition-all shadow-md group"
-                                title="مسح نتائج البحث"
-                            >
-                                <XIcon className="w-5 h-5 group-hover:rotate-90 transition-transform" />
-                            </button>
+                            <div className="flex items-center gap-4">
+                                <div className="flex flex-col items-center justify-center px-4 border-r-2 border-blue-200 dark:border-blue-800">
+                                    <span className="text-[10px] font-bold text-blue-500/80 dark:text-blue-400/80 uppercase tracking-tighter">إجمالي النتائج</span>
+                                    <span className="text-2xl font-black text-blue-700 dark:text-blue-300 leading-tight">
+                                        {searchedRequests.length}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={clearSearchedRequests}
+                                    className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 border-2 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-full hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/40 dark:hover:text-red-400 dark:hover:border-red-800 transition-all shadow-md group"
+                                    title="مسح نتائج البحث"
+                                >
+                                    <XIcon className="w-6 h-6 group-hover:rotate-90 transition-transform" />
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1170,28 +1189,54 @@ const Requests: React.FC = () => {
                         <RefreshCwIcon className="w-8 h-8 animate-spin text-blue-500" />
                     </div>
                 ) : (
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-                        {carHistoryRequests.map(req => (
-                            <div key={req.id} className="bg-slate-100 dark:bg-slate-700/50 p-3 rounded-lg flex justify-between items-center">
-                                <div>
-                                    <p className="font-bold text-slate-800 dark:text-slate-200">#{req.request_number}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                        {new Date(req.created_at).toLocaleDateString('en-GB')} - {req.status}
-                                    </p>
+                    <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4 pb-3 border-b dark:border-slate-700">
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                                تم العثور على {carHistoryRequests.length} سجلات سابقة لهذه السيارة
+                            </p>
+                            <Button 
+                                size="sm" 
+                                variant="primary" 
+                                onClick={() => {
+                                    const car = cars.find(c => c.id === historyModalCar?.carId);
+                                    const searchTerm = car?.plate_number || car?.plate_number_en || historyModalCar?.carName || '';
+                                    const url = new URL(window.location.href);
+                                    url.searchParams.set('page', 'requests');
+                                    url.searchParams.set('search', searchTerm);
+                                    window.open(url.toString(), '_blank');
+                                }}
+                                className="w-full sm:w-auto"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <SearchIcon className="w-4 h-4" />
+                                    <span>البحث في جميع السجلات</span>
                                 </div>
-                                <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={() => {
-                                        setSelectedRequestId(req.id);
-                                        setPage('print-report');
-                                        setHistoryModalCar(null);
-                                    }}
-                                >
-                                    عرض التقرير
-                                </Button>
-                            </div>
-                        ))}
+                            </Button>
+                        </div>
+                        
+                        <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                            {carHistoryRequests.map(req => (
+                                <div key={req.id} className="bg-slate-100 dark:bg-slate-700/50 p-3 rounded-lg flex justify-between items-center">
+                                    <div>
+                                        <p className="font-bold text-slate-800 dark:text-slate-200">#{req.request_number}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                            {new Date(req.created_at).toLocaleDateString('en-GB')} - {req.status}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => {
+                                            setSelectedRequestId(req.id);
+                                            setPage('print-report');
+                                            setHistoryModalCar(null);
+                                        }}
+                                    >
+                                        عرض التقرير
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </Modal>

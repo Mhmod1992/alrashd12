@@ -41,7 +41,14 @@ export const useNavigationScope = () => {
     const showConfirmModal = useCallback((modalState: Omit<ConfirmModalState, 'isOpen'>) => setConfirmModalState({ ...modalState, isOpen: true }), []);
     const hideConfirmModal = useCallback(() => setConfirmModalState(prev => ({ ...prev, isOpen: false })), []);
 
-    const [expandedArchiveCarId, setExpandedArchiveCarId] = useLocalStorage<string | null>('expandedArchiveCarId', null);
+    const [expandedArchiveCarId, setExpandedArchiveCarId] = useLocalStorage<string | null>('expandedArchiveCarId', () => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('carId');
+        } catch {
+            return null;
+        }
+    });
 
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 

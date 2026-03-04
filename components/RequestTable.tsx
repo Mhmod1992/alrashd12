@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { InspectionRequest, RequestStatus, Client, Car, CarMake, CarModel, InspectionType, Employee, PaymentType } from '../types';
 import { useAppContext } from '../context/AppContext';
 import EditIcon from './icons/EditIcon';
@@ -94,6 +94,46 @@ const RequestTable: React.FC<RequestTableProps> = ({
   } = useAppContext();
   const design = settings.design || 'aero';
   const isWaitingTable = title === 'طلبات بانتظار الدفع';
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const tableContainer = tableContainerRef.current;
+    if (!tableContainer) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const { deltaY } = e;
+      const isScrollingDown = deltaY > 0;
+      const isScrollingUp = deltaY < 0;
+
+      // Find the main scrollable container
+      const mainContent = document.querySelector('main');
+      if (!mainContent) return;
+
+      // Check if main content is at bottom
+      const isMainAtBottom = Math.abs(mainContent.scrollHeight - mainContent.scrollTop - mainContent.clientHeight) < 2;
+      const isMainAtTop = mainContent.scrollTop === 0;
+      
+      // Check if table container is at top/bottom
+      const isTableAtTop = tableContainer.scrollTop === 0;
+
+      if (isScrollingDown) {
+        if (!isMainAtBottom) {
+          // Scroll main content instead of table
+          mainContent.scrollTop += deltaY;
+          e.preventDefault();
+        }
+      } else if (isScrollingUp) {
+        if (isTableAtTop && !isMainAtTop) {
+          // Scroll main content instead of table
+          mainContent.scrollTop += deltaY;
+          e.preventDefault();
+        }
+      }
+    };
+
+    tableContainer.addEventListener('wheel', handleWheel, { passive: false });
+    return () => tableContainer.removeEventListener('wheel', handleWheel);
+  }, []);
 
   // State for Car Search Modal - Removed
 
@@ -339,7 +379,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
       </div>
       
       {requests.length > 0 ? (
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar relative">
+        <div ref={tableContainerRef} className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar relative">
             <table className="w-full text-sm text-right rtl:text-right text-slate-500 dark:text-slate-400">
                 <thead className="text-xs text-slate-700 uppercase bg-slate-50/90 dark:bg-slate-800/90 dark:text-slate-400 sticky top-0 backdrop-blur-md z-20 shadow-sm">
                     <tr>

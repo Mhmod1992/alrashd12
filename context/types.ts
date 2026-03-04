@@ -27,7 +27,7 @@ export interface AppContextType {
     loadMoreRequests: () => Promise<void>;
     hasMoreRequests: boolean;
     isLoadingMore: boolean;
-    searchRequestByNumber: (query: string | number) => Promise<void>;
+    searchRequestByNumber: (query: string | number, exactOnly?: boolean) => Promise<void>;
     clearSearchedRequests: () => void;
     searchedRequests: InspectionRequest[] | null;
     clients: Client[];
@@ -181,7 +181,7 @@ export interface AppContextType {
     fetchServerFinancials: (startDate: string, endDate: string, includeCompletedOnly: boolean) => Promise<FinancialStats>;
     fetchServerExpenses: (startDate: string, endDate: string) => Promise<Expense[]>;
     fetchServerRevenues: (startDate: string, endDate: string) => Promise<Revenue[]>;
-    fetchArchiveData: (startDate: string, endDate: string, query?: string) => Promise<ArchiveResult[]>;
+    fetchArchiveData: (startDate: string, endDate: string, query?: string, carId?: string) => Promise<ArchiveResult[]>;
     // --- Payroll ---
     fetchPayrollDraft: (month: number, year: number) => Promise<PayrollDraft | null>;
     savePayrollDraft: (draft: PayrollDraft) => Promise<void>;

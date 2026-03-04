@@ -125,11 +125,40 @@ const PaperArchive: React.FC = () => {
 
     // Debounce search query
     useEffect(() => {
+        // Instant local search for speed
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase().trim();
+            const isNumeric = /^\d+$/.test(query);
+            
+            setFilteredRequests(prev => {
+                return prev.filter(r => {
+                    const client = clients.find(c => c.id === r.client_id);
+                    const car = cars.find(c => c.id === r.car_id);
+                    const make = carMakes.find(m => m.id === car?.make_id);
+                    const model = carModels.find(m => m.id === car?.model_id);
+
+                    if (isNumeric) {
+                        return r.request_number.toString().includes(query) || client?.phone.includes(query);
+                    }
+
+                    return (
+                        client?.name.toLowerCase().includes(query) ||
+                        car?.plate_number?.toLowerCase().includes(query) ||
+                        car?.vin?.toLowerCase().includes(query) ||
+                        make?.name_ar.toLowerCase().includes(query) ||
+                        make?.name_en?.toLowerCase().includes(query) ||
+                        model?.name_ar.toLowerCase().includes(query) ||
+                        model?.name_en?.toLowerCase().includes(query)
+                    );
+                });
+            });
+        }
+
         const timer = setTimeout(() => {
             setDebouncedSearchQuery(searchQuery);
         }, 500);
         return () => clearTimeout(timer);
-    }, [searchQuery]);
+    }, [searchQuery, clients, cars, carMakes, carModels]);
 
     // Fetch Logic
     const loadData = async () => {

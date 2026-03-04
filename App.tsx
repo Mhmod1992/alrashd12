@@ -55,6 +55,21 @@ const AppContent: React.FC = () => {
   // Redirect Logic based on Permissions (More flexible than Role check)
   React.useEffect(() => {
     if (authUser && authUser.is_active) {
+      // Handle search parameter from URL
+      const params = new URLSearchParams(window.location.search);
+      const hasSearch = params.has('search');
+      const hasPage = params.has('page');
+      
+      if (hasSearch && !hasPage && page === 'dashboard') {
+        if (can('view_requests_list') && authUser.role !== 'receptionist') {
+          setPage('requests');
+          return;
+        } else if (authUser.role === 'receptionist') {
+          setPage('waiting-requests');
+          return;
+        }
+      }
+
       // If user is on dashboard but doesn't have permission, redirect them
       if (page === 'dashboard' && !can('view_dashboard')) {
         if (authUser.role === 'receptionist') {

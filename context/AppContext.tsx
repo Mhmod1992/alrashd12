@@ -484,7 +484,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (!authUser) return;
         const checkInactivity = () => {
             const lastActive = localStorage.getItem('lastActiveTime');
-            if (lastActive) {
+            const params = new URLSearchParams(window.location.search);
+            const hasInitialPage = params.has('page') || params.has('search');
+
+            if (lastActive && !hasInitialPage) {
                 const diff = Date.now() - parseInt(lastActive, 10);
                 if (diff > INACTIVITY_LIMIT_MS) {
                     setHistory(['dashboard']);
@@ -640,15 +643,51 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const clearSearchedRequests = useCallback(() => setSearchedRequests(null), [setSearchedRequests]);
 
-    const searchRequestByNumber = useCallback(async (queryRaw: string | number) => {
+    const searchRequestByNumber = useCallback(async (queryRaw: string | number, exactOnly: boolean = false) => {
         const query = String(queryRaw).trim();
         if (!query) {
             clearSearchedRequests();
             return;
         }
+
         setIsRefreshing(true);
+
+        // --- STEP 0: LOCAL SEARCH (FOR SPEED) ---
+        const isNumericQuery = /^\d+$/.test(query);
+        let localResults: InspectionRequest[] = [];
+
+        if (isNumericQuery) {
+            const queryNum = Number(query);
+            localResults = requests.filter(r => 
+                r.request_number === queryNum || 
+                clients.find(c => c.id === r.client_id)?.phone.includes(query)
+            );
+        } else {
+            const lowerQuery = query.toLowerCase();
+            localResults = requests.filter(r => {
+                const client = clients.find(c => c.id === r.client_id);
+                const car = cars.find(c => c.id === r.car_id);
+                const make = carMakes.find(m => m.id === car?.make_id);
+                const model = carModels.find(m => m.id === car?.model_id);
+
+                return (
+                    client?.name.toLowerCase().includes(lowerQuery) ||
+                    car?.plate_number?.toLowerCase().includes(lowerQuery) ||
+                    car?.vin?.toLowerCase().includes(lowerQuery) ||
+                    make?.name_ar.toLowerCase().includes(lowerQuery) ||
+                    make?.name_en?.toLowerCase().includes(lowerQuery) ||
+                    model?.name_ar.toLowerCase().includes(lowerQuery) ||
+                    model?.name_en?.toLowerCase().includes(lowerQuery)
+                );
+            });
+        }
+
+        // Show local results immediately if found
+        if (localResults.length > 0) {
+            setSearchedRequests(localResults);
+        }
+
         try {
-            const isNumericQuery = /^\d+$/.test(query);
             let requestsByNumber: InspectionRequest[] = [];
 
             // 1. If numeric, search by Request Number first
@@ -662,6 +701,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (!error && data) {
                     requestsByNumber = data;
                 }
+            }
+
+            // If exactOnly is true, we stop here and only return results by request number
+            if (exactOnly) {
+                // Merge with local results to ensure we don't lose anything (though DB is source of truth)
+                const merged = [...requestsByNumber];
+                localResults.forEach(lr => {
+                    if (lr.request_number === Number(query) && !merged.some(m => m.id === lr.id)) {
+                        merged.push(lr);
+                    }
+                });
+
+                setSearchedRequests(merged);
+                await ensureEntitiesLoaded(merged);
+                setIsRefreshing(false);
+                return;
             }
 
             // 2. Search Clients by Phone (if numeric) or Name
@@ -773,6 +828,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
             }
 
+            // Also merge with local results to ensure completeness
+            const existingIds = new Set(finalRequests.map(r => r.id));
+            localResults.forEach(lr => {
+                if (!existingIds.has(lr.id)) {
+                    finalRequests.push(lr);
+                    existingIds.add(lr.id);
+                }
+            });
+
             if (finalRequests.length > 0) {
                 // Sort combined results by date
                 finalRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -788,7 +852,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } finally {
             setIsRefreshing(false);
         }
-    }, [ensureEntitiesLoaded, clearSearchedRequests, setIsRefreshing, setSearchedRequests]);
+    }, [requests, clients, cars, carMakes, carModels, ensureEntitiesLoaded, clearSearchedRequests, setIsRefreshing, setSearchedRequests]);
 
     const fetchClientRequests = useCallback(async (clientId: string): Promise<InspectionRequest[]> => {
         const { data } = await supabase.from('inspection_requests').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
