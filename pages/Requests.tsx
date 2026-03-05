@@ -91,10 +91,6 @@ const Requests: React.FC = () => {
     const [isReservationsModalOpen, setIsReservationsModalOpen] = useState(false);
     const [reservationSearchTerm, setReservationSearchTerm] = useState('');
 
-    const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
-    // const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // Removed redundant state
-    // const [createdRequestNumber, setCreatedRequestNumber] = useState<number | null>(null); // Removed redundant state
-
     // Fixed: Added 'border' class to ensure borders are visible
     const searchInputClasses = "block w-full p-3 pl-10 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
     const formInputClasses = searchInputClasses;
@@ -130,16 +126,6 @@ const Requests: React.FC = () => {
             setInitialRequestModalState(null);
         }
     }, [initialRequestModalState, setInitialRequestModalState, can]);
-
-    const handleProcessing = () => {
-        setIsModalOpen(false);
-        setIsProcessingModalOpen(true);
-    };
-
-    const handleSuccess = (newRequest?: InspectionRequest) => {
-        setIsProcessingModalOpen(false);
-        // The global success modal is handled by AppContext/NewRequestForm
-    };
 
     // --- REAL-TIME SYNC FOR FILTERED DATA ---
     useEffect(() => {
@@ -1094,18 +1080,10 @@ const Requests: React.FC = () => {
                         inspectionTypes={inspectionTypes}
                         brokers={brokers}
                         onCancel={() => setIsModalOpen(false)}
-                        onSuccess={handleSuccess}
-                        onProcessing={handleProcessing}
+                        onSuccess={() => setIsModalOpen(false)}
                     />
                 </Modal>
             )}
-
-            <Modal isOpen={isProcessingModalOpen} onClose={() => {}} title="" size="sm" hideCloseButton>
-                <div className="flex flex-col items-center justify-center p-8 space-y-4">
-                    <RefreshCwIcon className="w-12 h-12 text-blue-500 animate-spin" />
-                    <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">جاري إنشاء الطلب...</p>
-                </div>
-            </Modal>
 
             {isUpdateModalOpen && requestToUpdate && (
                 <Modal isOpen={isUpdateModalOpen} onClose={() => setIsUpdateModalOpen(false)} title={`تحديث الطلب #${requestToUpdate.request_number}`} size="4xl">

@@ -43,15 +43,7 @@ export const useDataScope = (
 
     const [systemLogs, setSystemLogs] = useState<ActivityLog[]>([]);
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
-    const [clientsWithHistory, setClientsWithHistory] = useState<Set<string>>(new Set());
-
-    const markClientAsHavingHistory = useCallback((clientId: string) => {
-        setClientsWithHistory(prev => {
-            const newSet = new Set(prev);
-            newSet.add(clientId);
-            return newSet;
-        });
-    }, []);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const triggerHighlight = useCallback((requestId: string) => {
         setHighlightedRequestId(requestId);
@@ -363,8 +355,6 @@ export const useDataScope = (
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
         fetchPaperArchiveRequests,
-        fetchAllPaperArchiveRequests,
-        markClientAsHavingHistory,
-        clientsWithHistory
+        fetchAllPaperArchiveRequests
     };
 };

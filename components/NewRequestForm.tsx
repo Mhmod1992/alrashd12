@@ -25,7 +25,6 @@ interface NewRequestFormProps {
     brokers: Broker[];
     onCancel: () => void;
     onSuccess: (newRequest?: InspectionRequest) => void;
-    onProcessing?: () => void; // New prop for processing state
     initialReservationData?: Reservation;
     initialData?: InspectionRequest; // For Edit Mode
 }
@@ -38,7 +37,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     brokers = [],
     onCancel,
     onSuccess,
-    onProcessing,
     initialReservationData,
     initialData
 }) => {
@@ -978,14 +976,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             return;
         }
 
-        // Close modal immediately and show processing notification
-        if (onProcessing) {
-            onProcessing();
-        } else {
-            onCancel();
-        }
-        // addNotification({ title: 'جاري العمل', message: 'جاري إنشاء الطلب...', type: 'info' });
-
         try {
             // Find or Create Client
             let client: Client | undefined;
@@ -1023,6 +1013,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 addNotification({ title: 'تم التثبيت', message: 'تم تأكيد بيانات الحجز وتثبيته بنجاح.', type: 'success' });
                 onSuccess({ id: 'reservation-confirmed' } as any); 
+                onCancel(); 
                 return;
             }
 
@@ -1093,6 +1084,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
+                onCancel();
             } else {
                 let carId = '';
                 if (foundHistory) {
@@ -1133,6 +1125,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 if (newAddedRequest) {
                     showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number);
                     onSuccess(newAddedRequest);
+                    onCancel(); 
                 }
             }
         } catch (error) {

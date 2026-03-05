@@ -11,10 +11,9 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
-  hideCloseButton?: boolean;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer, size = '2xl', hideCloseButton = false }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer, size = '2xl' }) => {
   const { settings } = useAppContext();
   const design = settings.design || 'aero';
   
@@ -67,13 +66,11 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer,
       >
         <div className={`flex items-center justify-between p-4 border-b dark:border-slate-700 sticky top-0 rounded-t-lg z-10 ${headerFooterDesignClasses}`}>
           <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200">{title}</h3>
-          {!hideCloseButton && (
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
         <div className="p-6 max-h-[80vh] overflow-y-auto">
           {children}
