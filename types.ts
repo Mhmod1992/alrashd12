@@ -105,6 +105,7 @@ export interface Client {
   name: string;
   phone: string;
   is_vip?: boolean;
+  created_at?: string;
 }
 
 export interface CarMake {

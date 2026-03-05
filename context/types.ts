@@ -154,6 +154,8 @@ export interface AppContextType {
     fetchPaperArchiveRequests: (startDate: string, endDate: string) => Promise<InspectionRequest[]>;
     fetchAllPaperArchiveRequests: () => Promise<InspectionRequest[]>;
     checkCarHistory: (plateNumber: string | null, vin: string | null) => Promise<CarHistoryResult | null>;
+    markClientAsHavingHistory: (clientId: string) => void;
+    clientsWithHistory: Set<string>;
     isOnline: boolean;
     realtimeStatus: 'connected' | 'connecting' | 'disconnected';
     retryConnection: () => void;

@@ -94,7 +94,7 @@ const PaperArchive: React.FC = () => {
 
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-    const [archiveStatusFilter, setArchiveStatusFilter] = useState<'all' | 'archived' | 'not_archived'>('all');
+    const [archiveStatusFilter, setArchiveStatusFilter] = useState<'all' | 'archived' | 'not_archived'>('not_archived');
     const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'month' | 'custom' | 'all'>('today');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
@@ -714,7 +714,7 @@ const PaperArchive: React.FC = () => {
                         <table className="w-full text-right border-collapse">
                             <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold">
                                 <tr>
-                                    <th className="p-4 border-b dark:border-slate-700">السيارة</th>
+                                    <th className="p-4 border-b dark:border-slate-700 sticky right-0 z-20 bg-slate-50 dark:bg-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">السيارة</th>
                                     <th className="p-4 border-b dark:border-slate-700">رقم الطلب</th>
                                     <th className="p-4 border-b dark:border-slate-700">العميل</th>
                                     <th className="p-4 border-b dark:border-slate-700 text-center">الحالة</th>
@@ -736,7 +736,7 @@ const PaperArchive: React.FC = () => {
 
                                     return (
                                         <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
-                                            <td className="p-4">
+                                            <td className="p-4 sticky right-0 z-10 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                                                 <div className="font-bold text-slate-800 dark:text-slate-200 text-sm" dir="ltr">
                                                     {makeEn} {modelEn}
                                                 </div>

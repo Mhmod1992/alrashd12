@@ -22,7 +22,7 @@ import DollarSignIcon from '../components/icons/DollarSignIcon';
 import Icon from '../components/Icon';
 import InAppScannerModal from '../components/InAppScannerModal';
 import { Skeleton } from '../components/Skeleton';
-import { uuidv4 } from '../lib/utils';
+import { uuidv4, timeAgo } from '../lib/utils';
 
 const StatBlock: React.FC<{ title: string; count: number; icon: React.ReactElement<{ className?: string }>; color: string; }> = ({ title, count, icon, color }) => (
     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm flex items-center gap-4 border-l-4" style={{ borderColor: color }}>
@@ -91,6 +91,10 @@ const Requests: React.FC = () => {
     const [isReservationsModalOpen, setIsReservationsModalOpen] = useState(false);
     const [reservationSearchTerm, setReservationSearchTerm] = useState('');
 
+    const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
+    // const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // Removed redundant state
+    // const [createdRequestNumber, setCreatedRequestNumber] = useState<number | null>(null); // Removed redundant state
+
     // Fixed: Added 'border' class to ensure borders are visible
     const searchInputClasses = "block w-full p-3 pl-10 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
     const formInputClasses = searchInputClasses;
@@ -126,6 +130,16 @@ const Requests: React.FC = () => {
             setInitialRequestModalState(null);
         }
     }, [initialRequestModalState, setInitialRequestModalState, can]);
+
+    const handleProcessing = () => {
+        setIsModalOpen(false);
+        setIsProcessingModalOpen(true);
+    };
+
+    const handleSuccess = (newRequest?: InspectionRequest) => {
+        setIsProcessingModalOpen(false);
+        // The global success modal is handled by AppContext/NewRequestForm
+    };
 
     // --- REAL-TIME SYNC FOR FILTERED DATA ---
     useEffect(() => {
@@ -1080,10 +1094,18 @@ const Requests: React.FC = () => {
                         inspectionTypes={inspectionTypes}
                         brokers={brokers}
                         onCancel={() => setIsModalOpen(false)}
-                        onSuccess={() => setIsModalOpen(false)}
+                        onSuccess={handleSuccess}
+                        onProcessing={handleProcessing}
                     />
                 </Modal>
             )}
+
+            <Modal isOpen={isProcessingModalOpen} onClose={() => {}} title="" size="sm" hideCloseButton>
+                <div className="flex flex-col items-center justify-center p-8 space-y-4">
+                    <RefreshCwIcon className="w-12 h-12 text-blue-500 animate-spin" />
+                    <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">جاري إنشاء الطلب...</p>
+                </div>
+            </Modal>
 
             {isUpdateModalOpen && requestToUpdate && (
                 <Modal isOpen={isUpdateModalOpen} onClose={() => setIsUpdateModalOpen(false)} title={`تحديث الطلب #${requestToUpdate.request_number}`} size="4xl">
@@ -1219,9 +1241,14 @@ const Requests: React.FC = () => {
                                 <div key={req.id} className="bg-slate-100 dark:bg-slate-700/50 p-3 rounded-lg flex justify-between items-center">
                                     <div>
                                         <p className="font-bold text-slate-800 dark:text-slate-200">#{req.request_number}</p>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                            {new Date(req.created_at).toLocaleDateString('en-GB')} - {req.status}
-                                        </p>
+                                        <div className="flex flex-col gap-0.5 mt-1">
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                {new Date(req.created_at).toLocaleDateString('en-GB')} - {req.status}
+                                            </p>
+                                            <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded w-fit">
+                                                {timeAgo(req.created_at)}
+                                            </p>
+                                        </div>
                                     </div>
                                     <Button
                                         size="sm"

@@ -105,7 +105,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
         fetchPaperArchiveRequests,
-        fetchAllPaperArchiveRequests
+        fetchAllPaperArchiveRequests,
+        markClientAsHavingHistory,
+        clientsWithHistory
     } = useDataScope(authUser);
 
     const {
@@ -1474,7 +1476,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         lastRemoteDeleteId, setLastRemoteDeleteId,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
-        fetchRequests
+        fetchRequests,
+        markClientAsHavingHistory,
+        clientsWithHistory
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
