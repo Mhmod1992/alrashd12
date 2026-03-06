@@ -47,7 +47,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
-        fetchAndUpdateSingleRequest
+        fetchAndUpdateSingleRequest, setIsCreatingRequest
     } = useAppContext();
 
     // Responsive Logic
@@ -976,6 +976,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             return;
         }
 
+        // Close form and show global loading state immediately
+        onCancel();
+        setIsCreatingRequest(true);
+
         try {
             // Find or Create Client
             let client: Client | undefined;
@@ -1013,7 +1017,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 addNotification({ title: 'تم التثبيت', message: 'تم تأكيد بيانات الحجز وتثبيته بنجاح.', type: 'success' });
                 onSuccess({ id: 'reservation-confirmed' } as any); 
-                onCancel(); 
                 return;
             }
 
@@ -1084,7 +1087,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
-                onCancel();
             } else {
                 let carId = '';
                 if (foundHistory) {
@@ -1125,7 +1127,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 if (newAddedRequest) {
                     showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number);
                     onSuccess(newAddedRequest);
-                    onCancel(); 
                 }
             }
         } catch (error) {
@@ -1135,6 +1136,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 message: 'حدث خطأ غير متوقع. الرجاء المحاولة مرة أخرى.',
                 type: 'error',
             });
+        } finally {
+            setIsCreatingRequest(false);
         }
     };
 

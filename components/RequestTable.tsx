@@ -419,13 +419,8 @@ const RequestTable: React.FC<RequestTableProps> = ({
                         const rowClass = getRowClasses(request);
 
                         // Check if client has multiple requests (history)
-                        // This is a simple check based on the current loaded requests. 
-                        // For a more robust check, we might need a separate prop or map, but this works for the current view context.
-                        // Ideally, 'clients' should have a 'request_count' or similar if we wanted to be 100% accurate without fetching all.
-                        // Here we filter the current 'requests' list or use a prop if available.
-                        // Let's count how many times this client_id appears in the full 'requests' list passed to the table.
-                        const clientRequestCount = requests.filter(r => r.client_id === request.client_id).length;
-                        const hasHistory = clientRequestCount > 1;
+                        const client = clients.find(c => c.id === request.client_id);
+                        const hasHistory = (client?.inspection_requests?.[0]?.count || 0) > 1;
 
                         // Price column extras
                         let priceSuffix = null;

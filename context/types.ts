@@ -30,6 +30,8 @@ export interface AppContextType {
     searchRequestByNumber: (query: string | number, exactOnly?: boolean) => Promise<void>;
     clearSearchedRequests: () => void;
     searchedRequests: InspectionRequest[] | null;
+    isCreatingRequest: boolean;
+    setIsCreatingRequest: (isCreating: boolean) => void;
     clients: Client[];
     selectedClientId: string | null;
     setSelectedClientId: (id: string | null) => void;

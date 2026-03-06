@@ -47,6 +47,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // If we have a cached user, we show the UI immediately while verifying in background.
     const [isLoading, setIsLoading] = useState(!authUser);
     
+    const [isCreatingRequest, setIsCreatingRequest] = useState(false);
     const [isSessionError, setIsSessionError] = useState(false);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected');
@@ -918,12 +919,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const searchClients = useCallback(async (query: string): Promise<Client[]> => {
         if (!query || query.length < 2) return [];
-        const { data } = await supabase.from('clients').select('*').or(`name.ilike.%${query}%,phone.ilike.%${query}%`).limit(20);
+        const { data } = await supabase.from('clients').select('*, inspection_requests(count)').or(`name.ilike.%${query}%,phone.ilike.%${query}%`).limit(20);
         return data || [];
     }, []);
 
     const searchClientsPage = useCallback(async (pageNumber: number, pageSize: number, query?: string) => {
-        let queryBuilder = supabase.from('clients').select('*', { count: 'exact' });
+        let queryBuilder = supabase.from('clients').select('*, inspection_requests(count)', { count: 'exact' });
         if (query) queryBuilder = queryBuilder.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
         const { data, count } = await queryBuilder.range((pageNumber - 1) * pageSize, pageNumber * pageSize - 1);
         return { data: data || [], count: count || 0 };
@@ -967,7 +968,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const { data: requestHistory } = await supabase.from('inspection_requests').select('*').eq('car_id', foundCar.id).order('created_at', { ascending: false }).limit(5);
                 let lastClient: Client | undefined;
                 if (requestHistory && requestHistory.length > 0) {
-                    const { data: clientData } = await supabase.from('clients').select('*').eq('id', requestHistory[0].client_id).single();
+                    const { data: clientData } = await supabase.from('clients').select('*, inspection_requests(count)').eq('id', requestHistory[0].client_id).single();
                     if (clientData) lastClient = clientData;
                 }
                 return { car: foundCar, previousRequests: requestHistory || [], lastClient };
@@ -1402,7 +1403,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (carError) throw carError;
 
             const clientIds = Array.from(new Set((requestData || []).map((r: any) => r.client_id))) as string[];
-            const { data: clientsData, error: clientError } = await supabase.from('clients').select('*').in('id', clientIds);
+            const { data: clientsData, error: clientError } = await supabase.from('clients').select('*, inspection_requests(count)').in('id', clientIds);
             if (clientError) throw clientError;
 
             const carMap = new Map<string, Car>((carsData as Car[] || []).map((c) => [c.id, c]));
@@ -1474,7 +1475,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         lastRemoteDeleteId, setLastRemoteDeleteId,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
-        fetchRequests
+        fetchRequests,
+        isCreatingRequest,
+        setIsCreatingRequest
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

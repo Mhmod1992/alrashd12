@@ -48,7 +48,7 @@ const PageLoader = () => (
 
 const AppContent: React.FC = () => {
   // Added setPage to destructuring
-  const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, refreshSessionAndReload, isOnline } = useAppContext();
+  const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, refreshSessionAndReload, isOnline, isCreatingRequest } = useAppContext();
   const [isSidebarOpen, setSidebarOpen] = React.useState(false);
 
 
@@ -269,6 +269,22 @@ const AppContent: React.FC = () => {
       <NewRequestSuccessModal />
       <InstallPwaBanner />
       <IncomingRequestNotifier />
+
+      {/* Global Loading Overlay for Request Creation */}
+      {isCreatingRequest && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full mx-4 border border-slate-200 dark:border-slate-700">
+            <div className="relative w-16 h-16 mb-6">
+              <div className="absolute inset-0 border-4 border-blue-100 dark:border-slate-700 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">جاري إنشاء الطلب...</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-center text-sm">
+              يرجى الانتظار بينما نقوم بحفظ البيانات وتجهيز الطلب.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
