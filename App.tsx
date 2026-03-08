@@ -344,6 +344,13 @@ const PrintStyles = () => (
         .no-print {
             display: none !important;
         }
+
+        /* Force page break */
+        .page-break {
+            page-break-before: always !important;
+            break-before: page !important;
+            display: block !important;
+        }
       }
     `}
   </style>

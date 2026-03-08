@@ -186,7 +186,7 @@ const FindingItem: React.FC<{ finding: StructuredFinding; predefinedFinding?: Pr
 
 const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: ReportSettings; isPrintView?: boolean; direction?: 'rtl' | 'ltr' }> = ({ note, categoryName, settings, isPrintView, direction }) => {
     const { fontSizes } = settings;
-    const aspectClass = { small: 'aspect-[16/9]', medium: 'aspect-[4/3]', large: 'aspect-square' }[settings.noteImageSize] || 'aspect-[4/3]';
+    const aspectClass = isPrintView ? 'aspect-square' : ({ small: 'aspect-[16/9]', medium: 'aspect-[4/3]', large: 'aspect-square' }[settings.noteImageSize] || 'aspect-[4/3]');
     const displayLang = note.displayTranslation?.isActive ? note.displayTranslation.lang : undefined;
     const displayText = (displayLang && note.translations?.[displayLang]) ? note.translations[displayLang] : note.text;
 
@@ -194,10 +194,14 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
     const textClassName = note.highlightColor ? `px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
 
     return (
-        <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center" style={{ borderColor: settings.borderColor }}>
-            {note.image && <img src={note.image} alt="Note" className={`object-cover w-full ${aspectClass} mx-auto`} style={{ borderBottom: `1px solid ${settings.noteImageBorderColor}` }} />}
+        <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center overflow-hidden min-w-0 break-inside-avoid" style={{ borderColor: settings.borderColor }}>
+            {note.image && (
+                <div className={`w-full relative ${aspectClass}`} style={{ borderBottom: `1px solid ${settings.noteImageBorderColor}` }}>
+                    <img src={note.image} alt="Note" className="absolute inset-0 w-full h-full object-cover" />
+                </div>
+            )}
             <div className={`flex-grow flex flex-col w-full ${isPrintView ? 'p-2' : 'p-3'}`}>
-                <p className="text-xs font-bold mb-1 w-full" style={{ color: settings.primaryColor }}>{categoryName}</p>
+                <p className="text-xs font-bold mb-1 w-full truncate" style={{ color: settings.primaryColor }}>{categoryName}</p>
                 <div className={`flex-grow mb-2 w-full break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
                     {note.highlightColor ? (
                         <span style={highlightStyle} className={textClassName}>{displayText}</span>
@@ -422,7 +426,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
                     {allImageNotes.length > 0 && (
                         <FindingCategorySection title={reportDirection === 'ltr' ? "Attachments" : "الصور والملاحظات المرفقة"} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection}>
-                            <div className={`grid grid-cols-3 ${isPrintView ? 'gap-2' : 'gap-3'}`}>{allImageNotes.map(({ note, categoryName }) => <ImageNoteCard key={note.id} note={note} categoryName={categoryName} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} />)}</div>
+                            <div className={`grid grid-cols-3 ${isPrintView ? 'gap-2' : 'gap-3'} w-full`}>{allImageNotes.map(({ note, categoryName }) => <ImageNoteCard key={note.id} note={note} categoryName={categoryName} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} />)}</div>
                         </FindingCategorySection>
                     )}
 
