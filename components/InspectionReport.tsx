@@ -194,7 +194,8 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
     const textClassName = note.highlightColor ? `px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
 
     return (
-        <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center overflow-hidden" style={{ borderColor: settings.borderColor }}>
+        <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center" style={{ borderColor: settings.borderColor }}>
+            {note.image && <img src={note.image} alt="Note" className={`object-cover w-full ${aspectClass} mx-auto`} style={{ borderBottom: `1px solid ${settings.noteImageBorderColor}` }} />}
             <div className={`flex-grow flex flex-col w-full ${isPrintView ? 'p-2' : 'p-3'}`}>
                 <p className="text-xs font-bold mb-1 w-full" style={{ color: settings.primaryColor }}>{categoryName}</p>
                 <div className={`flex-grow mb-2 w-full break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
@@ -204,8 +205,8 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
                         <span style={{ color: settings.textColor }}>{displayText}</span>
                     )}
                 </div>
+                {note.authorName && <p className="text-xs font-semibold mt-auto pt-2 border-t w-full" style={{ color: settings.textColor, opacity: 0.7, borderColor: settings.borderColor }}>{note.authorName}</p>}
             </div>
-            {note.image && <img src={note.image} alt="Note" className={`object-cover w-full ${aspectClass} mx-auto`} style={{ borderTop: `1px solid ${settings.noteImageBorderColor}` }} />}
         </div>
     );
 };
@@ -421,7 +422,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
                     {allImageNotes.length > 0 && (
                         <FindingCategorySection title={reportDirection === 'ltr' ? "Attachments" : "الصور والملاحظات المرفقة"} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection}>
-                            <div className={`grid ${isPrintView ? 'grid-cols-2 gap-4' : 'grid-cols-3 gap-3'}`}>{allImageNotes.map(({ note, categoryName }) => <ImageNoteCard key={note.id} note={note} categoryName={categoryName} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} />)}</div>
+                            <div className={`grid grid-cols-3 ${isPrintView ? 'gap-2' : 'gap-3'}`}>{allImageNotes.map(({ note, categoryName }) => <ImageNoteCard key={note.id} note={note} categoryName={categoryName} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} />)}</div>
                         </FindingCategorySection>
                     )}
 

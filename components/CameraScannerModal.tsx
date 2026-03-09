@@ -178,22 +178,10 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         // Capture Logic
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
-        const videoRatio = videoWidth / videoHeight;
-        const containerRatio = 9 / 16;
-        
-        let visibleWidth = videoWidth;
-        let visibleHeight = videoHeight;
-        
-        if (videoRatio > containerRatio) {
-            visibleWidth = videoHeight * containerRatio;
-        } else {
-            visibleHeight = videoWidth / containerRatio;
-        }
-
         const widthRatio = mode === 'plate' ? 0.8 : 0.9;
         const heightRatio = mode === 'plate' ? 0.4 : 0.7;
-        const cropWidth = visibleWidth * widthRatio;
-        const cropHeight = visibleHeight * heightRatio;
+        const cropWidth = videoWidth * widthRatio;
+        const cropHeight = videoHeight * heightRatio;
         const cropX = (videoWidth - cropWidth) / 2;
         const cropY = (videoHeight - cropHeight) / 2;
         const MAX_DIMENSION = 800;
@@ -341,7 +329,7 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         <Modal isOpen={isOpen} onClose={() => { resetState(); onClose(); }} title={mode === 'car' ? (step === 'review' ? "مراجعة وتأكيد" : "التعرف على السيارة") : "مسح لوحة السيارة"} size="3xl">
             {step === 'capture' && (
                 <>
-                    <div className="relative w-full max-w-[320px] mx-auto aspect-[9/16] bg-black rounded-lg overflow-hidden flex items-center justify-center">
+                    <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center">
                         {error ? (
                             <div className="text-center text-white p-4">
                                 <p className="font-semibold">حدث خطأ</p>
