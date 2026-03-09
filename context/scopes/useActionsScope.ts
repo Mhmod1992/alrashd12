@@ -125,14 +125,16 @@ export const useActionsScope = (
     }, [setClients]);
 
     const addClient = useCallback(async (client: Client): Promise<Client> => {
-        const { data, error } = await supabase.from('clients').insert(client).select().single();
+        const { inspection_requests, ...insertData } = client;
+        const { data, error } = await supabase.from('clients').insert(insertData).select().single();
         if (error) throw error;
         setClients(prev => [...prev, data as Client]);
         return data as Client;
     }, [setClients]);
 
     const updateClient = useCallback(async (client: Client) => {
-        const { error } = await supabase.from('clients').update(client).eq('id', client.id);
+        const { inspection_requests, ...updateData } = client;
+        const { error } = await supabase.from('clients').update(updateData).eq('id', client.id);
         if (error) throw error;
         setClients(prev => prev.map(c => c.id === client.id ? client : c));
     }, [setClients]);
