@@ -34,6 +34,17 @@ const getHighlightStyle = (color: HighlightColor, opacity: number): React.CSSPro
     };
 };
 
+// --- PRINT MARGIN CONFIGURATION (MANUAL SETTINGS) ---
+// You can adjust these values to change the space around the report on the paper.
+const PRINT_CONFIG = {
+    pageMarginTop: '5mm',      // Physical margin of the paper
+    pageMarginBottom: '8mm',
+    pageMarginLeft: '5mm',
+    pageMarginRight: '5mm',
+    containerPadding: '5mm',   // Internal padding of the report content
+};
+// ----------------------------------------------------
+
 const printSizeMap: Record<string, string> = {
     'text-6xl': 'text-5xl', 'text-5xl': 'text-4xl', 'text-4xl': 'text-3xl',
     'text-3xl': 'text-2xl', 'text-2xl': 'text-xl', 'text-xl': 'text-lg',
@@ -94,7 +105,7 @@ const ReportHeader: React.FC<{ appName: string; logoUrl: string | null; settings
             <div className={`text-${direction === 'ltr' ? 'left' : 'right'}`}>
                 <h1 data-setting-section="colors-primary" className={`${isPrintView ? getPrintSize(fontSizes.headerTitle) : fontSizes.headerTitle} ${settings.headerTitleBold ? 'font-bold' : 'font-normal'}`} style={{ color: settings.appNameColor }}>{appName}</h1>
                 <p className={`mt-1 ${isPrintView ? getPrintSize(fontSizes.headerSubtitle) : fontSizes.headerSubtitle} ${settings.headerSubtitleBold ? 'font-bold' : 'font-normal'}`} style={{ color: settings.textColor, opacity: 0.8 }}>{settings.headerSubtitleText}</p>
-                
+
                 {/* Custom Fields (CR, VAT, etc.) */}
                 {settings.headerCustomFields && settings.headerCustomFields.length > 0 && (
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] sm:text-xs" style={{ color: settings.textColor }}>
@@ -202,14 +213,13 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
             )}
             <div className={`flex-grow flex flex-col w-full ${isPrintView ? 'p-2' : 'p-3'}`}>
                 <p className="text-xs font-bold mb-1 w-full" style={{ color: settings.primaryColor }}>{categoryName}</p>
-                <div className={`flex-grow mb-2 w-full break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
+                <div className={`flex-grow w-full break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
                     {note.highlightColor ? (
                         <span style={highlightStyle} className={textClassName}>{displayText}</span>
                     ) : (
                         <span style={{ color: settings.textColor }}>{displayText}</span>
                     )}
                 </div>
-                {note.authorName && <p className="text-xs font-semibold mt-auto pt-2 border-t w-full" style={{ color: settings.textColor, opacity: 0.7, borderColor: settings.borderColor }}>{note.authorName}</p>}
             </div>
         </div>
     );
@@ -292,7 +302,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
     }, [request.category_notes, request.general_notes, visibleCategoryIds, customFindingCategories, reportDirection]);
 
     const generalTextOnlyNotes = ((request.general_notes as Note[]) || []).filter(note => !note.image);
-    
+
     // Updated Logic: Get Technicians (Workers) AND Employees (System Users marked as Technicians)
     const getAssignedTechnicians = (categoryId: string) => {
         const assignedIds = request.technician_assignments?.[categoryId] || [];
@@ -316,7 +326,19 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
     return (
         <div style={{ backgroundColor: reportSettings.pageBackgroundColor, color: reportSettings.textColor, fontFamily: reportSettings.fontFamily }}>
-            <div ref={ref} className={`relative ${isPrintView ? 'p-[10mm] pb-[20mm]' : 'p-4 sm:p-6 print:p-[10mm] print:pb-[20mm]'}`} dir={reportDirection}>
+            <style>
+                {`
+                    @page {
+                        margin: ${PRINT_CONFIG.pageMarginTop} ${PRINT_CONFIG.pageMarginRight} ${PRINT_CONFIG.pageMarginBottom} ${PRINT_CONFIG.pageMarginLeft} !important;
+                    }
+                    @media print {
+                        .print-container-custom {
+                            padding: ${PRINT_CONFIG.containerPadding} !important;
+                        }
+                    }
+                `}
+            </style>
+            <div ref={ref} className={`relative print-container-custom ${isPrintView ? 'p-[10mm] pb-[20mm]' : 'p-4 sm:p-6 print:p-0'}`} dir={reportDirection}>
                 {request.report_stamps && request.report_stamps.length > 0 && (
                     <div className={`absolute inset-0 z-10 flex flex-col ${reportDirection === 'ltr' ? 'items-start' : 'items-end'} justify-start gap-8 pointer-events-none p-12 pt-40`}>
                         {request.report_stamps.filter(s => getStampText(s) !== '').map(stamp => <div key={stamp} className="border-2 border-red-500/90 text-red-500/90 p-3 rounded-md transform -rotate-12 text-center [filter:drop-shadow(0_4px_3px_rgba(0,0,0,0.5))] max-w-xs"><span className="text-2xl font-black tracking-wider leading-tight">{getStampText(stamp)}</span></div>)}
@@ -326,7 +348,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                 <div className="relative z-0">
                     <div className="report-header-section">
                         <ReportHeader appName={appName} logoUrl={reportSettings.reportLogoUrl} settings={reportSettings} requestNumber={request.request_number} isPrintView={isPrintView} direction={reportDirection} />
-                        
+
                         <div className={`${isPrintView ? 'mb-2 space-y-2' : 'mb-6 space-y-4'}`}>
                             <InfoBlock title={reportDirection === 'ltr' ? "Client Details" : "بيانات العميل"} icon={<Icon name="employee" className="w-5 h-5" />} settings={reportSettings} contentClassName={isPrintView ? `grid ${reportSettings.showPriceOnReport ? 'grid-cols-3' : 'grid-cols-2'} gap-2 items-center` : `grid grid-cols-1 ${reportSettings.showPriceOnReport ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6 items-center`} isPrintView={isPrintView} direction={reportDirection}>
                                 <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Name:' : 'الاسم:'}</span><span className={`font-bold ${isPrintView ? getPrintSize(fontSizes.blockHeader) : fontSizes.blockHeader}`}>{client.name}</span></div>
@@ -399,11 +421,11 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                                 {sortedFindings.length > 0 && <div className={`flex flex-wrap justify-center ${isPrintView ? 'gap-1.5' : 'gap-4'}`}>{sortedFindings.map(({ finding, predefined }) => <div key={finding.findingId} className={`${isPrintView ? 'w-[19%]' : 'w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%]'}`}><FindingItem finding={finding} predefinedFinding={predefined} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} /></div>)}</div>}
                                 {textOnlyNotes.length > 0 && (
                                     <div data-setting-section="text-disclaimer" className={`w-full mt-2 rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', zIndex: 10, breakInside: 'auto', ...watermarkStyle }}>
-                                        <div className="relative z-10"><h4 className={`font-bold border-b pb-1 mb-2 ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: reportSettings.primaryColor, borderColor: reportSettings.borderColor }}>{reportDirection === 'ltr' ? (allFindingsForCategory.length > 0 ? 'Technician Notes:' : 'Notes:') : (allFindingsForCategory.length > 0 ? 'ملاحظات الفني:' : 'ملاحظات:')}</h4><div className="space-y-1 p-0 m-0">{textOnlyNotes.map(note => { 
-                                            const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text; 
+                                        <div className="relative z-10"><h4 className={`font-bold border-b pb-1 mb-2 ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: reportSettings.primaryColor, borderColor: reportSettings.borderColor }}>{reportDirection === 'ltr' ? (allFindingsForCategory.length > 0 ? 'Technician Notes:' : 'Notes:') : (allFindingsForCategory.length > 0 ? 'ملاحظات الفني:' : 'ملاحظات:')}</h4><div className="space-y-1 p-0 m-0">{textOnlyNotes.map(note => {
+                                            const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
                                             const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
                                             const textClassName = note.highlightColor ? `px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
-                                            return <div key={note.id} className={`py-0.5 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>; 
+                                            return <div key={note.id} className={`py-0.5 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>;
                                         })}</div></div>
                                     </div>
                                 )}
@@ -414,11 +436,11 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                     {generalTextOnlyNotes.length > 0 && (
                         <FindingCategorySection title={reportDirection === 'ltr' ? "General Notes" : "ملاحظات عامة"} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection}>
                             <div data-setting-section="text-disclaimer" className={`bg-white rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', ...generateWatermarkStyle(reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة', reportSettings) }}>
-                                <div className="relative z-10 space-y-1 p-0 m-0">{generalTextOnlyNotes.map(note => { 
-                                    const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text; 
+                                <div className="relative z-10 space-y-1 p-0 m-0">{generalTextOnlyNotes.map(note => {
+                                    const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
                                     const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
                                     const textClassName = note.highlightColor ? `px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
-                                    return <div key={note.id} className={`py-1 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>; 
+                                    return <div key={note.id} className={`py-1 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>;
                                 })}</div>
                             </div>
                         </FindingCategorySection>
