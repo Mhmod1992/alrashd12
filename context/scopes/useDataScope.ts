@@ -77,7 +77,7 @@ export const useDataScope = (
                 supabase.from('custom_finding_categories').select('*'),
                 supabase.from('predefined_findings').select('*'),
                 supabase.from('expenses').select('*'),
-                supabase.from('clients').select('*, inspection_requests(count)').limit(100),
+                supabase.from('clients').select('*').limit(100),
                 supabase.from('cars').select('*').limit(100),
                 supabase.from('employees').select('*'),
                 supabase.from('technicians').select('*'),
@@ -119,7 +119,7 @@ export const useDataScope = (
                 if (moreCars) setCars(prev => [...prev, ...moreCars.filter(mc => !prev.some(pc => pc.id === mc.id))]);
             }
             if (missingClientIds.length > 0) {
-                const { data: moreClients } = await supabase.from('clients').select('*, inspection_requests(count)').in('id', missingClientIds);
+                const { data: moreClients } = await supabase.from('clients').select('*').in('id', missingClientIds);
                 if (moreClients) setClients(prev => [...prev, ...moreClients.filter(mc => !prev.some(pc => pc.id === mc.id))]);
             }
 
@@ -187,7 +187,7 @@ export const useDataScope = (
 
         if (clientIdsToFetch.length > 0) {
             promises.push(
-                supabase.from('clients').select('*, inspection_requests(count)').in('id', clientIdsToFetch)
+                supabase.from('clients').select('*').in('id', clientIdsToFetch)
                     .then(({ data }) => {
                         if (data && data.length > 0) {
                             setClients(prev => {
