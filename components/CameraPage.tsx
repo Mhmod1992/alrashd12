@@ -54,9 +54,28 @@ const CameraPage: React.FC<CameraPageProps> = ({ isOpen, onClose, onCapture }) =
     const context = canvas.getContext('2d');
     if (!context) return;
     
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
+    
+    const targetRatio = 1 / 1;
+    const videoRatio = videoWidth / videoHeight;
+    
+    let cropWidth = videoWidth;
+    let cropHeight = videoHeight;
+    let cropX = 0;
+    let cropY = 0;
+    
+    if (videoRatio > targetRatio) {
+      cropWidth = videoHeight * targetRatio;
+      cropX = (videoWidth - cropWidth) / 2;
+    } else {
+      cropHeight = videoWidth / targetRatio;
+      cropY = (videoHeight - cropHeight) / 2;
+    }
+    
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+    context.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
     
     canvas.toBlob((blob) => {
       if (blob) {
@@ -92,29 +111,31 @@ const CameraPage: React.FC<CameraPageProps> = ({ isOpen, onClose, onCapture }) =
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black z-[110] flex flex-col items-center justify-center animate-fade-in" dir="ltr">
-      <video ref={videoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-contain" onClick={handleVideoClick} />
-      
-      {error && (
-        <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white text-center p-4 z-10" dir="rtl">
-            <h3 className="text-2xl font-bold">حدث خطأ</h3>
-            <p className="mt-2 text-lg">{error}</p>
-        </div>
-      )}
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[110] flex flex-col items-center justify-center animate-fade-in p-4" dir="ltr">
+      <div className="relative w-full max-w-[min(100%,_85vh)] aspect-square bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10">
+        <video ref={videoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" onClick={handleVideoClick} />
+        
+        {error && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white text-center p-4 z-10" dir="rtl">
+              <h3 className="text-2xl font-bold">حدث خطأ</h3>
+              <p className="mt-2 text-lg">{error}</p>
+          </div>
+        )}
 
-      <div className="absolute top-4 right-4 z-20">
-        <button onClick={onClose} className="bg-black/50 text-white rounded-full p-3 hover:bg-black/75 transition-colors">
-            <Icon name="close" className="w-6 h-6" />
-        </button>
-      </div>
-      
-      <div className="absolute bottom-8 z-20">
-        <button 
-            onClick={handleCaptureClick} 
-            disabled={!!error}
-            className="w-20 h-20 rounded-full bg-white ring-4 ring-white/30 disabled:bg-gray-400 disabled:opacity-50 transition-all"
-            aria-label="التقاط صورة"
-        />
+        <div className="absolute top-4 right-4 z-20">
+          <button onClick={onClose} className="bg-black/50 text-white rounded-full p-3 hover:bg-black/75 transition-colors">
+              <Icon name="close" className="w-6 h-6" />
+          </button>
+        </div>
+        
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20">
+          <button 
+              onClick={handleCaptureClick} 
+              disabled={!!error}
+              className="w-20 h-20 rounded-full bg-white ring-4 ring-white/30 disabled:bg-gray-400 disabled:opacity-50 transition-all"
+              aria-label="التقاط صورة"
+          />
+        </div>
       </div>
 
       <canvas ref={canvasRef} className="hidden"></canvas>
