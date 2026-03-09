@@ -234,63 +234,6 @@ const PrintReport: React.FC = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Inject Print-Specific Styles for Browser Printing
-    useEffect(() => {
-        const style = document.createElement('style');
-        style.id = 'print-fixed-layout-style';
-        style.innerHTML = `
-            @media print {
-                @page { size: A4; margin: 0; }
-                body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .print-container { 
-                    width: 210mm !important; 
-                    min-height: 297mm !important; 
-                    margin: 0 auto !important; 
-                    padding: 0 !important; 
-                    overflow: visible !important; 
-                    display: block !important;
-                }
-                .report-wrapper {
-                    box-shadow: none !important;
-                    margin: 0 !important;
-                    width: 100% !important;
-                    min-height: 297mm !important;
-                }
-                /* Force grid layout for findings in print mode */
-                .finding-category > div:nth-of-type(2) > div {
-                    display: flex !important;
-                    flex-wrap: wrap !important;
-                    justify-content: flex-start !important;
-                    gap: 6px !important;
-                }
-                .finding-item {
-                    width: 19% !important; 
-                    height: 170px !important;
-                    break-inside: avoid !important;
-                    page-break-inside: avoid !important;
-                    margin-bottom: 8px !important;
-                }
-                .finding-img-container {
-                    height: 90px !important;
-                }
-                .finding-text-wrapper h4 {
-                    max-height: 24px !important;
-                    overflow: hidden !important;
-                }
-                /* Hide non-print elements */
-                header.no-print, .no-print { display: none !important; }
-                
-                /* Ensure images don't break across pages awkwardly */
-                img { page-break-inside: avoid; }
-            }
-        `;
-        document.head.appendChild(style);
-        return () => {
-            const el = document.getElementById('print-fixed-layout-style');
-            if (el) el.remove();
-        };
-    }, []);
-
     // --- Upload Handlers ---
     const handleUploadClick = (type: 'manual_paper' | 'internal_draft') => {
         setCurrentUploadType(type);
@@ -468,149 +411,50 @@ const PrintReport: React.FC = () => {
             setLoadingState('جاري معالجة الصور...');
 
             const originalElement = reportRef.current;
-            
-            // Create a dedicated container for the clone to ensure isolation
-            const cloneContainer = document.createElement('div');
-            cloneContainer.style.position = 'fixed';
-            cloneContainer.style.left = '-9999px';
-            cloneContainer.style.top = '0';
-            cloneContainer.style.width = '794px'; // Exact A4 width
-            cloneContainer.style.zIndex = '-9999';
-            document.body.appendChild(cloneContainer);
-
             const clone = originalElement.cloneNode(true) as HTMLElement;
-            cloneContainer.appendChild(clone);
             
-            // Inject strict CSS for flattening
+            const MAIN_CARD = { minHeight: '200px', margin: '8px 0', padding: '6px', bgColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px' };
+            const IMAGE_CONFIG = { height: '130px', marginBottom: '4px' };
+
+            const coloredSpans = clone.querySelectorAll('span[style*="background-color"]');
+            coloredSpans.forEach((span) => {
+                const originalText = span.innerHTML;
+                span.innerHTML = `<span class="inner-text-mover">${originalText}</span>`;
+            });
+
+            clone.style.width = '794px'; 
+            clone.style.minHeight = '1123px';
+            clone.style.position = 'fixed';
+            clone.style.left = '0';
+            clone.style.top = '0';
+            clone.style.zIndex = '-9999';
+            clone.style.background = '#ffffff';
+            clone.style.overflow = 'visible';
+            clone.style.direction = reportDirection;
+            clone.style.textAlign = reportDirection === 'rtl' ? 'right' : 'left';
+            
             const style = document.createElement('style');
             style.innerHTML = `
-                .print-clone {
-                    width: 794px !important;
-                    min-height: 1123px !important;
-                    background-color: #ffffff !important;
-                    color: #000000 !important;
-                    direction: ${reportDirection} !important;
-                    text-align: ${reportDirection === 'rtl' ? 'right' : 'left'} !important;
-                    font-family: 'Tajawal', sans-serif !important;
-                    padding: 20px !important;
-                }
-                .print-clone * {
-                    box-sizing: border-box !important;
-                    print-color-adjust: exact !important;
-                    -webkit-print-color-adjust: exact !important;
-                }
-                
-                /* Grid Layout Fixes */
-                .print-clone .finding-category > div:nth-of-type(2) > div {
-                    display: flex !important;
-                    flex-wrap: wrap !important;
-                    justify-content: flex-start !important;
-                    gap: 10px !important;
-                }
-                
-                /* Fixed Card Dimensions */
-                .print-clone .finding-item {
-                    width: 140px !important; /* Fixed width ~18% */
-                    height: 170px !important; /* Fixed height */
-                    margin-bottom: 10px !important;
-                    display: flex !important;
-                    flex-direction: column !important;
-                    border: 1px solid #e2e8f0 !important;
-                    border-radius: 8px !important;
-                    overflow: hidden !important;
-                    background: #fff !important;
-                    page-break-inside: avoid !important;
-                    box-shadow: none !important;
-                }
-                
-                /* Image Container Fixes */
-                .print-clone .finding-img-container {
-                    height: 90px !important;
-                    min-height: 90px !important;
-                    width: 100% !important;
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    background: #f8fafc !important;
-                    padding: 2px !important;
-                    order: 1 !important;
-                }
-                .print-clone .finding-img-container img {
-                    max-width: 100% !important;
-                    max-height: 100% !important;
-                    width: auto !important;
-                    height: auto !important;
-                    object-fit: contain !important;
-                }
-                
-                /* Text Content Fixes */
-                .print-clone .finding-content {
-                    flex: 1 !important;
-                    display: flex !important;
-                    flex-direction: column !important;
-                    justify-content: center !important;
-                    align-items: center !important;
-                    padding: 4px !important;
-                    background: #fff !important;
-                    order: 2 !important;
-                    width: 100% !important;
-                }
-                .print-clone .finding-text-wrapper {
-                    width: 100% !important;
-                }
-                .print-clone h4 {
-                    font-size: 10px !important;
-                    font-weight: bold !important;
-                    margin-bottom: 2px !important;
-                    text-align: center !important;
-                    line-height: 1.2 !important;
-                    max-height: 24px !important;
-                    overflow: hidden !important;
-                    white-space: normal !important;
-                }
-                .print-clone p {
-                    font-size: 9px !important;
-                    text-align: center !important;
-                    color: #64748b !important;
-                    line-height: 1.2 !important;
-                    white-space: normal !important;
-                }
-
-                /* Header & Footer Fixes */
-                .print-clone header {
-                    margin-bottom: 15px !important;
-                    border-bottom: 2px solid #e2e8f0 !important;
-                    padding-bottom: 10px !important;
-                }
-                .print-clone footer {
-                    margin-top: 20px !important;
-                    border-top: 2px solid #e2e8f0 !important;
-                    padding-top: 10px !important;
-                }
-                
-                /* Info Blocks */
-                .print-clone .info-block {
-                    border: 1px solid #e2e8f0 !important;
-                    border-radius: 6px !important;
-                    padding: 8px !important;
-                    margin-bottom: 8px !important;
-                }
-                
-                /* Hide any scrollbars */
-                .print-clone ::-webkit-scrollbar {
-                    display: none;
-                }
-                
-                /* Ensure images are visible */
-                .print-clone img {
-                    opacity: 1 !important;
-                    visibility: visible !important;
-                }
+                .print-clone * { box-sizing: border-box !important; font-family: 'Tajawal', sans-serif !important; }
+                .print-clone .finding-item { position: relative !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-start !important; min-height: ${MAIN_CARD.minHeight} !important; height: auto !important; margin: ${MAIN_CARD.margin} !important; padding: ${MAIN_CARD.padding} !important; border: 1px solid ${MAIN_CARD.borderColor} !important; background: ${MAIN_CARD.bgColor} !important; border-radius: ${MAIN_CARD.borderRadius} !important; box-shadow: none !important; page-break-inside: avoid !important; }
+                .print-clone .finding-img-container { order: 1 !important; position: relative !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: ${IMAGE_CONFIG.height} !important; background: transparent !important; margin-bottom: ${IMAGE_CONFIG.marginBottom} !important; overflow: hidden !important; }
+                .print-clone .finding-img-container img { width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
+                .print-clone .finding-text-wrapper { order: 2 !important; position: static !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; width: 98% !important; background-color: transparent !important; border: none !important; padding: 0 !important; min-height: 50px !important; overflow: visible !important; }
+                .print-clone .finding-text-wrapper h4 { position: relative !important; z-index: 10 !important; background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 12px !important; padding: 2px 10px !important; box-shadow: 0 2px 3px rgba(0,0,0,0.05) !important; margin: 0 !important; margin-bottom: -12px !important; top: -3mm !important; font-size: 10px !important; color: #1e293b !important; font-weight: bold !important; text-align: center !important; width: 95% !important; white-space: normal !important; line-height: 1.3 !important; min-height: 18px !important; }
+                .print-clone .finding-text-wrapper p { position: relative !important; z-index: 5 !important; background-color: #f8fafc !important; border: 1px solid #e2e8f0 !important; border-radius: 6px !important; padding: 14px 8px 4px 8px !important; margin: 0 !important; width: 100% !important; text-align: center !important; font-size: 11px !important; font-weight: bold !important; color: #334155 !important; white-space: normal !important; line-height: 1.4 !important; }
+                .print-clone .finding-content { display: contents !important; }
+                .print-clone .info-block { top: 2px !important; position: relative !important; }
+                .print-clone .finding-category h3 { top: -4px !important; position: relative !important; }
+                .print-clone span[style*="background-color"] { position: relative !important; display: inline-block !important; top: -1px !important; padding: 0 4px !important; line-height: 1.4 !important; }
+                .print-clone img { object-fit: contain !important; }
+                .print-clone .target-logo { height: 90px !important; width: auto !important; }
+                .print-clone .target-car-logo img { height: 60px !important; width: auto !important; }
+                .print-clone .flex-row-reverse { flex-direction: ${reportDirection === 'rtl' ? 'row-reverse' : 'row'} !important; }
             `;
             clone.appendChild(style);
             clone.classList.add('print-clone');
+            document.body.appendChild(clone);
 
-            // Handle QR Code Canvas
             const qrContainer = clone.querySelector('.target-qr');
             if (qrContainer) {
                 const originalCanvas = originalElement.querySelector('.target-qr canvas') as HTMLCanvasElement;
@@ -622,7 +466,6 @@ const PrintReport: React.FC = () => {
                 }
             }
 
-            // Convert all images to Base64 to ensure they render in html2canvas
             const images = Array.from(clone.querySelectorAll('img'));
             const imagePromises = images.map(async (img) => {
                 const src = img.getAttribute('src');
@@ -630,44 +473,25 @@ const PrintReport: React.FC = () => {
                     try {
                         const base64 = await urlToBase64(src);
                         img.setAttribute('src', base64);
-                    } catch (e) { 
-                        console.warn('Failed to load image for PDF:', src);
-                    }
+                    } catch (e) { }
                 }
             });
             await Promise.all(imagePromises);
-            
-            // Wait for layout to settle
-            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 1000));
 
             setLoadingState('جاري التقاط الشاشة...');
 
             const canvas = await (window as any).html2canvas(clone, {
-                useCORS: true, 
-                allowTaint: true, 
-                logging: false, 
-                scale: 2, // High quality
-                windowWidth: 794, 
-                width: 794,
-                scrollY: 0, 
-                scrollX: 0, 
-                x: 0, 
-                y: 0, 
-                backgroundColor: '#ffffff',
-                onclone: (doc: Document) => { 
-                    const el = doc.querySelector('.print-clone') as HTMLElement; 
-                    if(el) {
-                        el.style.transform = 'none'; 
-                        el.style.margin = '0';
-                    }
-                }
+                useCORS: true, allowTaint: true, logging: false, scale: 2, windowWidth: 794, width: 794,
+                scrollY: 0, scrollX: 0, x: 0, y: 0, backgroundColor: '#ffffff',
+                onclone: (doc: Document) => { const el = doc.querySelector('.print-clone') as HTMLElement; if(el) el.style.transform = 'none'; }
             }) as HTMLCanvasElement;
 
-            document.body.removeChild(cloneContainer);
+            document.body.removeChild(clone);
             setLoadingState('جاري إنشاء ملف PDF...');
 
             const { jsPDF } = (window as any).jspdf;
-            const imgData = canvas.toDataURL('image/jpeg', 0.90);
+            const imgData = canvas.toDataURL('image/jpeg', 0.85);
             const pdfWidth = 210; 
             const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
@@ -720,7 +544,6 @@ const PrintReport: React.FC = () => {
             
             return pdf;
         } catch(e: any) {
-            console.error(e);
             addNotification({ title: 'خطأ', message: 'فشل إنشاء الملف.', type: 'error' });
             return null;
         } finally {
@@ -855,7 +678,7 @@ const PrintReport: React.FC = () => {
                                             <div className="flex flex-col gap-4">
                                                 {publicImages.map((file, idx) => (
                                                     <div key={idx} className="w-full break-inside-avoid mb-4">
-                                                        <img src={file.data} alt={`Attachment ${idx + 1}`} className="w-full h-auto object-contain border rounded-lg print:max-w-[210mm] print:max-h-[290mm]" style={{ maxHeight: '290mm' }} />
+                                                        <img src={file.data} alt={`Attachment ${idx + 1}`} className="w-full h-auto object-contain border rounded-lg" style={{ maxHeight: '290mm' }} />
                                                     </div>
                                                 ))}
                                             </div>
