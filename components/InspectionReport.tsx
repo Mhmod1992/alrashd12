@@ -37,11 +37,11 @@ const getHighlightStyle = (color: HighlightColor, opacity: number): React.CSSPro
 // --- PRINT MARGIN CONFIGURATION (MANUAL SETTINGS) ---
 // You can adjust these values to change the space around the report on the paper.
 const PRINT_CONFIG = {
-    pageMarginTop: '5mm',      // Physical margin of the paper
-    pageMarginBottom: '8mm',
-    pageMarginLeft: '5mm',
-    pageMarginRight: '5mm',
-    containerPadding: '5mm',   // Internal padding of the report content
+    pageMarginTop: '6mm',      // Physical margin of the paper
+    pageMarginBottom: '10mm',
+    pageMarginLeft: '6mm',
+    pageMarginRight: '6mm',
+    containerPadding: '6mm',   // Internal padding of the report content
 };
 // ----------------------------------------------------
 

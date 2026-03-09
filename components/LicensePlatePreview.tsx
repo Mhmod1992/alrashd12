@@ -82,7 +82,7 @@ const LicensePlatePreview: React.FC<LicensePlatePreviewProps> = ({
             <div className="flex flex-col items-center justify-center px-2 flex-shrink-0">
                 <span className="text-xs font-bold" style={{color: settings.fontColor}}>KSA</span>
                 <img 
-                    src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Flag_of_Saudi_Arabia.svg/23px-Flag_of_Saudi_Arabia.svg.png" 
+                    src="https://www.svgrepo.com/show/405595/flag-for-flag-saudi-arabia.svg" 
                     alt="KSA Flag" 
                     className="h-3"
                 />
