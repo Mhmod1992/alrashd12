@@ -186,7 +186,7 @@ const FindingItem: React.FC<{ finding: StructuredFinding; predefinedFinding?: Pr
 
 const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: ReportSettings; isPrintView?: boolean; direction?: 'rtl' | 'ltr' }> = ({ note, categoryName, settings, isPrintView, direction }) => {
     const { fontSizes } = settings;
-    const aspectClass = { small: 'aspect-[16/9]', medium: 'aspect-[4/3]', large: 'aspect-square' }[settings.noteImageSize] || 'aspect-[4/3]';
+    const aspectClass = { small: 'aspect-[16/9]', medium: 'aspect-[4/3]', large: 'aspect-square' }[settings.noteImageSize] || 'aspect-[16/9]';
     const displayLang = note.displayTranslation?.isActive ? note.displayTranslation.lang : undefined;
     const displayText = (displayLang && note.translations?.[displayLang]) ? note.translations[displayLang] : note.text;
 
@@ -194,8 +194,12 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
     const textClassName = note.highlightColor ? `px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
 
     return (
-        <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center" style={{ borderColor: settings.borderColor }}>
-            {note.image && <img src={note.image} alt="Note" className={`object-cover w-full ${aspectClass} mx-auto`} style={{ borderBottom: `1px solid ${settings.noteImageBorderColor}` }} />}
+        <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center overflow-hidden break-inside-avoid print:break-inside-avoid w-full min-w-0" style={{ borderColor: settings.borderColor, clipPath: 'inset(0)' }}>
+            {note.image && (
+                <div className="relative w-full overflow-hidden flex-shrink-0 pt-[56.25%] bg-slate-50 print:bg-slate-50" style={{ borderBottom: `1px solid ${settings.noteImageBorderColor}`, clipPath: 'inset(0)' }}>
+                    <img src={note.image} alt="Note" className="absolute top-0 left-0 w-full h-full object-cover print:object-cover block" style={{ maxWidth: '100%', maxHeight: '100%', width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+            )}
             <div className={`flex-grow flex flex-col w-full ${isPrintView ? 'p-2' : 'p-3'}`}>
                 <p className="text-xs font-bold mb-1 w-full" style={{ color: settings.primaryColor }}>{categoryName}</p>
                 <div className={`flex-grow mb-2 w-full break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
