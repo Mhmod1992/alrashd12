@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
 
-declare const Html5Qrcode: any;
+declare const Html5QrcodeScanner: any;
 
 interface InAppScannerModalProps {
     isOpen: boolean;
@@ -12,122 +12,93 @@ interface InAppScannerModalProps {
 
 const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, onScanSuccess }) => {
     const onScanSuccessRef = useRef(onScanSuccess);
-    const scannerRef = useRef<any>(null);
-    const [isScanning, setIsScanning] = useState(false);
-    const [errorMsg, setErrorMsg] = useState('');
-
+    
     useEffect(() => {
         onScanSuccessRef.current = onScanSuccess;
     }, [onScanSuccess]);
 
     // Ref to prevent multiple scan callbacks from firing in quick succession
     const hasScannedRef = useRef(false);
+    const scannerInstanceRef = useRef<any>(null);
 
     useEffect(() => {
         if (!isOpen) {
-            // Stop scanner if modal closes
-            if (scannerRef.current && isScanning) {
-                scannerRef.current.stop().then(() => {
-                    scannerRef.current.clear();
-                    setIsScanning(false);
-                }).catch((err: any) => console.error("Failed to stop scanner", err));
-            }
             return;
         }
         
         // Reset the scanned flag every time the modal opens
         hasScannedRef.current = false;
-        setErrorMsg('');
 
-        if (typeof Html5Qrcode === 'undefined') {
-            setErrorMsg("مكتبة المسح غير متوفرة.");
+        if (typeof Html5QrcodeScanner === 'undefined') {
+            console.error("Html5QrcodeScanner library is not loaded.");
             return;
         }
 
-        const startScanner = async () => {
-            try {
-                const html5QrCode = new Html5Qrcode("reader");
-                scannerRef.current = html5QrCode;
-
-                const config = {
-                    fps: 15, // High frame rate for faster detection
-                    // No qrbox specified = full frame scanning (much better for detection)
-                    aspectRatio: 1.0, 
-                    disableFlip: false,
-                };
-
-                const handleSuccess = (decodedText: string) => {
-                    // Success callback
-                    if (!hasScannedRef.current) {
-                        hasScannedRef.current = true;
-                        // Stop scanner immediately upon success to freeze frame and prevent duplicate reads
-                        html5QrCode.stop().then(() => {
-                            setIsScanning(false);
-                            onScanSuccessRef.current(decodedText);
-                        }).catch((err: any) => {
-                            console.error("Failed to stop scanner after success", err);
-                            onScanSuccessRef.current(decodedText); // Proceed anyway
-                        });
-                    }
-                };
-
-                const handleError = (errorMessage: string) => {
-                    // Error callback (called frequently when no QR is in frame, ignore)
-                };
-
-                try {
-                    // Try 1: High resolution
-                    await html5QrCode.start(
-                        { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
-                        config,
-                        handleSuccess,
-                        handleError
-                    );
-                    setIsScanning(true);
-                } catch (err1) {
-                    console.warn("High res camera request failed, trying fallback...", err1);
-                    try {
-                        // Try 2: Basic environment camera without specific resolution constraints
-                        await html5QrCode.start(
-                            { facingMode: "environment" },
-                            config,
-                            handleSuccess,
-                            handleError
-                        );
-                        setIsScanning(true);
-                    } catch (err2) {
-                        console.warn("Environment camera request failed, trying any camera...", err2);
-                        // Try 3: Any available camera (might be front-facing, but better than nothing)
-                        // Using cameraId if possible, or just true for video
-                        await html5QrCode.start(
-                            { facingMode: "user" }, // Fallback to front camera if back fails completely
-                            config,
-                            handleSuccess,
-                            handleError
-                        );
-                        setIsScanning(true);
-                    }
-                }
-            } catch (err) {
-                console.error("Error starting scanner", err);
-                setErrorMsg("تعذر الوصول إلى الكاميرا. يرجى التأكد من منح الصلاحيات للمتصفح.");
-            }
-        };
-
-        // Small delay to ensure the DOM element is fully rendered before starting
+        // Small delay to ensure the modal animation finishes and the DOM is fully ready
         const timer = setTimeout(() => {
-            startScanner();
-        }, 100);
+            try {
+                const html5QrcodeScanner = new Html5QrcodeScanner(
+                    "reader",
+                    {
+                        fps: 15, // High frame rate for faster detection
+                        // OMITTING qrbox: This enables FULL FRAME scanning (reads from anywhere on screen)
+                        aspectRatio: 1.0,
+                        supportedScanTypes: [0], // SCAN_TYPE_CAMERA
+                        disableFlip: false,
+                        // Request high resolution and continuous focus from the environment (back) camera
+                        videoConstraints: {
+                            facingMode: "environment",
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 },
+                            advanced: [{ focusMode: "continuous" }]
+                        }
+                    },
+                    /* verbose= */ false
+                );
+
+                scannerInstanceRef.current = html5QrcodeScanner;
+
+                const successCallback = (decodedText: string) => {
+                    // Only process the first successful scan
+                    if (!hasScannedRef.current) {
+                        hasScannedRef.current = true; // Set the flag
+                        
+                        // Stop scanner immediately upon success
+                        if (scannerInstanceRef.current) {
+                            scannerInstanceRef.current.clear().catch(console.error);
+                        }
+                        
+                        onScanSuccessRef.current(decodedText);
+                    }
+                };
+
+                const errorCallback = (errorMessage: string) => {
+                    // Ignore frequent "QR code not found" messages to keep the console clean
+                    if (!errorMessage.toLowerCase().includes('qr code not found')) {
+                        // console.warn(`QR Scanner Error: ${errorMessage}`);
+                    }
+                };
+
+                html5QrcodeScanner.render(successCallback, errorCallback);
+            } catch (err) {
+                console.error("Failed to initialize scanner:", err);
+            }
+        }, 400); // 400ms delay matches the modal slide-in animation duration
 
         // Cleanup function for when the modal closes or component unmounts
         return () => {
             clearTimeout(timer);
-            if (scannerRef.current && isScanning) {
-                scannerRef.current.stop().then(() => {
-                    scannerRef.current.clear();
-                }).catch((error: any) => {
-                    console.error("Failed to clear html5-qrcode on cleanup.", error);
-                });
+            if (scannerInstanceRef.current) {
+                try {
+                    const state = scannerInstanceRef.current.getState();
+                    if (state !== 1) { // 1 is NOT_STARTED
+                        scannerInstanceRef.current.clear().catch((error: any) => {
+                            console.error("Failed to clear html5-qrcode-scanner on cleanup.", error);
+                        });
+                    }
+                } catch (e) {
+                    console.error("Error during scanner cleanup", e);
+                }
             }
         };
     }, [isOpen]);
@@ -135,30 +106,25 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="مسح رمز الاستجابة السريعة" size="lg">
             <div className="flex flex-col items-center relative">
-                {errorMsg ? (
-                    <div className="p-4 bg-red-50 text-red-600 rounded-lg text-center w-full">
-                        {errorMsg}
-                    </div>
-                ) : (
-                    <div className="relative w-full max-w-md aspect-square rounded-2xl overflow-hidden bg-black flex items-center justify-center shadow-inner">
-                        <div id="reader" className="w-full h-full object-cover"></div>
-                        
-                        {/* Overlay to guide user, but scanning happens full-frame */}
-                        <div className="absolute inset-0 pointer-events-none border-[40px] border-black/40 z-10"></div>
-                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
-                            <div className="w-3/4 h-3/4 border-2 border-white/50 rounded-xl relative">
-                                {/* Corner markers */}
-                                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
-                                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
-                                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
-                                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl"></div>
-                                
-                                {/* Scanning line animation */}
-                                <div className="absolute top-0 left-0 w-full h-0.5 bg-blue-500 shadow-[0_0_8px_2px_rgba(59,130,246,0.5)] animate-[scan_2s_ease-in-out_infinite]"></div>
-                            </div>
+                <div className="relative w-full max-w-md aspect-square rounded-2xl overflow-hidden bg-black flex items-center justify-center shadow-inner">
+                    {/* The scanner will inject its UI here */}
+                    <div id="reader" className="w-full h-full flex flex-col items-center justify-center"></div>
+                    
+                    {/* Overlay to guide user, but scanning happens full-frame */}
+                    <div className="absolute inset-0 pointer-events-none border-[40px] border-black/40 z-10"></div>
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
+                        <div className="w-3/4 h-3/4 border-2 border-white/50 rounded-xl relative">
+                            {/* Corner markers */}
+                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
+                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl"></div>
+                            
+                            {/* Scanning line animation */}
+                            <div className="absolute top-0 left-0 w-full h-0.5 bg-blue-500 shadow-[0_0_8px_2px_rgba(59,130,246,0.5)] animate-[scan_2s_ease-in-out_infinite]"></div>
                         </div>
                     </div>
-                )}
+                </div>
                 <p className="mt-6 text-slate-600 dark:text-slate-300 text-center font-medium bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-lg">
                     وجّه الكاميرا نحو رمز QR الموجود في التقرير
                 </p>
@@ -173,6 +139,22 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
                     #reader__dashboard_section_csr span { display: none !important; }
                     #reader__dashboard_section_swaplink { display: none !important; }
                     #reader__header_message { display: none !important; }
+                    /* Make sure the video fills the container */
+                    #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; border-radius: 1rem; }
+                    /* Hide the default border of the reader */
+                    #reader { border: none !important; }
+                    /* Style the default permission button if it shows up */
+                    #reader button { 
+                        background-color: #3b82f6 !important; 
+                        color: white !important; 
+                        padding: 0.5rem 1rem !important; 
+                        border-radius: 0.5rem !important; 
+                        border: none !important;
+                        font-family: inherit !important;
+                        cursor: pointer !important;
+                        z-index: 50 !important;
+                        position: relative !important;
+                    }
                 `}</style>
             </div>
         </Modal>
