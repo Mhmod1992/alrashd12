@@ -184,6 +184,12 @@ const Requests: React.FC = () => {
 
         if (hasChanges) {
             newData.sort((a, b) => {
+                const aIsComplete = a.status === RequestStatus.COMPLETE;
+                const bIsComplete = b.status === RequestStatus.COMPLETE;
+                
+                if (aIsComplete && !bIsComplete) return 1;
+                if (!aIsComplete && bIsComplete) return -1;
+
                 const dateA = new Date(a.created_at);
                 const dateB = new Date(b.created_at);
                 // Adjust for 4 AM shift start: treat 00:00-03:59 as "next day" (add 24h) for sorting
@@ -634,6 +640,12 @@ const Requests: React.FC = () => {
         }
 
         statusFilteredReqs.sort((a, b) => {
+            const aIsComplete = a.status === RequestStatus.COMPLETE;
+            const bIsComplete = b.status === RequestStatus.COMPLETE;
+            
+            if (aIsComplete && !bIsComplete) return 1;
+            if (!aIsComplete && bIsComplete) return -1;
+
             const dateA = new Date(a.created_at);
             const dateB = new Date(b.created_at);
             // Adjust for 4 AM shift start: treat 00:00-03:59 as "next day" (add 24h) for sorting

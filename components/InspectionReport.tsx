@@ -88,7 +88,10 @@ const ReportHeader: React.FC<{ appName: string; logoUrl: string | null; settings
 
     useEffect(() => {
         if (!settings.showQrCode || !qrCodeRef.current || typeof QRCodeStyling === 'undefined') return;
-        const content = settings.qrCodeContent.replace('{request_number}', String(requestNumber));
+        
+        // Use a smart URL that points to our app's /scan route
+        const content = `${window.location.origin}/scan/${requestNumber}`;
+        
         const size = parseInt(settings.qrCodeSize, 10) || 96;
         const qrCode = new QRCodeStyling({
             width: size, height: size, data: content, margin: 0,

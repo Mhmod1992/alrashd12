@@ -406,21 +406,21 @@ const PaperArchive: React.FC = () => {
     const handleQRScan = async (decodedText: string) => {
         setIsQRScannerOpen(false);
         
-        // Try to extract request number if it's a URL or complex string
-        // Assuming format might be just number or "REQ-123" or full URL
         let requestNumberStr = decodedText;
         
-        // Simple heuristic: if it contains "req_" or similar, try to parse. 
-        // For now, let's assume the QR code contains the request number directly or as part of a string.
-        // If your QR codes have a specific format (e.g., JSON or URL), parse it here.
-        
-        // Example: If QR is "https://app.com/requests/123", extract 123.
-        // Example: If QR is "123", use 123.
-        
-        // Try to find a number in the string
-        const match = decodedText.match(/\d+/);
-        if (match) {
-            requestNumberStr = match[0];
+        try {
+            const url = new URL(decodedText);
+            const pathParts = url.pathname.split('/');
+            const numberPart = pathParts.pop();
+            if (numberPart && /^\d+$/.test(numberPart)) {
+                requestNumberStr = numberPart;
+            }
+        } catch (e) {
+            // Not a URL, try to find a number at the end or just use the whole string
+            const match = decodedText.match(/\d+$/);
+            if (match) {
+                requestNumberStr = match[0];
+            }
         }
 
         const requestNumber = parseInt(requestNumberStr);

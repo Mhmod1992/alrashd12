@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { InspectionRequest, RequestStatus, Client, Car, CarMake, CarModel, InspectionType, Employee, PaymentType } from '../types';
 import { useAppContext } from '../context/AppContext';
 import EditIcon from './icons/EditIcon';
@@ -95,6 +95,23 @@ const RequestTable: React.FC<RequestTableProps> = ({
   const design = settings.design || 'aero';
   const isWaitingTable = title === 'طلبات بانتظار الدفع';
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  const [paymentFilter, setPaymentFilter] = useState<PaymentType | 'الكل'>('الكل');
+
+  const availablePaymentTypes = useMemo(() => {
+      const types = new Set<PaymentType>();
+      requests.forEach(req => {
+          if (req.payment_type) types.add(req.payment_type);
+      });
+      return Array.from(types);
+  }, [requests]);
+
+  const displayedRequests = useMemo(() => {
+      return requests.filter(req => {
+          if (paymentFilter === 'الكل') return true;
+          return req.payment_type === paymentFilter;
+      });
+  }, [requests, paymentFilter]);
 
   useEffect(() => {
     const tableContainer = tableContainerRef.current;
@@ -359,8 +376,38 @@ const RequestTable: React.FC<RequestTableProps> = ({
             <h3 className={`text-lg font-bold ${isWaitingTable ? 'text-purple-800 dark:text-purple-200' : 'text-slate-800 dark:text-slate-100'}`}>{title}</h3>
             {getStatusIndicator()}
         </div>
+        
+        {!isWaitingTable && availablePaymentTypes.length > 0 && (
+            <div className="flex-1 flex items-center justify-center gap-2 overflow-x-auto hide-scrollbar px-4">
+                <button
+                    onClick={() => setPaymentFilter('الكل')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-colors whitespace-nowrap ${
+                        paymentFilter === 'الكل' 
+                        ? 'bg-blue-600 text-white shadow-md' 
+                        : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    }`}
+                >
+                    الكل
+                </button>
+                {availablePaymentTypes.map(type => (
+                    <button
+                        key={type}
+                        onClick={() => setPaymentFilter(type)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-colors whitespace-nowrap ${
+                            paymentFilter === type 
+                            ? 'bg-blue-600 text-white shadow-md' 
+                            : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+                        }`}
+                    >
+                        {type === PaymentType.Split ? 'مجزأ' : 
+                         type === PaymentType.Unpaid ? 'آجل' : type}
+                    </button>
+                ))}
+            </div>
+        )}
+
         {setPlateDisplayLanguage && (
-          <label htmlFor="plate-lang-toggle" className="flex items-center cursor-pointer group">
+          <label htmlFor="plate-lang-toggle" className="flex items-center cursor-pointer group shrink-0">
             <span className="mr-3 text-sm font-medium text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors">
               عرض الأحرف الإنجليزية
             </span>
@@ -394,8 +441,9 @@ const RequestTable: React.FC<RequestTableProps> = ({
                     </tr>
                 </thead>
                 <tbody>
-                    {requests.map((request) => {
-                        const clientInfo = getClientInfo(request.client_id);
+                    {displayedRequests.length > 0 ? (
+                        displayedRequests.map((request) => {
+                            const clientInfo = getClientInfo(request.client_id);
                         const carInfo = getCarInfo(request.car_id);
                         const creator = employees.find(e => e.id === request.employee_id);
                         const carDisplayName = request.car_snapshot
@@ -617,7 +665,13 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                 </td>
                             </tr>
                         )
-                    })}
+                    })) : (
+                        <tr>
+                            <td colSpan={isWaitingTable ? 6 : 8} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                                لا توجد طلبات تطابق نوع الدفع المحدد.
+                            </td>
+                        </tr>
+                    )}
                 </tbody>
             </table>
         </div>

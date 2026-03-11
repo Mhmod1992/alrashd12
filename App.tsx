@@ -133,10 +133,28 @@ const AppContent: React.FC = () => {
     }
   }, [settings.appName]);
 
+  const [isRedirecting, setIsRedirecting] = React.useState(false);
+
+  // Handle QR Code Scan Redirection
+  React.useEffect(() => {
+    if (isLoading) return;
+    
+    const pathname = window.location.pathname;
+    const scanMatch = pathname.match(/^\/scan\/(\d+)$/);
+    
+    if (scanMatch && settings.reportSettings?.qrCodeContent) {
+      setIsRedirecting(true);
+      const scanRequestNumber = scanMatch[1];
+      // Redirect to the external URL with the request number
+      const targetUrl = settings.reportSettings.qrCodeContent.replace('{request_number}', scanRequestNumber);
+      window.location.href = targetUrl;
+    }
+  }, [isLoading, settings.reportSettings?.qrCodeContent]);
+
   // The problematic force-reload logic has been removed from here
   // and replaced with a better "revival" mechanism in AppContext.
 
-  if (isLoading) {
+  if (isLoading || isRedirecting) {
     return <AppShellSkeleton />;
   }
 
