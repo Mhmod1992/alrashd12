@@ -73,7 +73,12 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                 setError(null);
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: { facingMode: 'environment' } 
+                        video: { 
+                            facingMode: 'environment',
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 },
+                            advanced: [{ focusMode: "continuous" }] as any
+                        } 
                     });
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;

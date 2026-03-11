@@ -46,10 +46,12 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
                 aspectRatio: 1.0,
                 supportedScanTypes: [0], // SCAN_TYPE_CAMERA
                 disableFlip: true, // Performance boost
-                // Use videoConstraints for a stronger request for the back camera
+                // Use videoConstraints for a stronger request for the back camera and high resolution
                 videoConstraints: {
-                    facingMode: "environment", // Changed from { exact: "environment" } for better compatibility
-                    focusMode: "continuous", // Try to force continuous focus
+                    facingMode: "environment",
+                    width: { ideal: 1920, min: 1280 },
+                    height: { ideal: 1080, min: 720 },
+                    advanced: [{ focusMode: "continuous" }]
                 }
             },
             /* verbose= */ false);
