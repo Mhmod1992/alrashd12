@@ -56,39 +56,61 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
                     disableFlip: false,
                 };
 
-                // Request high resolution and continuous focus from the environment (back) camera
-                const cameraConfig = {
-                    facingMode: "environment",
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                    advanced: [{ focusMode: "continuous" }]
+                const handleSuccess = (decodedText: string) => {
+                    // Success callback
+                    if (!hasScannedRef.current) {
+                        hasScannedRef.current = true;
+                        // Stop scanner immediately upon success to freeze frame and prevent duplicate reads
+                        html5QrCode.stop().then(() => {
+                            setIsScanning(false);
+                            onScanSuccessRef.current(decodedText);
+                        }).catch((err: any) => {
+                            console.error("Failed to stop scanner after success", err);
+                            onScanSuccessRef.current(decodedText); // Proceed anyway
+                        });
+                    }
                 };
 
-                await html5QrCode.start(
-                    cameraConfig,
-                    config,
-                    (decodedText: string) => {
-                        // Success callback
-                        if (!hasScannedRef.current) {
-                            hasScannedRef.current = true;
-                            // Stop scanner immediately upon success to freeze frame and prevent duplicate reads
-                            html5QrCode.stop().then(() => {
-                                setIsScanning(false);
-                                onScanSuccessRef.current(decodedText);
-                            }).catch((err: any) => {
-                                console.error("Failed to stop scanner after success", err);
-                                onScanSuccessRef.current(decodedText); // Proceed anyway
-                            });
-                        }
-                    },
-                    (errorMessage: string) => {
-                        // Error callback (called frequently when no QR is in frame, ignore)
+                const handleError = (errorMessage: string) => {
+                    // Error callback (called frequently when no QR is in frame, ignore)
+                };
+
+                try {
+                    // Try 1: High resolution
+                    await html5QrCode.start(
+                        { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+                        config,
+                        handleSuccess,
+                        handleError
+                    );
+                    setIsScanning(true);
+                } catch (err1) {
+                    console.warn("High res camera request failed, trying fallback...", err1);
+                    try {
+                        // Try 2: Basic environment camera without specific resolution constraints
+                        await html5QrCode.start(
+                            { facingMode: "environment" },
+                            config,
+                            handleSuccess,
+                            handleError
+                        );
+                        setIsScanning(true);
+                    } catch (err2) {
+                        console.warn("Environment camera request failed, trying any camera...", err2);
+                        // Try 3: Any available camera (might be front-facing, but better than nothing)
+                        // Using cameraId if possible, or just true for video
+                        await html5QrCode.start(
+                            { facingMode: "user" }, // Fallback to front camera if back fails completely
+                            config,
+                            handleSuccess,
+                            handleError
+                        );
+                        setIsScanning(true);
                     }
-                );
-                setIsScanning(true);
+                }
             } catch (err) {
                 console.error("Error starting scanner", err);
-                setErrorMsg("تعذر الوصول إلى الكاميرا. يرجى التأكد من منح الصلاحيات.");
+                setErrorMsg("تعذر الوصول إلى الكاميرا. يرجى التأكد من منح الصلاحيات للمتصفح.");
             }
         };
 
