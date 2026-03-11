@@ -40,17 +40,19 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
                 const html5QrcodeScanner = new Html5QrcodeScanner(
                     "reader",
                     {
-                        fps: 15, // High frame rate for faster detection
-                        // OMITTING qrbox: This enables FULL FRAME scanning (reads from anywhere on screen)
+                        fps: 20, // High frame rate for faster detection
+                        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                            // 95% of the smaller dimension to simulate full-frame safely
+                            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                            const size = Math.floor(minEdge * 0.95);
+                            return { width: size, height: size };
+                        },
                         aspectRatio: 1.0,
                         supportedScanTypes: [0], // SCAN_TYPE_CAMERA
-                        disableFlip: false,
-                        // Request high resolution and continuous focus from the environment (back) camera
+                        disableFlip: true,
+                        // Removed strict width/height to prevent black screen on some devices
                         videoConstraints: {
-                            facingMode: "environment",
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 },
-                            advanced: [{ focusMode: "continuous" }]
+                            facingMode: "environment"
                         }
                     },
                     /* verbose= */ false
@@ -106,14 +108,13 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="مسح رمز الاستجابة السريعة" size="lg">
             <div className="flex flex-col items-center relative">
-                <div className="relative w-full max-w-md aspect-square rounded-2xl overflow-hidden bg-black flex items-center justify-center shadow-inner">
-                    {/* The scanner will inject its UI here */}
-                    <div id="reader" className="w-full h-full flex flex-col items-center justify-center"></div>
+                <div className="relative w-full max-w-md mx-auto">
+                    {/* The scanner will inject its UI here. Removed strict height/bg classes so it sizes naturally */}
+                    <div id="reader" className="w-full rounded-2xl overflow-hidden shadow-inner bg-slate-50 dark:bg-slate-900"></div>
                     
-                    {/* Overlay to guide user, but scanning happens full-frame */}
-                    <div className="absolute inset-0 pointer-events-none border-[40px] border-black/40 z-10"></div>
+                    {/* Custom Overlay */}
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
-                        <div className="w-3/4 h-3/4 border-2 border-white/50 rounded-xl relative">
+                        <div className="w-[95%] h-[95%] border-2 border-white/30 rounded-xl relative">
                             {/* Corner markers */}
                             <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
                             <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
@@ -140,7 +141,7 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
                     #reader__dashboard_section_swaplink { display: none !important; }
                     #reader__header_message { display: none !important; }
                     /* Make sure the video fills the container */
-                    #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; border-radius: 1rem; }
+                    #reader video { object-fit: cover !important; width: 100% !important; border-radius: 1rem; }
                     /* Hide the default border of the reader */
                     #reader { border: none !important; }
                     /* Style the default permission button if it shows up */
@@ -154,6 +155,8 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
                         cursor: pointer !important;
                         z-index: 50 !important;
                         position: relative !important;
+                        margin-top: 1rem !important;
+                        margin-bottom: 1rem !important;
                     }
                 `}</style>
             </div>
