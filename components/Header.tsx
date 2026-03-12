@@ -35,7 +35,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   const design = settings.design || 'aero';
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notificationTab, setNotificationTab] = useState<'all' | 'unread'>('all');
+  const [notificationTab, setNotificationTab] = useState<'all' | 'unread' | 'logins'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   
   const menuRef = useRef<HTMLDivElement>(null);
@@ -136,6 +136,9 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   const filteredNotifications = useMemo(() => {
       if (notificationTab === 'unread') {
           return appNotifications.filter(n => !n.is_read);
+      }
+      if (notificationTab === 'logins') {
+          return appNotifications.filter(n => n.type === 'login');
       }
       return appNotifications;
   }, [appNotifications, notificationTab]);
@@ -288,6 +291,12 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                         >
                             غير مقروء ({unreadCount})
                         </button>
+                        <button 
+                            onClick={() => setNotificationTab('logins')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${notificationTab === 'logins' ? 'bg-white dark:bg-slate-600 shadow-sm text-purple-600 dark:text-purple-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                        >
+                            الدخول ({appNotifications.filter(n => n.type === 'login').length})
+                        </button>
                     </div>
                     
                     <div className="max-h-[60vh] md:max-h-[350px] overflow-y-auto custom-scrollbar bg-slate-50/30 dark:bg-slate-900/30">
@@ -331,7 +340,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                                 <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-3">
                                     <BellIcon className="w-10 h-10 opacity-30" />
                                 </div>
-                                <p className="font-medium text-sm">لا توجد إشعارات {notificationTab === 'unread' ? 'غير مقروءة' : 'حالياً'}.</p>
+                                <p className="font-medium text-sm">لا توجد إشعارات {notificationTab === 'unread' ? 'غير مقروءة' : notificationTab === 'logins' ? 'تسجيل دخول' : 'حالياً'}.</p>
                             </div>
                         )}
                     </div>

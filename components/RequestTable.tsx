@@ -371,14 +371,14 @@ const RequestTable: React.FC<RequestTableProps> = ({
 
   return (
     <div className={`bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden relative ${isWaitingTable ? 'border-purple-200 dark:border-purple-800 shadow-purple-100 dark:shadow-none' : ''}`}>
-      <div className={`flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-700/50 ${isWaitingTable ? 'bg-purple-50/50 dark:bg-purple-900/20' : 'bg-slate-50/50 dark:bg-slate-800/50'}`}>
-        <div className="flex items-center gap-3">
+      <div className={`flex flex-wrap justify-between items-center p-4 sm:p-5 gap-3 border-b border-slate-100 dark:border-slate-700/50 ${isWaitingTable ? 'bg-purple-50/50 dark:bg-purple-900/20' : 'bg-slate-50/50 dark:bg-slate-800/50'}`}>
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
             <h3 className={`text-lg font-bold ${isWaitingTable ? 'text-purple-800 dark:text-purple-200' : 'text-slate-800 dark:text-slate-100'}`}>{title}</h3>
             {getStatusIndicator()}
         </div>
         
         {!isWaitingTable && availablePaymentTypes.length > 0 && (
-            <div className="flex-1 flex items-center justify-center gap-2 overflow-x-auto hide-scrollbar px-4">
+            <div className="flex-1 flex items-center justify-start sm:justify-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto order-3 sm:order-none pb-1 sm:pb-0">
                 <button
                     onClick={() => setPaymentFilter('الكل')}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-colors whitespace-nowrap ${
@@ -409,7 +409,8 @@ const RequestTable: React.FC<RequestTableProps> = ({
         {setPlateDisplayLanguage && (
           <label htmlFor="plate-lang-toggle" className="flex items-center cursor-pointer group shrink-0">
             <span className="mr-3 text-sm font-medium text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors">
-              عرض الأحرف الإنجليزية
+              <span className="hidden sm:inline">عرض الأحرف الإنجليزية</span>
+              <span className="sm:hidden">لوحة ABC</span>
             </span>
             <div className="relative">
               <input 

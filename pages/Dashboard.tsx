@@ -45,17 +45,17 @@ const QuickActions: React.FC = () => {
     ];
 
     return (
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-6">
             {actions.map((btn, idx) => (
                 <button
                     key={idx}
                     onClick={btn.action}
-                    className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all active:scale-95"
+                    className="flex flex-col items-center justify-center p-2 sm:p-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all active:scale-95"
                 >
-                    <div className={`p-2.5 rounded-full mb-2 ${btn.color} shadow-sm`}>
-                        {btn.icon}
+                    <div className={`p-1.5 sm:p-2.5 rounded-full mb-1 sm:mb-2 ${btn.color} shadow-sm`}>
+                        {React.cloneElement(btn.icon as React.ReactElement<{ className?: string }>, { className: 'w-4 h-4 sm:w-5 sm:h-5' })}
                     </div>
-                    <span className="text-[10px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">{btn.label}</span>
+                    <span className="text-[9px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">{btn.label}</span>
                 </button>
             ))}
         </div>
