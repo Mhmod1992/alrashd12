@@ -131,13 +131,9 @@ const compressImageForPdf = async (url: string, maxWidth: number = 600, quality:
                     const blob = await response.blob();
                     img.src = URL.createObjectURL(blob);
                 } catch (e) {
-                    try {
-                        img.crossOrigin = "anonymous";
-                        img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-                    } catch (e2) {
-                        img.crossOrigin = "anonymous";
-                        img.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                    }
+                    // Fallback to proxy if direct fetch fails
+                    img.crossOrigin = "anonymous";
+                    img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                 }
             }
 
@@ -215,19 +211,14 @@ const urlToBase64 = async (url: string, compress: boolean = false): Promise<stri
         return await fetchImage(url);
     } catch (e1) {
         try {
-            // Try proxy without cors mode to avoid preflight issues
-            const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
-            if (!response.ok) throw new Error('Proxy response was not ok');
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
+            return await fetchImage(`https://corsproxy.io/?${encodeURIComponent(url)}`);
         } catch (e2) {
-            console.warn(`Failed to convert image: ${url}. Using fallback.`);
-            return FALLBACK_IMAGE;
+            try {
+                return await fetchImage(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+            } catch (e3) {
+                console.warn(`Failed to convert image: ${url}. Using fallback.`);
+                return FALLBACK_IMAGE;
+            }
         }
     }
 };
