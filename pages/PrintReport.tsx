@@ -133,7 +133,7 @@ const compressImageForPdf = async (url: string, maxWidth: number = 600, quality:
                 } catch (e) {
                     // Fallback to proxy if direct fetch fails
                     img.crossOrigin = "anonymous";
-                    img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                    img.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
                 }
             }
 
@@ -211,14 +211,22 @@ const urlToBase64 = async (url: string, compress: boolean = false): Promise<stri
         return await fetchImage(url);
     } catch (e1) {
         try {
-            return await fetchImage(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+            // allorigins returns JSON by default if we don't use the raw endpoint, but raw is better for images.
+            // However, sometimes the raw endpoint fails if the image is too large or the server blocks it.
+            // Let's try to fetch it as a blob through the proxy.
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error('Proxy response was not ok');
+            const blob = await response.blob();
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
         } catch (e2) {
-            try {
-                return await fetchImage(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
-            } catch (e3) {
-                console.warn(`Failed to convert image: ${url}. Using fallback.`);
-                return FALLBACK_IMAGE;
-            }
+            console.warn(`Failed to convert image: ${url}. Using fallback.`);
+            return FALLBACK_IMAGE;
         }
     }
 };
