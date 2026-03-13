@@ -118,26 +118,18 @@ const compressImageForPdf = async (url: string, maxWidth: number = 600, quality:
     
     return new Promise(async (resolve) => {
         try {
-            const img = new Image();
-            
-            // Handle data URLs vs external URLs
             if (url.startsWith('data:')) {
-                // Do not set crossOrigin for data URLs to avoid CORS errors
+                const img = new Image();
+                img.onload = () => {
+                   const result = processImage(img);
+                   resolve(result);
+                };
+                img.onerror = () => resolve(url);
                 img.src = url;
-            } else {
-                // Try direct fetch first, then proxies
-                try {
-                    const response = await fetch(url, { mode: 'cors' });
-                    const blob = await response.blob();
-                    img.src = URL.createObjectURL(blob);
-                } catch (e) {
-                    // Fallback to proxy if direct fetch fails
-                    img.crossOrigin = "anonymous";
-                    img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-                }
+                return;
             }
 
-            img.onload = () => {
+            const processImage = (img: HTMLImageElement) => {
                 let width = img.width;
                 let height = img.height;
 
@@ -150,34 +142,45 @@ const compressImageForPdf = async (url: string, maxWidth: number = 600, quality:
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    resolve(url); // Fallback to original if canvas fails
-                    return;
-                }
+                if (!ctx) return url;
 
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, width, height);
                 ctx.drawImage(img, 0, 0, width, height);
                 
-                const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
-                
-                // Cleanup if we created a blob URL
-                if (img.src.startsWith('blob:')) {
-                    URL.revokeObjectURL(img.src);
-                }
-                
-                // If original was a data URL and is somehow smaller, keep original
-                if (url.startsWith('data:') && url.length < compressedBase64.length) {
-                    resolve(url);
-                } else {
-                    resolve(compressedBase64);
-                }
+                return canvas.toDataURL('image/jpeg', quality);
             };
 
-            img.onerror = (err) => {
-                console.warn('Compression failed, using original', err);
-                resolve(url); // Fallback to original on error
+            const tryLoad = (src: string, isProxy: boolean = false): Promise<string> => {
+                return new Promise((res, rej) => {
+                    const img = new Image();
+                    if (!isProxy) img.crossOrigin = "anonymous";
+                    img.onload = () => res(processImage(img));
+                    img.onerror = rej;
+                    img.src = src;
+                });
             };
+
+            try {
+                // Try direct load with crossOrigin and cache-busting for Supabase
+                const cacheBuster = url.includes('supabase.co') ? (url.includes('?') ? '&' : '?') + `t=${Date.now()}` : '';
+                resolve(await tryLoad(url + cacheBuster));
+            } catch (e) {
+                try {
+                    // Fallback to weserv.nl proxy - very reliable for images
+                    const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=${maxWidth}&output=jpg&q=${Math.round(quality * 100)}`;
+                    resolve(await tryLoad(proxyUrl, true));
+                } catch (e2) {
+                    try {
+                        // All-origins fallback
+                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                        resolve(await tryLoad(proxyUrl, true));
+                    } catch (e3) {
+                        console.warn('Compression failed all methods, using original', url);
+                        resolve(url);
+                    }
+                }
+            }
         } catch (err) {
             console.error('Compression error:', err);
             resolve(url);
@@ -187,16 +190,16 @@ const compressImageForPdf = async (url: string, maxWidth: number = 600, quality:
 
 const urlToBase64 = async (url: string, compress: boolean = false): Promise<string> => {
     if (!url) return '';
-    
-    if (compress) {
-        return await compressImageForPdf(url);
-    }
-
+    if (compress) return await compressImageForPdf(url);
     if (url.startsWith('data:')) return url;
+
     const FALLBACK_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-    const fetchImage = async (targetUrl: string): Promise<string> => {
-        const response = await fetch(targetUrl, { cache: 'force-cache', mode: 'cors' });
+    const fetchImage = async (targetUrl: string, useCors: boolean = true): Promise<string> => {
+        const options: RequestInit = { cache: 'no-store' };
+        if (useCors) options.mode = 'cors';
+        
+        const response = await fetch(targetUrl, options);
         if (!response.ok) throw new Error('Network response was not ok');
         const blob = await response.blob();
         return new Promise((resolve, reject) => {
@@ -208,13 +211,17 @@ const urlToBase64 = async (url: string, compress: boolean = false): Promise<stri
     };
 
     try {
-        return await fetchImage(url);
+        // Direct attempt with cache-busting
+        const cacheBuster = url.includes('supabase.co') ? (url.includes('?') ? '&' : '?') + `t=${Date.now()}` : '';
+        return await fetchImage(url + cacheBuster);
     } catch (e1) {
         try {
-            return await fetchImage(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+            // Weserv.nl proxy - more reliable
+            return await fetchImage(`https://images.weserv.nl/?url=${encodeURIComponent(url)}`, false);
         } catch (e2) {
             try {
-                return await fetchImage(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+                // Allorigins fallback
+                return await fetchImage(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, false);
             } catch (e3) {
                 console.warn(`Failed to convert image: ${url}. Using fallback.`);
                 return FALLBACK_IMAGE;
