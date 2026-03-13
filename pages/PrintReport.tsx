@@ -131,9 +131,13 @@ const compressImageForPdf = async (url: string, maxWidth: number = 600, quality:
                     const blob = await response.blob();
                     img.src = URL.createObjectURL(blob);
                 } catch (e) {
-                    // Fallback to proxy if direct fetch fails
-                    img.crossOrigin = "anonymous";
-                    img.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    try {
+                        img.crossOrigin = "anonymous";
+                        img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                    } catch (e2) {
+                        img.crossOrigin = "anonymous";
+                        img.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    }
                 }
             }
 
@@ -211,22 +215,18 @@ const urlToBase64 = async (url: string, compress: boolean = false): Promise<stri
         return await fetchImage(url);
     } catch (e1) {
         try {
-            // allorigins returns JSON by default if we don't use the raw endpoint, but raw is better for images.
-            // However, sometimes the raw endpoint fails if the image is too large or the server blocks it.
-            // Let's try to fetch it as a blob through the proxy.
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error('Proxy response was not ok');
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
+            // Try another proxy: cors-anywhere (demo) or similar
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            return await fetchImage(proxyUrl);
         } catch (e2) {
-            console.warn(`Failed to convert image: ${url}. Using fallback.`);
-            return FALLBACK_IMAGE;
+            try {
+                // Try allorigins as a last resort
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                return await fetchImage(proxyUrl);
+            } catch (e3) {
+                console.warn(`Failed to convert image: ${url}. Using fallback.`);
+                return FALLBACK_IMAGE;
+            }
         }
     }
 };
