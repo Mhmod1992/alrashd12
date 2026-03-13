@@ -9,13 +9,15 @@ import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import SparklesIcon from '../components/icons/SparklesIcon';
 import ReportTranslationModal from '../components/ReportTranslationModal';
 import Modal from '../components/Modal'; 
-import { InspectionRequest, ReportSettings, CustomFindingCategory } from '../types';
+import { InspectionRequest, ReportSettings, CustomFindingCategory, Note } from '../types';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import CameraIcon from '../components/icons/CameraIcon';
 import UploadIcon from '../components/icons/UploadIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
+import { pdf } from '@react-pdf/renderer';
+import OrderPdf from '../components/reports/OrderPdf';
 
 // --- Image Optimization Helper ---
 // Updated to accept 'grayscale' parameter. Default is true for backward compatibility with 'document' style.
@@ -111,8 +113,86 @@ const ensureFonts = async () => {
     }
 };
 
-const urlToBase64 = async (url: string): Promise<string> => {
-    if (!url || url.startsWith('data:')) return url;
+const compressImageForPdf = async (url: string, maxWidth: number = 600, quality: number = 0.5): Promise<string> => {
+    if (!url) return '';
+    
+    return new Promise(async (resolve) => {
+        try {
+            const img = new Image();
+            
+            // Handle data URLs vs external URLs
+            if (url.startsWith('data:')) {
+                // Do not set crossOrigin for data URLs to avoid CORS errors
+                img.src = url;
+            } else {
+                // Try direct fetch first, then proxies
+                try {
+                    const response = await fetch(url, { mode: 'cors' });
+                    const blob = await response.blob();
+                    img.src = URL.createObjectURL(blob);
+                } catch (e) {
+                    // Fallback to proxy if direct fetch fails
+                    img.crossOrigin = "anonymous";
+                    img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                }
+            }
+
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    resolve(url); // Fallback to original if canvas fails
+                    return;
+                }
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+                
+                // Cleanup if we created a blob URL
+                if (img.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(img.src);
+                }
+                
+                // If original was a data URL and is somehow smaller, keep original
+                if (url.startsWith('data:') && url.length < compressedBase64.length) {
+                    resolve(url);
+                } else {
+                    resolve(compressedBase64);
+                }
+            };
+
+            img.onerror = (err) => {
+                console.warn('Compression failed, using original', err);
+                resolve(url); // Fallback to original on error
+            };
+        } catch (err) {
+            console.error('Compression error:', err);
+            resolve(url);
+        }
+    });
+};
+
+const urlToBase64 = async (url: string, compress: boolean = false): Promise<string> => {
+    if (!url) return '';
+    
+    if (compress) {
+        return await compressImageForPdf(url);
+    }
+
+    if (url.startsWith('data:')) return url;
     const FALLBACK_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
     const fetchImage = async (targetUrl: string): Promise<string> => {
@@ -582,6 +662,132 @@ const PrintReport: React.FC = () => {
         if (pdf) pdf.save(`Report_${request?.request_number}.pdf`);
     };
 
+    const handleDownloadNativePdf = async () => {
+        if (!request || !client || !car || !inspectionType) return;
+        
+        setIsGenerating(true);
+        setLoadingState('جاري تجهيز البيانات...');
+
+        try {
+            // 1. Capture QR Code if exists
+            let qrCodeBase64 = undefined;
+            const qrCanvas = document.querySelector('.target-qr canvas') as HTMLCanvasElement;
+            if (qrCanvas) {
+                qrCodeBase64 = qrCanvas.toDataURL('image/png');
+            }
+
+            setLoadingState('جاري معالجة الصور...');
+            
+            // 2. Prepare attachments (excluding internal drafts)
+            const validAttachments = (originalRequest?.attached_files || []).filter(f => f.type !== 'internal_draft');
+            
+            // 3. Convert all essential images to base64 with compression to reduce PDF size
+            const processImage = async (url: string, shouldCompress: boolean = true) => {
+                if (!url) return undefined;
+                try {
+                    return await urlToBase64(url, shouldCompress);
+                } catch (e) {
+                    console.warn('Failed to process image for PDF:', url);
+                    return url;
+                }
+            };
+
+            const [logoBase64, carLogoBase64, stampBase64] = await Promise.all([
+                processImage(reportSettings.reportLogoUrl || '', true),
+                processImage(carMake?.logo_url || '', true),
+                processImage(reportSettings.workshopStampUrl || '', true)
+            ]);
+
+            // Process finding images (if any were added to the PDF component)
+            setLoadingState('جاري ضغط صور الفحص...');
+            const usedFindingIds = new Set(request.structured_findings?.map(f => f.findingId) || []);
+            const processedPredefinedFindings = await Promise.all(predefinedFindings.map(async pf => {
+                if (usedFindingIds.has(pf.id) && pf.reference_image) {
+                    const base64 = await processImage(pf.reference_image, true);
+                    return { ...pf, reference_image: base64 };
+                }
+                return pf;
+            }));
+            
+            // Process note images
+            const processedGeneralNotes = await Promise.all(((request.general_notes as Note[]) || []).map(async n => {
+                if (n.image) {
+                    const base64 = await processImage(n.image, true);
+                    return { ...n, image: base64 };
+                }
+                return n;
+            }));
+
+            const processedCategoryNotes = { ...request.category_notes };
+            for (const catId in processedCategoryNotes) {
+                const notes = processedCategoryNotes[catId] as Note[];
+                if (notes) {
+                    processedCategoryNotes[catId] = await Promise.all(notes.map(async n => {
+                        if (n.image) {
+                            const base64 = await processImage(n.image, true);
+                            return { ...n, image: base64 };
+                        }
+                        return n;
+                    }));
+                }
+            }
+
+            // Process attachments - these are usually the biggest part of the file size
+            setLoadingState('جاري ضغط المرفقات...');
+            const processedAttachments = await Promise.all(validAttachments.map(async (file) => {
+                const base64 = await processImage(file.data, true);
+                return { ...file, data: base64 || file.data };
+            }));
+
+            setLoadingState('جاري توليد ملف PDF...');
+
+            const blob = await pdf(
+                <OrderPdf 
+                    request={{
+                        ...request,
+                        general_notes: processedGeneralNotes,
+                        category_notes: processedCategoryNotes
+                    }}
+                    client={client}
+                    car={car}
+                    carMake={carMake ? { ...carMake, logo_url: carLogoBase64 || carMake.logo_url } : undefined}
+                    carModel={carModel}
+                    inspectionType={inspectionType}
+                    customFindingCategories={effectiveCategories}
+                    predefinedFindings={processedPredefinedFindings}
+                    settings={{
+                        ...settings,
+                        reportSettings: {
+                            ...reportSettings,
+                            reportLogoUrl: logoBase64 || null,
+                            workshopStampUrl: stampBase64 || null
+                        }
+                    }}
+                    reportDirection={reportDirection}
+                    qrCodeBase64={qrCodeBase64}
+                    attachments={processedAttachments}
+                />
+            ).toBlob();
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Report_${request.request_number}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            addNotification({ title: 'تم بنجاح', message: 'تم تحميل التقرير بصيغة PDF حقيقية.', type: 'success' });
+        } catch (error: any) {
+            console.error('Native PDF Error:', error);
+            addNotification({ title: 'خطأ', message: 'فشل إنشاء ملف PDF الحقيقي.', type: 'error' });
+        } finally {
+            setIsGenerating(false);
+            setLoadingState('');
+        }
+    };
+
     if (!request || !isDataReady) {
         return (
             <div className="flex flex-col items-center justify-center h-screen text-center p-4">
@@ -635,7 +841,7 @@ const PrintReport: React.FC = () => {
                         <Icon name="print" className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">طباعة</span>
                     </Button>
-                    <Button onClick={handleDownloadPdf} size="sm" disabled={isGenerating}>
+                    <Button onClick={handleDownloadNativePdf} size="sm" disabled={isGenerating}>
                         <Icon name="document-report" className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">PDF</span>
                     </Button>
