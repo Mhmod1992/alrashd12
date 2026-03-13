@@ -2,7 +2,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image, Font, Svg, Path, Circle } from '@react-pdf/renderer';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor } from '../../types';
-import { useAppContext } from '../../context/AppContext';
 
 // Register Arabic Font (Tajawal)
 Font.register({
@@ -360,11 +359,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     alignContent: 'center',
-    opacity: 0.06,
+    opacity: 0.04,
     zIndex: -1,
   },
   noteWatermarkText: {
-    fontSize: 30,
+    fontSize: 22,
     fontWeight: 'bold',
     margin: 15,
     transform: 'rotate(-25deg)',
@@ -552,14 +551,6 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
   };
 
   const visibleCategoryIds = inspectionType.finding_category_ids;
-  const { technicians, employees } = useAppContext();
-
-  const getAssignedTechnicians = (categoryId: string) => {
-    const assignedIds = request.technician_assignments?.[categoryId] || [];
-    const techNames = technicians.filter(t => assignedIds.includes(t.id)).map(t => t.name);
-    const empNames = employees.filter(e => assignedIds.includes(e.id)).map(e => e.name);
-    return [...techNames, ...empNames];
-  };
 
   const allImageNotes: { note: Note; categoryName: string }[] = [];
   visibleCategoryIds.forEach(catId => {
@@ -774,14 +765,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
 
           return (
             <View key={catId} style={[styles.categorySection, { borderColor: reportSettings.borderColor }]}>
-              <View style={{ flexDirection: reportDirection === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: reportSettings.findingsHeaderBackgroundColor, padding: 6, borderBottomWidth: 1, borderBottomColor: reportSettings.borderColor }}>
-                <Text style={[styles.categoryTitle, { backgroundColor: 'transparent', color: reportSettings.findingsHeaderFontColor, padding: 0 }]}>{category.name}</Text>
-                {getAssignedTechnicians(catId).length > 0 && (
-                  <Text style={{ fontSize: 8, color: reportSettings.findingsHeaderFontColor, fontWeight: 'bold' }}>
-                    {reportDirection === 'ltr' ? 'Tech: ' : 'الفني: '}{getAssignedTechnicians(catId).join(', ')}
-                  </Text>
-                )}
-              </View>
+              <Text style={[styles.categoryTitle, { backgroundColor: reportSettings.findingsHeaderBackgroundColor, color: reportSettings.findingsHeaderFontColor, borderBottomColor: reportSettings.borderColor }]}>{category.name}</Text>
               
               <View style={styles.categoryContent}>
                 {/* Watermark Pattern for the whole category content */}

@@ -127,15 +127,13 @@ const compressImageForPdf = async (url: string, maxWidth: number = 600, quality:
             } else {
                 // Try direct fetch first, then proxies
                 try {
-                    // Add cache buster to bypass browser cache without CORS headers
-                    const cacheBusterUrl = url + (url.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
-                    const response = await fetch(cacheBusterUrl, { mode: 'cors' });
+                    const response = await fetch(url, { mode: 'cors' });
                     const blob = await response.blob();
                     img.src = URL.createObjectURL(blob);
                 } catch (e) {
                     // Fallback to proxy if direct fetch fails
                     img.crossOrigin = "anonymous";
-                    img.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                 }
             }
 
@@ -198,8 +196,7 @@ const urlToBase64 = async (url: string, compress: boolean = false): Promise<stri
     const FALLBACK_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
     const fetchImage = async (targetUrl: string): Promise<string> => {
-        // Remove cache: 'force-cache' to avoid using cached responses without CORS headers
-        const response = await fetch(targetUrl, { mode: 'cors' });
+        const response = await fetch(targetUrl, { cache: 'force-cache', mode: 'cors' });
         if (!response.ok) throw new Error('Network response was not ok');
         const blob = await response.blob();
         return new Promise((resolve, reject) => {
@@ -211,15 +208,17 @@ const urlToBase64 = async (url: string, compress: boolean = false): Promise<stri
     };
 
     try {
-        // Add cache buster to bypass browser cache without CORS headers
-        const cacheBusterUrl = url + (url.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
-        return await fetchImage(cacheBusterUrl);
+        return await fetchImage(url);
     } catch (e1) {
         try {
-            return await fetchImage(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+            return await fetchImage(`https://corsproxy.io/?${encodeURIComponent(url)}`);
         } catch (e2) {
-            console.warn(`Failed to convert image: ${url}. Using fallback.`);
-            return FALLBACK_IMAGE;
+            try {
+                return await fetchImage(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+            } catch (e3) {
+                console.warn(`Failed to convert image: ${url}. Using fallback.`);
+                return FALLBACK_IMAGE;
+            }
         }
     }
 };
