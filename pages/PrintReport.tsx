@@ -516,7 +516,7 @@ const PrintReport: React.FC = () => {
             const MAIN_CARD = { minHeight: '200px', margin: '8px 0', padding: '6px', bgColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px' };
             const IMAGE_CONFIG = { height: '130px', marginBottom: '4px' };
 
-            const coloredSpans = clone.querySelectorAll('span[style*="background-color"]');
+            const coloredSpans = clone.querySelectorAll('.highlighted-note');
             coloredSpans.forEach((span) => {
                 const originalText = span.innerHTML;
                 span.innerHTML = `<span class="inner-text-mover">${originalText}</span>`;
@@ -545,7 +545,7 @@ const PrintReport: React.FC = () => {
                 .print-clone .finding-content { display: contents !important; }
                 .print-clone .info-block { top: 2px !important; position: relative !important; }
                 .print-clone .finding-category h3 { top: -4px !important; position: relative !important; }
-                .print-clone span[style*="background-color"] { position: relative !important; display: inline-block !important; top: -1px !important; padding: 0 4px !important; line-height: 1.4 !important; }
+                .print-clone .highlighted-note { position: relative !important; display: inline-block !important; top: -1px !important; padding: 0 4px !important; line-height: 1.4 !important; }
                 .print-clone img { object-fit: contain !important; }
                 .print-clone .target-logo { height: 90px !important; width: auto !important; }
                 .print-clone .target-car-logo img { height: 60px !important; width: auto !important; }

@@ -205,7 +205,7 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
     const displayText = (displayLang && note.translations?.[displayLang]) ? note.translations[displayLang] : note.text;
 
     const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, settings.noteHighlightOpacity || 0.1) : {};
-    const textClassName = note.highlightColor ? `px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
+    const textClassName = note.highlightColor ? `highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
 
     return (
         <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center overflow-hidden break-inside-avoid print:break-inside-avoid w-full min-w-0" style={{ borderColor: settings.borderColor, clipPath: 'inset(0)' }}>
@@ -324,7 +324,13 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
         const size = reportSettings.bulletSize ?? 6;
         const color = reportSettings.bulletColor ?? '#94a3b8';
         const style = reportSettings.bulletStyle ?? 'circle';
-        return { width: `${size}px`, height: style === 'dash' ? '2px' : `${size}px`, backgroundColor: color, borderRadius: style === 'circle' ? '9999px' : style === 'square' ? '2px' : '0', marginTop: style === 'dash' ? `${size / 2}px` : '6px' };
+        return { 
+            width: `${size}px`, 
+            height: style === 'dash' ? '2px' : `${size}px`, 
+            backgroundColor: color, 
+            borderRadius: style === 'circle' ? '9999px' : style === 'square' ? '2px' : '0', 
+            marginTop: style === 'dash' ? '0.6em' : '0.4em' 
+        };
     };
 
     return (
@@ -427,7 +433,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                                         <div className="relative z-10"><h4 className={`font-bold border-b pb-1 mb-2 ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: reportSettings.primaryColor, borderColor: reportSettings.borderColor }}>{reportDirection === 'ltr' ? (allFindingsForCategory.length > 0 ? 'Technician Notes:' : 'Notes:') : (allFindingsForCategory.length > 0 ? 'ملاحظات الفني:' : 'ملاحظات:')}</h4><div className="space-y-1 p-0 m-0">{textOnlyNotes.map(note => {
                                             const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
                                             const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
-                                            const textClassName = note.highlightColor ? `px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
+                                            const textClassName = note.highlightColor ? `highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
                                             return <div key={note.id} className={`py-0.5 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>;
                                         })}</div></div>
                                     </div>
@@ -442,7 +448,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                                 <div className="relative z-10 space-y-1 p-0 m-0">{generalTextOnlyNotes.map(note => {
                                     const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
                                     const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
-                                    const textClassName = note.highlightColor ? `px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
+                                    const textClassName = note.highlightColor ? `highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
                                     return <div key={note.id} className={`py-1 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>;
                                 })}</div>
                             </div>

@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: '#1e293b',
-    marginTop: 5,
+    marginTop: 4,
     marginLeft: layoutSettings.notes.spacing.bulletMargin,
   },
   noteText: {

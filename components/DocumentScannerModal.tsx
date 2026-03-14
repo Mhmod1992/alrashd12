@@ -11,7 +11,7 @@ interface DocumentScannerModalProps {
     onClose: () => void;
     imageFile: File | null;
     onConfirm: (processedFile: File) => void;
-    forceFilter?: 'original' | 'document' | 'bw';
+    forceFilter?: 'original' | 'document' | 'bw' | 'magic_color';
 }
 
 const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onClose, imageFile, onConfirm, forceFilter }) => {
@@ -25,7 +25,7 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
     
     // Processing State
     const [isProcessing, setIsProcessing] = useState(false);
-    const [filterType, setFilterType] = useState<'original' | 'document' | 'bw'>('document');
+    const [filterType, setFilterType] = useState<'original' | 'document' | 'bw' | 'magic_color'>('magic_color');
     
     // Refs
     const containerRef = useRef<HTMLDivElement>(null);
@@ -42,7 +42,7 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
             setScale(1);
             setPosition({ x: 0, y: 0 });
             setRotation(0);
-            setFilterType(forceFilter || 'document');
+            setFilterType(forceFilter || 'magic_color');
             setIsLandscape(false);
             
             return () => URL.revokeObjectURL(url);
@@ -132,7 +132,21 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                     
                     let v = 0.299 * r + 0.587 * g + 0.114 * b;
                     
-                    if (filterType === 'document') { // Enhanced Document Filter
+                    if (filterType === 'magic_color') {
+                        // Magic Color: Remove background, keep text colors
+                        if (v > 150) {
+                            // Smooth transition to white for the background
+                            const blend = Math.min(1, (v - 150) / 40); // 150->0, 190->1
+                            data[i] = r + (255 - r) * blend;
+                            data[i + 1] = g + (255 - g) * blend;
+                            data[i + 2] = b + (255 - b) * blend;
+                        } else {
+                            // Darken the text and increase contrast for ink
+                            data[i] = Math.max(0, r * 1.15 - 25);
+                            data[i + 1] = Math.max(0, g * 1.15 - 25);
+                            data[i + 2] = Math.max(0, b * 1.15 - 25);
+                        }
+                    } else if (filterType === 'document') { // Enhanced Document Filter
                         // Lighten shadows/mid-tones using gamma correction
                         v = 255 * Math.pow(v / 255, 0.7);
                         
@@ -187,7 +201,7 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                     {forceFilter ? (
                         <div className="flex gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
                             <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-white dark:bg-slate-600 shadow text-blue-600">
-                                {forceFilter === 'bw' ? 'مستند (إجباري)' : 'مستند محسن (إجباري)'}
+                                {forceFilter === 'bw' ? 'أبيض وأسود (إجباري)' : forceFilter === 'document' ? 'رمادي ذكي (إجباري)' : 'ملون ذكي (إجباري)'}
                             </span>
                         </div>
                     ) : (
@@ -199,16 +213,22 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
                                 ملون
                             </button>
                             <button 
+                                onClick={() => setFilterType('magic_color')} 
+                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'magic_color' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
+                            >
+                                ملون ذكي
+                            </button>
+                            <button 
                                 onClick={() => setFilterType('document')} 
                                 className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'document' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
                             >
-                                مستند محسن
+                                رمادي ذكي
                             </button>
                             <button 
                                 onClick={() => setFilterType('bw')} 
                                 className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${filterType === 'bw' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}
                             >
-                                مستند
+                                أبيض وأسود
                             </button>
                         </div>
                     )}
