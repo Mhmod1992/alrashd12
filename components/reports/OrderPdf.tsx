@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image, Font, Svg, Path, Circle } from '@react-pdf/renderer';
-import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor } from '../../types';
+import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor, ReportStamp } from '../../types';
 
 // Register Arabic Font (Tajawal)
 Font.register({
@@ -125,6 +125,17 @@ const layoutSettings = {
     elements: {
       qrSize: 80,      // حجم رمز الاستجابة السريعة (QR Code Size)
       logoHeight: 80,  // ارتفاع الشعار (Logo Height)
+    }
+  },
+  // 7. الأختام (Stamps Settings)
+  stamps: {
+    incomplete: {
+      width: 220,      // عرض الختم
+      height: 'auto',  // ارتفاع الختم (تلقائي ليناسب النص)
+      fontSizeMain: 22, // حجم خط "لم يتم اكمال الفحص"
+      fontSizeSub: 14,  // حجم خط "بناء على طلب العميل"
+      top: 115,        // البعد من الأعلى
+      left: 40         // البعد من الجانب
     }
   }
 };
@@ -534,6 +545,33 @@ const styles = StyleSheet.create({
     height: 90,
     objectFit: 'cover',
   },
+  stampIncomplete: {
+    position: 'absolute',
+    top: layoutSettings.stamps.incomplete.top,
+    left: layoutSettings.stamps.incomplete.left,
+    borderWidth: 3,
+    borderColor: '#ef4444',
+    padding: 10,
+    borderRadius: 4,
+    transform: 'rotate(-12deg)',
+    zIndex: 1000,
+    width: layoutSettings.stamps.incomplete.width,
+    height: layoutSettings.stamps.incomplete.height,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  stampTextMain: {
+    color: '#ef4444',
+    fontSize: layoutSettings.stamps.incomplete.fontSizeMain,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  stampTextSub: {
+    color: '#ef4444',
+    fontSize: layoutSettings.stamps.incomplete.fontSizeSub,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
   imageNoteContent: {
     padding: 4,
   },
@@ -608,6 +646,7 @@ interface OrderPdfProps {
   reportDirection?: 'rtl' | 'ltr';
   qrCodeBase64?: string;
   attachments?: { data: string; type: string; name: string }[];
+  reportStamps?: ReportStamp[];
 }
 
 const FormattedPlate = ({ plateNumber, plateCharacters, borderColor }: { plateNumber: string; plateCharacters?: any[]; borderColor: string }) => {
@@ -664,7 +703,8 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
   settings,
   reportDirection = 'rtl',
   qrCodeBase64,
-  attachments = []
+  attachments = [],
+  reportStamps = []
 }) => {
   const { appName, reportSettings } = settings;
 
@@ -693,6 +733,22 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {/* Stamps Overlay (Rendered first with absolute positioning to stay on top of the first page content) */}
+        {(reportStamps.length > 0 ? reportStamps : (request.report_stamps || [])).includes('CUSTOMER_REQUEST_INCOMPLETE') && (
+          <View
+            style={[
+              styles.stampIncomplete,
+              { zIndex: 9999, backgroundColor: 'rgba(255, 255, 255, 0.7)' },
+              reportDirection === 'ltr' ? { left: 'auto', right: layoutSettings.stamps.incomplete.left } : {}
+            ]}
+          >
+            <Text style={styles.stampTextMain}>{reportDirection === 'ltr' ? 'INCOMPLETE REQUEST' : 'لم يتم اكمال الفحص'}</Text>
+            <Text style={styles.stampTextSub}>{reportDirection === 'ltr' ? 'By Client Request' : 'بناء على طلب العميل'}</Text>
+          </View>
+        )}
+
+        {/* Header content continues below */}
+
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLogos}>
@@ -946,17 +1002,16 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                       return (
                         <View key={note.id} style={styles.noteItem} wrap={false}>
                           <View style={styles.noteBullet} />
-                          <Text style={[
-                            styles.noteText,
-                            highlight ? {
+                          <Text style={styles.noteText}>
+                            <Text style={highlight ? {
                               backgroundColor: `rgba(${highlight.rgb}, 0.1)`,
                               color: highlight.text,
-                              padding: 2,
+                              paddingHorizontal: 4,
                               borderRadius: 2,
                               fontWeight: 'bold'
-                            } : {}
-                          ]}>
-                            {displayText}
+                            } : {}}>
+                              {displayText}
+                            </Text>
                           </Text>
                         </View>
                       );
@@ -994,17 +1049,16 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                   return (
                     <View key={note.id} style={styles.noteItem} wrap={false}>
                       <View style={styles.noteBullet} />
-                      <Text style={[
-                        styles.noteText,
-                        highlight ? {
+                      <Text style={styles.noteText}>
+                        <Text style={highlight ? {
                           backgroundColor: `rgba(${highlight.rgb}, 0.1)`,
                           color: highlight.text,
-                          padding: 2,
+                          paddingHorizontal: 4,
                           borderRadius: 2,
                           fontWeight: 'bold'
-                        } : {}
-                      ]}>
-                        {displayText}
+                        } : {}}>
+                          {displayText}
+                        </Text>
                       </Text>
                     </View>
                   );
@@ -1054,6 +1108,8 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
         <Text style={styles.pageNumber} render={({ pageNumber, totalPages }) => (
           `${pageNumber} / ${totalPages}`
         )} fixed />
+
+        {/* Page Number (fixed to appear on every page) */}
       </Page>
 
       {/* Attachment Pages */}
