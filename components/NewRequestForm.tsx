@@ -47,7 +47,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
-        fetchAndUpdateSingleRequest, setIsCreatingRequest
+        fetchAndUpdateSingleRequest, setIsCreatingRequest, updateClient
     } = useAppContext();
 
     // Responsive Logic
@@ -995,6 +995,13 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     client = { id: uuidv4(), name: clientName, phone: clientPhone };
                     await addClient(client);
                 }
+            }
+
+            // Update client name if it changed
+            if (client && client.name !== clientName) {
+                const updatedClient = { ...client, name: clientName };
+                await updateClient(updatedClient);
+                client = updatedClient;
             }
             
             // Reservation Handling
