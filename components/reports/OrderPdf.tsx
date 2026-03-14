@@ -13,15 +13,127 @@ Font.register({
 });
 
 const highlightBaseColors: Record<HighlightColor, { rgb: string; text: string }> = {
-    yellow: { rgb: '250, 204, 21', text: '#422006' },
-    red: { rgb: '239, 68, 68', text: '#450a0a' },
-    green: { rgb: '34, 197, 94', text: '#052e16' },
-    blue: { rgb: '59, 130, 246', text: '#172554' },
+  yellow: { rgb: '250, 204, 21', text: '#422006' },
+  red: { rgb: '239, 68, 68', text: '#450a0a' },
+  green: { rgb: '34, 197, 94', text: '#052e16' },
+  blue: { rgb: '59, 130, 246', text: '#172554' },
+};
+
+/**
+ * إعدادات التحكم في تصميم وتنسيق الحاويات (Manual Layout Control)
+ * تسمح بتعديل الخطوط، الأحجام، والمسافات لكل حاوية من مكان واحد.
+ */
+const layoutSettings = {
+  // 1. حاوية بيانات السيارة (Vehicle Info)
+  vehicle: {
+    fontSize: {
+      title: 10,      // عنوان الحاوية
+      contentAr: 11,  // النصوص العربية
+      contentEn: 14,  // النصوص الإنجليزية
+      badge: 9        // نصوص البطاقات الصغيرة (سنة الصنع)
+    },
+    container: {
+      width: '66%',   // العرض
+      height: 'auto', // الارتفاع
+      padding: 8      // المسافات الداخلية (Padding)
+    },
+    spacing: {
+      columnGap: 20,  // المسافة بين الأعمدة داخل الحاوية
+      headerGap: 4,   // المسافة أسفل العنوان
+      dividerMargin: 5 // المسافة حول الخط الفاصل
+    },
+    elements: {
+      iconSize: 14,   // حجم الأيقونات
+      logoHeight: 40  // ارتفاع شعار السيارة
+    }
+  },
+  // 2. حاوية بيانات العميل (Customer Info)
+  customer: {
+    fontSize: {
+      title: 10,      // عنوان الحاوية
+      content: 8,     // القيم
+      label: 8        // التسميات (الاسم، الجوال...)
+    },
+    container: {
+      width: '100%',
+      height: 'auto',
+      padding: 5
+    },
+    spacing: {
+      gap: 20,        // المسافة بين العناصر (الاسم والجوال)
+      headerGap: 3,   // المسافة أسفل العنوان
+      dividerMargin: 4 // المسافة حول الخط الفاصل
+    },
+    elements: {
+      iconSize: 14
+    }
+  },
+  // 3. حاوية بيانات الطلب (Order Info)
+  order: {
+    fontSize: {
+      title: 10,      // عنوان الحاوية
+      content: 8.0,   // القيم
+      label: 7.5      // التسميات
+    },
+    container: {
+      width: '32%',
+      height: 'auto',
+      padding: 8
+    },
+    spacing: {
+      rowGap: 4,      // المسافة بين أسطر البيانات
+      headerGap: 4,   // المسافة أسفل العنوان
+      dividerMargin: 7 // المسافة أسفل الخط الفاصل
+    },
+    elements: {
+      iconSize: 14
+    }
+  },
+  // 4. حاويات الأقسام (Section/Category Containers)
+  sections: {
+    fontSize: {
+      mainHeader: 9,  // "نتائج الفحص الفني"
+      title: 9,       // عنوان القسم (المجرك، البودي...)
+      findingName: 7, // اسم الفحص داخل القسم
+      findingValue: 6.5, // حالة الفحص (سليم/تالف)
+      technicianNotesHeader: 9, // عنوان "ملاحظات الفني" داخل القسم
+      imageNoteCategory: 7 // اسم القسم في كروت الصور المرفقة
+    },
+    container: {
+      marginBottom: 10,
+      padding: 8
+    }
+  },
+  // 5. الملاحظات (General Notes)
+  notes: {
+    fontSize: {
+      content: 9,     // نص الملاحظة
+      watermark: 22   // حجم العلامة المائية خلف الملاحظات
+    },
+    container: {
+      padding: 10,
+      marginHorizontal: 4,
+      marginTop: 4
+    },
+    spacing: {
+      rowGap: 4,
+      bulletMargin: 8
+    }
+  },
+  // 6. الهيدر والعناصر العامة (Header & General Elements)
+  header: {
+    elements: {
+      qrSize: 80,      // حجم رمز الاستجابة السريعة (QR Code Size)
+      logoHeight: 80,  // ارتفاع الشعار (Logo Height)
+    }
+  }
 };
 
 const styles = StyleSheet.create({
   page: {
-    padding: 20,
+    paddingTop: 25,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
     fontFamily: 'Tajawal',
     fontSize: 10,
     color: '#334155',
@@ -29,31 +141,39 @@ const styles = StyleSheet.create({
     direction: 'rtl',
   },
   header: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: '#e2e8f0',
-    paddingBottom: 8,
-    marginBottom: 8,
+    paddingBottom: 10,
+    marginBottom: 15,
   },
   headerInfo: {
     flex: 1,
     textAlign: 'right',
   },
+  headerCustomFieldsRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 2,
+  },
   appName: {
-    fontSize: 14,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#2563eb',
-    marginBottom: 2,
+    color: '#c02626',
+    marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: 8,
+    fontSize: 12,
     color: '#64748b',
     marginBottom: 5,
   },
   headerCustomField: {
-    fontSize: 8,
-    color: '#475569',
+    fontSize: 9,
+    color: '#64748b',
+    marginBottom: 2,
   },
   headerLogos: {
     flexDirection: 'row',
@@ -61,14 +181,16 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   logo: {
-    height: 50,
+    height: layoutSettings.header.elements.logoHeight,
     width: 'auto',
+    objectFit: 'contain',
   },
   qrCode: {
-    width: 60,
-    height: 60,
+    width: layoutSettings.header.elements.qrSize,
+    height: layoutSettings.header.elements.qrSize,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    padding: 2,
   },
   section: {
     marginBottom: 10,
@@ -77,35 +199,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#cbd5e1',
     borderRadius: 12,
-    padding: 5,
+    padding: layoutSettings.customer.container.padding,
     marginBottom: 4,
-    width: '100%',
+    width: layoutSettings.customer.container.width,
+    height: layoutSettings.customer.container.height,
   },
   clientDataHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginBottom: 3,
+    marginBottom: layoutSettings.customer.spacing.headerGap,
   },
   clientDataTitle: {
-    fontSize: 10,
+    fontSize: layoutSettings.customer.fontSize.title,
     fontWeight: 'bold',
     marginRight: 4,
   },
   clientDataIcon: {
-    width: 14,
-    height: 14,
+    width: layoutSettings.customer.elements.iconSize,
+    height: layoutSettings.customer.elements.iconSize,
   },
   clientDataDivider: {
     height: 1,
-    marginBottom: 4,
+    marginBottom: layoutSettings.customer.spacing.dividerMargin,
     marginTop: 2,
   },
   clientDataBody: {
     flexDirection: 'row-reverse',
     justifyContent: 'flex-start',
     alignItems: 'center',
-    gap: 20,
+    gap: layoutSettings.customer.spacing.gap,
   },
   clientDataRow: {
     flexDirection: 'row-reverse',
@@ -113,45 +236,47 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   clientDataLabel: {
-    fontSize: 6,
+    fontSize: layoutSettings.customer.fontSize.label,
     color: '#64748b',
     fontWeight: 'bold',
   },
   clientDataValue: {
-    fontSize: 6,
+    fontSize: layoutSettings.customer.fontSize.content,
     fontWeight: 'bold',
     color: '#1e293b',
   },
   carDataContainer: {
     borderWidth: 1,
     borderRadius: 12,
-    padding: 8,
-    width: '62%',
+    padding: layoutSettings.vehicle.container.padding,
+    width: layoutSettings.vehicle.container.width,
+    height: layoutSettings.vehicle.container.height,
   },
   carDataHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginBottom: 4,
+    marginBottom: layoutSettings.vehicle.spacing.headerGap,
   },
   carDataTitle: {
-    fontSize: 10,
+    fontSize: layoutSettings.vehicle.fontSize.title,
     fontWeight: 'bold',
     marginRight: 4,
   },
   carDataIcon: {
-    width: 14,
-    height: 14,
+    width: layoutSettings.vehicle.elements.iconSize,
+    height: layoutSettings.vehicle.elements.iconSize,
   },
   carDataDivider: {
     height: 1,
-    marginBottom: 5,
+    marginBottom: layoutSettings.vehicle.spacing.dividerMargin,
     marginTop: 2,
   },
   carDataBody: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: layoutSettings.vehicle.spacing.columnGap,
   },
   carLogoContainer: {
     flex: 1,
@@ -163,12 +288,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   carNameEn: {
-    fontSize: 14,
+    fontSize: layoutSettings.vehicle.fontSize.contentEn,
     fontWeight: 'bold',
     color: '#1e293b',
   },
   carNameAr: {
-    fontSize: 11,
+    fontSize: layoutSettings.vehicle.fontSize.contentAr,
     color: '#64748b',
     marginTop: 1,
   },
@@ -176,7 +301,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9',
     padding: '1 4',
     borderRadius: 3,
-    fontSize: 9,
+    fontSize: layoutSettings.vehicle.fontSize.badge,
     fontWeight: 'bold',
     marginTop: 3,
     alignSelf: 'flex-end',
@@ -184,7 +309,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   carLogo: {
-    height: 40,
+    height: layoutSettings.vehicle.elements.logoHeight,
     width: 'auto',
   },
   plateContainer: {
@@ -220,7 +345,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 4,
     borderRadius: 3,
-    fontSize: 9,
+    fontSize: layoutSettings.sections.fontSize.mainHeader,
     fontWeight: 'bold',
     marginBottom: 6,
   },
@@ -228,60 +353,59 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
     borderRadius: 12,
-    marginBottom: 10,
-    overflow: 'hidden',
+    marginBottom: layoutSettings.sections.container.marginBottom,
   },
   categoryTitle: {
     padding: 6,
     textAlign: 'center',
-    fontSize: 9,
+    fontSize: layoutSettings.sections.fontSize.title,
     fontWeight: 'bold',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
   categoryContent: {
-    padding: 8,
+    padding: layoutSettings.sections.container.padding,
     position: 'relative',
-    overflow: 'hidden',
   },
   orderDataCard: {
     borderWidth: 1,
     borderRadius: 12,
-    padding: 8,
-    width: '36%',
+    padding: layoutSettings.order.container.padding,
+    width: layoutSettings.order.container.width,
+    height: layoutSettings.order.container.height,
   },
   orderDataHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginBottom: 4,
+    marginBottom: layoutSettings.order.spacing.headerGap,
   },
   orderDataTitle: {
-    fontSize: 10,
+    fontSize: layoutSettings.order.fontSize.title,
     fontWeight: 'bold',
     marginRight: 4,
   },
   orderDataIcon: {
-    width: 14,
-    height: 14,
+    width: layoutSettings.order.elements.iconSize,
+    height: layoutSettings.order.elements.iconSize,
   },
   orderDataDivider: {
     height: 1,
-    marginBottom: 7,
+    marginBottom: layoutSettings.order.spacing.dividerMargin,
     marginTop: 3,
   },
   orderDataRow: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: layoutSettings.order.spacing.rowGap,
     alignItems: 'center',
   },
   orderDataLabel: {
-    fontSize: 7.5,
+    fontSize: layoutSettings.order.fontSize.label,
     color: '#64748b',
   },
   orderDataValue: {
-    fontSize: 7.5,
+    fontSize: layoutSettings.order.fontSize.content,
     fontWeight: 'bold',
     color: '#1e293b',
   },
@@ -325,28 +449,27 @@ const styles = StyleSheet.create({
     borderTopColor: '#f1f5f9',
   },
   findingName: {
-    fontSize: 7,
+    fontSize: layoutSettings.sections.fontSize.findingName,
     fontWeight: 'bold',
     textAlign: 'center',
     color: '#1e293b',
   },
   findingValue: {
-    fontSize: 6.5,
+    fontSize: layoutSettings.sections.fontSize.findingValue,
     color: '#64748b',
     textAlign: 'center',
     marginTop: 1,
   },
   notesSection: {
-    marginTop: 4,
-    padding: 10,
+    marginTop: layoutSettings.notes.container.marginTop,
+    padding: layoutSettings.notes.container.padding,
     borderWidth: 1.5,
     borderColor: '#cbd5e1',
     borderStyle: 'dashed',
     borderRadius: 10,
     backgroundColor: 'transparent',
     position: 'relative',
-    overflow: 'hidden',
-    marginHorizontal: 4,
+    marginHorizontal: layoutSettings.notes.container.marginHorizontal,
   },
   noteWatermarkContainer: {
     position: 'absolute',
@@ -363,7 +486,7 @@ const styles = StyleSheet.create({
     zIndex: -1,
   },
   noteWatermarkText: {
-    fontSize: 22,
+    fontSize: layoutSettings.notes.fontSize.watermark,
     fontWeight: 'bold',
     margin: 15,
     transform: 'rotate(-25deg)',
@@ -371,7 +494,7 @@ const styles = StyleSheet.create({
   noteItem: {
     flexDirection: 'row-reverse',
     alignItems: 'flex-start',
-    marginBottom: 4,
+    marginBottom: layoutSettings.notes.spacing.rowGap,
   },
   noteBullet: {
     width: 4,
@@ -379,12 +502,13 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#1e293b',
     marginTop: 5,
-    marginLeft: 8,
+    marginLeft: layoutSettings.notes.spacing.bulletMargin,
   },
   noteText: {
     flex: 1,
-    fontSize: 8,
+    fontSize: layoutSettings.notes.fontSize.content,
     lineHeight: 1.4,
+    textAlign: 'right',
   },
   highlightedText: {
     paddingHorizontal: 2,
@@ -414,17 +538,18 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   imageNoteCategory: {
-    fontSize: 7,
+    fontSize: layoutSettings.sections.fontSize.imageNoteCategory,
     fontWeight: 'bold',
     color: '#1e40af',
     marginBottom: 1,
+    textAlign: 'right',
   },
   footer: {
     marginTop: 10,
     borderTopWidth: 2,
     borderTopColor: '#e2e8f0',
     paddingTop: 10,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'space-between',
   },
   disclaimer: {
@@ -432,6 +557,7 @@ const styles = StyleSheet.create({
     fontSize: 7,
     color: '#64748b',
     lineHeight: 1.4,
+    textAlign: 'right',
   },
   stampContainer: {
     width: 80,
@@ -488,14 +614,14 @@ const FormattedPlate = ({ plateNumber, plateCharacters, borderColor }: { plateNu
   const parts = plateNumber.split(' ').filter(Boolean);
   const arabicLettersRaw = parts.filter(p => !/^\d+$/.test(p)).join('');
   const numbersRaw = parts.find(p => /^\d+$/.test(p)) || '';
-  
+
   const arToEnMap = new Map<string, string>();
   if (plateCharacters) {
     plateCharacters.forEach(pc => {
       arToEnMap.set(pc.ar.replace('ـ', ''), pc.en);
     });
   }
-  
+
   const arabicChars = arabicLettersRaw.split('');
   const numberChars = numbersRaw.split('');
 
@@ -511,7 +637,7 @@ const FormattedPlate = ({ plateNumber, plateCharacters, borderColor }: { plateNu
           </View>
         ))}
       </View>
-      
+
       {/* Numbers */}
       <View style={[styles.plateBox, { borderRightWidth: 1, borderRightColor: borderColor, paddingRight: 8, marginRight: 8 }]}>
         {numberChars.map((num, i) => (
@@ -541,7 +667,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
   attachments = []
 }) => {
   const { appName, reportSettings } = settings;
-  
+
   const carDetails = {
     makeNameEn: request.car_snapshot?.make_en || carMake?.name_en || 'Unknown',
     modelNameEn: request.car_snapshot?.model_en || carModel?.name_en || 'Unknown',
@@ -560,7 +686,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
       imageNotes.forEach(note => allImageNotes.push({ note, categoryName: category.name }));
     }
   });
-  ((request.general_notes as Note[]) || []).filter(note => !!note.image).forEach(note => 
+  ((request.general_notes as Note[]) || []).filter(note => !!note.image).forEach(note =>
     allImageNotes.push({ note, categoryName: reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة' })
   );
 
@@ -569,48 +695,50 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
+          <View style={styles.headerLogos}>
+            {reportSettings.reportLogoUrl && <Image src={reportSettings.reportLogoUrl} style={styles.logo} />}
+            {qrCodeBase64 && <Image src={qrCodeBase64} style={styles.qrCode} />}
+          </View>
+
           <View style={styles.headerInfo}>
             <Text style={[styles.appName, { color: reportSettings.appNameColor || '#2563eb' }]}>{appName}</Text>
             <Text style={styles.headerSubtitle}>{reportSettings.headerSubtitleText}</Text>
-            
-            {reportSettings.headerCustomFields?.map(field => (
-              <Text key={field.id} style={styles.headerCustomField}>
-                {field.label}: {field.value}
-              </Text>
-            ))}
-            
+
+            <View style={styles.headerCustomFieldsRow}>
+              {reportSettings.headerCustomFields?.map(field => (
+                <Text key={field.id} style={styles.headerCustomField}>
+                  {field.label}: {field.value}
+                </Text>
+              ))}
+            </View>
+
             {reportSettings.headerAdditionalTexts?.map(textItem => (
               <Text key={textItem.id} style={[styles.headerCustomField, { fontWeight: textItem.bold ? 'bold' : 'normal' }]}>
                 {textItem.text}
               </Text>
             ))}
           </View>
-          
-          <View style={styles.headerLogos}>
-            {qrCodeBase64 && <Image src={qrCodeBase64} style={styles.qrCode} />}
-            {reportSettings.reportLogoUrl && <Image src={reportSettings.reportLogoUrl} style={styles.logo} />}
-          </View>
         </View>
 
         {/* Client Details */}
-        <View style={styles.clientDataContainer}>
+        <View style={styles.clientDataContainer} wrap={false}>
           <View style={styles.clientDataHeader}>
             <Svg viewBox="0 0 24 24" style={styles.clientDataIcon}>
-              <Path 
-                d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" 
-                fill="none" 
-                stroke={reportSettings.primaryColor} 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
+              <Path
+                d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                fill="none"
+                stroke={reportSettings.primaryColor}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
               <Circle cx="12" cy="7" r="4" fill="none" stroke={reportSettings.primaryColor} strokeWidth="2" />
             </Svg>
             <Text style={[styles.clientDataTitle, { color: reportSettings.primaryColor }]}>{reportDirection === 'ltr' ? "Client Data" : "بيانات العميل"}</Text>
           </View>
-          
+
           <View style={[styles.clientDataDivider, { backgroundColor: reportSettings.borderColor }]} />
-          
+
           <View style={styles.clientDataBody}>
             <View style={styles.clientDataRow}>
               <Text style={styles.clientDataLabel}>{reportDirection === 'ltr' ? 'Name:' : 'الاسم:'}</Text>
@@ -632,16 +760,16 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
         {/* Summary Row: Vehicle & Order Data */}
         <View style={styles.summaryRow}>
           {/* Vehicle Details Container */}
-          <View style={[styles.carDataContainer, { borderColor: reportSettings.borderColor }]}>
+          <View style={[styles.carDataContainer, { borderColor: reportSettings.borderColor }]} wrap={false}>
             <View style={styles.carDataHeader}>
               <Svg viewBox="0 0 24 24" style={styles.carDataIcon}>
-                <Path 
-                  d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" 
-                  fill="none" 
-                  stroke={reportSettings.primaryColor} 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
+                <Path
+                  d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"
+                  fill="none"
+                  stroke={reportSettings.primaryColor}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
                 <Path d="M7 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" fill="none" stroke={reportSettings.primaryColor} strokeWidth="2" />
                 <Path d="M17 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" fill="none" stroke={reportSettings.primaryColor} strokeWidth="2" />
@@ -649,9 +777,9 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
               </Svg>
               <Text style={[styles.carDataTitle, { color: reportSettings.primaryColor }]}>{reportDirection === 'ltr' ? "Vehicle Data" : "بيانات السيارة"}</Text>
             </View>
-            
+
             <View style={[styles.carDataDivider, { backgroundColor: reportSettings.borderColor }]} />
-            
+
             <View style={styles.carDataBody}>
               <View style={styles.carInfo}>
                 <Text style={styles.carNameEn}>{`${carDetails.makeNameEn} ${carDetails.modelNameEn}`}</Text>
@@ -660,13 +788,13 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                   <Text>{reportDirection === 'ltr' ? 'Year' : 'سنة الصنع'} {carDetails.year}</Text>
                 </View>
               </View>
-              
+
               <View style={styles.carLogoContainer}>
                 {carMake?.logo_url && (
                   <Image src={carMake.logo_url} style={styles.carLogo} />
                 )}
               </View>
-              
+
               <View style={[styles.plateContainer, { borderRightColor: reportSettings.borderColor }]}>
                 {car.vin || (car.plate_number && car.plate_number.startsWith('شاصي')) ? (
                   <View style={{ alignItems: 'center' }}>
@@ -683,14 +811,14 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
           </View>
 
           {/* Request Info Card */}
-          <View style={[styles.orderDataCard, { borderColor: reportSettings.borderColor }]}>
+          <View style={[styles.orderDataCard, { borderColor: reportSettings.borderColor }]} wrap={false}>
             <View style={styles.orderDataHeader}>
               <Svg viewBox="0 0 24 24" style={styles.orderDataIcon}>
-                <Path 
-                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" 
-                  fill="none" 
-                  stroke={reportSettings.primaryColor} 
-                  strokeWidth="2" 
+                <Path
+                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  fill="none"
+                  stroke={reportSettings.primaryColor}
+                  strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -701,19 +829,19 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
               </Svg>
               <Text style={[styles.orderDataTitle, { color: reportSettings.primaryColor }]}>{reportDirection === 'ltr' ? "Order Data" : "بيانات الطلب"}</Text>
             </View>
-            
+
             <View style={[styles.orderDataDivider, { backgroundColor: reportSettings.borderColor }]} />
-            
+
             <View style={styles.orderDataRow}>
               <Text style={styles.orderDataLabel}>{reportDirection === 'ltr' ? "Report No.:" : "رقم التقرير:"}</Text>
               <Text style={styles.orderDataValue}>#{request.request_number}</Text>
             </View>
-            
+
             <View style={styles.orderDataRow}>
               <Text style={styles.orderDataLabel}>{reportDirection === 'ltr' ? "Date:" : "التاريخ:"}</Text>
               <Text style={styles.orderDataValue}>{new Date(request.created_at).toLocaleDateString('en-GB')}</Text>
             </View>
-            
+
             <View style={styles.orderDataRow}>
               <Text style={styles.orderDataLabel}>{reportDirection === 'ltr' ? "Time:" : "الوقت:"}</Text>
               <Text style={styles.orderDataValue}>
@@ -727,7 +855,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                 })()}
               </Text>
             </View>
-            
+
             <View style={styles.orderDataRow}>
               <Text style={styles.orderDataLabel}>{reportDirection === 'ltr' ? "Type:" : "نوع الفحص:"}</Text>
               <Text style={styles.orderDataValue}>{inspectionType.name}</Text>
@@ -744,9 +872,9 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
         {visibleCategoryIds.map(catId => {
           const category = customFindingCategories.find(c => c.id === catId);
           if (!category) return null;
-          
+
           const categoryFindings = (request.structured_findings || []).filter(f => f.categoryId === catId);
-          
+
           const sortedFindings = categoryFindings.map(finding => {
             const predefined = predefinedFindings.find(pf => pf.id === finding.findingId);
             let positionPriority = 2;
@@ -760,13 +888,18 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
           });
 
           const textOnlyNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !note.image);
-          
+
           if (categoryFindings.length === 0 && textOnlyNotes.length === 0) return null;
 
           return (
             <View key={catId} style={[styles.categorySection, { borderColor: reportSettings.borderColor }]}>
-              <Text style={[styles.categoryTitle, { backgroundColor: reportSettings.findingsHeaderBackgroundColor, color: reportSettings.findingsHeaderFontColor, borderBottomColor: reportSettings.borderColor }]}>{category.name}</Text>
-              
+              <Text
+                style={[styles.categoryTitle, { backgroundColor: reportSettings.findingsHeaderBackgroundColor, color: reportSettings.findingsHeaderFontColor, borderBottomColor: reportSettings.borderColor }]}
+                minPresenceAhead={20}
+              >
+                {category.name}
+              </Text>
+
               <View style={styles.categoryContent}>
                 {/* Watermark Pattern for the whole category content */}
                 <View style={styles.noteWatermarkContainer}>
@@ -779,7 +912,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                   <View style={styles.findingsGrid}>
                     {sortedFindings.map(({ finding, predefined }) => {
                       return (
-                        <View key={finding.findingId} style={styles.findingItem}>
+                        <View key={finding.findingId} style={styles.findingItem} wrap={false}>
                           <View style={styles.findingImage}>
                             {predefined?.reference_image && (
                               <Image src={predefined.reference_image} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -797,23 +930,26 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
 
                 {textOnlyNotes.length > 0 && (
                   <View style={styles.notesSection}>
-                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: reportSettings.primaryColor, marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 2 }}>
+                    <Text
+                      style={{ fontSize: layoutSettings.sections.fontSize.technicianNotesHeader, fontWeight: 'bold', color: reportSettings.primaryColor, marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 2, textAlign: 'right' }}
+                      minPresenceAhead={20}
+                    >
                       {reportDirection === 'ltr' ? 'Technician Notes:' : 'ملاحظات الفني:'}
                     </Text>
                     {textOnlyNotes.map(note => {
-                      const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) 
-                        ? note.translations[note.displayTranslation.lang] 
+                      const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang])
+                        ? note.translations[note.displayTranslation.lang]
                         : note.text;
-                      
+
                       const highlight = note.highlightColor ? highlightBaseColors[note.highlightColor] : null;
 
                       return (
-                        <View key={note.id} style={styles.noteItem}>
+                        <View key={note.id} style={styles.noteItem} wrap={false}>
                           <View style={styles.noteBullet} />
                           <Text style={[
                             styles.noteText,
-                            highlight ? { 
-                              backgroundColor: `rgba(${highlight.rgb}, 0.1)`, 
+                            highlight ? {
+                              backgroundColor: `rgba(${highlight.rgb}, 0.1)`,
                               color: highlight.text,
                               padding: 2,
                               borderRadius: 2,
@@ -835,7 +971,12 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
         {/* General Notes */}
         {((request.general_notes as Note[]) || []).filter(n => !n.image).length > 0 && (
           <View style={[styles.categorySection, { borderColor: reportSettings.borderColor }]}>
-            <Text style={[styles.categoryTitle, { backgroundColor: reportSettings.findingsHeaderBackgroundColor, color: reportSettings.findingsHeaderFontColor, borderBottomColor: reportSettings.borderColor }]}>{reportDirection === 'ltr' ? "General Notes" : "ملاحظات عامة"}</Text>
+            <Text
+              style={[styles.categoryTitle, { backgroundColor: reportSettings.findingsHeaderBackgroundColor, color: reportSettings.findingsHeaderFontColor, borderBottomColor: reportSettings.borderColor }]}
+              minPresenceAhead={20}
+            >
+              {reportDirection === 'ltr' ? "General Notes" : "ملاحظات عامة"}
+            </Text>
             <View style={styles.categoryContent}>
               {/* Watermark Pattern */}
               <View style={styles.noteWatermarkContainer}>
@@ -845,18 +986,18 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
               </View>
               <View style={styles.notesSection}>
                 {((request.general_notes as Note[]) || []).filter(n => !n.image).map(note => {
-                  const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) 
-                    ? note.translations[note.displayTranslation.lang] 
+                  const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang])
+                    ? note.translations[note.displayTranslation.lang]
                     : note.text;
                   const highlight = note.highlightColor ? highlightBaseColors[note.highlightColor] : null;
-                  
+
                   return (
-                    <View key={note.id} style={styles.noteItem}>
+                    <View key={note.id} style={styles.noteItem} wrap={false}>
                       <View style={styles.noteBullet} />
                       <Text style={[
                         styles.noteText,
-                        highlight ? { 
-                          backgroundColor: `rgba(${highlight.rgb}, 0.1)`, 
+                        highlight ? {
+                          backgroundColor: `rgba(${highlight.rgb}, 0.1)`,
                           color: highlight.text,
                           padding: 2,
                           borderRadius: 2,
@@ -893,12 +1034,6 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
 
         {/* Footer */}
         <View style={styles.footer} wrap={false}>
-          <View style={styles.disclaimer}>
-            <Text style={{ fontWeight: 'bold', marginBottom: 2 }}>
-              {reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}
-            </Text>
-            <Text>{reportSettings.disclaimerText}</Text>
-          </View>
           <View style={styles.stampContainer}>
             <Text style={styles.stampLabel}>{reportDirection === 'ltr' ? 'Stamp' : 'ختم الورشة'}</Text>
             {reportSettings.workshopStampUrl ? (
@@ -908,6 +1043,12 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                 <Text style={{ fontSize: 6, color: '#94a3b8' }}>{reportDirection === 'ltr' ? 'Stamp Here' : 'مكان الختم'}</Text>
               </View>
             )}
+          </View>
+          <View style={styles.disclaimer}>
+            <Text style={{ fontWeight: 'bold', marginBottom: 2 }}>
+              {reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}
+            </Text>
+            <Text>{reportSettings.disclaimerText}</Text>
           </View>
         </View>
         <Text style={styles.pageNumber} render={({ pageNumber, totalPages }) => (
