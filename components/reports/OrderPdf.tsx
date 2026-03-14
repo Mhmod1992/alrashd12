@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image, Font, Svg, Path, Circle } from '@react-pdf/renderer';
-import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor, ReportStamp } from '../../types';
+import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor, ReportStamp, Technician, Employee } from '../../types';
 
 // Register Arabic Font (Tajawal)
 Font.register({
@@ -676,6 +676,8 @@ interface OrderPdfProps {
   reportStamps?: ReportStamp[];
   downloadedBy?: string;
   downloadDateTime?: string;
+  technicians: Technician[];
+  employees: Employee[];
 }
 
 const FormattedPlate = ({ plateNumber, plateCharacters, borderColor }: { plateNumber: string; plateCharacters?: any[]; borderColor: string }) => {
@@ -735,7 +737,9 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
   attachments = [],
   reportStamps = [],
   downloadedBy,
-  downloadDateTime
+  downloadDateTime,
+  technicians = [],
+  employees = []
 }) => {
   const { appName, reportSettings } = settings;
 
@@ -951,6 +955,24 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
               <Text style={styles.orderDataLabel}>{reportDirection === 'ltr' ? "Type:" : "نوع الفحص:"}</Text>
               <Text style={styles.orderDataValue}>{inspectionType.name}</Text>
             </View>
+
+            {/* General Technicians */}
+            {request.technician_assignments?.['general']?.length ? (
+              <View style={styles.orderDataRow}>
+                <Text style={styles.orderDataLabel}>{reportDirection === 'ltr' ? "Technicians:" : "الفنيين:"}</Text>
+                <Text style={[styles.orderDataValue, { color: '#0d9488' }]}>
+                  {request.technician_assignments['general']
+                    .map(id => {
+                      const tech = technicians.find(t => t.id === id);
+                      if (tech) return tech.name;
+                      const emp = employees.find(e => e.id === id);
+                      return emp?.name;
+                    })
+                    .filter(Boolean)
+                    .join(' - ')}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -1063,6 +1085,35 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                   </View>
                 )}
                 
+                {/* Technician Assignment for this category */}
+                {request.technician_assignments?.[catId]?.length ? (
+                  <View style={{ 
+                    flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', 
+                    justifyContent: reportDirection === 'ltr' ? 'flex-start' : 'flex-end',
+                    alignItems: 'center', 
+                    marginTop: 8, 
+                    paddingTop: 4, 
+                    borderTopWidth: 1, 
+                    borderTopColor: '#f1f5f9', 
+                    gap: 4 
+                  }}>
+                    <Text style={{ fontSize: 8, color: '#64748b' }}>
+                      {reportDirection === 'ltr' ? 'Inspected by:' : 'تم الفحص بواسطة:'}
+                    </Text>
+                    <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#0d9488' }}>
+                      {request.technician_assignments[catId]
+                        .map(id => {
+                          const tech = technicians.find(t => t.id === id);
+                          if (tech) return tech.name;
+                          const emp = employees.find(e => e.id === id);
+                          return emp?.name;
+                        })
+                        .filter(Boolean)
+                        .join(' - ')}
+                    </Text>
+                  </View>
+                ) : null}
+
                 <Text style={styles.sectionDigitalLabel}>
                   {reportDirection === 'ltr' ? 'Digital Copy - نسخة رقمية' : 'نسخة رقمية - Digital Copy'}
                 </Text>
@@ -1112,6 +1163,36 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                   );
                 })}
               </View>
+
+              {/* Technician Assignment for General Notes */}
+              {request.technician_assignments?.['general']?.length ? (
+                <View style={{ 
+                  flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', 
+                  justifyContent: reportDirection === 'ltr' ? 'flex-start' : 'flex-end',
+                  alignItems: 'center', 
+                  marginTop: 8, 
+                  paddingTop: 4, 
+                  borderTopWidth: 1, 
+                  borderTopColor: '#f1f5f9', 
+                  gap: 4 
+                }}>
+                  <Text style={{ fontSize: 8, color: '#64748b' }}>
+                    {reportDirection === 'ltr' ? 'Inspected by:' : 'تم الفحص بواسطة:'}
+                  </Text>
+                  <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#0d9488' }}>
+                    {request.technician_assignments['general']
+                      .map(id => {
+                        const tech = technicians.find(t => t.id === id);
+                        if (tech) return tech.name;
+                        const emp = employees.find(e => e.id === id);
+                        return emp?.name;
+                      })
+                      .filter(Boolean)
+                      .join(' - ')}
+                  </Text>
+                </View>
+              ) : null}
+
               <Text style={styles.sectionDigitalLabel}>
                 {reportDirection === 'ltr' ? 'Digital Copy - نسخة رقمية' : 'نسخة رقمية - Digital Copy'}
               </Text>

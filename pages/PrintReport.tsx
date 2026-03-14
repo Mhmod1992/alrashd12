@@ -248,7 +248,7 @@ const PrintReport: React.FC = () => {
         selectedRequestId, requests, clients, cars, carMakes, 
         carModels, inspectionTypes, setPage, predefinedFindings, 
         customFindingCategories, settings, addNotification, goBack,
-        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage, authUser
+        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage, authUser, technicians, employees
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
@@ -689,7 +689,7 @@ const PrintReport: React.FC = () => {
         const reqNum = request?.request_number || '';
         
         if (make && model && year) {
-            return `${make} ${model} ${year} rp${reqNum}.pdf`;
+            return `${make} ${model} ${year} Rp${reqNum}.pdf`;
         }
         return `Report_${reqNum}.pdf`;
     };
@@ -831,6 +831,8 @@ const PrintReport: React.FC = () => {
                     attachments={processedAttachments}
                     downloadedBy={authUser?.name}
                     downloadDateTime={reportDirection === 'ltr' ? new Date().toLocaleString('en-US') : formatArabicDateTime(new Date())}
+                    technicians={technicians}
+                    employees={employees}
                 />
             ).toBlob();
 
