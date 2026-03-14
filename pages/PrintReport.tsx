@@ -230,12 +230,25 @@ const urlToBase64 = async (url: string, compress: boolean = false): Promise<stri
     }
 };
 
+const formatArabicDateTime = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    const dayName = days[date.getDay()];
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'م' : 'ص';
+    hours = hours % 12 || 12;
+    return `${year}/${month}/${day} يوم ${dayName} الساعة ${hours}:${minutes} ${ampm}`;
+};
+
 const PrintReport: React.FC = () => {
     const { 
         selectedRequestId, requests, clients, cars, carMakes, 
         carModels, inspectionTypes, setPage, predefinedFindings, 
         customFindingCategories, settings, addNotification, goBack,
-        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage
+        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage, authUser
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
@@ -540,6 +553,37 @@ const PrintReport: React.FC = () => {
             `;
             clone.appendChild(style);
             clone.classList.add('print-clone');
+
+            // Add generation info to the footer of the clone
+            const footerDisclaimer = clone.querySelector('[data-setting-section="text-disclaimer"]');
+            if (footerDisclaimer && footerDisclaimer.parentElement) {
+                const infoLine = document.createElement('div');
+                infoLine.style.cssText = `
+                    font-size: 8px; 
+                    color: #94a3b8; 
+                    margin-top: 6px; 
+                    border-top: 0.5px solid #e2e8f0; 
+                    padding-top: 4px; 
+                    display: flex; 
+                    gap: 15px; 
+                    flex-direction: ${reportDirection === 'ltr' ? 'row' : 'row-reverse'};
+                `;
+                
+                const userLabel = reportDirection === 'ltr' ? 'Downloaded by: ' : 'تم تحميل التقرير بواسطة: ';
+                const userName = authUser?.name || '';
+                const timeLabel = reportDirection === 'ltr' ? 'Date: ' : 'التاريخ والوقت: ';
+                const timeValue = reportDirection === 'ltr' ? new Date().toLocaleString('en-US') : formatArabicDateTime(new Date());
+                
+                infoLine.innerHTML = `
+                    <div style="display: flex; gap: 4px; flex-direction: ${reportDirection === 'ltr' ? 'row' : 'row-reverse'};">
+                        <span>${userLabel}</span>
+                        <span style="font-weight: 700 !important; color: #64748b;">${userName}</span>
+                    </div>
+                    <span>${timeLabel}${timeValue}</span>
+                `;
+                footerDisclaimer.parentElement.appendChild(infoLine);
+            }
+
             document.body.appendChild(clone);
 
             const qrContainer = clone.querySelector('.target-qr');
@@ -638,6 +682,18 @@ const PrintReport: React.FC = () => {
         }
     };
 
+    const getPdfFilename = () => {
+        const make = request?.car_snapshot?.make_en || carMake?.name_en || carMake?.name_ar || '';
+        const model = request?.car_snapshot?.model_en || carModel?.name_en || carModel?.name_ar || '';
+        const year = request?.car_snapshot?.year || car?.year || '';
+        const reqNum = request?.request_number || '';
+        
+        if (make && model && year) {
+            return `${make} ${model} ${year} rp${reqNum}.pdf`;
+        }
+        return `Report_${reqNum}.pdf`;
+    };
+
     const handleWhatsAppShare = async () => {
         if (!client?.phone) { addNotification({ title: 'بيانات ناقصة', message: 'رقم هاتف العميل غير متوفر.', type: 'warning' }); return; }
         try {
@@ -645,7 +701,7 @@ const PrintReport: React.FC = () => {
             if (!pdf) return;
             setLoadingState('جاري الرفع إلى السيرفر...');
             const blob = pdf.output('blob');
-            const file = new File([blob], `Report_${request?.request_number}.pdf`, { type: 'application/pdf' });
+            const file = new File([blob], getPdfFilename(), { type: 'application/pdf' });
             const publicUrl = await uploadImage(file, 'reports');
             if (originalRequest && !translatedRequest) { 
                 await updateRequest({ id: originalRequest.id, report_url: publicUrl, report_generated_at: new Date().toISOString() });
@@ -666,7 +722,7 @@ const PrintReport: React.FC = () => {
 
     const handleDownloadPdf = async () => {
         const pdf = await generatePdfInstance();
-        if (pdf) pdf.save(`Report_${request?.request_number}.pdf`);
+        if (pdf) pdf.save(getPdfFilename());
     };
 
     const handleDownloadNativePdf = async () => {
@@ -773,13 +829,15 @@ const PrintReport: React.FC = () => {
                     reportDirection={reportDirection}
                     qrCodeBase64={qrCodeBase64}
                     attachments={processedAttachments}
+                    downloadedBy={authUser?.name}
+                    downloadDateTime={reportDirection === 'ltr' ? new Date().toLocaleString('en-US') : formatArabicDateTime(new Date())}
                 />
             ).toBlob();
 
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `Report_${request.request_number}.pdf`;
+            link.download = getPdfFilename();
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);

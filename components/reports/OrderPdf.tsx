@@ -582,6 +582,33 @@ const styles = StyleSheet.create({
     marginBottom: 1,
     textAlign: 'right',
   },
+  digitalBadge: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    alignSelf: 'flex-end',
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  digitalBadgeText: {
+    fontSize: 7,
+    fontWeight: 'bold',
+    color: '#64748b',
+    letterSpacing: 0.5,
+  },
+  sectionDigitalLabel: {
+    fontSize: 7,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 8,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    fontWeight: 'bold',
+  },
   footer: {
     marginTop: 10,
     borderTopWidth: 2,
@@ -647,6 +674,8 @@ interface OrderPdfProps {
   qrCodeBase64?: string;
   attachments?: { data: string; type: string; name: string }[];
   reportStamps?: ReportStamp[];
+  downloadedBy?: string;
+  downloadDateTime?: string;
 }
 
 const FormattedPlate = ({ plateNumber, plateCharacters, borderColor }: { plateNumber: string; plateCharacters?: any[]; borderColor: string }) => {
@@ -704,7 +733,9 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
   reportDirection = 'rtl',
   qrCodeBase64,
   attachments = [],
-  reportStamps = []
+  reportStamps = [],
+  downloadedBy,
+  downloadDateTime
 }) => {
   const { appName, reportSettings } = settings;
 
@@ -747,7 +778,6 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
           </View>
         )}
 
-        {/* Header content continues below */}
 
         {/* Header */}
         <View style={styles.header}>
@@ -757,6 +787,11 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
           </View>
 
           <View style={styles.headerInfo}>
+            <View style={styles.digitalBadge}>
+              <Text style={styles.digitalBadgeText}>DIGITAL COPY</Text>
+              <Text style={[styles.digitalBadgeText, { color: '#94a3b8' }]}>|</Text>
+              <Text style={styles.digitalBadgeText}>نسخة رقمية</Text>
+            </View>
             <Text style={[styles.appName, { color: reportSettings.appNameColor || '#2563eb' }]}>{appName}</Text>
             <Text style={styles.headerSubtitle}>{reportSettings.headerSubtitleText}</Text>
 
@@ -945,8 +980,6 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
 
           const textOnlyNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !note.image);
 
-          if (categoryFindings.length === 0 && textOnlyNotes.length === 0) return null;
-
           return (
             <View key={catId} style={[styles.categorySection, { borderColor: reportSettings.borderColor }]}>
               <Text
@@ -963,6 +996,17 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                     <Text key={i} style={styles.noteWatermarkText}>{category.name}</Text>
                   ))}
                 </View>
+
+                {categoryFindings.length === 0 && textOnlyNotes.length === 0 && (
+                  <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 15, gap: 8 }}>
+                    <Svg width="30" height="30" viewBox="0 0 24 24">
+                      <Path d="M20 6L9 17l-5-5" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    </Svg>
+                    <Text style={{ color: '#475569', fontSize: 12, fontWeight: 'bold' }}>
+                      {reportDirection === 'ltr' ? 'No Issues Found' : 'بدون ملاحظات'}
+                    </Text>
+                  </View>
+                )}
 
                 {sortedFindings.length > 0 && (
                   <View style={styles.findingsGrid}>
@@ -1018,6 +1062,10 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                     })}
                   </View>
                 )}
+                
+                <Text style={styles.sectionDigitalLabel}>
+                  {reportDirection === 'ltr' ? 'Digital Copy - نسخة رقمية' : 'نسخة رقمية - Digital Copy'}
+                </Text>
               </View>
             </View>
           );
@@ -1064,6 +1112,9 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                   );
                 })}
               </View>
+              <Text style={styles.sectionDigitalLabel}>
+                {reportDirection === 'ltr' ? 'Digital Copy - نسخة رقمية' : 'نسخة رقمية - Digital Copy'}
+              </Text>
             </View>
           </View>
         )}
@@ -1083,6 +1134,9 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                 </View>
               ))}
             </View>
+            <Text style={[styles.sectionDigitalLabel, { marginTop: 10, marginBottom: 5 }]}>
+              {reportDirection === 'ltr' ? 'Digital Copy - نسخة رقمية' : 'نسخة رقمية - Digital Copy'}
+            </Text>
           </View>
         )}
 
@@ -1103,6 +1157,22 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
               {reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}
             </Text>
             <Text>{reportSettings.disclaimerText}</Text>
+            
+            {(downloadedBy || downloadDateTime) && (
+              <View style={{ marginTop: 6, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: '#e2e8f0', flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', gap: 10, flexWrap: 'wrap' }}>
+                {downloadedBy && (
+                  <View style={{ flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 6, color: '#94a3b8' }}>{reportDirection === 'ltr' ? 'Downloaded by: ' : 'تم تحميل التقرير بواسطة: '}</Text>
+                    <Text style={{ fontSize: 6, color: '#64748b', fontWeight: 'bold' }}>{downloadedBy}</Text>
+                  </View>
+                )}
+                {downloadDateTime && (
+                  <Text style={{ fontSize: 6, color: '#94a3b8' }}>
+                    {reportDirection === 'ltr' ? `Date: ${downloadDateTime}` : `التاريخ والوقت: ${downloadDateTime}`}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         </View>
         <Text style={styles.pageNumber} render={({ pageNumber, totalPages }) => (
