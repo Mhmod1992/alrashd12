@@ -69,7 +69,7 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
         } catch (e) {}
 
         const config = {
-            fps: 15, // Smooth and stable
+            fps: 20,
             qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
                 const width = Math.min(viewfinderWidth * 0.8, 300);
                 const height = Math.min(viewfinderHeight * 0.6, 250);
@@ -80,13 +80,9 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
         };
 
         try {
+            // Use simple string-based facingMode for maximum compatibility
             await scannerRef.current.start(
-                { 
-                    facingMode: "environment",
-                    width: { ideal: 1920, min: 1280 },
-                    height: { ideal: 1080, min: 720 },
-                    advanced: [{ focusMode: "continuous" }]
-                },
+                { facingMode: "environment" },
                 config,
                 (decodedText: string) => {
                     if (!hasScannedRef.current) {
