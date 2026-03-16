@@ -404,6 +404,7 @@ const PaperArchive: React.FC = () => {
     };
 
     const handleQRScan = async (decodedText: string) => {
+        console.log("Scanner Success RAW (Archive):", decodedText);
         setIsQRScannerOpen(false);
         
         let requestNumberStr = decodedText;
@@ -424,6 +425,7 @@ const PaperArchive: React.FC = () => {
         }
 
         const requestNumber = parseInt(requestNumberStr);
+        console.log("Parsed Archive Request Number:", requestNumber);
 
         if (isNaN(requestNumber)) {
             addNotification({ title: 'خطأ', message: 'لم يتم العثور على رقم طلب صالح في الكود.', type: 'error' });

@@ -365,6 +365,7 @@ const Requests: React.FC = () => {
     };
 
     const handleScanSuccess = async (decodedText: string) => {
+        console.log("Scanner Success RAW:", decodedText);
         const trimmedText = decodedText.trim();
         let requestNumber: number | null = null;
         let isDraftCode = false;
@@ -388,6 +389,8 @@ const Requests: React.FC = () => {
                 }
             }
         }
+
+        console.log("Parsed Request Number:", requestNumber, "isDraft:", isDraftCode);
 
         if (!requestNumber || isNaN(requestNumber)) {
             addNotification({ title: 'خطأ', message: 'رمز QR غير صالح أو لا يمكن قراءته.', type: 'error' });
