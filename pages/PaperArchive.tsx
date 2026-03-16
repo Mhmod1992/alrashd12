@@ -122,6 +122,7 @@ const PaperArchive: React.FC = () => {
     const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
     const [isExtractingPdf, setIsExtractingPdf] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const pdfInputRef = useRef<HTMLInputElement>(null);
 
     // Delete Confirmation Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -942,7 +943,15 @@ const PaperArchive: React.FC = () => {
                                     >
                                         <UploadIcon className="w-5 h-5" />
                                     </button>
-                                    <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={handleFileSelected} className="hidden" />
+                                    <button 
+                                        onClick={() => { setCurrentUploadType('manual_paper'); pdfInputRef.current?.click(); }} 
+                                        disabled={isUploading || isExtractingPdf}
+                                        className="p-3 rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                                        title="رفع ملف PDF"
+                                    >
+                                        <Icon name="file-text" className="w-5 h-5" />
+                                        <span className="font-bold text-sm hidden sm:inline">PDF</span>
+                                    </button>
                                 </div>
                             )}
                             
@@ -960,7 +969,15 @@ const PaperArchive: React.FC = () => {
                                     >
                                         <UploadIcon className="w-5 h-5" />
                                     </button>
-                                    <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={handleFileSelected} className="hidden" />
+                                    <button 
+                                        onClick={() => { setCurrentUploadType('internal_draft'); pdfInputRef.current?.click(); }} 
+                                        disabled={isUploading || isExtractingPdf}
+                                        className="p-3 rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                                        title="رفع ملف PDF"
+                                    >
+                                        <Icon name="file-text" className="w-5 h-5" />
+                                        <span className="font-bold text-sm hidden sm:inline">PDF</span>
+                                    </button>
                                 </div>
                             )}
 
@@ -1032,6 +1049,9 @@ const PaperArchive: React.FC = () => {
                 </div>
             </Modal>
             
+            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelected} className="hidden" />
+            <input ref={pdfInputRef} type="file" accept="application/pdf" multiple onChange={handleFileSelected} className="hidden" />
+
             <DocumentScannerModal 
                 isOpen={isScannerOpen} 
                 onClose={() => setIsScannerOpen(false)} 
