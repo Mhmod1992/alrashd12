@@ -1978,7 +1978,7 @@ export const FillRequest: React.FC = () => {
                 <div key={note.id} className="flex items-start gap-3 w-full">
                     <li
                         id={`note-${note.id}`}
-                        className={`relative flex flex-col sm:flex-row sm:items-start p-3 border rounded-lg gap-3 animate-slide-in-down hover:shadow-md transition-all w-full h-auto ${colorStyle ? colorStyle.cardBg : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}
+                        className={`relative flex flex-col sm:flex-row sm:items-start p-3 border rounded-lg gap-3 animate-slide-in-down hover:shadow-md transition-all w-full h-auto ${colorStyle ? colorStyle.cardBg : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'} ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
                     >
                         <div className="flex items-start gap-3 flex-grow min-w-0 cursor-pointer color-picker-trigger" onClick={() => !isLocked && setColorPickerOpenFor(note.id)}>
                             {note.image && <img src={note.image} alt="صورة ملاحظة" className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-md cursor-pointer border p-0.5 flex-shrink-0" onClick={(e) => { e.stopPropagation(); openImagePreview(note.image!) }} />}
@@ -1991,7 +1991,9 @@ export const FillRequest: React.FC = () => {
                         {can('manage_notes') && !isLocked && (
                             <div className="flex sm:flex-col items-center justify-end gap-2 mt-2 sm:mt-0 sm:border-r pt-2 sm:pt-0 sm:pr-2 dark:border-slate-700">
                                 <button onClick={(e) => { e.stopPropagation(); openEditNoteModal(note, categoryId); }} disabled={isDeleting} className="text-yellow-500 hover:text-yellow-700 p-1"><Icon name="edit" className="w-4 h-4" /></button>
-                                <button onClick={(e) => { e.stopPropagation(); if (categoryId === 'general') handleRemoveGeneralNote(note.id); else handleRemoveCategoryNote(categoryId, note.id); }} disabled={isDeleting} className="text-red-500 hover:text-red-700 p-1"><Icon name="delete" className="w-4 h-4" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); if (categoryId === 'general') handleRemoveGeneralNote(note.id); else handleRemoveCategoryNote(categoryId, note.id); }} disabled={isDeleting} className="text-red-500 hover:text-red-700 p-1">
+                                    {isDeleting ? <Icon name="refresh-cw" className="w-4 h-4 animate-spin" /> : <Icon name="delete" className="w-4 h-4" />}
+                                </button>
                             </div>
                         )}
 

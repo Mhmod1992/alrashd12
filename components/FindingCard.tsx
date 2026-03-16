@@ -144,7 +144,7 @@ const FindingCard: React.FC<FindingCardProps> = ({
                         className="text-slate-400 hover:text-red-500 p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                         type="button"
                     >
-                        <Icon name="delete" className="w-4 h-4" />
+                        {isDeleting ? <Icon name="refresh-cw" className="w-4 h-4 animate-spin" /> : <Icon name="delete" className="w-4 h-4" />}
                     </button>
                 )}
             </div>
@@ -183,7 +183,7 @@ const FindingCard: React.FC<FindingCardProps> = ({
                         type="button"
                         title="حذف"
                     >
-                        <Icon name="delete" className="w-3 h-3" />
+                        {isDeleting ? <Icon name="refresh-cw" className="w-3 h-3 animate-spin" /> : <Icon name="delete" className="w-3 h-3" />}
                     </button>
                 )}
             </div>
