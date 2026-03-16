@@ -232,9 +232,9 @@ const PaperArchive: React.FC = () => {
                 // Apply Archive Filter locally since we fetched by search
                 let finalData = uniqueData;
                 if (archiveStatusFilter === 'archived') {
-                    finalData = uniqueData.filter(r => r.attached_files && r.attached_files.length > 0);
+                    finalData = uniqueData.filter(r => r.attached_files?.some(f => f.type === 'internal_draft'));
                 } else if (archiveStatusFilter === 'not_archived') {
-                    finalData = uniqueData.filter(r => !r.attached_files || r.attached_files.length === 0);
+                    finalData = uniqueData.filter(r => !r.attached_files?.some(f => f.type === 'internal_draft'));
                 }
 
                 setFilteredRequests(finalData);
@@ -284,9 +284,9 @@ const PaperArchive: React.FC = () => {
 
             // Apply Archive Filter
             if (archiveStatusFilter === 'archived') {
-                data = data.filter(r => r.attached_files && r.attached_files.length > 0);
+                data = data.filter(r => r.attached_files?.some(f => f.type === 'internal_draft'));
             } else if (archiveStatusFilter === 'not_archived') {
-                data = data.filter(r => !r.attached_files || r.attached_files.length === 0);
+                data = data.filter(r => !r.attached_files?.some(f => f.type === 'internal_draft'));
             }
 
             setFilteredRequests(data);
@@ -330,7 +330,7 @@ const PaperArchive: React.FC = () => {
                 );
             });
         }
-        return data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        return data.sort((a, b) => b.request_number - a.request_number);
     }, [filteredRequests, searchQuery, clients, cars, carMakes, carModels]);
 
     const openUploadModal = async (request: InspectionRequest, autoCamera: boolean = false) => {
@@ -565,8 +565,7 @@ const PaperArchive: React.FC = () => {
     }
 
     const getRequestStatus = (req: InspectionRequest) => {
-        const hasPaper = req.attached_files && req.attached_files.length > 0;
-        return hasPaper;
+        return req.attached_files?.some(f => f.type === 'internal_draft') || false;
     };
 
     const paperImages = selectedRequest?.attached_files?.filter(f => f.type === 'manual_paper' || f.type === 'internal_draft') || [];
@@ -687,19 +686,19 @@ const PaperArchive: React.FC = () => {
                     <div className="flex gap-2 border-t border-slate-200 dark:border-slate-700 pt-4">
                         <button 
                             onClick={() => setArchiveStatusFilter('all')}
-                            className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${archiveStatusFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}
+                            className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${archiveStatusFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}
                         >
                             الكل
                         </button>
                         <button 
                             onClick={() => setArchiveStatusFilter('archived')}
-                            className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${archiveStatusFilter === 'archived' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400'}`}
+                            className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${archiveStatusFilter === 'archived' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400'}`}
                         >
                             مؤرشف
                         </button>
                         <button 
                             onClick={() => setArchiveStatusFilter('not_archived')}
-                            className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${archiveStatusFilter === 'not_archived' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400'}`}
+                            className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${archiveStatusFilter === 'not_archived' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400'}`}
                         >
                             غير مؤرشف
                         </button>
@@ -763,12 +762,12 @@ const PaperArchive: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-center">
                                                 {isArchived ? (
-                                                    <div className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2.5 py-1 rounded-full text-xs font-bold border border-green-100 dark:border-green-800">
+                                                    <div className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2.5 py-1 rounded-md text-xs font-bold border border-green-100 dark:border-green-800">
                                                         <CheckCircleIcon className="w-3.5 h-3.5" />
-                                                        <span>مؤرشف ({req.attached_files?.length})</span>
+                                                        <span>مؤرشف ({req.attached_files?.filter(f => f.type === 'internal_draft').length || 0})</span>
                                                     </div>
                                                 ) : (
-                                                    <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full text-xs font-bold border border-slate-200 dark:border-slate-700">
+                                                    <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 text-slate-400 px-2.5 py-1 rounded-md text-xs font-bold border border-slate-200 dark:border-slate-700">
                                                         <XIcon className="w-3.5 h-3.5" />
                                                         <span>غير مؤرشف</span>
                                                     </div>
@@ -911,10 +910,10 @@ const PaperArchive: React.FC = () => {
                                         <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm aspect-[3/4]">
                                             <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
                                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                <a href={file.data} target="_blank" rel="noopener noreferrer" className="p-2 bg-white rounded-full text-slate-800 hover:bg-blue-50 transition-colors">
+                                                <a href={file.data} target="_blank" rel="noopener noreferrer" className="p-2 bg-white rounded-lg text-slate-800 hover:bg-blue-50 transition-colors">
                                                     <Icon name="eye" className="w-4 h-4" />
                                                 </a>
-                                                <button onClick={() => initiateDelete(file)} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50 transition-colors">
+                                                <button onClick={() => initiateDelete(file)} className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 transition-colors">
                                                     <TrashIcon className="w-4 h-4" />
                                                 </button>
                                             </div>
