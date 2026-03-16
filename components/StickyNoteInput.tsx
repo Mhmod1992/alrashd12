@@ -115,10 +115,10 @@ const highlightColors: Record<HighlightColor, { name: string; bg: string; ring: 
 
 // --- QUICK NOTES CONFIGURATION ---
 // لإضافة كلمات سريعة جديدة في المستقبل، قم بإضافة كائن جديد إلى المصفوفة أدناه.
-// التنسيق: { text: "النص الذي سيظهر", color: 'yellow' | 'red' | 'green' | 'blue' | null, icon?: 'car' | '...' }
+// التنسيق: { text: "النص الذي سيظهر", shortText: "النص المختصر", color: 'yellow' | 'red' | 'green' | 'blue' | null, icon?: 'car' | '...' }
 // إذا أردت استخدام أيقونة بدلاً من النص، أضف خاصية icon مع اسم الأيقونة الموجودة في ملف Icon.tsx.
-const QUICK_NOTES: { text: string; color: HighlightColor | null; icon?: string }[] = [
-    { text: "يلزم غسيل البدي مراجعة المركز للتاكد", color: 'yellow', icon: 'car' },
+const QUICK_NOTES: { text: string; shortText?: string; color: HighlightColor | null; icon?: string }[] = [
+    { text: "يلزم غسيل البدي مراجعة المركز للتاكد", shortText: "يلزم غسيل", color: 'yellow', icon: 'car' },
 ];
 
 export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
@@ -333,7 +333,7 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
         }
     };
 
-    const handleQuickNote = async (quickNote: { text: string; color: HighlightColor | null; icon?: string }) => {
+    const handleQuickNote = async (quickNote: { text: string; shortText?: string; color: HighlightColor | null; icon?: string }) => {
         if (isLocked || !canManageNotes || isSubmitting) return;
         setIsSubmitting(true);
         try {
@@ -401,95 +401,100 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                 <div className="max-w-5xl mx-auto w-full flex flex-col gap-2 p-2">
 
                     {/* TOP BAR: Navigation & Actions */}
-                    <div className="flex items-center justify-between px-1">
-                         {/* Right (RTL): Navigation Group */}
-                         <div className="flex items-center gap-2 sm:gap-4 flex-1">
-                             <button onClick={onPrevTab} disabled={isFirstTab} className={`p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors ${isFirstTab ? 'opacity-30 cursor-not-allowed' : ''}`}>
-                                <ChevronRightIcon className="w-6 h-6" />
-                             </button>
-                             {/* Enhanced Title with Glow and Animation */}
-                             <h3 className="text-base sm:text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-300 truncate max-w-[150px] sm:max-w-xs text-center flex-1 sm:flex-none drop-shadow-md animate-pulse">
-                                {currentCategoryName}
-                             </h3>
-                             <button onClick={onNextTab} disabled={isLastTab} className={`p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors ${isLastTab ? 'opacity-30 cursor-not-allowed' : ''}`}>
-                                <ChevronRightIcon className="w-6 h-6 transform rotate-180" />
-                             </button>
-                             
-                             {/* Stamp Button in the Middle */}
-                             {!isLocked && onToggleStamp && (
-                                <button 
-                                    onClick={handleStampClick}
-                                    className={`
-                                        flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-md p-2 mx-2
-                                        ${isStamped
-                                            ? 'bg-red-600 text-white ring-4 ring-red-400/50 shadow-lg scale-110 rotate-12'
-                                            : 'bg-white dark:bg-slate-800 border-2 border-red-200 dark:border-red-900/30 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
-                                        }
-                                    `}
-                                    title="ختم: لم يكتمل بطلب العميل"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M5 22h14" />
-                                        <path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11a2.5 2.5 0 0 0-1.77.73L2 17v2a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2l-2.73-3.27z" />
-                                        <path d="M14 13V8.5C14 7.12 12.88 6 11.5 6S9 7.12 9 8.5V13" />
-                                    </svg>
-                                    {isStamped && <span className="text-[10px] font-black uppercase tracking-tighter">STAMPED</span>}
-                                </button>
-                             )}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between px-1 gap-2">
+                         <div className="flex items-center justify-between w-full sm:w-auto flex-1">
+                             {/* Right (RTL): Navigation Group */}
+                             <div className="flex items-center gap-2 sm:gap-4">
+                                 <button onClick={onPrevTab} disabled={isFirstTab} className={`p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors ${isFirstTab ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                                    <ChevronRightIcon className="w-6 h-6" />
+                                 </button>
+                                 {/* Enhanced Title with Glow and Animation */}
+                                 <h3 className="text-base sm:text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-300 truncate max-w-[150px] sm:max-w-xs text-center drop-shadow-md animate-pulse">
+                                    {currentCategoryName}
+                                 </h3>
+                                 <button onClick={onNextTab} disabled={isLastTab} className={`p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors ${isLastTab ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                                    <ChevronRightIcon className="w-6 h-6 transform rotate-180" />
+                                 </button>
+                                 
+                                 {/* Stamp Button */}
+                                 {!isLocked && onToggleStamp && (
+                                    <button 
+                                        onClick={handleStampClick}
+                                        className={`
+                                            flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-xl sm:shadow-md p-3 sm:p-2 sm:mx-2
+                                            fixed bottom-36 right-4 z-50 sm:static sm:z-auto sm:bottom-auto sm:right-auto
+                                            ${isStamped
+                                                ? 'bg-red-600 text-white ring-4 ring-red-400/50 scale-110 rotate-12'
+                                                : 'bg-white dark:bg-slate-800 border-2 border-red-200 dark:border-red-900/30 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                            }
+                                        `}
+                                        title="ختم: لم يكتمل بطلب العميل"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" className="sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M5 22h14" />
+                                            <path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11a2.5 2.5 0 0 0-1.77.73L2 17v2a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2l-2.73-3.27z" />
+                                            <path d="M14 13V8.5C14 7.12 12.88 6 11.5 6S9 7.12 9 8.5V13" />
+                                        </svg>
+                                        {isStamped && <span className="hidden sm:inline text-[10px] font-black uppercase tracking-tighter">STAMPED</span>}
+                                    </button>
+                                 )}
+                             </div>
 
-                             {/* Quick Notes in Top Bar */}
-                             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[200px] sm:max-w-[400px] px-2">
-                                 {QUICK_NOTES.map((qn, idx) => (
-                                     <button
-                                         key={idx}
-                                         onClick={() => handleQuickNote(qn)}
-                                         disabled={isSubmitting}
-                                         title={qn.text}
-                                         className={`
-                                             flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all active:scale-95 border whitespace-nowrap shadow-sm
-                                             ${qn.color === 'yellow' ? 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200' : 
-                                               qn.color === 'red' ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200' :
-                                               qn.color === 'green' ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' :
-                                               qn.color === 'blue' ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200' :
-                                               'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200'}
-                                             disabled:opacity-50
-                                         `}
-                                     >
-                                         {qn.icon ? <Icon name={qn.icon as any} className="w-4 h-4" /> : qn.text}
-                                     </button>
-                                 ))}
+                             {/* Center/Left (RTL): Actions Group */}
+                             <div className="flex items-center gap-1 sm:gap-2">
+                                 {onReview && (
+                                    <button onClick={onReview} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="مراجعة">
+                                        <EyeIcon className="w-5 h-5" />
+                                    </button>
+                                 )}
+                                 {onPrint && canPrint && (
+                                    <button onClick={onPrint} className="p-2 text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="طباعة">
+                                        <PrinterIcon className="w-5 h-5" />
+                                    </button>
+                                 )}
+                                 
+                                 {!isLocked && onComplete && (
+                                    <button 
+                                        onClick={handleCompleteClick} 
+                                        className={`
+                                            flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-md
+                                            ${isConfirmingComplete 
+                                                ? 'bg-green-600 text-white px-4 py-2 hover:bg-green-700 scale-105' 
+                                                : 'bg-transparent text-slate-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-slate-800 p-2'
+                                            }
+                                        `} 
+                                        title={isConfirmingComplete ? "تأكيد الإكمال؟" : "إكمال الطلب"}
+                                    >
+                                        <CheckCircleIcon className={`w-5 h-5 ${isConfirmingComplete ? 'animate-bounce' : ''}`} />
+                                        {isConfirmingComplete && <span className="font-bold text-xs whitespace-nowrap">تأكيد؟</span>}
+                                    </button>
+                                 )}
                              </div>
                          </div>
 
-                         {/* Center/Left (RTL): Actions Group */}
-                         <div className="flex items-center gap-1 sm:gap-2">
-                             {onReview && (
-                                <button onClick={onReview} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="مراجعة">
-                                    <EyeIcon className="w-5 h-5" />
-                                </button>
-                             )}
-                             {onPrint && canPrint && (
-                                <button onClick={onPrint} className="p-2 text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="طباعة">
-                                    <PrinterIcon className="w-5 h-5" />
-                                </button>
-                             )}
-                             
-                             {!isLocked && onComplete && (
-                                <button 
-                                    onClick={handleCompleteClick} 
-                                    className={`
-                                        flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-md
-                                        ${isConfirmingComplete 
-                                            ? 'bg-green-600 text-white px-4 py-2 hover:bg-green-700 scale-105' 
-                                            : 'bg-transparent text-slate-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-slate-800 p-2'
-                                        }
-                                    `} 
-                                    title={isConfirmingComplete ? "تأكيد الإكمال؟" : "إكمال الطلب"}
-                                >
-                                    <CheckCircleIcon className={`w-5 h-5 ${isConfirmingComplete ? 'animate-bounce' : ''}`} />
-                                    {isConfirmingComplete && <span className="font-bold text-xs whitespace-nowrap">تأكيد؟</span>}
-                                </button>
-                             )}
+                         {/* Quick Notes in Top Bar (Second Row on Mobile) */}
+                         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full sm:w-auto sm:max-w-[400px] px-2 py-1">
+                             {QUICK_NOTES.map((qn, idx) => (
+                                 <button
+                                     key={idx}
+                                     onClick={() => handleQuickNote(qn)}
+                                     disabled={isSubmitting}
+                                     title={qn.text}
+                                     className={`
+                                         flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all active:scale-95 border shadow-sm
+                                         whitespace-nowrap flex items-center gap-1
+                                         ${qn.color === 'yellow' ? 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200' : 
+                                           qn.color === 'red' ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200' :
+                                           qn.color === 'green' ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' :
+                                           qn.color === 'blue' ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200' :
+                                           'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200'}
+                                         disabled:opacity-50
+                                     `}
+                                 >
+                                     {qn.icon && <Icon name={qn.icon as any} className="w-3.5 h-3.5 flex-shrink-0" />}
+                                     <span>{qn.shortText || qn.text}</span>
+                                 </button>
+                             ))}
                          </div>
                     </div>
 

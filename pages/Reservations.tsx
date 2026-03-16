@@ -110,6 +110,21 @@ const Reservations: React.FC = () => {
         setSelectedReservation(null);
     };
 
+    const handleWhatsAppContact = (res: Reservation) => {
+        if (!res.client_phone) {
+            addNotification({ title: 'خطأ', message: 'لا يوجد رقم هاتف لهذا الحجز.', type: 'error' });
+            return;
+        }
+        
+        // Clean phone number (remove non-digits)
+        const cleanPhone = res.client_phone.replace(/\D/g, '');
+        // Add country code if missing (assuming Saudi Arabia +966)
+        const phoneWithCode = cleanPhone.startsWith('966') ? cleanPhone : `966${cleanPhone.startsWith('0') ? cleanPhone.substring(1) : cleanPhone}`;
+        
+        const message = encodeURIComponent(`مرحباً ${res.client_name}، نؤكد استلام حجزك لسيارة ${res.car_details} لفحص ${res.service_type}. يرجى تأكيد الموعد.`);
+        window.open(`https://wa.me/${phoneWithCode}?text=${message}`, '_blank');
+    };
+
     if (!can('manage_reservations')) {
         return <div className="p-8 text-center text-red-500 font-bold">ليس لديك صلاحية الوصول لهذه الصفحة.</div>;
     }
@@ -129,6 +144,21 @@ const Reservations: React.FC = () => {
                 <Button onClick={() => setIsAddModalOpen(true)} leftIcon={<Icon name="add" />}>
                     إضافة حجز جديد
                 </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
+                    <div className="text-blue-600 dark:text-blue-400 text-xs font-bold uppercase mb-1">حجوزات جديدة</div>
+                    <div className="text-2xl font-black text-blue-800 dark:text-blue-200">{reservations.filter(r => r.status === 'new').length}</div>
+                </div>
+                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-100 dark:border-green-800">
+                    <div className="text-green-600 dark:text-green-400 text-xs font-bold uppercase mb-1">تم تحويلها لطلبات</div>
+                    <div className="text-2xl font-black text-green-800 dark:text-green-200">{reservations.filter(r => r.status === 'converted').length}</div>
+                </div>
+                <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl border border-purple-100 dark:border-purple-800">
+                    <div className="text-purple-600 dark:text-purple-400 text-xs font-bold uppercase mb-1">إجمالي الحجوزات</div>
+                    <div className="text-2xl font-black text-purple-800 dark:text-purple-200">{reservations.length}</div>
+                </div>
             </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden border border-slate-100 dark:border-slate-700">
@@ -191,6 +221,13 @@ const Reservations: React.FC = () => {
                                                         إنشاء طلب
                                                     </Button>
                                                 )}
+                                                <button 
+                                                    onClick={() => handleWhatsAppContact(res)} 
+                                                    className="p-2 text-green-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                                                    title="تواصل واتساب"
+                                                >
+                                                    <Icon name="whatsapp" className="w-5 h-5" />
+                                                </button>
                                                 <button 
                                                     onClick={() => handleDelete(res.id)} 
                                                     className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
