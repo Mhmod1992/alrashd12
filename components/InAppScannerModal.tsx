@@ -81,7 +81,12 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
 
         try {
             await scannerRef.current.start(
-                { facingMode: "environment" },
+                { 
+                    facingMode: "environment",
+                    width: { ideal: 1920, min: 1280 },
+                    height: { ideal: 1080, min: 720 },
+                    advanced: [{ focusMode: "continuous" }]
+                },
                 config,
                 (decodedText: string) => {
                     if (!hasScannedRef.current) {
