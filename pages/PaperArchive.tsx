@@ -19,6 +19,11 @@ import { formatBytes } from '../lib/utils';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import InAppScannerModal from '../components/InAppScannerModal';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+// Configure PDF.js worker using Vite's ?url import
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // --- Image Optimization Helper ---
 const optimizeDocumentImage = async (file: File, grayscale: boolean = true): Promise<File> => {
@@ -115,6 +120,7 @@ const PaperArchive: React.FC = () => {
     const [isSourceChoiceModalOpen, setIsSourceChoiceModalOpen] = useState(false);
     const [currentUploadType, setCurrentUploadType] = useState<'manual_paper' | 'internal_draft'>('manual_paper');
     const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+    const [isExtractingPdf, setIsExtractingPdf] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Delete Confirmation Modal State
@@ -374,21 +380,91 @@ const PaperArchive: React.FC = () => {
             setIsSourceChoiceModalOpen(true);
         }
     };
+
+    const extractPdfPages = async (file: File): Promise<File[]> => {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const numPages = pdf.numPages;
+            const extractedFiles: File[] = [];
+
+            for (let i = 1; i <= numPages; i++) {
+                const page = await pdf.getPage(i);
+                // Scale 1.5 usually gives a good balance between quality and size (around 1200px width for A4)
+                const viewport = page.getViewport({ scale: 1.5 });
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('Canvas context not available');
+
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+
+                await page.render(renderContext).promise;
+
+                const blob = await new Promise<Blob | null>((resolve) => {
+                    // Compress to JPEG with 0.7 quality to keep size small
+                    canvas.toBlob(resolve, 'image/jpeg', 0.7);
+                });
+
+                if (blob) {
+                    const fileName = `${file.name.replace(/\.[^/.]+$/, "")}_page_${i}.jpg`;
+                    extractedFiles.push(new File([blob], fileName, { type: 'image/jpeg' }));
+                }
+            }
+            return extractedFiles;
+        } catch (error) {
+            console.error("Error extracting PDF pages:", error);
+            throw error;
+        }
+    };
     
-    const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || !selectedRequest) return;
         const files: File[] = Array.from(e.target.files);
 
+        // Check if there's a PDF file
+        const pdfFiles = files.filter(f => f.type === 'application/pdf');
+        const imageFiles = files.filter(f => f.type.startsWith('image/'));
+
+        if (pdfFiles.length > 0) {
+            setIsExtractingPdf(true);
+            try {
+                let allExtractedImages: File[] = [...imageFiles];
+                for (const pdfFile of pdfFiles) {
+                    const extracted = await extractPdfPages(pdfFile);
+                    allExtractedImages = [...allExtractedImages, ...extracted];
+                }
+                
+                if (allExtractedImages.length > 0) {
+                    processFiles(allExtractedImages, currentUploadType);
+                }
+            } catch (error) {
+                addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء استخراج صفحات PDF.', type: 'error' });
+            } finally {
+                setIsExtractingPdf(false);
+                e.target.value = ''; // Reset input
+            }
+            return;
+        }
+
         // Single image goes to scanner
-        if (files.length === 1 && files[0].type.startsWith('image/')) {
-             setScannerFile(files[0]);
+        if (imageFiles.length === 1) {
+             setScannerFile(imageFiles[0]);
              setIsScannerOpen(true);
              e.target.value = ''; // Reset input
              return;
         }
 
         // Multiple files processed directly
-        processFiles(files, currentUploadType);
+        if (imageFiles.length > 0) {
+            processFiles(imageFiles, currentUploadType);
+        }
         e.target.value = ''; // Reset input
     };
     
@@ -846,15 +922,21 @@ const PaperArchive: React.FC = () => {
 
                         {/* Contextual Actions Toolbar */}
                         <div className="mb-4 flex flex-col gap-3">
+                            {isExtractingPdf && (
+                                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg animate-pulse flex items-center justify-center gap-3">
+                                    <RefreshCwIcon className="w-5 h-5 text-blue-600 animate-spin" />
+                                    <span className="text-sm font-bold text-blue-700 dark:text-blue-300">جاري استخراج الصفحات من ملف PDF...</span>
+                                </div>
+                            )}
                             {activeArchiveTab === 'public' && (
                                 <div className="flex gap-2">
-                                    <button onClick={() => handleUploadClick('manual_paper')} disabled={isUploading} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
+                                    <button onClick={() => handleUploadClick('manual_paper')} disabled={isUploading || isExtractingPdf} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
                                         <CameraIcon className="w-5 h-5" />
                                         <span className="font-bold text-sm">إضافة مرفق جديد (ملون)</span>
                                     </button>
                                     <button 
                                         onClick={() => { setCurrentUploadType('manual_paper'); fileInputRef.current?.click(); }} 
-                                        disabled={isUploading}
+                                        disabled={isUploading || isExtractingPdf}
                                         className="p-3 rounded-lg border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition-all"
                                         title="رفع من الجهاز"
                                     >
@@ -866,13 +948,13 @@ const PaperArchive: React.FC = () => {
                             
                             {activeArchiveTab === 'internal' && (
                                 <div className="flex gap-2">
-                                    <button onClick={() => handleUploadClick('internal_draft')} disabled={isUploading} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800">
+                                    <button onClick={() => handleUploadClick('internal_draft')} disabled={isUploading || isExtractingPdf} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800">
                                         <CameraIcon className="w-5 h-5" />
                                         <span className="font-bold text-sm">إضافة مسودة (داخلي)</span>
                                     </button>
                                     <button 
                                         onClick={() => { setCurrentUploadType('internal_draft'); fileInputRef.current?.click(); }} 
-                                        disabled={isUploading}
+                                        disabled={isUploading || isExtractingPdf}
                                         className="p-3 rounded-lg border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition-all"
                                         title="رفع من الجهاز"
                                     >

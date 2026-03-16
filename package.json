@@ -13,6 +13,7 @@
     "@google/genai": "^1.29.0",
     "@react-pdf/renderer": "^4.3.2",
     "@supabase/supabase-js": "^2.84.0",
+    "pdfjs-dist": "^5.5.207",
     "react": "^19.2.0",
     "react-datepicker": "^8.10.0",
     "react-dom": "^19.2.0",
