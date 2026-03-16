@@ -40,6 +40,9 @@ interface RequestTableProps {
   onDeleteSuccess?: (requestId: string) => void;
   onRefresh?: () => void;
   isLoading?: boolean;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
 }
 
 const StatusBadge: React.FC<{ status: RequestStatus }> = ({ status }) => {
@@ -85,7 +88,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
   title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
   onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh,
-  isLoading
+  isLoading, onLoadMore, hasMore, isLoadingMore
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
@@ -427,7 +430,17 @@ const RequestTable: React.FC<RequestTableProps> = ({
       </div>
       
       {requests.length > 0 ? (
-        <div ref={tableContainerRef} className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar relative">
+        <div 
+            ref={tableContainerRef} 
+            className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar relative"
+            onScroll={(e) => {
+                if (!onLoadMore || !hasMore || isLoadingMore) return;
+                const target = e.currentTarget;
+                if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
+                    onLoadMore();
+                }
+            }}
+        >
             <table className="w-full text-sm text-right rtl:text-right text-slate-500 dark:text-slate-400">
                 <thead className="text-xs text-slate-700 uppercase bg-slate-50/90 dark:bg-slate-800/90 dark:text-slate-400 sticky top-0 backdrop-blur-md z-20 shadow-sm">
                     <tr>
@@ -675,6 +688,15 @@ const RequestTable: React.FC<RequestTableProps> = ({
                     )}
                 </tbody>
             </table>
+            {hasMore && (
+                <div className="text-center py-4 border-t border-slate-100 dark:border-slate-700">
+                    {isLoadingMore ? (
+                        <RefreshCwIcon className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
+                    ) : (
+                        <span className="text-sm text-slate-400 dark:text-slate-500">قم بالتمرير لأسفل لتحميل المزيد...</span>
+                    )}
+                </div>
+            )}
         </div>
       ) : (
          <div className="p-12 text-center flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">

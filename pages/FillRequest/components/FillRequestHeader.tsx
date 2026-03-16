@@ -18,7 +18,6 @@ interface FillRequestHeaderProps {
     themeColor: string;
     onGoBack: () => void;
     onOpenTechnicianModal: () => void;
-    onToggleStamp: (stamp: ReportStamp) => void;
     onSave: () => void;
     onOpenActivityLog: () => void;
     onOpenInfoModal: () => void;
@@ -32,7 +31,6 @@ const FillRequestHeader = ({
     themeColor,
     onGoBack,
     onOpenTechnicianModal,
-    onToggleStamp,
     onSave,
     onOpenActivityLog,
     onOpenInfoModal,
@@ -67,15 +65,6 @@ const FillRequestHeader = ({
                         >
                             <UsersIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                             <span className="hidden sm:inline text-xs font-bold">فنيو الطلب</span>
-                        </button>
-                    )}
-                    {!isLocked && (
-                        <button
-                            onClick={() => onToggleStamp('CUSTOMER_REQUEST_INCOMPLETE')}
-                            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all shadow-sm ${request.report_stamps?.includes('CUSTOMER_REQUEST_INCOMPLETE') ? 'bg-red-500 text-white ring-2 ring-red-400 shadow-lg scale-110' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:text-red-500 hover:border-red-400'}`}
-                            title="ختم: لم يكتمل بطلب العميل"
-                        >
-                            <Icon name="check-circle" className="w-4 h-4 sm:w-5 sm:h-5" />
                         </button>
                     )}
                     {!isLocked && (

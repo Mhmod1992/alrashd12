@@ -32,6 +32,8 @@ interface StickyNoteInputProps {
     allTabsInOrder?: string[];
     onNextTab?: () => void;
     onPrevTab?: () => void;
+    onToggleStamp?: (stamp: import('../types').ReportStamp) => void;
+    reportStamps?: import('../types').ReportStamp[];
 }
 
 interface SpeechRecognition {
@@ -111,6 +113,14 @@ const highlightColors: Record<HighlightColor, { name: string; bg: string; ring: 
 };
 
 
+// --- QUICK NOTES CONFIGURATION ---
+// لإضافة كلمات سريعة جديدة في المستقبل، قم بإضافة كائن جديد إلى المصفوفة أدناه.
+// التنسيق: { text: "النص الذي سيظهر", color: 'yellow' | 'red' | 'green' | 'blue' | null, icon?: 'car' | '...' }
+// إذا أردت استخدام أيقونة بدلاً من النص، أضف خاصية icon مع اسم الأيقونة الموجودة في ملف Icon.tsx.
+const QUICK_NOTES: { text: string; color: HighlightColor | null; icon?: string }[] = [
+    { text: "يلزم غسيل البدي مراجعة المركز للتاكد", color: 'yellow', icon: 'car' },
+];
+
 export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
     onAddNote,
     activeTabId,
@@ -126,7 +136,9 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
     canPrint,
     allTabsInOrder,
     onNextTab,
-    onPrevTab
+    onPrevTab,
+    onToggleStamp,
+    reportStamps = []
 }) => {
     const { addNotification } = useAppContext();
     const isMounted = useRef(true);
@@ -320,6 +332,19 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
              if (isMounted.current) setIsSubmitting(false);
         }
     };
+
+    const handleQuickNote = async (quickNote: { text: string; color: HighlightColor | null; icon?: string }) => {
+        if (isLocked || !canManageNotes || isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            await onAddNote({ text: quickNote.text, file: null, color: quickNote.color });
+            addNotification({ title: 'تمت الإضافة', message: 'تم إضافة الملاحظة السريعة بنجاح.', type: 'success' });
+        } catch (error) {
+            addNotification({ title: 'خطأ', message: 'فشل إضافة الملاحظة السريعة.', type: 'error' });
+        } finally {
+            if (isMounted.current) setIsSubmitting(false);
+        }
+    };
     
     // Two-Step Completion Logic
     const handleCompleteClick = () => {
@@ -339,6 +364,12 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
             }, 3000);
         }
     };
+
+    const handleStampClick = () => {
+        onToggleStamp?.('CUSTOMER_REQUEST_INCOMPLETE');
+    };
+
+    const isStamped = reportStamps?.includes('CUSTOMER_REQUEST_INCOMPLETE') || false;
     
     // Clear timeout on unmount
     useEffect(() => {
@@ -383,6 +414,51 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                              <button onClick={onNextTab} disabled={isLastTab} className={`p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors ${isLastTab ? 'opacity-30 cursor-not-allowed' : ''}`}>
                                 <ChevronRightIcon className="w-6 h-6 transform rotate-180" />
                              </button>
+                             
+                             {/* Stamp Button in the Middle */}
+                             {!isLocked && onToggleStamp && (
+                                <button 
+                                    onClick={handleStampClick}
+                                    className={`
+                                        flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-md p-2 mx-2
+                                        ${isStamped
+                                            ? 'bg-red-600 text-white ring-4 ring-red-400/50 shadow-lg scale-110 rotate-12'
+                                            : 'bg-white dark:bg-slate-800 border-2 border-red-200 dark:border-red-900/30 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                        }
+                                    `}
+                                    title="ختم: لم يكتمل بطلب العميل"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M5 22h14" />
+                                        <path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11a2.5 2.5 0 0 0-1.77.73L2 17v2a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2l-2.73-3.27z" />
+                                        <path d="M14 13V8.5C14 7.12 12.88 6 11.5 6S9 7.12 9 8.5V13" />
+                                    </svg>
+                                    {isStamped && <span className="text-[10px] font-black uppercase tracking-tighter">STAMPED</span>}
+                                </button>
+                             )}
+
+                             {/* Quick Notes in Top Bar */}
+                             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[200px] sm:max-w-[400px] px-2">
+                                 {QUICK_NOTES.map((qn, idx) => (
+                                     <button
+                                         key={idx}
+                                         onClick={() => handleQuickNote(qn)}
+                                         disabled={isSubmitting}
+                                         title={qn.text}
+                                         className={`
+                                             flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all active:scale-95 border whitespace-nowrap shadow-sm
+                                             ${qn.color === 'yellow' ? 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200' : 
+                                               qn.color === 'red' ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200' :
+                                               qn.color === 'green' ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' :
+                                               qn.color === 'blue' ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200' :
+                                               'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200'}
+                                             disabled:opacity-50
+                                         `}
+                                     >
+                                         {qn.icon ? <Icon name={qn.icon as any} className="w-4 h-4" /> : qn.text}
+                                     </button>
+                                 ))}
+                             </div>
                          </div>
 
                          {/* Center/Left (RTL): Actions Group */}

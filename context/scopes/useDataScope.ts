@@ -276,6 +276,26 @@ export const useDataScope = (
         return data || [];
     }, [addNotification, ensureEntitiesLoaded]);
 
+    const fetchRequestsCount = useCallback(async (startDate?: string, endDate?: string): Promise<number> => {
+        let query = supabase.from('inspection_requests').select('*', { count: 'exact', head: true });
+        
+        if (startDate) {
+            query = query.gte('created_at', startDate);
+        }
+        if (endDate) {
+            query = query.lte('created_at', endDate);
+        }
+
+        const { count, error } = await query;
+        
+        if (error) {
+            console.error("Error fetching requests count:", error);
+            return 0;
+        }
+        
+        return count || 0;
+    }, []);
+
     const fetchPaperArchiveRequests = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
         // Fetches ALL requests in a date range for archiving purposes
         const { data, error } = await supabase.from('inspection_requests')
@@ -354,6 +374,7 @@ export const useDataScope = (
         markAllNotificationsAsRead,
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
+        fetchRequestsCount,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests
     };

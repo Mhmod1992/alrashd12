@@ -59,7 +59,8 @@ export const FillRequest: React.FC = () => {
         setSelectedRequestId, updateRequest, addNotification, uploadImage,
         deleteImage, can, settings, goBack, showConfirmModal, createActivityLog,
         fetchRequestTabContent, fetchFullRequestForSave, setIsFocusMode,
-        hasUnsavedChanges, setHasUnsavedChanges, unreadMessagesCount, setIsMailboxOpen, technicians
+        hasUnsavedChanges, setHasUnsavedChanges, unreadMessagesCount, setIsMailboxOpen, technicians,
+        fetchAndUpdateSingleRequest
     } = useAppContext();
 
     const focusRingClass = `focus:ring-${settings.design === 'classic' ? 'teal' : settings.design === 'glass' ? 'indigo' : 'blue'}-500`;
@@ -104,16 +105,6 @@ export const FillRequest: React.FC = () => {
     const [activityLogFilter, setActivityLogFilter] = useState<string>('all');
     const [activityLogCategoryFilter, setActivityLogCategoryFilter] = useState<string>('all');
     const [activityLogSearch, setActivityLogSearch] = useState<string>('');
-
-    // Scroll to Bottom Helper
-    const scrollToBottom = useCallback(() => {
-        if (contentRef.current) {
-            contentRef.current.scrollTo({
-                top: contentRef.current.scrollHeight,
-                behavior: 'smooth',
-            });
-        }
-    }, []);
 
     const scrollToTop = () => {
         if (contentRef.current) {
@@ -178,9 +169,22 @@ export const FillRequest: React.FC = () => {
         setSessionEgress(prev => prev + size);
     }, []);
 
+    const [isFetchingRequest, setIsFetchingRequest] = useState(false);
+    const fetchAttemptedRef = useRef<string | null>(null);
+
     const request = useMemo(() => {
         return requests.find(r => r.id === selectedRequestId) || searchedRequests?.find(r => r.id === selectedRequestId);
     }, [requests, searchedRequests, selectedRequestId]);
+
+    useEffect(() => {
+        if (selectedRequestId && !request && fetchAttemptedRef.current !== selectedRequestId) {
+            fetchAttemptedRef.current = selectedRequestId;
+            setIsFetchingRequest(true);
+            fetchAndUpdateSingleRequest(selectedRequestId).finally(() => {
+                if (isMounted.current) setIsFetchingRequest(false);
+            });
+        }
+    }, [selectedRequestId, request, fetchAndUpdateSingleRequest]);
 
     // LOCKED STATE CHECK
     const isLocked = request?.status === RequestStatus.COMPLETE;
@@ -316,6 +320,26 @@ export const FillRequest: React.FC = () => {
             localStorage.setItem(getDraftKey(request.id), JSON.stringify(dataToSave));
         }
     }, [generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog, request, isInitialDataLoaded, getDraftKey]);
+
+    // Scroll to Bottom Helper
+    const scrollToBottom = useCallback(() => {
+        if (contentRef.current) {
+            // Use a small timeout to ensure DOM has updated and layout is stable
+            setTimeout(() => {
+                if (contentRef.current) {
+                    contentRef.current.scrollTo({
+                        top: contentRef.current.scrollHeight,
+                        behavior: 'smooth',
+                    });
+                }
+            }, 150);
+        }
+    }, []);
+
+    // Auto-scroll when content changes
+    useEffect(() => {
+        scrollToBottom();
+    }, [generalNotes.length, categoryNotes[activeTab]?.length, structuredFindings.length, activeTab, scrollToBottom]);
 
 
     useEffect(() => {
@@ -1493,14 +1517,74 @@ export const FillRequest: React.FC = () => {
                 const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
 
                 try {
-                    await updateRequest({
+                    const updates: any = {
                         id: request.id,
                         report_stamps: newStamps,
                         activity_log: newActivityLog,
                         updated_at: new Date().toISOString()
-                    });
+                    };
 
-                    setActivityLog(newActivityLog);
+                    // Auto-add/remove notes if stamping as INCOMPLETE
+                    if (isAdding && stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
+                        const noteText = "لم يتم إكمال الطلب بناءً على طلب العميل.";
+                        const updatedCategoryNotes = { ...categoryNotes };
+                        
+                        visibleFindingCategories.forEach(cat => {
+                            const newNote: Note = {
+                                id: uuidv4(),
+                                text: noteText,
+                                originalText: noteText,
+                                authorId: authUser?.id || '',
+                                authorName: authUser?.name || 'النظام',
+                                status: 'saved',
+                                highlightColor: 'red',
+                                displayTranslation: { lang: 'ar', isActive: false },
+                                categoryId: cat.id
+                            };
+                            updatedCategoryNotes[cat.id] = [...(updatedCategoryNotes[cat.id] || []), newNote];
+                        });
+                        
+                        setCategoryNotes(updatedCategoryNotes);
+                        updates.category_notes = updatedCategoryNotes;
+                        
+                        // Also add an activity log entry for this automatic action
+                        const autoNoteLog = createActivityLog('إضافة ملاحظات تلقائية', 'تم إضافة ملاحظة "لم يتم إكمال الطلب بناءً على طلب العميل" لجميع الأقسام باللون الأحمر');
+                        if (autoNoteLog) {
+                            updates.activity_log = [autoNoteLog, ...newActivityLog];
+                            setActivityLog(updates.activity_log);
+                        } else {
+                            setActivityLog(newActivityLog);
+                        }
+                    } else if (!isAdding && stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
+                        const noteText = "لم يتم إكمال الطلب بناءً على طلب العميل.";
+                        const updatedCategoryNotes = { ...categoryNotes };
+                        let removedCount = 0;
+
+                        Object.keys(updatedCategoryNotes).forEach(catId => {
+                            const originalCount = updatedCategoryNotes[catId].length;
+                            updatedCategoryNotes[catId] = updatedCategoryNotes[catId].filter(n => n.text !== noteText);
+                            removedCount += (originalCount - updatedCategoryNotes[catId].length);
+                        });
+
+                        if (removedCount > 0) {
+                            setCategoryNotes(updatedCategoryNotes);
+                            updates.category_notes = updatedCategoryNotes;
+                            
+                            const autoRemoveLog = createActivityLog('حذف ملاحظات تلقائية', `تم حذف ${removedCount} ملاحظة "لم يتم إكمال الطلب بناءً على طلب العميل"`);
+                            if (autoRemoveLog) {
+                                updates.activity_log = [autoRemoveLog, ...newActivityLog];
+                                setActivityLog(updates.activity_log);
+                            } else {
+                                setActivityLog(newActivityLog);
+                            }
+                        } else {
+                            setActivityLog(newActivityLog);
+                        }
+                    } else {
+                        setActivityLog(newActivityLog);
+                    }
+
+                    await updateRequest(updates);
 
                     addNotification({
                         title: 'تم التحديث',
@@ -1717,7 +1801,111 @@ export const FillRequest: React.FC = () => {
         performSave();
     }, [isLocked, performSave]);
 
+    // --- Activity Log Enhancements ---
+    const logParticipants = useMemo(() => {
+        const participants = new Map<string, string>();
+        activityLog.forEach(log => {
+            if (!participants.has(log.employeeId)) {
+                participants.set(log.employeeId, log.employeeName);
+            }
+        });
+        return Array.from(participants, ([id, name]) => ({ id, name }));
+    }, [activityLog]);
+
+    // --- Dynamic Category Extraction from Logs ---
+    const logCategories = useMemo(() => {
+        const categories = new Set<string>();
+        // Look for patterns like 'في قسم "..."' in details
+        const catRegex = /في قسم "([^"]+)"/;
+        activityLog.forEach(log => {
+            const match = log.details.match(catRegex);
+            if (match) {
+                categories.add(match[1]);
+            } else if (log.action.includes('عامة')) {
+                categories.add('ملاحظات عامة');
+            }
+        });
+        return Array.from(categories);
+    }, [activityLog]);
+
+    const filteredActivityLog = useMemo(() => {
+        let filtered = activityLog;
+
+        // Filter by employee
+        if (activityLogFilter !== 'all') {
+            filtered = filtered.filter(log => log.employeeId === activityLogFilter);
+        }
+
+        // Filter by category
+        if (activityLogCategoryFilter !== 'all') {
+            filtered = filtered.filter(log => {
+                const catRegex = /في قسم "([^"]+)"/;
+                const match = log.details.match(catRegex);
+                if (activityLogCategoryFilter === 'ملاحظات عامة') {
+                    return log.action.includes('عامة') || (match && match[1] === 'ملاحظات عامة');
+                }
+                return match && match[1] === activityLogCategoryFilter;
+            });
+        }
+
+        // Filter by search term
+        if (activityLogSearch.trim()) {
+            const term = activityLogSearch.toLowerCase();
+            filtered = filtered.filter(log =>
+                log.action.toLowerCase().includes(term) ||
+                log.details.toLowerCase().includes(term) ||
+                log.employeeName.toLowerCase().includes(term)
+            );
+        }
+
+        return filtered;
+    }, [activityLog, activityLogFilter, activityLogCategoryFilter, activityLogSearch]);
+
+    // --- Helper to Navigate to Item from Log ---
+    const handleLogClick = useCallback((log: ActivityLog) => {
+        if (!log.link_id && !log.details.includes('قسم')) return;
+
+        // 1. Identify Target Tab
+        let targetTab = '';
+        if (log.action.includes('ملاحظة عامة') || log.details.includes('ملاحظات عامة')) {
+            targetTab = 'general-notes';
+        } else {
+            const catRegex = /في قسم "([^"]+)"/;
+            const match = log.details.match(catRegex);
+            if (match) {
+                const categoryName = match[1];
+                const category = customFindingCategories.find(c => c.name === categoryName);
+                if (category) targetTab = category.id;
+            }
+        }
+
+        if (targetTab) {
+            setActiveTab(targetTab);
+            setIsActivityDrawerOpen(false);
+
+            // 2. Scroll and Highlight (if we have a link_id)
+            if (log.link_id) {
+                setTimeout(() => {
+                    const element = document.getElementById(`notecard-${log.link_id}`) ||
+                        document.getElementById(`finding-${log.link_id}`);
+                    if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        element.classList.add('animate-pulse-blue');
+                        setTimeout(() => element.classList.remove('animate-pulse-blue'), 3000);
+                    }
+                }, 300);
+            }
+        }
+    }, [customFindingCategories, setActiveTab]);
+
     if (!request) {
+        if (isFetchingRequest) {
+            return (
+                <div className="flex justify-center items-center h-full p-12">
+                    <RefreshCwIcon className="w-8 h-8 animate-spin text-blue-500" />
+                </div>
+            );
+        }
         return <div className="p-6 dark:text-gray-300">الرجاء اختيار طلب أولاً. <button onClick={() => setPage('requests')} className="text-blue-600 dark:text-blue-400">العودة للطلبات</button></div>;
     }
 
@@ -2037,103 +2225,6 @@ export const FillRequest: React.FC = () => {
     const activeMultiSelectSection = Object.keys(multiSelectMode).find(key => multiSelectMode[key]);
     const numSelectedInActiveSection = activeMultiSelectSection ? (selectedNoteIds[activeMultiSelectSection]?.size || 0) : 0;
 
-    // --- Activity Log Enhancements ---
-    const logParticipants = useMemo(() => {
-        const participants = new Map<string, string>();
-        activityLog.forEach(log => {
-            if (!participants.has(log.employeeId)) {
-                participants.set(log.employeeId, log.employeeName);
-            }
-        });
-        return Array.from(participants, ([id, name]) => ({ id, name }));
-    }, [activityLog]);
-
-    // --- Dynamic Category Extraction from Logs ---
-    const logCategories = useMemo(() => {
-        const categories = new Set<string>();
-        // Look for patterns like 'في قسم "..."' in details
-        const catRegex = /في قسم "([^"]+)"/;
-        activityLog.forEach(log => {
-            const match = log.details.match(catRegex);
-            if (match) {
-                categories.add(match[1]);
-            } else if (log.action.includes('عامة')) {
-                categories.add('ملاحظات عامة');
-            }
-        });
-        return Array.from(categories);
-    }, [activityLog]);
-
-    const filteredActivityLog = useMemo(() => {
-        let filtered = activityLog;
-
-        // Filter by employee
-        if (activityLogFilter !== 'all') {
-            filtered = filtered.filter(log => log.employeeId === activityLogFilter);
-        }
-
-        // Filter by category
-        if (activityLogCategoryFilter !== 'all') {
-            filtered = filtered.filter(log => {
-                const catRegex = /في قسم "([^"]+)"/;
-                const match = log.details.match(catRegex);
-                if (activityLogCategoryFilter === 'ملاحظات عامة') {
-                    return log.action.includes('عامة') || (match && match[1] === 'ملاحظات عامة');
-                }
-                return match && match[1] === activityLogCategoryFilter;
-            });
-        }
-
-        // Filter by search term
-        if (activityLogSearch.trim()) {
-            const term = activityLogSearch.toLowerCase();
-            filtered = filtered.filter(log =>
-                log.action.toLowerCase().includes(term) ||
-                log.details.toLowerCase().includes(term) ||
-                log.employeeName.toLowerCase().includes(term)
-            );
-        }
-
-        return filtered;
-    }, [activityLog, activityLogFilter, activityLogCategoryFilter, activityLogSearch]);
-
-    // --- Helper to Navigate to Item from Log ---
-    const handleLogClick = useCallback((log: ActivityLog) => {
-        if (!log.link_id && !log.details.includes('قسم')) return;
-
-        // 1. Identify Target Tab
-        let targetTab = '';
-        if (log.action.includes('ملاحظة عامة') || log.details.includes('ملاحظات عامة')) {
-            targetTab = 'general-notes';
-        } else {
-            const catRegex = /في قسم "([^"]+)"/;
-            const match = log.details.match(catRegex);
-            if (match) {
-                const categoryName = match[1];
-                const category = customFindingCategories.find(c => c.name === categoryName);
-                if (category) targetTab = category.id;
-            }
-        }
-
-        if (targetTab) {
-            setActiveTab(targetTab);
-            setIsActivityDrawerOpen(false);
-
-            // 2. Scroll and Highlight (if we have a link_id)
-            if (log.link_id) {
-                setTimeout(() => {
-                    const element = document.getElementById(`notecard-${log.link_id}`) ||
-                        document.getElementById(`finding-${log.link_id}`);
-                    if (element) {
-                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        element.classList.add('animate-pulse-blue');
-                        setTimeout(() => element.classList.remove('animate-pulse-blue'), 3000);
-                    }
-                }, 300);
-            }
-        }
-    }, [customFindingCategories, setActiveTab]);
-
     const formatLogTimestamp = (timestamp: string) => {
         const logDate = new Date(timestamp);
         const now = new Date();
@@ -2163,7 +2254,6 @@ export const FillRequest: React.FC = () => {
                     setTechnicianModalTarget({ id: 'ALL', name: 'كامل الطلب' });
                     setIsTechnicianModalOpen(true);
                 }}
-                onToggleStamp={handleToggleStamp}
                 onSave={handleSave}
                 onOpenActivityLog={() => setIsActivityDrawerOpen(true)}
                 onOpenInfoModal={() => setIsInfoModalOpen(true)}
@@ -2221,7 +2311,7 @@ export const FillRequest: React.FC = () => {
                 ref={contentRef}
                 onScroll={handleScroll} // Added Scroll Handler
                 className="flex-1 overflow-y-auto bg-[#f8fafc] dark:bg-slate-800 p-4 sm:p-6 pb-4 relative scroll-smooth overflow-x-hidden"
-                style={{ paddingBottom: `${footerHeight + 88}px` }}
+                style={{ paddingBottom: `${footerHeight + 120}px` }}
             >
                 {isLoadingTab ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500"><RefreshCwIcon className={`w-10 h-10 animate-spin text-${themeColor}-500 mb-4`} /><p>جاري تحميل البيانات...</p></div>
@@ -2295,6 +2385,8 @@ export const FillRequest: React.FC = () => {
                         onReview={() => setIsReviewModalOpen(true)}
                         onPrint={handlePreviewAndPrint}
                         onComplete={can('mark_request_complete') ? handleComplete : undefined}
+                        onToggleStamp={handleToggleStamp}
+                        reportStamps={request?.report_stamps}
                         canChangeStatus={!isLocked && can('change_request_status')}
                         canPrint={can('print_request')}
                         allTabsInOrder={allTabsInOrder}

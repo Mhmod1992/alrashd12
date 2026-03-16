@@ -105,6 +105,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         markAllNotificationsAsRead,
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
+        fetchRequestsCount,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests
     } = useDataScope(authUser);
@@ -1459,7 +1460,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         findOrCreateCarMake, findOrCreateCarModel, initialRequestModalState, setInitialRequestModalState,
         currentDbUsage, currentStorageUsage, newRequestSuccessState, showNewRequestSuccessModal, hideNewRequestSuccessModal,
         shouldPrintDraft, setShouldPrintDraft, fetchFinancialsData, createActivityLog, systemLogs, searchClients,
-        searchCars, searchClientsPage, fetchClientRequests, fetchClientRequestsFiltered, getClientFinancialSummary, fetchRequestsByCarId, fetchRequestByRequestNumber, fetchRequestByRequestNumberForAuth, fetchRequestsByDateRange,
+        searchCars, searchClientsPage, fetchClientRequests, fetchClientRequestsFiltered, getClientFinancialSummary, fetchRequestsByCarId, fetchRequestByRequestNumber, fetchRequestByRequestNumberForAuth, fetchRequestsByDateRange, fetchRequestsCount,
         checkCarHistory, highlightedRequestId, triggerHighlight,
         unreadMessagesCount, fetchInboxMessages, fetchSentMessages, sendInternalMessage, markMessageAsRead,
         isFocusMode, setIsFocusMode, hasUnsavedChanges, setHasUnsavedChanges, isMailboxOpen, setIsMailboxOpen,

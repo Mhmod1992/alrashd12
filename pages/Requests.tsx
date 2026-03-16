@@ -48,7 +48,7 @@ const Requests: React.FC = () => {
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels,
-        lastRemoteDeleteId, fetchRequests
+        lastRemoteDeleteId, fetchRequests, fetchRequestsCount
     } = useAppContext();
 
     const [requestNumberQuery, setRequestNumberQuery] = useState('');
@@ -63,6 +63,7 @@ const Requests: React.FC = () => {
     const [rangeEndDate, setRangeEndDate] = useState('');
     const [serverFetchedData, setServerFetchedData] = useState<InspectionRequest[] | null>(null);
     const [isFetchingDateRange, setIsFetchingDateRange] = useState(false);
+    const [dbTotalCount, setDbTotalCount] = useState<number | null>(null);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -208,6 +209,51 @@ const Requests: React.FC = () => {
             setServerFetchedData(prev => prev ? prev.filter(r => r.id !== lastRemoteDeleteId) : null);
         }
     }, [lastRemoteDeleteId]);
+
+    // --- DATABASE TOTAL COUNT FETCHING ---
+    useEffect(() => {
+        const fetchCount = async () => {
+            let start: string | undefined;
+            let end: string | undefined;
+
+            if (dateFilter !== 'all') {
+                const now = new Date();
+                if (now.getHours() < 4) now.setDate(now.getDate() - 1);
+
+                const s = new Date(now);
+                const e = new Date(now);
+
+                if (dateFilter === 'today') {
+                    s.setHours(0, 0, 0, 0);
+                    e.setHours(23, 59, 59, 999);
+                } else if (dateFilter === 'yesterday') {
+                    s.setDate(now.getDate() - 1);
+                    s.setHours(0, 0, 0, 0);
+                    e.setDate(now.getDate() - 1);
+                    e.setHours(23, 59, 59, 999);
+                } else if (dateFilter === 'month') {
+                    s.setDate(1);
+                    s.setHours(0, 0, 0, 0);
+                    e.setMonth(now.getMonth() + 1, 0);
+                    e.setHours(23, 59, 59, 999);
+                } else if (dateFilter === 'range' && rangeStartDate && rangeEndDate) {
+                    s.setTime(new Date(rangeStartDate).getTime());
+                    s.setHours(0, 0, 0, 0);
+                    e.setTime(new Date(rangeEndDate).getTime());
+                    e.setHours(23, 59, 59, 999);
+                } else if (dateFilter === 'range') {
+                    return; // Wait for range to be applied
+                }
+                start = s.toISOString();
+                end = e.toISOString();
+            }
+
+            const count = await fetchRequestsCount(start, end);
+            setDbTotalCount(count);
+        };
+
+        fetchCount();
+    }, [dateFilter, rangeStartDate, rangeEndDate, fetchRequestsCount, requests.length]);
 
     const [isSearching, setIsSearching] = useState(false);
 
@@ -590,6 +636,14 @@ const Requests: React.FC = () => {
     const isLoadMoreVisible = searchedRequests === null && serverFetchedData === null && hasMoreRequests && dateFilter === 'all';
     const isAnyFilterActive = requestNumberQuery.trim() !== '' || comprehensiveQuery.trim() !== '' || statusFilter !== 'الكل' || employeeFilter !== 'الكل' || dateFilter !== 'today';
 
+    const [displayLimit, setDisplayLimit] = useState(10);
+    const [isPaginatingLocal, setIsPaginatingLocal] = useState(false);
+    const observerTarget = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setDisplayLimit(10);
+    }, [dateFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm]);
+
     const { dataToDisplay, waitingPaymentRequests, carsWithHistory } = useMemo(() => {
         let sourceData: InspectionRequest[];
 
@@ -710,7 +764,7 @@ const Requests: React.FC = () => {
         return combined;
     }, [carsWithHistory, serverCarsWithHistory]);
 
-    const totalCount = dataToDisplay.length + waitingPaymentRequests.length;
+    const totalCount = dbTotalCount !== null && searchedRequests === null ? dbTotalCount : (dataToDisplay.length + waitingPaymentRequests.length);
     const newCount = dataToDisplay.filter(r => r.status === RequestStatus.NEW).length;
     const inProgressCount = dataToDisplay.filter(r => r.status === RequestStatus.IN_PROGRESS).length;
     const completeCount = dataToDisplay.filter(r => r.status === RequestStatus.COMPLETE).length;
@@ -731,6 +785,22 @@ const Requests: React.FC = () => {
         if (!paymentRequest || !employees) return null;
         return employees.find(e => e.id === paymentRequest.employee_id);
     }, [paymentRequest, employees]);
+
+    const paginatedDataToDisplay = useMemo(() => {
+        return dataToDisplay.slice(0, displayLimit);
+    }, [dataToDisplay, displayLimit]);
+
+    const handleLoadMore = useCallback(() => {
+        if (displayLimit < dataToDisplay.length && !isPaginatingLocal) {
+            setIsPaginatingLocal(true);
+            setTimeout(() => {
+                setDisplayLimit(prev => prev + 10);
+                setIsPaginatingLocal(false);
+            }, 500);
+        } else if (displayLimit >= dataToDisplay.length && isLoadMoreVisible && !isLoadingMore) {
+            loadMoreRequests();
+        }
+    }, [displayLimit, dataToDisplay.length, isPaginatingLocal, isLoadMoreVisible, isLoadingMore, loadMoreRequests]);
 
     return (
         <div className="container mx-auto">
@@ -1069,35 +1139,32 @@ const Requests: React.FC = () => {
             )}
 
             {!isFetchingDateRange && (
-                <RequestTable
-                    requests={dataToDisplay}
-                    clients={clients}
-                    cars={cars}
-                    carMakes={carMakes}
-                    carModels={carModels}
-                    inspectionTypes={inspectionTypes}
-                    employees={employees}
-                    title={searchedRequests ? "نتائج البحث" : (dateFilter !== 'all' ? `الطلبات (${dateFilter === 'today' ? 'اليوم' : dateFilter === 'yesterday' ? 'أمس' : 'المحددة'})` : "قائمة الطلبات النشطة")}
-                    onOpenUpdateModal={handleOpenUpdateModal}
-                    plateDisplayLanguage={plateDisplayLanguage}
-                    setPlateDisplayLanguage={setPlateDisplayLanguage}
-                    isRefreshing={isRefreshing}
-                    isLive={true}
-                    onRowClick={handleRowClick}
-                    onHistoryClick={handleOpenHistoryModal}
-                    carsWithHistory={combinedCarsWithHistory}
-                    onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
-                    onRefresh={fetchRequests}
-                    isLoading={isSearching}
-                />
-            )}
-
-            {isLoadMoreVisible && (
-                <div className="text-center mt-6">
-                    <Button onClick={loadMoreRequests} variant="secondary" disabled={isLoadingMore}>
-                        {isLoadingMore ? 'جاري التحميل...' : 'تحميل المزيد'}
-                    </Button>
-                </div>
+                <>
+                    <RequestTable
+                        requests={paginatedDataToDisplay}
+                        clients={clients}
+                        cars={cars}
+                        carMakes={carMakes}
+                        carModels={carModels}
+                        inspectionTypes={inspectionTypes}
+                        employees={employees}
+                        title={searchedRequests ? "نتائج البحث" : (dateFilter !== 'all' ? `الطلبات (${dateFilter === 'today' ? 'اليوم' : dateFilter === 'yesterday' ? 'أمس' : 'المحددة'})` : "قائمة الطلبات النشطة")}
+                        onOpenUpdateModal={handleOpenUpdateModal}
+                        plateDisplayLanguage={plateDisplayLanguage}
+                        setPlateDisplayLanguage={setPlateDisplayLanguage}
+                        isRefreshing={isRefreshing}
+                        isLive={true}
+                        onRowClick={handleRowClick}
+                        onHistoryClick={handleOpenHistoryModal}
+                        carsWithHistory={combinedCarsWithHistory}
+                        onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
+                        onRefresh={fetchRequests}
+                        isLoading={isSearching}
+                        onLoadMore={handleLoadMore}
+                        hasMore={isLoadMoreVisible || displayLimit < dataToDisplay.length}
+                        isLoadingMore={isLoadingMore || isPaginatingLocal}
+                    />
+                </>
             )}
 
             {isModalOpen && (
