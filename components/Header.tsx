@@ -27,16 +27,16 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   const { 
     theme, toggleTheme, authUser, logout, settings,
-    appNotifications, markNotificationAsRead, markAllNotificationsAsRead, 
+    appNotifications, markNotificationAsRead, deleteNotification, markAllNotificationsAsRead, 
     setPage, setSelectedRequestId, fetchAndUpdateSingleRequest, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
-    unreadMessagesCount, setIsMailboxOpen, searchRequestByNumber, clearSearchedRequests, searchedRequests
+    unreadMessagesCount, setIsMailboxOpen, searchRequestByNumber, clearSearchedRequests, searchedRequests,
+    searchQuery, setSearchQuery, can
   } = useAppContext();
 
   const design = settings.design || 'aero';
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notificationTab, setNotificationTab] = useState<'all' | 'unread' | 'logins'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
   
   const menuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -331,6 +331,24 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                                             {notification.created_by_name && (
                                                 <p className="text-[10px] text-slate-400 mt-1">بواسطة: {notification.created_by_name}</p>
                                             )}
+                                            
+                                            {/* Action Buttons */}
+                                            <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {!notification.is_read && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); markNotificationAsRead(notification.id); }}
+                                                        className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                                    >
+                                                        تمت القراءة
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); deleteNotification(notification.id); }}
+                                                    className="text-[10px] font-bold text-red-600 dark:text-red-400 hover:underline"
+                                                >
+                                                    حذف
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
@@ -375,6 +393,17 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                         <UserCircleIcon className="w-5 h-5 text-slate-400" />
                         <span>الملف الشخصي</span>
                     </a>
+
+                    {can('view_settings') && (
+                        <a
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); setPage('settings'); setIsMenuOpen(false); }}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                            <RefreshCwIcon className="w-5 h-5 text-slate-400" />
+                            <span>الإعدادات</span>
+                        </a>
+                    )}
                     
                     <a
                         href="#"

@@ -19,6 +19,7 @@ export const useDataScope = (
     const [hasMoreRequests, setHasMoreRequests] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [searchedRequests, setSearchedRequests] = useState<InspectionRequest[] | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
     const [highlightedRequestId, setHighlightedRequestId] = useState<string | null>(null);
     const [incomingRequest, setIncomingRequest] = useState<InspectionRequest | null>(null);
     const [lastRemoteDeleteId, setLastRemoteDeleteId] = useState<string | null>(null);
@@ -223,7 +224,20 @@ export const useDataScope = (
     const markNotificationAsRead = useCallback(async (id: string) => {
         setAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
         const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-        if (error) console.error("Failed to mark notification as read", error);
+        if (error) {
+            console.error("Failed to mark notification as read", error);
+            // Revert local state on error
+            setAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: false } : n));
+        }
+    }, []);
+
+    const deleteNotification = useCallback(async (id: string) => {
+        setAppNotifications(prev => prev.filter(n => n.id !== id));
+        const { error } = await supabase.from('notifications').delete().eq('id', id);
+        if (error) {
+            console.error("Failed to delete notification", error);
+            // We don't easily revert here without re-fetching, but usually delete is final
+        }
     }, []);
 
     const markAllNotificationsAsRead = useCallback(async () => {
@@ -343,6 +357,7 @@ export const useDataScope = (
         hasMoreRequests, setHasMoreRequests,
         isLoadingMore, setIsLoadingMore,
         searchedRequests, setSearchedRequests,
+        searchQuery, setSearchQuery,
         highlightedRequestId, triggerHighlight,
         incomingRequest, setIncomingRequest,
         lastRemoteDeleteId, setLastRemoteDeleteId,
@@ -371,6 +386,7 @@ export const useDataScope = (
         createActivityLog,
         addNotification,
         markNotificationAsRead,
+        deleteNotification,
         markAllNotificationsAsRead,
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,

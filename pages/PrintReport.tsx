@@ -627,6 +627,9 @@ const PrintReport: React.FC = () => {
                 .print-clone .target-logo { height: 90px !important; width: auto !important; }
                 .print-clone .target-car-logo img { height: 60px !important; width: auto !important; }
                 .print-clone .flex-row-reverse { flex-direction: ${reportDirection === 'rtl' ? 'row-reverse' : 'row'} !important; }
+                .print-clone .image-note-card { border-width: 1.5px !important; border-color: #cbd5e1 !important; }
+                .print-clone .image-note-category { font-size: 11px !important; font-weight: 800 !important; margin-bottom: 2px !important; font-family: 'Tajawal', sans-serif !important; }
+                .print-clone .image-note-text { font-size: 12px !important; line-height: 1.4 !important; font-weight: 500 !important; color: #000000 !important; font-family: 'Tajawal', sans-serif !important; padding-top: 2px !important; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
             `;
             clone.appendChild(style);
             clone.classList.add('print-clone');
@@ -690,7 +693,7 @@ const PrintReport: React.FC = () => {
             setLoadingState('جاري التقاط الشاشة...');
 
             const canvas = await (window as any).html2canvas(clone, {
-                useCORS: true, allowTaint: true, logging: false, scale: 2, windowWidth: 794, width: 794,
+                useCORS: true, allowTaint: true, logging: false, scale: 3, windowWidth: 794, width: 794,
                 scrollY: 0, scrollX: 0, x: 0, y: 0, backgroundColor: '#ffffff',
                 onclone: (doc: Document) => { const el = doc.querySelector('.print-clone') as HTMLElement; if(el) el.style.transform = 'none'; }
             }) as HTMLCanvasElement;
@@ -699,7 +702,7 @@ const PrintReport: React.FC = () => {
             setLoadingState('جاري إنشاء ملف PDF...');
 
             const { jsPDF } = (window as any).jspdf;
-            const imgData = canvas.toDataURL('image/jpeg', 0.85);
+            const imgData = canvas.toDataURL('image/jpeg', 0.98);
             const pdfWidth = 210; 
             const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 

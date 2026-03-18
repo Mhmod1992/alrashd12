@@ -30,6 +30,8 @@ export interface AppContextType {
     searchRequestByNumber: (query: string | number, exactOnly?: boolean) => Promise<void>;
     clearSearchedRequests: () => void;
     searchedRequests: InspectionRequest[] | null;
+    searchQuery: string;
+    setSearchQuery: (query: string) => void;
     isCreatingRequest: boolean;
     setIsCreatingRequest: (isCreating: boolean) => void;
     clients: Client[];
@@ -117,6 +119,7 @@ export interface AppContextType {
     removeNotification: (id: string) => void;
     appNotifications: AppNotification[];
     markNotificationAsRead: (id: string) => void;
+    deleteNotification: (id: string) => void;
     markAllNotificationsAsRead: () => void;
     confirmModalState: ConfirmModalState;
     showConfirmModal: (modalState: Omit<ConfirmModalState, 'isOpen'>) => void;

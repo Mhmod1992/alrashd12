@@ -215,8 +215,8 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
                 </div>
             )}
             <div className={`flex-grow flex flex-col w-full ${isPrintView ? 'p-2' : 'p-3'}`}>
-                <p className="text-xs font-bold mb-1 w-full" style={{ color: settings.primaryColor }}>{categoryName}</p>
-                <div className={`flex-grow w-full break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
+                <p className="image-note-category text-xs font-bold mb-1 w-full" style={{ color: settings.primaryColor }}>{categoryName}</p>
+                <div className={`image-note-text flex-grow w-full break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
                     {note.highlightColor ? (
                         <span style={highlightStyle} className={textClassName}>{displayText}</span>
                     ) : (

@@ -62,11 +62,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Initialize from URL params if present (e.g. for print window)
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        const requestIdParam = params.get('requestId');
-        if (requestIdParam) {
+        const requestIdParam = params.get('requestId') || params.get('id');
+        if (requestIdParam && requestIdParam !== selectedRequestId) {
             setSelectedRequestId(requestIdParam);
         }
     }, [setSelectedRequestId]);
+
+    // Sync selectedRequestId to URL
+    useEffect(() => {
+        if (selectedRequestId && (page === 'fill-request' || page === 'print-report')) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('id') !== selectedRequestId) {
+                params.set('id', selectedRequestId);
+                const newUrl = `${window.location.pathname}?${params.toString()}`;
+                window.history.replaceState(window.history.state, '', newUrl);
+            }
+        }
+    }, [selectedRequestId, page]);
 
     const {
         requests, setRequests,
@@ -74,6 +86,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         hasMoreRequests, setHasMoreRequests,
         isLoadingMore, setIsLoadingMore,
         searchedRequests, setSearchedRequests,
+        searchQuery, setSearchQuery,
         highlightedRequestId, triggerHighlight,
         incomingRequest, setIncomingRequest,
         lastRemoteDeleteId, setLastRemoteDeleteId,
@@ -102,6 +115,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createActivityLog,
         addNotification,
         markNotificationAsRead,
+        deleteNotification,
         markAllNotificationsAsRead,
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
@@ -1447,6 +1461,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
         requests, clients, cars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
         loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, clearSearchedRequests, searchedRequests,
+        searchQuery, setSearchQuery,
         customFindingCategories, predefinedFindings, selectedRequestId, setSelectedRequestId, selectedClientId, setSelectedClientId,
         authUser, setAuthUser, login, logout, updateOwnPassword, settings, updateSettings, addRequest, updateRequest, deleteRequest, deleteRequestsBatch,
         fetchAndUpdateSingleRequest, updateRequestAndAssociatedData, addClient, updateClient, deleteClient, ensureLocalClient, addCar,
@@ -1455,6 +1470,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addCarMake, addCarMakesBulk, updateCarMake, deleteCarMake, deleteAllCarMakes, addCarModel, addCarModelsBulk,
         updateCarModel, deleteCarModel, deleteModelsByMakeId, addBroker, updateBroker, deleteBroker, addEmployee,
         updateEmployee, adminChangePassword, deleteEmployee, addExpense, updateExpense, deleteExpense, notifications, addNotification,
+        deleteNotification,
         removeNotification, appNotifications, markNotificationAsRead, markAllNotificationsAsRead, confirmModalState,
         showConfirmModal, hideConfirmModal, isLoading, isRefreshing, isSetupComplete, startSetupProcess, can,
         findOrCreateCarMake, findOrCreateCarModel, initialRequestModalState, setInitialRequestModalState,

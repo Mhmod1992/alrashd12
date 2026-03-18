@@ -19,19 +19,69 @@ export const useNavigationScope = () => {
         }
     });
 
+    const page = history[history.length - 1] || 'dashboard';
+
+    // Sync URL with page state
     useEffect(() => {
-        localStorage.removeItem('pageHistory');
+        const params = new URLSearchParams(window.location.search);
+        const currentPageParam = params.get('page');
+        
+        if (currentPageParam !== page) {
+            params.set('page', page);
+            
+            // Clear irrelevant parameters based on the new page
+            if (page === 'dashboard') {
+                params.delete('search');
+                params.delete('requestId');
+                params.delete('id');
+            } else if (page === 'requests' || page === 'waiting-requests') {
+                params.delete('requestId');
+                params.delete('id');
+                // Keep search if it's already there (e.g. deep link to search results)
+            } else if (page === 'fill-request' || page === 'print-report') {
+                // Solution 2: Clear search when viewing a specific request to avoid interference
+                params.delete('search');
+            } else {
+                // For all other pages, clear everything
+                params.delete('search');
+                params.delete('requestId');
+                params.delete('id');
+            }
+
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.pushState({ page }, '', newUrl);
+        }
+    }, [page]);
+
+    // Handle browser back/forward buttons
+    useEffect(() => {
+        const handlePopState = (event: PopStateEvent) => {
+            if (event.state && event.state.page) {
+                const newPage = event.state.page as Page;
+                setHistory(prev => {
+                    if (prev[prev.length - 1] === newPage) return prev;
+                    return [...prev, newPage];
+                });
+            } else {
+                // Fallback to URL params if state is missing
+                const params = new URLSearchParams(window.location.search);
+                const pageParam = params.get('page') as Page | null;
+                if (pageParam) {
+                    setHistory(prev => {
+                        if (prev[prev.length - 1] === pageParam) return prev;
+                        return [...prev, pageParam];
+                    });
+                }
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
     }, []);
 
     useEffect(() => {
-        try {
-            window.sessionStorage.setItem('pageHistory', JSON.stringify(history));
-        } catch (e) {
-            console.error("Failed to save history to sessionStorage", e);
-        }
-    }, [history]);
-
-    const page = history[history.length - 1] || 'dashboard';
+        localStorage.removeItem('pageHistory');
+    }, []);
 
     const [isFocusMode, setIsFocusMode] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);

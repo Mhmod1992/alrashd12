@@ -265,10 +265,23 @@ const Requests: React.FC = () => {
             window.clearTimeout(searchDebounceRef.current);
         }
 
+        const params = new URLSearchParams(window.location.search);
         if (trimmedTerm === '') {
             clearSearchedRequests();
             setIsSearching(false);
+            if (params.has('search')) {
+                params.delete('search');
+                const newUrl = `${window.location.pathname}?${params.toString()}`;
+                window.history.replaceState(window.history.state, '', newUrl);
+            }
             return;
+        }
+
+        // Sync search to URL
+        if (params.get('search') !== trimmedTerm) {
+            params.set('search', trimmedTerm);
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.replaceState(window.history.state, '', newUrl);
         }
 
         setIsSearching(true);
@@ -408,6 +421,14 @@ const Requests: React.FC = () => {
         setRangeEndDate('');
         setDateFilter('today'); 
         clearSearchedRequests();
+
+        // Clear search from URL
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('search')) {
+            params.delete('search');
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.replaceState(window.history.state, '', newUrl);
+        }
     };
 
     const handleScanSuccess = async (decodedText: string) => {

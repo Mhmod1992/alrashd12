@@ -529,20 +529,22 @@ const styles = StyleSheet.create({
   imageNotesGrid: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
-    gap: 6,
-    padding: 4,
+    gap: 10,
+    padding: 10,
+    justifyContent: 'center',
   },
   imageNoteCard: {
     width: '32%',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 6,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 4,
+    marginBottom: 8,
+    backgroundColor: '#ffffff',
   },
   noteImage: {
     width: '100%',
-    height: 90,
+    height: 100,
     objectFit: 'cover',
   },
   stampIncomplete: {
@@ -573,26 +575,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   imageNoteContent: {
-    padding: 4,
+    padding: 8,
+    alignItems: 'center',
   },
   imageNoteCategory: {
-    fontSize: layoutSettings.sections.fontSize.imageNoteCategory,
+    fontSize: 10,
     fontWeight: 'bold',
-    color: '#1e40af',
-    marginBottom: 1,
-    textAlign: 'right',
+    color: '#0d9488',
+    marginBottom: 4,
+    textAlign: 'center',
   },
   digitalBadge: {
     backgroundColor: '#f8fafc',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
-    alignSelf: 'flex-end',
-    marginBottom: 6,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     flexDirection: 'row',
     gap: 4,
+    alignSelf: 'center',
+    marginBottom: 10,
   },
   digitalBadgeText: {
     fontSize: 7,
@@ -783,19 +786,21 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
         )}
 
 
+        {/* Digital Copy Badge at the very top */}
+        <View style={styles.digitalBadge}>
+          <Text style={styles.digitalBadgeText}>DIGITAL COPY</Text>
+          <Text style={[styles.digitalBadgeText, { color: '#94a3b8' }]}>|</Text>
+          <Text style={styles.digitalBadgeText}>نسخة رقمية</Text>
+        </View>
+
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLogos}>
+          <View style={[styles.headerLogos, { flex: 1 }]}>
             {reportSettings.reportLogoUrl && <Image src={reportSettings.reportLogoUrl} style={styles.logo} />}
             {qrCodeBase64 && <Image src={qrCodeBase64} style={styles.qrCode} />}
           </View>
 
           <View style={styles.headerInfo}>
-            <View style={styles.digitalBadge}>
-              <Text style={styles.digitalBadgeText}>DIGITAL COPY</Text>
-              <Text style={[styles.digitalBadgeText, { color: '#94a3b8' }]}>|</Text>
-              <Text style={styles.digitalBadgeText}>نسخة رقمية</Text>
-            </View>
             <Text style={[styles.appName, { color: reportSettings.appNameColor || '#2563eb' }]}>{appName}</Text>
             <Text style={styles.headerSubtitle}>{reportSettings.headerSubtitleText}</Text>
 
@@ -1210,7 +1215,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                   {note.image && <Image src={note.image} style={styles.noteImage} />}
                   <View style={styles.imageNoteContent}>
                     <Text style={styles.imageNoteCategory}>{categoryName}</Text>
-                    <Text style={styles.noteText}>{note.text}</Text>
+                    <Text style={[styles.noteText, { textAlign: 'center', fontSize: 9, color: '#475569' }]}>{note.text}</Text>
                   </View>
                 </View>
               ))}
