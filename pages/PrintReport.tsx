@@ -774,39 +774,8 @@ const PrintReport: React.FC = () => {
         return `Report_${reqNum}.pdf`;
     };
 
-    const handleWhatsAppShare = async () => {
-        if (!client?.phone) { addNotification({ title: 'بيانات ناقصة', message: 'رقم هاتف العميل غير متوفر.', type: 'warning' }); return; }
-        try {
-            const pdf = await generatePdfInstance();
-            if (!pdf) return;
-            setLoadingState('جاري الرفع إلى السيرفر...');
-            const blob = pdf.output('blob');
-            const file = new File([blob], getPdfFilename(), { type: 'application/pdf' });
-            const publicUrl = await uploadImage(file, 'reports');
-            if (originalRequest && !translatedRequest) { 
-                await updateRequest({ id: originalRequest.id, report_url: publicUrl, report_generated_at: new Date().toISOString() });
-            }
-            openWhatsapp(publicUrl);
-            addNotification({ title: 'تم', message: 'تم إرسال التقرير.', type: 'success' });
-        } catch (error: any) { addNotification({ title: 'خطأ', message: 'فشل الإرسال.', type: 'error' }); }
-    };
-
-    const openWhatsapp = (link: string) => {
-        let phone = client?.phone.replace(/\D/g, '') || ''; 
-        if (phone.startsWith('05')) phone = '966' + phone.substring(1);
-        else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
-        const carName = request?.car_snapshot ? `${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}` : 'السيارة';
-        const message = `مرحباً سيد ${client?.name || ''}،\nإليك تقرير الفحص الفني لسيارتك ${carName}:\n${link}\n\nشكراً لثقتكم بنا.`;
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-    };
-
-    const handleDownloadPdf = async () => {
-        const pdf = await generatePdfInstance();
-        if (pdf) pdf.save(getPdfFilename());
-    };
-
-    const handleDownloadNativePdf = async () => {
-        if (!request || !client || !car || !inspectionType) return;
+    const generateNativePdfBlob = async (): Promise<Blob | null> => {
+        if (!request || !client || !car || !inspectionType) return null;
         
         setIsGenerating(true);
         setLoadingState('جاري تجهيز البيانات...');
@@ -916,23 +885,99 @@ const PrintReport: React.FC = () => {
                 />
             ).toBlob();
 
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = getPdfFilename();
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            addNotification({ title: 'تم بنجاح', message: 'تم تحميل التقرير بصيغة PDF حقيقية.', type: 'success' });
+            return blob;
         } catch (error: any) {
-            console.error('Native PDF Error:', error);
-            addNotification({ title: 'خطأ', message: 'فشل إنشاء ملف PDF الحقيقي.', type: 'error' });
+            console.error('Native PDF Generation Error:', error);
+            addNotification({ title: 'خطأ', message: 'فشل إنشاء ملف PDF.', type: 'error' });
+            return null;
         } finally {
             setIsGenerating(false);
             setLoadingState('');
         }
+    };
+
+    const handleWhatsAppShare = async () => {
+        if (!client?.phone) { addNotification({ title: 'بيانات ناقصة', message: 'رقم هاتف العميل غير متوفر.', type: 'warning' }); return; }
+        
+        try {
+            // --- OPTIMIZATION: Check if we can reuse an existing report ---
+            // Only reuse if:
+            // 1. We have a report_url and report_generated_at
+            // 2. We are NOT in translation mode (translated reports are temporary/different)
+            // 3. The report was generated AFTER the last update to the request
+            if (originalRequest?.report_url && originalRequest?.report_generated_at && !translatedRequest) {
+                const generatedAt = new Date(originalRequest.report_generated_at).getTime();
+                const updatedAt = originalRequest.updated_at ? new Date(originalRequest.updated_at).getTime() : 0;
+                
+                // If generated after last update, use existing link
+                if (generatedAt > updatedAt) {
+                    openWhatsapp(originalRequest.report_url);
+                    addNotification({ title: 'تم الإرسال', message: 'تمت مشاركة التقرير الحالي بنجاح.', type: 'success' });
+                    return;
+                }
+            }
+
+            // Otherwise, generate a new one
+            const blob = await generateNativePdfBlob();
+            if (!blob) return;
+            
+            setLoadingState('جاري الرفع إلى السيرفر...');
+            const file = new File([blob], getPdfFilename(), { type: 'application/pdf' });
+            const publicUrl = await uploadImage(file, 'reports');
+            
+            // Only update the database if we are NOT in translation mode
+            if (originalRequest && !translatedRequest) { 
+                await updateRequest({ 
+                    id: originalRequest.id, 
+                    report_url: publicUrl, 
+                    report_generated_at: new Date().toISOString() 
+                });
+            }
+            
+            openWhatsapp(publicUrl);
+            addNotification({ title: 'تم', message: 'تم توليد وإرسال تقرير جديد.', type: 'success' });
+        } catch (error: any) { 
+            console.error('WhatsApp Share Error:', error);
+            addNotification({ title: 'خطأ', message: 'فشل الإرسال.', type: 'error' }); 
+        } finally {
+            setLoadingState('');
+        }
+    };
+
+    const openWhatsapp = (link: string) => {
+        let phone = client?.phone.replace(/\D/g, '') || ''; 
+        if (phone.startsWith('05')) phone = '966' + phone.substring(1);
+        else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+
+        const clientName = client?.name ? `*${client.name}*` : 'العميل';
+        const carInfo = `*${carMake?.name_ar || carMake?.name_en || ''} ${carModel?.name_ar || carModel?.name_en || carModel?.name || ''} ${car?.year || ''}*`.trim();
+        const workshopName = `*${settings.appName}*`;
+        const reviewLink = reportSettings.qrCodeContent || settings.googleMapsLink || '';
+
+        const message = `تحية طيبة، السيد/ة ${clientName} المحترم/ة،\n\nنود إفادتكم بصدور تقرير الفحص الفني لمركبتكم ${carInfo}. يمكنكم استعراض التفاصيل الكاملة من خلال الرابط:\n🔗 ${link}\n\nنسعى دوماً لتقديم أفضل تجربة لعملائنا، لذا تهمنا مشاركتكم لتقييم الخدمة عبر الرابط التالي:\n⭐ ${reviewLink}\n\nمع خالص التقدير، إدارة وفريق ${workshopName}`;
+        
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    };
+
+    const handleDownloadPdf = async () => {
+        const pdf = await generatePdfInstance();
+        if (pdf) pdf.save(getPdfFilename());
+    };
+
+    const handleDownloadNativePdf = async () => {
+        const blob = await generateNativePdfBlob();
+        if (!blob) return;
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = getPdfFilename();
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        addNotification({ title: 'تم بنجاح', message: 'تم تحميل التقرير بصيغة PDF حقيقية.', type: 'success' });
     };
 
     if (!request || !isDataReady) {
