@@ -178,10 +178,11 @@ export const useActionsScope = (
 
 
     // --- FINDING CATEGORIES ---
-    const addFindingCategory = useCallback(async (category: Omit<CustomFindingCategory, 'id'>) => {
+    const addFindingCategory = useCallback(async (category: Omit<CustomFindingCategory, 'id'>): Promise<CustomFindingCategory> => {
         const { data, error } = await supabase.from('custom_finding_categories').insert(category).select().single();
         if (error) throw error;
         setCustomFindingCategories(prev => [...prev, data as CustomFindingCategory]);
+        return data as CustomFindingCategory;
     }, [setCustomFindingCategories]);
 
     const updateFindingCategory = useCallback(async (category: CustomFindingCategory) => {
@@ -199,10 +200,11 @@ export const useActionsScope = (
 
 
     // --- PREDEFINED FINDINGS ---
-    const addPredefinedFinding = useCallback(async (finding: Omit<PredefinedFinding, 'id'>) => {
+    const addPredefinedFinding = useCallback(async (finding: Omit<PredefinedFinding, 'id'>): Promise<PredefinedFinding> => {
         const { data, error } = await supabase.from('predefined_findings').insert(finding).select().single();
         if (error) throw error;
         setPredefinedFindings(prev => [...prev, data as PredefinedFinding]);
+        return data as PredefinedFinding;
     }, [setPredefinedFindings]);
 
     const updatePredefinedFinding = useCallback(async (finding: PredefinedFinding) => {

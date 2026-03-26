@@ -19,6 +19,31 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Trigger function to automate creating an employee profile on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS TRIGGER AS $$
+DECLARE
+    perms_array TEXT[];
+BEGIN
+    IF NEW.raw_user_meta_data->'permissions' IS NOT NULL THEN
+        SELECT ARRAY(SELECT jsonb_array_elements_text(NEW.raw_user_meta_data->'permissions')) INTO perms_array;
+    ELSE
+        perms_array := ARRAY[]::TEXT[];
+    END IF;
+
+    INSERT INTO public.employees (id, email, name, role, permissions, is_active)
+    VALUES (
+        NEW.id, 
+        NEW.email, 
+        COALESCE(NEW.raw_user_meta_data->>'name', 'مدير النظام'), 
+        COALESCE(NEW.raw_user_meta_data->>'role', 'general_manager'), 
+        perms_array,
+        true
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- 2. Tables
 
 -- Clients Table
@@ -109,7 +134,7 @@ CREATE TABLE IF NOT EXISTS predefined_findings (
     "group" TEXT,
     groups TEXT[],
     reference_image_position TEXT,
-    order_index INTEGER,
+    "orderIndex" INTEGER,
     report_position TEXT,
     is_bundle BOOLEAN DEFAULT false,
     linked_finding_ids TEXT[],
@@ -225,8 +250,8 @@ CREATE TABLE IF NOT EXISTS revenues (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- App Notifications Table
-CREATE TABLE IF NOT EXISTS app_notifications (
+-- Notifications Table
+CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMPTZ DEFAULT now(),
     title TEXT NOT NULL,
@@ -253,29 +278,10 @@ CREATE TABLE IF NOT EXISTS internal_messages (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Settings Table (Single row)
-CREATE TABLE IF NOT EXISTS settings (
-    id UUID PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000000',
-    app_name TEXT,
-    logo_url TEXT,
-    design TEXT,
-    sidebar_style TEXT,
-    header_style TEXT,
-    background_image_url TEXT,
-    background_color TEXT,
-    glassmorphism_intensity NUMERIC,
-    plate_characters JSONB,
-    plate_preview_settings JSONB,
-    report_settings JSONB,
-    draft_settings JSONB,
-    custom_report_templates JSONB,
-    gemini_api_key TEXT,
-    google_maps_link TEXT,
-    location_url TEXT,
-    database_capacity INTEGER,
-    storage_capacity INTEGER,
-    setup_completed BOOLEAN DEFAULT false,
-    allow_signup BOOLEAN DEFAULT false,
+-- App Settings Table (Single row)
+CREATE TABLE IF NOT EXISTS app_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    settings_data JSONB,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -284,9 +290,14 @@ CREATE TRIGGER update_inspection_requests_updated_at
 BEFORE UPDATE ON inspection_requests
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_settings_updated_at
-BEFORE UPDATE ON settings
+CREATE TRIGGER update_app_settings_updated_at
+BEFORE UPDATE ON app_settings
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- 4. Row Level Security (RLS) Policies
 -- Enable RLS on all tables
@@ -306,9 +317,9 @@ ALTER TABLE payroll_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE revenues ENABLE ROW LEVEL SECURITY;
-ALTER TABLE app_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE internal_messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 
 -- Create "Allow All" policies for authenticated users (Simplified for initial setup)
 -- Note: In production, these should be more restrictive based on roles.
@@ -323,9 +334,40 @@ BEGIN
 END $$;
 
 -- 5. Initial Data
-INSERT INTO settings (id, app_name, setup_completed) 
-VALUES ('00000000-0000-0000-0000-000000000000', 'Car Inspection App', false)
+INSERT INTO app_settings (id, settings_data) 
+VALUES (1, '{"appName": "Car Inspection App", "setupCompleted": false}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
+
+-- ===============================================================
+-- Admin User Bootstrapping (Manual Step)
+-- ===============================================================
+-- After creating a user in Supabase Auth, copy their UUID and 
+-- replace 'YOUR_USER_UUID_HERE' below. Then run this command.
+-- ===============================================================
+
+-- INSERT INTO employees (id, email, name, role, permissions, is_active)
+-- VALUES (
+--     'YOUR_USER_UUID_HERE', 
+--     'admin@example.com', 
+--     'المدير العام', 
+--     'general_manager', 
+--     ARRAY[
+--         'view_dashboard', 'view_login_notifications', 'send_internal_messages', 
+--         'create_requests', 'view_completed_requests', 'view_waiting_requests', 
+--         'update_requests_data', 'change_request_status', 'mark_request_complete', 
+--         'delete_requests', 'print_request', 'export_data', 'fill_requests', 
+--         'view_request_info', 'view_car_history_on_create', 'view_archive', 
+--         'manage_paper_archive', 'manage_notes', 'manage_findings', 
+--         'view_activity_log', 'view_financials', 'manage_expenses', 
+--         'manage_revenues', 'delete_expenses', 'edit_request_price', 
+--         'process_payment', 'manage_clients', 'manage_employees', 
+--         'manage_brokers', 'manage_technicians', 'manage_settings_general', 
+--         'manage_settings_technical', 'manage_appearance', 'manage_api_keys', 
+--         'manage_reservations', 'view_requests_list', 'view_settings'
+--     ], 
+--     true
+-- )
+-- ON CONFLICT (id) DO NOTHING;
 
 -- 6. Storage Buckets and Policies
 -- This section automates the creation of storage buckets and their RLS policies.
@@ -334,24 +376,50 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) 
 VALUES 
     ('logos', 'logos', true), 
-    ('reports', 'reports', false),
-    ('attachments', 'attachments', false),
-    ('backgrounds', 'backgrounds', true)
+    ('reports', 'reports', true),
+    ('attached_files', 'attached_files', true),
+    ('note_images', 'note_images', true),
+    ('finding_images', 'finding_images', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage Policies for 'logos' (Public Read, Auth Write)
 CREATE POLICY "Public Access for Logos" ON storage.objects FOR SELECT USING (bucket_id = 'logos');
 CREATE POLICY "Admin Access for Logos" ON storage.objects FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
 
--- Storage Policies for 'backgrounds' (Public Read, Auth Write)
-CREATE POLICY "Public Access for Backgrounds" ON storage.objects FOR SELECT USING (bucket_id = 'backgrounds');
-CREATE POLICY "Admin Access for Backgrounds" ON storage.objects FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+-- Storage Policies for 'reports' (Public Read, Auth Write)
+CREATE POLICY "Public Access for Reports" ON storage.objects FOR SELECT USING (bucket_id = 'reports');
+CREATE POLICY "Admin Access for Reports" ON storage.objects FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
 
--- Storage Policies for 'reports' (Auth Read/Write)
-CREATE POLICY "Authenticated Access for Reports" ON storage.objects FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+-- Storage Policies for 'attached_files' (Public Read, Auth Write)
+CREATE POLICY "Public Access for Attached Files" ON storage.objects FOR SELECT USING (bucket_id = 'attached_files');
+CREATE POLICY "Admin Access for Attached Files" ON storage.objects FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
 
--- Storage Policies for 'attachments' (Auth Read/Write)
-CREATE POLICY "Authenticated Access for Attachments" ON storage.objects FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+-- Storage Policies for 'note_images' (Public Read, Auth Write)
+CREATE POLICY "Public Access for Note Images" ON storage.objects FOR SELECT USING (bucket_id = 'note_images');
+CREATE POLICY "Admin Access for Note Images" ON storage.objects FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+
+-- Storage Policies for 'finding_images' (Public Read, Auth Write)
+CREATE POLICY "Public Access for Finding Images" ON storage.objects FOR SELECT USING (bucket_id = 'finding_images');
+CREATE POLICY "Admin Access for Finding Images" ON storage.objects FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+
+-- ===============================================================
+-- 7. Realtime Setup
+-- ===============================================================
+-- The following tables require Supabase Realtime to be enabled.
+-- This allows the client application to listen to changes instantly.
+
+BEGIN;
+  -- Remove the supabase_realtime publication if it exists (for safe recreation if needed)
+  -- DROP PUBLICATION IF EXISTS supabase_realtime;
+  
+  -- Create the publication (Supabase usually creates this by default, but ensuring it exists)
+  -- CREATE PUBLICATION supabase_realtime;
+COMMIT;
+
+-- Add tables to the realtime publication
+ALTER PUBLICATION supabase_realtime ADD TABLE inspection_requests;
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+ALTER PUBLICATION supabase_realtime ADD TABLE internal_messages;
 
 -- ===============================================================
 -- End of Schema

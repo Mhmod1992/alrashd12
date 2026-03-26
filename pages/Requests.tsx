@@ -8,6 +8,8 @@ import PlusIcon from '../components/icons/PlusIcon';
 import SearchIcon from '../components/icons/SearchIcon';
 import FilterIcon from '../components/icons/FilterIcon';
 import Modal from '../components/Modal';
+import ExportRequestsModal from '../components/ExportRequestsModal';
+import ImportRequestsModal from '../components/ImportRequestsModal';
 import NewRequestForm from '../components/NewRequestForm';
 import RequestTable from '../components/RequestTable';
 import FileTextIcon from '../components/icons/FileTextIcon';
@@ -93,6 +95,8 @@ const Requests: React.FC = () => {
     const [reservationSearchTerm, setReservationSearchTerm] = useState('');
 
     const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     // const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // Removed redundant state
     // const [createdRequestNumber, setCreatedRequestNumber] = useState<number | null>(null); // Removed redundant state
 
@@ -846,13 +850,29 @@ const Requests: React.FC = () => {
                         </button>
                     )}
                     {can('create_requests') && (
-                        <Button 
-                            onClick={() => setIsModalOpen(true)} 
-                            leftIcon={<PlusIcon className="w-5 h-5" />}
-                            className="shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-1 transition-all px-8 py-2.5 font-bold text-lg"
-                        >
-                            إنشاء طلب جديد
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button 
+                                onClick={() => setIsImportModalOpen(true)} 
+                                variant="outline"
+                                className="shadow-sm hover:shadow-md transition-all px-4 py-2.5 font-bold"
+                            >
+                                استيراد
+                            </Button>
+                            <Button 
+                                onClick={() => setIsExportModalOpen(true)} 
+                                variant="outline"
+                                className="shadow-sm hover:shadow-md transition-all px-4 py-2.5 font-bold"
+                            >
+                                تصدير
+                            </Button>
+                            <Button 
+                                onClick={() => setIsModalOpen(true)} 
+                                leftIcon={<PlusIcon className="w-5 h-5" />}
+                                className="shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-1 transition-all px-8 py-2.5 font-bold text-lg"
+                            >
+                                إنشاء طلب جديد
+                            </Button>
+                        </div>
                     )}
                 </div>
                 
@@ -1201,6 +1221,20 @@ const Requests: React.FC = () => {
                         onProcessing={handleProcessing}
                     />
                 </Modal>
+            )}
+
+            {isExportModalOpen && (
+                <ExportRequestsModal
+                    isOpen={isExportModalOpen}
+                    onClose={() => setIsExportModalOpen(false)}
+                />
+            )}
+
+            {isImportModalOpen && (
+                <ImportRequestsModal
+                    isOpen={isImportModalOpen}
+                    onClose={() => setIsImportModalOpen(false)}
+                />
             )}
 
             <Modal isOpen={isProcessingModalOpen} onClose={() => {}} title="" size="sm" hideCloseButton>

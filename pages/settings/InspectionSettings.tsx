@@ -15,7 +15,7 @@ const InspectionSettingsTab: React.FC = () => {
         inspectionTypes, addInspectionType, updateInspectionType, deleteInspectionType,
         customFindingCategories, addFindingCategory, updateFindingCategory, deleteFindingCategory,
         predefinedFindings, addPredefinedFinding, updatePredefinedFinding, deletePredefinedFinding,
-        settings, addNotification, showConfirmModal
+        settings, addNotification, showConfirmModal, uploadImage
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState<'packages' | 'findings'>('packages');
@@ -188,6 +188,193 @@ const InspectionSettingsTab: React.FC = () => {
         return customFindingCategories.find(c => c.id === selectedCategoryId)?.name || '';
     }, [selectedCategoryId, customFindingCategories]);
 
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState<string>('');
+
+    const urlToBase64 = async (url: string): Promise<string | null> => {
+        if (!url) return null;
+        if (url.startsWith('data:')) return url;
+        try {
+            const response = await fetch(url, { mode: 'cors', cache: 'no-store' });
+            if (!response.ok) return null;
+            const blob = await response.blob();
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        } catch (error) {
+            console.error('Failed to convert image to base64:', url, error);
+            return null;
+        }
+    };
+
+    const base64ToFile = (base64String: string, filename: string): File => {
+        const arr = base64String.split(',');
+        const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new File([u8arr], filename, { type: mime });
+    };
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجميع بيانات الفحص والصور، يرجى الانتظار...', type: 'info' });
+
+            const processedFindings = await Promise.all(predefinedFindings.map(async (finding) => {
+                let imageBase64 = null;
+                if (finding.reference_image) {
+                    imageBase64 = await urlToBase64(finding.reference_image);
+                }
+                return { ...finding, imageBase64 };
+            }));
+
+            const exportData = {
+                version: '1.0',
+                type: 'inspection_settings',
+                timestamp: new Date().toISOString(),
+                data: {
+                    inspectionTypes: inspectionTypes,
+                    customFindingCategories: customFindingCategories,
+                    predefinedFindings: processedFindings,
+                }
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", `inspection_settings_export_${new Date().toISOString().split('T')[0]}.json`);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+
+            addNotification({ title: 'تم التصدير', message: 'تم تصدير إعدادات الفحص بنجاح.', type: 'success' });
+        } catch (error) {
+            console.error('Export error:', error);
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setIsImporting(true);
+        setImportProgress('جاري قراءة الملف...');
+
+        try {
+            const fileContent = await file.text();
+            const importedData = JSON.parse(fileContent);
+
+            if (importedData.version !== '1.0' || importedData.type !== 'inspection_settings' || !importedData.data) {
+                throw new Error('ملف غير صالح أو إصدار غير مدعوم.');
+            }
+
+            const { data } = importedData;
+
+            setImportProgress('جاري استيراد باقات وبنود الفحص...');
+            const categoryIdMap: Record<string, string> = {};
+
+            for (const cat of data.customFindingCategories || []) {
+                const newCat = await addFindingCategory({ name: cat.name });
+                if (newCat) {
+                    categoryIdMap[cat.id] = newCat.id;
+                }
+            }
+
+            setImportProgress('جاري استيراد أنواع الفحص...');
+            for (const type of data.inspectionTypes || []) {
+                const newFindingCategoryIds = (type.finding_category_ids || [])
+                    .map((oldId: string) => categoryIdMap[oldId])
+                    .filter(Boolean);
+                
+                const newFillTabOrderIds = (type.fill_tab_order_ids || [])
+                    .map((oldId: string) => categoryIdMap[oldId])
+                    .filter(Boolean);
+
+                await addInspectionType({
+                    name: type.name,
+                    price: type.price,
+                    finding_category_ids: newFindingCategoryIds,
+                    fill_tab_order_ids: newFillTabOrderIds.length > 0 ? newFillTabOrderIds : undefined
+                });
+            }
+
+            const findingIdMap: Record<string, string> = {};
+            const findingsWithLinks: any[] = [];
+
+            for (const finding of data.predefinedFindings || []) {
+                const newCategoryId = categoryIdMap[finding.category_id];
+                if (newCategoryId) {
+                    let newImageUrl = null;
+                    if (finding.imageBase64) {
+                        const imageFile = base64ToFile(finding.imageBase64, `finding_${Date.now()}.png`);
+                        newImageUrl = await uploadImage(imageFile, 'finding_images');
+                    }
+
+                    const newFinding = await addPredefinedFinding({
+                        name: finding.name,
+                        category_id: newCategoryId,
+                        options: finding.options,
+                        reference_image: newImageUrl || undefined,
+                        group: finding.group,
+                        groups: finding.groups,
+                        reference_image_position: finding.reference_image_position,
+                        orderIndex: finding.orderIndex,
+                        report_position: finding.report_position,
+                        is_bundle: finding.is_bundle,
+                        bundle_default_value: finding.bundle_default_value
+                    });
+                    
+                    if (newFinding) {
+                        findingIdMap[finding.id] = newFinding.id;
+                        if (finding.linked_finding_ids && finding.linked_finding_ids.length > 0) {
+                            findingsWithLinks.push({
+                                newFinding,
+                                oldLinkedIds: finding.linked_finding_ids
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Second pass: Update linked_finding_ids for bundles
+            for (const item of findingsWithLinks) {
+                const newLinkedIds = item.oldLinkedIds
+                    .map((oldId: string) => findingIdMap[oldId])
+                    .filter(Boolean); // Only keep valid new IDs
+                
+                if (newLinkedIds.length > 0) {
+                    await updatePredefinedFinding({
+                        ...item.newFinding,
+                        linked_finding_ids: newLinkedIds
+                    });
+                }
+            }
+
+            addNotification({ title: 'تم الاستيراد', message: 'تم استيراد إعدادات الفحص بنجاح.', type: 'success' });
+        } catch (error: any) {
+            console.error('Import error:', error);
+            addNotification({ title: 'خطأ', message: error.message || 'حدث خطأ أثناء الاستيراد.', type: 'error' });
+        } finally {
+            setIsImporting(false);
+            setImportProgress('');
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
     // Style Helpers
     const activeTabClasses = design === 'classic' 
         ? 'border-teal-500 text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20' 
@@ -198,6 +385,48 @@ const InspectionSettingsTab: React.FC = () => {
     return (
         <div className="space-y-6 animate-fade-in pb-10">
             
+            {/* Header with Import/Export */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">إعدادات الفحص</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">إدارة باقات الفحص والتبويبات والبنود المشمولة</p>
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <input
+                        type="file"
+                        accept=".json"
+                        ref={fileInputRef}
+                        onChange={handleImport}
+                        className="hidden"
+                    />
+                    <Button
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isImporting || isExporting}
+                        leftIcon={isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
+                        className="flex-1 sm:flex-none"
+                    >
+                        {isImporting ? 'جاري الاستيراد...' : 'استيراد'}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={handleExport}
+                        disabled={isExporting || isImporting}
+                        leftIcon={isExporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="download" className="w-4 h-4" />}
+                        className="flex-1 sm:flex-none"
+                    >
+                        {isExporting ? 'جاري التصدير...' : 'تصدير'}
+                    </Button>
+                </div>
+            </div>
+
+            {importProgress && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 p-3 rounded-lg text-sm flex items-center gap-2 animate-fade-in">
+                    <RefreshCwIcon className="w-4 h-4 animate-spin" />
+                    {importProgress}
+                </div>
+            )}
+
             {/* Tab Navigation (Sticky) */}
             <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-t-xl sticky top-0 z-30 shadow-sm">
                 <button
