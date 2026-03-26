@@ -956,29 +956,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (!plateNumber && !vin) return null;
         try {
             let foundCar: Car | null = null;
-            const clean = (s: string) => s.replace(/\s/g, '').toUpperCase();
+            
+            let query = supabase.from('cars').select('*').limit(1);
+            
             if (plateNumber) {
-                const targetPlate = clean(plateNumber);
-                foundCar = cars.find(c => (c.plate_number && clean(c.plate_number) === targetPlate) || (c.plate_number_en && clean(c.plate_number_en) === targetPlate)) || null;
+                // Remove all spaces for a clean search string
+                const cleanPlate = plateNumber.replace(/\s/g, '');
+                
+                // Create a pattern that allows optional spaces between any character
+                // e.g., "ABC1234" -> "%A%B%C%1%2%3%4%"
+                const fuzzyPattern = '%' + cleanPlate.split('').join('%') + '%';
+                
+                // Search in both Arabic and English plate fields
+                query = query.or(`plate_number.ilike.${fuzzyPattern},plate_number_en.ilike.${fuzzyPattern}`);
             }
-            if (!foundCar && vin) {
-                const targetVin = clean(vin);
-                foundCar = cars.find(c => c.vin && clean(c.vin) === targetVin) || null;
+            
+            if (vin) {
+                const cleanVin = vin.replace(/\s/g, '');
+                query = query.or(`vin.ilike.%${cleanVin}%`);
             }
-            if (!foundCar) {
-                let query = supabase.from('cars').select('*').limit(1);
-                if (plateNumber) {
-                    const cleanPlate = plateNumber.replace(/\s/g, '');
-                    const spacedPlate = plateNumber.split('').join(' ');
-                    query = query.or(`plate_number.ilike.%${cleanPlate}%,plate_number.ilike.%${spacedPlate}%,plate_number_en.ilike.%${cleanPlate}%,plate_number_en.ilike.%${spacedPlate}%`);
-                }
-                if (vin) query = query.or(`vin.eq.${vin}`);
-                const { data } = await query;
-                if (data && data.length > 0) {
-                    foundCar = data[0];
-                    setCars(prev => prev.find(c => c.id === foundCar!.id) ? prev : [...prev, foundCar!]);
-                }
+            
+            const { data, error } = await query;
+            
+            if (error) {
+                console.error("Error searching for car history:", error);
+                return null;
             }
+
+            if (data && data.length > 0) {
+                foundCar = data[0];
+                // Update local state if not already present
+                setCars(prev => prev.find(c => c.id === foundCar!.id) ? prev : [...prev, foundCar!]);
+            }
+            
             if (foundCar) {
                 const { data: requestHistory } = await supabase.from('inspection_requests').select('*').eq('car_id', foundCar.id).order('created_at', { ascending: false }).limit(5);
                 let lastClient: Client | undefined;
@@ -988,9 +998,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
                 return { car: foundCar, previousRequests: requestHistory || [], lastClient };
             }
-        } catch (e) { }
+        } catch (e) {
+            console.error("Exception in checkCarHistory:", e);
+        }
         return null;
-    }, [cars]);
+    }, []);
 
     const searchCarMakes = useCallback(async (query: string): Promise<CarMake[]> => {
         if (!query) return [];

@@ -158,10 +158,11 @@ export const useActionsScope = (
 
 
     // --- INSPECTION TYPES ---
-    const addInspectionType = useCallback(async (type: Omit<InspectionType, 'id'>) => {
+    const addInspectionType = useCallback(async (type: Omit<InspectionType, 'id'>): Promise<InspectionType> => {
         const { data, error } = await supabase.from('inspection_types').insert(type).select().single();
         if (error) throw error;
         setInspectionTypes(prev => [...prev, data as InspectionType]);
+        return data as InspectionType;
     }, [setInspectionTypes]);
 
     const updateInspectionType = useCallback(async (type: InspectionType) => {

@@ -421,7 +421,7 @@ export interface UserPreferences {
   isTechnician?: boolean; // Add isTechnician here
 }
 
-export type SettingsPage = 'general' | 'appearance' | 'request' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management';
+export type SettingsPage = 'general' | 'appearance' | 'request' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management' | 'technical';
 
 export interface Employee {
   id: string;

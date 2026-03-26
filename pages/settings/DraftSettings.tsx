@@ -98,10 +98,6 @@ const NumberInput: React.FC<{ label: string, value: number, onChange: (val: numb
 const DraftSettings: React.FC = () => {
     const { settings, updateSettings, addNotification, uploadImage, inspectionTypes } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
-    const [isExporting, setIsExporting] = useState(false);
-    const [isImporting, setIsImporting] = useState(false);
-    const [importProgress, setImportProgress] = useState<string>('');
-    const fileInputRef = React.useRef<HTMLInputElement>(null);
     
     // Default settings to avoid issues with undefined properties
     const defaultDraftSettings: DraftSettingsType = {
@@ -172,125 +168,6 @@ const DraftSettings: React.FC = () => {
         }
     };
 
-    const urlToBase64 = async (url: string): Promise<string | null> => {
-        if (!url) return null;
-        if (url.startsWith('data:')) return url;
-        try {
-            const response = await fetch(url, { mode: 'cors', cache: 'no-store' });
-            if (!response.ok) return null;
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error('Failed to convert image to base64:', url, error);
-            return null;
-        }
-    };
-
-    const base64ToFile = (base64String: string, filename: string): File => {
-        const arr = base64String.split(',');
-        const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
-        const bstr = atob(arr[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        while (n--) {
-            u8arr[n] = bstr.charCodeAt(n);
-        }
-        return new File([u8arr], filename, { type: mime });
-    };
-
-    const handleExport = async () => {
-        setIsExporting(true);
-        try {
-            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجهيز إعدادات المسودة والصورة...', type: 'info' });
-
-            let imageBase64 = null;
-            if (localDraftSettings.customImageUrl) {
-                imageBase64 = await urlToBase64(localDraftSettings.customImageUrl);
-            }
-
-            const exportData = {
-                version: '1.0',
-                type: 'draft_settings',
-                timestamp: new Date().toISOString(),
-                data: {
-                    settings: localDraftSettings,
-                    imageBase64: imageBase64
-                }
-            };
-
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
-            const downloadAnchorNode = document.createElement('a');
-            downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", `draft_settings_export_${new Date().toISOString().split('T')[0]}.json`);
-            document.body.appendChild(downloadAnchorNode);
-            downloadAnchorNode.click();
-            downloadAnchorNode.remove();
-
-            addNotification({ title: 'تم التصدير', message: 'تم تصدير إعدادات المسودة بنجاح.', type: 'success' });
-        } catch (error) {
-            console.error('Export error:', error);
-            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
-        } finally {
-            setIsExporting(false);
-        }
-    };
-
-    const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        setIsImporting(true);
-        setImportProgress('جاري قراءة الملف...');
-
-        try {
-            const fileContent = await file.text();
-            const importedData = JSON.parse(fileContent);
-
-            if (importedData.version !== '1.0' || importedData.type !== 'draft_settings' || !importedData.data) {
-                throw new Error('ملف غير صالح أو إصدار غير مدعوم.');
-            }
-
-            const { data } = importedData;
-            
-            setImportProgress('جاري استيراد الإعدادات...');
-            
-            let newImageUrl = data.settings.customImageUrl;
-            
-            if (data.imageBase64) {
-                setImportProgress('جاري رفع الصورة...');
-                const imageFile = base64ToFile(data.imageBase64, `draft_image_${Date.now()}.png`);
-                newImageUrl = await uploadImage(imageFile, 'note_images');
-            }
-
-            const newSettings = {
-                ...data.settings,
-                customImageUrl: newImageUrl
-            };
-
-            setLocalDraftSettings(newSettings);
-            
-            await updateSettings({
-                draftSettings: newSettings,
-            });
-
-            addNotification({ title: 'تم الاستيراد', message: 'تم استيراد إعدادات المسودة بنجاح.', type: 'success' });
-        } catch (error: any) {
-            console.error('Import error:', error);
-            addNotification({ title: 'خطأ', message: error.message || 'حدث خطأ أثناء الاستيراد.', type: 'error' });
-        } finally {
-            setIsImporting(false);
-            setImportProgress('');
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
-        }
-    };
-
     return (
         <div className="space-y-8 animate-fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -301,33 +178,6 @@ const DraftSettings: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <input 
-                        type="file" 
-                        accept=".json" 
-                        ref={fileInputRef} 
-                        onChange={handleImport} 
-                        className="hidden" 
-                    />
-                    <Button 
-                        size="sm" 
-                        variant="secondary" 
-                        onClick={() => fileInputRef.current?.click()} 
-                        disabled={isImporting || isExporting}
-                        className="flex items-center gap-2"
-                    >
-                        {isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
-                        <span className="hidden sm:inline">{isImporting ? importProgress || 'جاري الاستيراد...' : 'استيراد'}</span>
-                    </Button>
-                    <Button 
-                        size="sm" 
-                        variant="secondary" 
-                        onClick={handleExport} 
-                        disabled={isImporting || isExporting}
-                        className="flex items-center gap-2"
-                    >
-                        {isExporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
-                        <span className="hidden sm:inline">{isExporting ? 'جاري التصدير...' : 'تصدير'}</span>
-                    </Button>
                 </div>
             </div>
 

@@ -80,13 +80,13 @@ export interface AppContextType {
     addCar: (car: Car) => Promise<Car>;
     uploadImage: (file: File, bucket: string) => Promise<string>;
     deleteImage: (imageUrl: string) => Promise<void>;
-    addInspectionType: (type: Omit<InspectionType, 'id'>) => Promise<void>;
+    addInspectionType: (type: Omit<InspectionType, 'id'>) => Promise<InspectionType>;
     updateInspectionType: (type: InspectionType) => Promise<void>;
     deleteInspectionType: (id: string) => Promise<void>;
-    addFindingCategory: (category: Omit<CustomFindingCategory, 'id'>) => Promise<void>;
+    addFindingCategory: (category: Omit<CustomFindingCategory, 'id'>) => Promise<CustomFindingCategory>;
     updateFindingCategory: (category: CustomFindingCategory) => Promise<void>;
     deleteFindingCategory: (id: string) => Promise<void>;
-    addPredefinedFinding: (finding: Omit<PredefinedFinding, 'id'>) => Promise<void>;
+    addPredefinedFinding: (finding: Omit<PredefinedFinding, 'id'>) => Promise<PredefinedFinding>;
     updatePredefinedFinding: (finding: PredefinedFinding) => Promise<void>;
     deletePredefinedFinding: (id: string) => Promise<void>;
     addCarMake: (make: Omit<CarMake, 'id'>) => Promise<CarMake>;

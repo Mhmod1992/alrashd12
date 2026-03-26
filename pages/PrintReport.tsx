@@ -950,7 +950,7 @@ const PrintReport: React.FC = () => {
         else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
 
         const clientName = client?.name ? `*${client.name}*` : 'العميل';
-        const carInfo = `*${carMake?.name_ar || carMake?.name_en || ''} ${carModel?.name_ar || carModel?.name_en || carModel?.name || ''} ${car?.year || ''}*`.trim();
+        const carInfo = `*${carMake?.name_ar || carMake?.name_en || ''} ${carModel?.name_ar || carModel?.name_en || ''} ${car?.year || ''}*`.trim();
         const workshopName = `*${settings.appName}*`;
         const reviewLink = reportSettings.qrCodeContent || settings.googleMapsLink || '';
 

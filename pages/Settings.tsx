@@ -10,9 +10,7 @@ import AppearanceSettings from './settings/AppearanceSettings';
 import EmployeesManagement from './settings/EmployeesManagement';
 import TechniciansManagement from './settings/TechniciansManagement';
 import BrokersManagement from './settings/BrokersManagement';
-import InspectionSettings from './settings/InspectionSettings';
-import CarsManagement from './settings/CarsManagement';
-import DraftSettings from './settings/DraftSettings';
+import TechnicalSettings from './settings/TechnicalSettings';
 import PlateSettings from './settings/PlateSettings';
 import ReportSettingsPage from './settings/ReportSettings'; // Renamed to avoid clash
 import DatabaseManagement from './settings/DatabaseManagement'; // Now acts as Maintenance
@@ -64,9 +62,7 @@ const Settings: React.FC = () => {
         {
             title: 'الفحص والعمليات',
             items: [
-                { id: 'request', label: 'باقات وبنود الفحص', icon: 'clipboard-list', permission: 'manage_settings_technical', component: InspectionSettings },
-                { id: 'cars', label: 'قاعدة بيانات السيارات', icon: 'cars', permission: 'manage_settings_technical', component: CarsManagement },
-                { id: 'draft', label: 'إعدادات المسودة', icon: 'edit', permission: 'manage_settings_technical', component: DraftSettings },
+                { id: 'technical', label: 'إعدادات الفحص والبيانات', icon: 'clipboard-list', permission: 'manage_settings_technical', component: TechnicalSettings },
                 { id: 'plate', label: 'تصميم اللوحة', icon: 'scan-plate', permission: 'manage_settings_technical', component: PlateSettings },
             ]
         },

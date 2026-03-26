@@ -97,8 +97,18 @@ const Requests: React.FC = () => {
     const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-    // const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // Removed redundant state
-    // const [createdRequestNumber, setCreatedRequestNumber] = useState<number | null>(null); // Removed redundant state
+    const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+    const actionsMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+                setIsActionsMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Fixed: Added 'border' class to ensure borders are visible
     const searchInputClasses = "block w-full p-3 pl-10 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
@@ -831,8 +841,35 @@ const Requests: React.FC = () => {
         <div className="container mx-auto">
             <div className="flex flex-col md:grid md:grid-cols-3 items-center justify-between mb-8 gap-4">
                 {/* 1. Page Title (Right) */}
-                <div className="text-center md:text-right order-1">
-                    <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200">إدارة الطلبات</h2>
+                <div className="text-center md:text-right order-1 relative" ref={actionsMenuRef}>
+                    <button 
+                        onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+                        className="flex items-center justify-center md:justify-start gap-2 w-full md:w-auto hover:opacity-80 transition-opacity"
+                    >
+                        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200">إدارة الطلبات</h2>
+                        {can('create_requests') && (
+                            <Icon name="chevron-down" className={`w-6 h-6 text-slate-500 transition-transform ${isActionsMenuOpen ? 'rotate-180' : ''}`} />
+                        )}
+                    </button>
+                    
+                    {isActionsMenuOpen && can('create_requests') && (
+                        <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-50 overflow-hidden">
+                            <button
+                                onClick={() => { setIsImportModalOpen(true); setIsActionsMenuOpen(false); }}
+                                className="w-full text-right px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-300 transition-colors"
+                            >
+                                <Icon name="upload" className="w-4 h-4 text-blue-500" />
+                                <span>استيراد طلبات</span>
+                            </button>
+                            <button
+                                onClick={() => { setIsExportModalOpen(true); setIsActionsMenuOpen(false); }}
+                                className="w-full text-right px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-300 transition-colors border-t border-slate-100 dark:border-slate-700"
+                            >
+                                <Icon name="download" className="w-4 h-4 text-emerald-500" />
+                                <span>تصدير طلبات</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* 2. Main Actions (Center) */}
@@ -851,20 +888,6 @@ const Requests: React.FC = () => {
                     )}
                     {can('create_requests') && (
                         <div className="flex gap-2">
-                            <Button 
-                                onClick={() => setIsImportModalOpen(true)} 
-                                variant="outline"
-                                className="shadow-sm hover:shadow-md transition-all px-4 py-2.5 font-bold"
-                            >
-                                استيراد
-                            </Button>
-                            <Button 
-                                onClick={() => setIsExportModalOpen(true)} 
-                                variant="outline"
-                                className="shadow-sm hover:shadow-md transition-all px-4 py-2.5 font-bold"
-                            >
-                                تصدير
-                            </Button>
                             <Button 
                                 onClick={() => setIsModalOpen(true)} 
                                 leftIcon={<PlusIcon className="w-5 h-5" />}
