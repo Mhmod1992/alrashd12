@@ -5,9 +5,10 @@ import { InspectionType, CustomFindingCategory, PredefinedFinding } from '../../
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
 import Modal from '../../components/Modal';
-import { compressImageToBase64, uuidv4 } from '../../lib/utils';
+import { compressImageToBase64, uuidv4, urlToBase64, base64ToFile } from '../../lib/utils';
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
 import ArrowLeftIcon from '../../components/icons/ArrowLeftIcon';
+import DownloadIcon from '../../components/icons/DownloadIcon';
 
 
 const InspectionSettingsTab: React.FC = () => {
@@ -38,6 +39,127 @@ const InspectionSettingsTab: React.FC = () => {
     // Toggle for View Mode: 'groups' or 'flat'
     const [viewMode, setViewMode] = useState<'groups' | 'flat'>('groups');
     const design = settings.design || 'aero';
+
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+
+    const handleExportInspectionSettings = async () => {
+        setIsExporting(true);
+        try {
+            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجميع بيانات الفحص والصور، يرجى الانتظار...', type: 'info' });
+
+            const processedFindings = await Promise.all(predefinedFindings.map(async (finding) => {
+                let imageBase64 = null;
+                if (finding.reference_image) {
+                    imageBase64 = await urlToBase64(finding.reference_image);
+                }
+                return { ...finding, imageBase64 };
+            }));
+
+            const exportData = {
+                version: '1.0',
+                type: 'inspection_settings',
+                timestamp: new Date().toISOString(),
+                data: {
+                    inspectionTypes: inspectionTypes,
+                    customFindingCategories: customFindingCategories,
+                    predefinedFindings: processedFindings,
+                }
+            };
+
+            const dataStr = JSON.stringify(exportData);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `inspection_settings_export_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            addNotification({ title: 'تم التصدير', message: 'تم تصدير إعدادات الفحص بنجاح.', type: 'success' });
+        } catch (error) {
+            console.error("Export failed:", error);
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleImportInspectionSettings = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setIsImporting(true);
+        try {
+            const text = await file.text();
+            const parsedData = JSON.parse(text);
+
+            if (parsedData.type !== 'inspection_settings' || !parsedData.data) {
+                throw new Error("ملف غير صالح أو غير مدعوم.");
+            }
+
+            const data = parsedData.data;
+            addNotification({ title: 'جاري الاستيراد', message: 'يتم الآن استيراد باقات وبنود الفحص...', type: 'info' });
+            
+            const categoryIdMap: Record<string, string> = {};
+
+            for (const cat of data.customFindingCategories || []) {
+                const newCat = await addFindingCategory({ name: cat.name });
+                if (newCat) {
+                    categoryIdMap[cat.id] = newCat.id;
+                }
+            }
+
+            for (const type of data.inspectionTypes || []) {
+                const newFindingCategoryIds = (type.finding_category_ids || [])
+                    .map((oldId: string) => categoryIdMap[oldId])
+                    .filter(Boolean);
+                
+                await addInspectionType({
+                    name: type.name,
+                    price: type.price,
+                    finding_category_ids: newFindingCategoryIds,
+                } as any);
+            }
+
+            const findingsToProcess = data.predefinedFindings || [];
+
+            for (const finding of findingsToProcess) {
+                let newImageUrl = finding.reference_image;
+                if (finding.imageBase64) {
+                    const imageFile = base64ToFile(finding.imageBase64, `finding_${Date.now()}.png`);
+                    newImageUrl = await uploadImage(imageFile, 'finding_images');
+                }
+
+                await addPredefinedFinding({
+                    name: finding.name,
+                    category_id: categoryIdMap[finding.category_id] || finding.category_id,
+                    options: finding.options,
+                    reference_image: newImageUrl,
+                    reference_image_position: finding.reference_image_position,
+                    groups: finding.groups,
+                    group: finding.group,
+                    orderIndex: finding.orderIndex,
+                    report_position: finding.report_position,
+                    is_bundle: finding.is_bundle,
+                    linked_finding_ids: finding.linked_finding_ids,
+                    bundle_default_value: finding.bundle_default_value
+                } as any);
+            }
+
+            addNotification({ title: 'تم الاستيراد', message: 'تم استيراد إعدادات الفحص بنجاح.', type: 'success' });
+        } catch (error: any) {
+            console.error("Import failed:", error);
+            addNotification({ title: 'خطأ', message: error.message || 'حدث خطأ أثناء الاستيراد.', type: 'error' });
+        } finally {
+            setIsImporting(false);
+            if (event.target) {
+                event.target.value = '';
+            }
+        }
+    };
 
     // --- Inspection Type Management ---
     const handleAddType = () => {
@@ -203,6 +325,35 @@ const InspectionSettingsTab: React.FC = () => {
                 <div>
                     <h2 className="text-xl font-bold text-slate-800 dark:text-white">إعدادات الفحص</h2>
                     <p className="text-sm text-slate-500 dark:text-slate-400">إدارة باقات الفحص والتبويبات والبنود المشمولة</p>
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <input 
+                        type="file" 
+                        id="import-inspection" 
+                        className="hidden" 
+                        accept=".json" 
+                        onChange={handleImportInspectionSettings} 
+                    />
+                    <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        className="flex-1 sm:flex-none" 
+                        onClick={() => document.getElementById('import-inspection')?.click()}
+                        disabled={isImporting || isExporting}
+                        leftIcon={isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
+                    >
+                        {isImporting ? 'جاري...' : 'استيراد'}
+                    </Button>
+                    <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        className="flex-1 sm:flex-none" 
+                        onClick={handleExportInspectionSettings}
+                        disabled={isImporting || isExporting}
+                        leftIcon={isExporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
+                    >
+                        {isExporting ? 'جاري...' : 'تصدير'}
+                    </Button>
                 </div>
             </div>
 

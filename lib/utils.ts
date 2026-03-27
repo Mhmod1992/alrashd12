@@ -98,3 +98,34 @@ export const timeAgo = (dateString: string): string => {
     if (interval > 1) return `منذ ${Math.floor(interval)} دقيقة`;
     return 'منذ لحظات';
 };
+
+export const urlToBase64 = async (url: string): Promise<string | null> => {
+    if (!url) return null;
+    if (url.startsWith('data:')) return url;
+    try {
+        const response = await fetch(url, { mode: 'cors', cache: 'no-store' });
+        if (!response.ok) return null;
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) {
+        console.error("Failed to fetch image for base64 conversion:", e);
+        return null;
+    }
+};
+
+export const base64ToFile = (base64String: string, filename: string): File => {
+    const arr = base64String.split(',');
+    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+};

@@ -161,7 +161,7 @@ const DatabaseManagement: React.FC = () => {
     const [isImporting, setIsImporting] = useState<string | null>(null);
     const [importProgress, setImportProgress] = useState<string>('');
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [importType, setImportType] = useState<'requests' | 'inspection' | 'cars' | 'draft' | null>(null);
+    const [importType, setImportType] = useState<'requests' | null>(null);
 
     useEffect(() => {
         setCapacityInput(settings.databaseCapacity || 500);
@@ -196,258 +196,6 @@ const DatabaseManagement: React.FC = () => {
             u8arr[n] = bstr.charCodeAt(n);
         }
         return new File([u8arr], filename, { type: mime });
-    };
-
-    // --- Inspection Settings Import/Export ---
-    const handleExportInspectionSettings = async () => {
-        setIsExporting('inspection');
-        try {
-            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجميع بيانات الفحص والصور، يرجى الانتظار...', type: 'info' });
-
-            const processedFindings = await Promise.all(predefinedFindings.map(async (finding) => {
-                let imageBase64 = null;
-                if (finding.reference_image) {
-                    imageBase64 = await urlToBase64(finding.reference_image);
-                }
-                return { ...finding, imageBase64 };
-            }));
-
-            const exportData = {
-                version: '1.0',
-                type: 'inspection_settings',
-                timestamp: new Date().toISOString(),
-                data: {
-                    inspectionTypes: inspectionTypes,
-                    customFindingCategories: customFindingCategories,
-                    predefinedFindings: processedFindings,
-                }
-            };
-
-            const dataStr = JSON.stringify(exportData);
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `inspection_settings_export_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            addNotification({ title: 'تم التصدير', message: 'تم تصدير إعدادات الفحص بنجاح.', type: 'success' });
-        } catch (error) {
-            console.error('Export error:', error);
-            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
-        } finally {
-            setIsExporting(null);
-        }
-    };
-
-    const handleImportInspectionSettings = async (data: any) => {
-        setImportProgress('جاري استيراد باقات وبنود الفحص...');
-        const categoryIdMap: Record<string, string> = {};
-
-        for (const cat of data.customFindingCategories || []) {
-            const newCat = await addFindingCategory({ name: cat.name });
-            if (newCat) {
-                categoryIdMap[cat.id] = newCat.id;
-            }
-        }
-
-        setImportProgress('جاري استيراد أنواع الفحص...');
-            for (const type of data.inspectionTypes || []) {
-                const newFindingCategoryIds = (type.finding_category_ids || [])
-                    .map((oldId: string) => categoryIdMap[oldId])
-                    .filter(Boolean);
-                
-                await addInspectionType({
-                    name: type.name,
-                    price: type.price,
-                    finding_category_ids: newFindingCategoryIds,
-                } as any);
-            }
-
-        setImportProgress('جاري استيراد البنود والصور...');
-        const findingIdMap: Record<string, string> = {};
-        const findingsToProcess = data.predefinedFindings || [];
-
-        for (const finding of findingsToProcess) {
-            let newImageUrl = finding.reference_image;
-            if (finding.imageBase64) {
-                const imageFile = base64ToFile(finding.imageBase64, `finding_${Date.now()}.png`);
-                newImageUrl = await uploadImage(imageFile, 'finding_images');
-            }
-
-            const newFinding = await addPredefinedFinding({
-                name: finding.name,
-                category_id: categoryIdMap[finding.category_id] || finding.category_id,
-                options: finding.options,
-                reference_image: newImageUrl,
-                reference_image_position: finding.reference_image_position,
-                report_position: finding.report_position,
-                orderIndex: finding.orderIndex,
-                group: finding.group,
-                groups: finding.groups,
-                is_bundle: finding.is_bundle,
-                linked_finding_ids: [] // Will update later to handle new IDs
-            });
-
-            if (newFinding) {
-                findingIdMap[finding.id] = newFinding.id;
-            }
-        }
-
-        // Update linked findings for bundles
-        for (const finding of findingsToProcess) {
-            if (finding.is_bundle && finding.linked_finding_ids?.length > 0) {
-                const newLinkedIds = finding.linked_finding_ids
-                    .map((oldId: string) => findingIdMap[oldId])
-                    .filter(Boolean);
-                
-                if (newLinkedIds.length > 0) {
-                    // This would require an updatePredefinedFinding call, but we'll skip for now or implement if needed
-                }
-            }
-        }
-    };
-
-    // --- Car Database Import/Export ---
-    const handleExportCarDatabase = async () => {
-        setIsExporting('cars');
-        try {
-            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجميع بيانات السيارات والشعارات...', type: 'info' });
-
-            const processedMakes = await Promise.all(carMakes.map(async (make) => {
-                let logoBase64 = null;
-                if (make.logo_url) {
-                    logoBase64 = await urlToBase64(make.logo_url);
-                }
-                return { ...make, logoBase64 };
-            }));
-
-            const exportData = {
-                version: '1.0',
-                type: 'car_database',
-                timestamp: new Date().toISOString(),
-                data: {
-                    carMakes: processedMakes,
-                    carModels: carModels,
-                }
-            };
-
-            const dataStr = JSON.stringify(exportData);
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `car_database_export_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            addNotification({ title: 'تم التصدير', message: 'تم تصدير قاعدة بيانات السيارات بنجاح.', type: 'success' });
-        } catch (error) {
-            console.error('Export error:', error);
-            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
-        } finally {
-            setIsExporting(null);
-        }
-    };
-
-    const handleImportCarDatabase = async (data: any) => {
-        setImportProgress('جاري استيراد الماركات والشعارات...');
-        const makeIdMap: Record<string, string> = {};
-
-        for (const make of data.carMakes || []) {
-            let newLogoUrl = make.logo_url;
-            if (make.logoBase64) {
-                const logoFile = base64ToFile(make.logoBase64, `logo_${Date.now()}.png`);
-                newLogoUrl = await uploadImage(logoFile, 'car_logos');
-            }
-            const newMake = await addCarMake({
-                name_ar: make.name_ar,
-                name_en: make.name_en,
-                logo_url: newLogoUrl,
-            } as any);
-            if (newMake) {
-                makeIdMap[make.id] = newMake.id;
-            }
-        }
-
-        setImportProgress('جاري استيراد الموديلات...');
-        for (const model of data.carModels || []) {
-            const newMakeId = makeIdMap[model.make_id];
-            if (newMakeId) {
-                await addCarModel({
-                    name_ar: model.name_ar,
-                    name_en: model.name_en,
-                    make_id: newMakeId
-                });
-            }
-        }
-    };
-
-    // --- Draft Settings Import/Export ---
-    const handleExportDraftSettings = async () => {
-        setIsExporting('draft');
-        try {
-            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجهيز إعدادات المسودة والصورة...', type: 'info' });
-
-            let imageBase64 = null;
-            if (settings.draftSettings?.customImageUrl) {
-                imageBase64 = await urlToBase64(settings.draftSettings.customImageUrl);
-            }
-
-            const exportData = {
-                version: '1.0',
-                type: 'draft_settings',
-                timestamp: new Date().toISOString(),
-                data: {
-                    settings: settings.draftSettings,
-                    imageBase64: imageBase64
-                }
-            };
-
-            const dataStr = JSON.stringify(exportData);
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `draft_settings_export_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            addNotification({ title: 'تم التصدير', message: 'تم تصدير إعدادات المسودة بنجاح.', type: 'success' });
-        } catch (error) {
-            console.error('Export error:', error);
-            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
-        } finally {
-            setIsExporting(null);
-        }
-    };
-
-    const handleImportDraftSettings = async (data: any) => {
-        setImportProgress('جاري استيراد الإعدادات...');
-        
-        let newImageUrl = data.data?.settings?.customImageUrl || data.settings?.customImageUrl;
-        
-        if (data.data?.imageBase64 || data.imageBase64) {
-            setImportProgress('جاري رفع الصورة...');
-            const imageFile = base64ToFile(data.data?.imageBase64 || data.imageBase64, `draft_image_${Date.now()}.png`);
-            newImageUrl = await uploadImage(imageFile, 'note_images');
-        }
-
-        const newSettings = {
-            ...(data.data?.settings || data.settings),
-            customImageUrl: newImageUrl
-        };
-
-        await updateSettings({
-            draftSettings: newSettings,
-        });
     };
 
     const handleImportRequests = async (data: any) => {
@@ -510,13 +258,7 @@ const DatabaseManagement: React.FC = () => {
             const fileContent = await file.text();
             const importedData = JSON.parse(fileContent);
 
-            if (importType === 'inspection') {
-                await handleImportInspectionSettings(importedData);
-            } else if (importType === 'cars') {
-                await handleImportCarDatabase(importedData);
-            } else if (importType === 'draft') {
-                await handleImportDraftSettings(importedData);
-            } else if (importType === 'requests') {
+            if (importType === 'requests') {
                 await handleImportRequests(importedData);
             }
 
@@ -534,7 +276,7 @@ const DatabaseManagement: React.FC = () => {
         }
     };
 
-    const triggerImport = (type: 'inspection' | 'cars' | 'draft' | 'requests') => {
+    const triggerImport = (type: 'requests') => {
         setImportType(type);
         fileInputRef.current?.click();
     };
@@ -722,117 +464,13 @@ const DatabaseManagement: React.FC = () => {
 
     return (
         <div className="space-y-8 animate-fade-in">
-            <div>
-                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">إدارة البيانات الأساسية</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">استيراد وتصدير الإعدادات والقواعد الأساسية للنظام.</p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                    {/* Inspection Settings */}
-                    <div className="p-4 border rounded-xl dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600">
-                                <Icon name="inspection" className="w-5 h-5" />
-                            </div>
-                            <h4 className="font-bold text-slate-700 dark:text-slate-200">باقات وبنود الفحص</h4>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                className="flex-1" 
-                                onClick={() => triggerImport('inspection')}
-                                disabled={!!isImporting || !!isExporting}
-                            >
-                                {isImporting === 'inspection' ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
-                                {isImporting === 'inspection' ? 'جاري...' : 'استيراد'}
-                            </Button>
-                            <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                className="flex-1" 
-                                onClick={handleExportInspectionSettings}
-                                disabled={!!isImporting || !!isExporting}
-                            >
-                                {isExporting === 'inspection' ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
-                                {isExporting === 'inspection' ? 'جاري...' : 'تصدير'}
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* Car Database */}
-                    <div className="p-4 border rounded-xl dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600">
-                                <Icon name="car" className="w-5 h-5" />
-                            </div>
-                            <h4 className="font-bold text-slate-700 dark:text-slate-200">قاعدة بيانات السيارات</h4>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                className="flex-1" 
-                                onClick={() => triggerImport('cars')}
-                                disabled={!!isImporting || !!isExporting}
-                            >
-                                {isImporting === 'cars' ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
-                                {isImporting === 'cars' ? 'جاري...' : 'استيراد'}
-                            </Button>
-                            <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                className="flex-1" 
-                                onClick={handleExportCarDatabase}
-                                disabled={!!isImporting || !!isExporting}
-                            >
-                                {isExporting === 'cars' ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
-                                {isExporting === 'cars' ? 'جاري...' : 'تصدير'}
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* Draft Settings */}
-                    <div className="p-4 border rounded-xl dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600">
-                                <Icon name="document-text" className="w-5 h-5" />
-                            </div>
-                            <h4 className="font-bold text-slate-700 dark:text-slate-200">إعدادات المسودة اليدوية</h4>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                className="flex-1" 
-                                onClick={() => triggerImport('draft')}
-                                disabled={!!isImporting || !!isExporting}
-                            >
-                                {isImporting === 'draft' ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
-                                {isImporting === 'draft' ? 'جاري...' : 'استيراد'}
-                            </Button>
-                            <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                className="flex-1" 
-                                onClick={handleExportDraftSettings}
-                                disabled={!!isImporting || !!isExporting}
-                            >
-                                {isExporting === 'draft' ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
-                                {isExporting === 'draft' ? 'جاري...' : 'تصدير'}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-
-                <input 
-                    type="file" 
-                    accept=".json" 
-                    ref={fileInputRef} 
-                    onChange={handleFileChange} 
-                    className="hidden" 
-                />
-            </div>
-
+            <input 
+                type="file" 
+                accept=".json" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                className="hidden" 
+            />
             <div className="border-t dark:border-slate-700 pt-8">
                 <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">استخدام البيانات</h3>
                 <div className="grid grid-cols-1 gap-8 mt-4">

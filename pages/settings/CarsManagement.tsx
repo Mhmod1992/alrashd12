@@ -17,7 +17,7 @@ import CheckCircleIcon from '../../components/icons/CheckCircleIcon';
 import FilterIcon from '../../components/icons/FilterIcon';
 import ArrowLeftIcon from '../../components/icons/ArrowLeftIcon';
 import { GoogleGenAI, Type } from "@google/genai";
-import { cleanJsonString } from '../../lib/utils';
+import { cleanJsonString, urlToBase64, base64ToFile } from '../../lib/utils';
 import { supabase } from '../../lib/supabaseClient';
 
 const LOGO_SOURCES = [
@@ -72,6 +72,10 @@ const CarsManagement: React.FC = () => {
     const [bulkLogoProgress, setBulkLogoProgress] = useState({ total: 0, current: 0, success: 0, title: '' });
     const [selectedAiModel, setSelectedAiModel] = useState<string>('gemini-flash-lite-latest');
     
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const isProcessingRef = useRef(false);
 
     useEffect(() => {
@@ -459,6 +463,103 @@ Return JSON array of objects with "name_ar" and "name_en".`;
         } catch (error) { addNotification({ title: 'خطأ', message: 'فشل حفظ الشركات.', type: 'error' }); }
     };
 
+    const handleExportCarDatabase = async () => {
+        setIsExporting(true);
+        try {
+            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجميع بيانات السيارات والشعارات...', type: 'info' });
+
+            const processedMakes = await Promise.all(carMakes.map(async (make) => {
+                let logoBase64 = null;
+                if (make.logo_url) {
+                    logoBase64 = await urlToBase64(make.logo_url);
+                }
+                return { ...make, logoBase64 };
+            }));
+
+            const exportData = {
+                version: '1.0',
+                type: 'car_database',
+                timestamp: new Date().toISOString(),
+                data: {
+                    carMakes: processedMakes,
+                    carModels: carModels,
+                }
+            };
+
+            const dataStr = JSON.stringify(exportData);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `car_database_export_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            addNotification({ title: 'تم التصدير', message: 'تم تصدير قاعدة بيانات السيارات بنجاح.', type: 'success' });
+        } catch (error) {
+            console.error('Export error:', error);
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleImportCarDatabase = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setIsImporting(true);
+        try {
+            const fileContent = await file.text();
+            const data = JSON.parse(fileContent);
+
+            if (data.type !== 'car_database') {
+                throw new Error('ملف غير صالح. يرجى اختيار ملف قاعدة بيانات سيارات صحيح.');
+            }
+
+            const makeIdMap: Record<string, string> = {};
+
+            for (const make of data.data?.carMakes || []) {
+                let newLogoUrl = make.logo_url;
+                if (make.logoBase64) {
+                    const logoFile = base64ToFile(make.logoBase64, `logo_${Date.now()}.png`);
+                    newLogoUrl = await uploadImage(logoFile, 'car_logos');
+                }
+                const newMake = await addCarMake({
+                    name_ar: make.name_ar,
+                    name_en: make.name_en,
+                    logo_url: newLogoUrl,
+                } as any);
+                if (newMake) {
+                    makeIdMap[make.id] = newMake.id;
+                }
+            }
+
+            for (const model of data.data?.carModels || []) {
+                const newMakeId = makeIdMap[model.make_id];
+                if (newMakeId) {
+                    await addCarModel({
+                        name_ar: model.name_ar,
+                        name_en: model.name_en,
+                        make_id: newMakeId
+                    });
+                }
+            }
+
+            addNotification({ title: 'تم الاستيراد', message: 'تم استيراد قاعدة بيانات السيارات بنجاح.', type: 'success' });
+        } catch (error: any) {
+            console.error('Import error:', error);
+            addNotification({ title: 'خطأ', message: error.message || 'حدث خطأ أثناء الاستيراد.', type: 'error' });
+        } finally {
+            setIsImporting(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
     const formInputClasses = "mt-1 block w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200";
 
     return (
@@ -474,6 +575,31 @@ Return JSON array of objects with "name_ar" and "name_en".`;
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <input 
+                        type="file" 
+                        accept=".json" 
+                        className="hidden" 
+                        ref={fileInputRef} 
+                        onChange={handleImportCarDatabase} 
+                    />
+                    <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isImporting || isExporting}
+                    >
+                        {isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{isImporting ? 'جاري...' : 'استيراد'}</span>
+                    </Button>
+                    <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        onClick={handleExportCarDatabase}
+                        disabled={isImporting || isExporting}
+                    >
+                        {isExporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{isExporting ? 'جاري...' : 'تصدير'}</span>
+                    </Button>
                 </div>
             </div>
 

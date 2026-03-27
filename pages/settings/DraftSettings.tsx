@@ -5,6 +5,7 @@ import Icon from '../../components/Icon';
 import { DraftSettings as DraftSettingsType } from '../../types';
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
 import DownloadIcon from '../../components/icons/DownloadIcon';
+import { urlToBase64, base64ToFile } from '../../lib/utils';
 
 const DraftPreview: React.FC<{ settings: DraftSettingsType }> = ({ settings }) => {
     // A simplified, static version of PrintablePage for preview purposes
@@ -99,6 +100,10 @@ const DraftSettings: React.FC = () => {
     const { settings, updateSettings, addNotification, uploadImage, inspectionTypes } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
     
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    
     // Default settings to avoid issues with undefined properties
     const defaultDraftSettings: DraftSettingsType = {
         customImageUrl: null,
@@ -168,6 +173,87 @@ const DraftSettings: React.FC = () => {
         }
     };
 
+    const handleExportDraftSettings = async () => {
+        setIsExporting(true);
+        try {
+            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجهيز إعدادات المسودة والصورة...', type: 'info' });
+
+            let imageBase64 = null;
+            if (settings.draftSettings?.customImageUrl) {
+                imageBase64 = await urlToBase64(settings.draftSettings.customImageUrl);
+            }
+
+            const exportData = {
+                version: '1.0',
+                type: 'draft_settings',
+                timestamp: new Date().toISOString(),
+                data: {
+                    settings: settings.draftSettings,
+                    imageBase64: imageBase64
+                }
+            };
+
+            const dataStr = JSON.stringify(exportData);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `draft_settings_export_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            addNotification({ title: 'تم التصدير', message: 'تم تصدير إعدادات المسودة بنجاح.', type: 'success' });
+        } catch (error) {
+            console.error('Export error:', error);
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleImportDraftSettings = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setIsImporting(true);
+        try {
+            const fileContent = await file.text();
+            const data = JSON.parse(fileContent);
+
+            if (data.type !== 'draft_settings') {
+                throw new Error('ملف غير صالح. يرجى اختيار ملف إعدادات مسودة صحيح.');
+            }
+
+            let newImageUrl = data.data?.settings?.customImageUrl || data.settings?.customImageUrl;
+            
+            if (data.data?.imageBase64 || data.imageBase64) {
+                const imageFile = base64ToFile(data.data?.imageBase64 || data.imageBase64, `draft_image_${Date.now()}.png`);
+                newImageUrl = await uploadImage(imageFile, 'note_images');
+            }
+
+            const newSettings = {
+                ...(data.data?.settings || data.settings),
+                customImageUrl: newImageUrl
+            };
+
+            await updateSettings({
+                draftSettings: newSettings,
+            });
+
+            addNotification({ title: 'تم الاستيراد', message: 'تم استيراد إعدادات المسودة بنجاح.', type: 'success' });
+        } catch (error: any) {
+            console.error('Import error:', error);
+            addNotification({ title: 'خطأ', message: error.message || 'حدث خطأ أثناء الاستيراد.', type: 'error' });
+        } finally {
+            setIsImporting(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -178,6 +264,31 @@ const DraftSettings: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-2">
+                    <input 
+                        type="file" 
+                        accept=".json" 
+                        className="hidden" 
+                        ref={fileInputRef} 
+                        onChange={handleImportDraftSettings} 
+                    />
+                    <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isImporting || isExporting}
+                    >
+                        {isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{isImporting ? 'جاري...' : 'استيراد'}</span>
+                    </Button>
+                    <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        onClick={handleExportDraftSettings}
+                        disabled={isImporting || isExporting}
+                    >
+                        {isExporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{isExporting ? 'جاري...' : 'تصدير'}</span>
+                    </Button>
                 </div>
             </div>
 
