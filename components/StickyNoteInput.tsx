@@ -394,6 +394,37 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
     const isFirstTab = currentTabIndex === 0;
     const isLastTab = currentTabIndex === (allTabsInOrder?.length || 0) - 1;
 
+    const actionButtons = (
+        <>
+            {onReview && (
+                <button onClick={onReview} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="مراجعة">
+                    <EyeIcon className="w-5 h-5" />
+                </button>
+            )}
+            {onPrint && canPrint && (
+                <button onClick={onPrint} className="p-2 text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="طباعة">
+                    <PrinterIcon className="w-5 h-5" />
+                </button>
+            )}
+            
+            {!isLocked && onComplete && (
+                <button 
+                    onClick={handleCompleteClick} 
+                    className={`
+                        flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-md
+                        ${isConfirmingComplete 
+                            ? 'bg-green-600 text-white px-4 py-2 hover:bg-green-700 scale-105' 
+                            : 'bg-transparent text-slate-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-slate-800 p-2'
+                        }
+                    `} 
+                    title={isConfirmingComplete ? "تأكيد الإكمال؟" : "إكمال الطلب"}
+                >
+                    <CheckCircleIcon className={`w-5 h-5 ${isConfirmingComplete ? 'animate-bounce' : ''}`} />
+                    {isConfirmingComplete && <span className="font-bold text-xs whitespace-nowrap">تأكيد؟</span>}
+                </button>
+            )}
+        </>
+    );
 
     return (
         <>
@@ -402,8 +433,8 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
 
                     {/* TOP BAR: Navigation & Actions */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between px-1 gap-2">
-                         <div className="flex items-center justify-between w-full sm:w-auto flex-1">
-                             {/* Right (RTL): Navigation Group */}
+                         {/* Right (RTL): Navigation Group & Mobile Actions */}
+                         <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto shrink-0">
                              <div className="flex items-center gap-2 sm:gap-4">
                                  <button onClick={onPrevTab} disabled={isFirstTab} className={`p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors ${isFirstTab ? 'opacity-30 cursor-not-allowed' : ''}`}>
                                     <ChevronRightIcon className="w-6 h-6" />
@@ -440,40 +471,14 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                                  )}
                              </div>
 
-                             {/* Center/Left (RTL): Actions Group */}
-                             <div className="flex items-center gap-1 sm:gap-2">
-                                 {onReview && (
-                                    <button onClick={onReview} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="مراجعة">
-                                        <EyeIcon className="w-5 h-5" />
-                                    </button>
-                                 )}
-                                 {onPrint && canPrint && (
-                                    <button onClick={onPrint} className="p-2 text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="طباعة">
-                                        <PrinterIcon className="w-5 h-5" />
-                                    </button>
-                                 )}
-                                 
-                                 {!isLocked && onComplete && (
-                                    <button 
-                                        onClick={handleCompleteClick} 
-                                        className={`
-                                            flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-md
-                                            ${isConfirmingComplete 
-                                                ? 'bg-green-600 text-white px-4 py-2 hover:bg-green-700 scale-105' 
-                                                : 'bg-transparent text-slate-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-slate-800 p-2'
-                                            }
-                                        `} 
-                                        title={isConfirmingComplete ? "تأكيد الإكمال؟" : "إكمال الطلب"}
-                                    >
-                                        <CheckCircleIcon className={`w-5 h-5 ${isConfirmingComplete ? 'animate-bounce' : ''}`} />
-                                        {isConfirmingComplete && <span className="font-bold text-xs whitespace-nowrap">تأكيد؟</span>}
-                                    </button>
-                                 )}
+                             {/* Mobile Actions */}
+                             <div className="flex sm:hidden items-center gap-1">
+                                 {actionButtons}
                              </div>
                          </div>
 
-                         {/* Quick Notes in Top Bar (Second Row on Mobile) */}
-                         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full sm:w-auto sm:max-w-[400px] px-2 py-1">
+                         {/* Center: Quick Notes */}
+                         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full sm:flex-1 sm:justify-center px-2 py-1">
                              {QUICK_NOTES.map((qn, idx) => (
                                  <button
                                      key={idx}
@@ -495,6 +500,11 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                                      <span>{qn.shortText || qn.text}</span>
                                  </button>
                              ))}
+                         </div>
+
+                         {/* Desktop Actions */}
+                         <div className="hidden sm:flex items-center justify-end gap-2 shrink-0">
+                             {actionButtons}
                          </div>
                     </div>
 

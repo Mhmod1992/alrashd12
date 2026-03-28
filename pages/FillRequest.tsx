@@ -1494,6 +1494,23 @@ export const FillRequest: React.FC = () => {
         } catch { }
     };
 
+    const handleReopen = async () => {
+        if (!isLocked) return;
+        showConfirmModal({
+            title: 'إعادة فتح الطلب',
+            message: 'هل أنت متأكد من رغبتك في إعادة فتح هذا الطلب؟ سيتمكن الفنيون من التعديل عليه مرة أخرى.',
+            onConfirm: async () => {
+                const newLog = createActivityLog('تغيير حالة الطلب', 'تم إعادة فتح الطلب');
+                const newLogArray = newLog ? [newLog, ...activityLog] : activityLog;
+                setActivityLog(newLogArray);
+                try {
+                    await performSave(true, RequestStatus.IN_PROGRESS, { activityLog: newLogArray });
+                    addNotification({ title: 'نجاح', message: 'تم إعادة فتح الطلب بنجاح.', type: 'success' });
+                } catch { }
+            }
+        });
+    };
+
     const handleToggleStamp = async (stamp: ReportStamp) => {
         if (!request || isLocked) return;
 
@@ -2075,7 +2092,7 @@ export const FillRequest: React.FC = () => {
 
                 <div className="flex flex-col gap-4">
                     {availableFindings.length > 0 && (
-                        <div className="flex flex-col h-auto bg-[#f8fafc] dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden mb-4">
+                        <div className="flex flex-col h-auto bg-[#f8fafc] dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
                             <div className="p-2 flex justify-between items-center cursor-pointer bg-slate-100 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 transition-colors hover:bg-slate-200 dark:hover:bg-slate-800" onClick={() => setIsFindingsSectionOpen(!isFindingsSectionOpen)}>
                                 <div className="flex items-center gap-2">
                                     <ChevronDownIcon className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isFindingsSectionOpen ? 'rotate-180' : ''}`} />
@@ -2095,7 +2112,7 @@ export const FillRequest: React.FC = () => {
                                     {!isLocked && <Button onClick={() => setIsFindingModalOpen(true)} size="sm" leftIcon={<Icon name="add" className="w-4 h-4" />} disabled={!can('manage_findings')} className="text-xs px-3 py-1.5 h-8">إضافة بنود</Button>}
                                 </div>
                             </div>
-                            <div className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isFindingsSectionOpen ? 'max-h-[5000px]' : 'max-h-0'}`}>
+                            <div className={`transition-[max-height] duration-500 ease-in-out ${isFindingsSectionOpen ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
                                 <div className="p-2 bg-[#f8fafc] dark:bg-slate-800/50">
                                     {findingsToRender.length > 0 ? (
                                         <div className="flex flex-col gap-4">
@@ -2178,6 +2195,7 @@ export const FillRequest: React.FC = () => {
                     <BatchFindingEntry
                         categoryId={activeTab}
                         availableFindings={availableFindings}
+                        existingFindingIds={structuredFindings.filter(sf => sf.categoryId === activeTab).map(sf => sf.findingId)}
                         onSave={(newFindings) => {
                             const expandedFindings: StructuredFinding[] = [];
                             newFindings.forEach(f => {
@@ -2372,6 +2390,35 @@ export const FillRequest: React.FC = () => {
                                 <button type="button" onClick={() => applyColorToSelectedNotes(null)} className="w-7 h-7 rounded-full border dark:border-slate-500 bg-white dark:bg-slate-600 flex items-center justify-center hover:scale-110 transition-transform ring-2 ring-transparent hover:ring-slate-400" title="إزالة اللون"><XIcon className="w-5 h-5 text-slate-500 dark:text-slate-300" /></button>
                                 <div className="h-6 w-px bg-slate-200 dark:bg-slate-600 mx-2"></div>
                                 <Button size="sm" onClick={() => toggleMultiSelect(activeMultiSelectSection)}>تم</Button>
+                            </div>
+                        </div>
+                    </div>
+                ) : isLocked ? (
+                    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-t dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.2)] p-4 sm:p-6 transition-all duration-300">
+                        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
+                                <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400 shrink-0">
+                                    <CheckCircleIcon className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg">الطلب مكتمل</h3>
+                                    <p className="text-sm opacity-80">لا يمكن التعديل على الطلب في الوقت الحالي.</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                                {can('change_request_status') && (
+                                    <Button variant="outline" onClick={handleReopen} className="flex-1 sm:flex-none border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                        إعادة فتح الطلب
+                                    </Button>
+                                )}
+                                <Button variant="secondary" onClick={() => setIsReviewModalOpen(true)} className="flex-1 sm:flex-none bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50">
+                                    مراجعة
+                                </Button>
+                                {can('print_request') && (
+                                    <Button onClick={handlePreviewAndPrint} className="flex-1 sm:flex-none bg-purple-600 hover:bg-purple-700 text-white shadow-md hover:shadow-lg transition-all">
+                                        طباعة التقرير
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>

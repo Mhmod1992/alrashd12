@@ -9,17 +9,19 @@ import FindingSearchSelect from './FindingSearchSelect';
 interface BatchFindingEntryProps {
     categoryId: string;
     availableFindings: PredefinedFinding[];
+    existingFindingIds: string[];
     onSave: (findings: { id: string; findingId: string; value: string }[]) => void;
     onClose: () => void;
 }
 
-const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, availableFindings, onSave, onClose }) => {
+const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, availableFindings, existingFindingIds, onSave, onClose }) => {
     // Add 'bundles' to state
     const [viewMode, setViewMode] = useState<'rows' | 'gallery' | 'bundles'>('gallery');
     const [rows, setRows] = useState<{ id: string; findingId: string; value: string }[]>([{ id: uuidv4(), findingId: '', value: '' }]);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [galleryValues, setGalleryValues] = useState<Record<string, string>>({});
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
     const [defaultValue, setDefaultValue] = useState('');
     const searchInputRef = useRef<HTMLInputElement>(null);
     const quickWords = ['يسار', 'يمين', 'أمام', 'خلف', 'كبوت', 'شنطة', 'سقف'];
@@ -102,71 +104,139 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
     const filteredFindings = useMemo(() => {
         let list = availableFindings;
 
+        // Filter out already added findings
+        list = list.filter(f => {
+            if (f.is_bundle && f.linked_finding_ids) {
+                // For bundles, hide if ALL linked findings are already added
+                // Or maybe hide if ANY? Let's hide if ALL are added to allow partial additions.
+                // Actually, hiding if ANY are added is safer to prevent duplicates. Let's hide if ANY are added.
+                return !f.linked_finding_ids.some(id => existingFindingIds.includes(id));
+            }
+            return !existingFindingIds.includes(f.id);
+        });
+
         // Filter for Bundles mode
         if (viewMode === 'bundles') {
             list = list.filter(f => f.is_bundle);
         }
 
+        // Filter by group if selected
+        if (selectedGroup) {
+            list = list.filter(f => f.group === selectedGroup || f.groups?.includes(selectedGroup));
+        }
+
         if (!searchTerm) return list;
         return list.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    }, [availableFindings, searchTerm, viewMode]);
+    }, [availableFindings, searchTerm, viewMode, selectedGroup, existingFindingIds]);
+
+    const availableGroups = useMemo(() => {
+        const groups = new Set<string>();
+        availableFindings.forEach(f => {
+            if (f.group) groups.add(f.group);
+            if (f.groups) f.groups.forEach(g => groups.add(g));
+        });
+        return Array.from(groups).sort();
+    }, [availableFindings]);
+
+    const groupNameMapping: Record<string, string> = {
+        'الجهة الأمامية': 'الأمام',
+        'الجهة الخلفية': 'الخلف',
+        'الجهة اليمنى': 'اليمين',
+        'الجهة اليسرى': 'اليسار',
+        // Add more mappings here if needed
+    };
+
+    const getShortGroupName = (groupName: string) => {
+        return groupNameMapping[groupName] || groupName;
+    };
 
     return (
         <div className="flex flex-col h-[75vh] bg-gray-50 dark:bg-slate-900 rounded-lg overflow-hidden">
             {/* Header / Tabs */}
-            <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 border-b dark:border-slate-700">
-                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-lg gap-1">
-                    <button
-                        onClick={() => setViewMode('gallery')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'gallery' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                    >
-                        <Icon name="findings" className="w-4 h-4" />
-                        المعرض
-                    </button>
-                    {/* New Smart Bundles Button */}
-                    <button
-                        onClick={() => setViewMode('bundles')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'bundles' ? 'bg-white dark:bg-slate-700 shadow-sm text-purple-600 dark:text-purple-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                    >
-                        <Icon name="sparkles" className="w-4 h-4" />
-                        الحزم الذكية
-                    </button>
-                    <button
-                        onClick={() => setViewMode('rows')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'rows' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                    >
-                        <Icon name="add" className="w-4 h-4" />
-                        يدوي
-                    </button>
+            <div className="flex flex-col p-4 bg-white dark:bg-slate-800 border-b dark:border-slate-700 gap-3">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-lg gap-1 shrink-0">
+                        <button
+                            onClick={() => setViewMode('gallery')}
+                            className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'gallery' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                        >
+                            <Icon name="findings" className="w-4 h-4" />
+                            المعرض
+                        </button>
+                        {/* New Smart Bundles Button */}
+                        <button
+                            onClick={() => setViewMode('bundles')}
+                            className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'bundles' ? 'bg-white dark:bg-slate-700 shadow-sm text-purple-600 dark:text-purple-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                        >
+                            <Icon name="sparkles" className="w-4 h-4" />
+                            الحزم الذكية
+                        </button>
+                        <button
+                            onClick={() => setViewMode('rows')}
+                            className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'rows' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                        >
+                            <Icon name="add" className="w-4 h-4" />
+                            يدوي
+                        </button>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row items-end md:items-center gap-2 w-full md:w-auto flex-1 md:justify-end">
+                        <div className="flex flex-wrap gap-1 justify-end md:justify-center order-2 md:order-1">
+                            {quickWords.map(word => (
+                                <button
+                                    key={word}
+                                    onClick={() => {
+                                        setSearchTerm(word);
+                                        searchInputRef.current?.focus();
+                                    }}
+                                    className="px-2 py-1 text-[10px] font-medium bg-slate-100 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-blue-900 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-600 transition-colors"
+                                >
+                                    {word}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="relative w-full md:w-64 shrink-0 order-1 md:order-2">
+                            <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                ref={searchInputRef}
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="ابحث باسم البند..."
+                                className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-900 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            />
+                        </div>
+                    </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-2">
-                    <div className="relative w-64">
-                        <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            ref={searchInputRef}
-                            type="text"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="ابحث باسم البند..."
-                            className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-900 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                        />
-                    </div>
-                    <div className="flex flex-wrap gap-1 justify-end w-64">
-                        {quickWords.map(word => (
+                {/* Group Filter Buttons */}
+                {availableGroups.length > 0 && (viewMode === 'gallery' || viewMode === 'bundles') && (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                        <button
+                            onClick={() => setSelectedGroup(null)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                selectedGroup === null
+                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-transparent hover:bg-slate-200 dark:hover:bg-slate-700'
+                            }`}
+                        >
+                            الكل
+                        </button>
+                        {availableGroups.map(g => (
                             <button
-                                key={word}
-                                onClick={() => {
-                                    setSearchTerm(word);
-                                    searchInputRef.current?.focus();
-                                }}
-                                className="px-2 py-1 text-[10px] font-medium bg-slate-100 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-blue-900 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-600 transition-colors"
+                                key={g}
+                                onClick={() => setSelectedGroup(g)}
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                    selectedGroup === g
+                                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-transparent hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
                             >
-                                {word}
+                                {getShortGroupName(g)}
                             </button>
                         ))}
                     </div>
-                </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">

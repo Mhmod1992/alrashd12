@@ -60,21 +60,35 @@ const FindingCard: React.FC<FindingCardProps> = ({
     viewMode = 'grid'
 }) => {
     const [localValue, setLocalValue] = React.useState(finding.value);
+    const [isExpanded, setIsExpanded] = React.useState(false);
+    const inputRef = React.useRef<HTMLTextAreaElement | HTMLSelectElement>(null);
 
     React.useEffect(() => {
         setLocalValue(finding.value);
     }, [finding.value]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             onUpdate(finding.findingId, localValue);
             (e.target as HTMLElement).blur();
         }
     };
 
     const handleBlur = () => {
+        setIsExpanded(false);
         if (localValue !== finding.value) {
             onUpdate(finding.findingId, localValue);
+        }
+    };
+
+    const handleFocus = () => {
+        setIsExpanded(true);
+    };
+
+    const handleCardClick = () => {
+        if (!isExpanded && inputRef.current && !isLocked && canManage && !isDeleting) {
+            inputRef.current.focus();
         }
     };
 
@@ -153,7 +167,7 @@ const FindingCard: React.FC<FindingCardProps> = ({
 
     // Grid View (Default)
     return (
-        <div className={`relative bg-[#fcfcfc] dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-md hover:-translate-y-0.5 group ${isDeleting ? 'opacity-50' : ''}`}>
+        <div className={`relative bg-[#fcfcfc] dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col transition-all duration-300 ease-out group ${isDeleting ? 'opacity-50' : ''} ${isExpanded ? 'scale-[1.15] sm:scale-125 z-50 shadow-2xl ring-2 ring-blue-500 dark:ring-blue-400' : 'hover:shadow-md hover:-translate-y-0.5 z-10'}`}>
             <StatusIndicator status={finding.status} viewMode="grid" onRetry={() => onRetry?.(finding.findingId)} />
 
             {/* Image Section - Compact Height */}
@@ -189,15 +203,21 @@ const FindingCard: React.FC<FindingCardProps> = ({
             </div>
 
             {/* Content Section - Compact Padding & Text */}
-            <div className="p-1.5 flex flex-col justify-between bg-[#fcfcfc] dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex-grow">
+            <div 
+                className="p-1.5 flex flex-col justify-between bg-[#fcfcfc] dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex-grow cursor-pointer"
+                onClick={handleCardClick}
+            >
                 <h5 className="font-bold text-slate-700 dark:text-slate-200 text-[9px] text-center line-clamp-2 mb-1 leading-tight" title={finding.findingName}>{finding.findingName}</h5>
 
                 <div className="flex items-center justify-center w-full mt-auto">
                     {predefined && predefined.options && predefined.options.length > 0 ? (
                         <div className="relative w-full">
                             <select
+                                ref={inputRef as React.RefObject<HTMLSelectElement>}
                                 value={localValue}
                                 onChange={(e) => { setLocalValue(e.target.value); onUpdate(finding.findingId, e.target.value); }}
+                                onFocus={handleFocus}
+                                onBlur={handleBlur}
                                 disabled={!canManage || isDeleting || isLocked}
                                 className="w-full text-[9px] font-semibold py-0.5 pl-1 pr-4 rounded border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none cursor-pointer text-center transition-colors disabled:cursor-not-allowed disabled:opacity-70 h-6"
                                 dir="auto"
@@ -211,15 +231,17 @@ const FindingCard: React.FC<FindingCardProps> = ({
                             </div>
                         </div>
                     ) : (
-                        <input
-                            type="text"
+                        <textarea
+                            ref={inputRef as React.RefObject<HTMLTextAreaElement>}
                             value={localValue}
                             onChange={(e) => setLocalValue(e.target.value)}
                             onKeyDown={handleKeyDown}
+                            onFocus={handleFocus}
                             onBlur={handleBlur}
                             disabled={!canManage || isDeleting || isLocked}
-                            className="w-full py-0.5 text-[9px] border-b border-slate-200 dark:border-slate-600 bg-transparent text-center focus:border-blue-500 outline-none placeholder-slate-400 disabled:cursor-not-allowed disabled:opacity-70 h-6"
+                            className={`w-full py-0.5 text-[9px] border-b border-slate-200 dark:border-slate-600 bg-transparent text-center focus:border-blue-500 outline-none placeholder-slate-400 disabled:cursor-not-allowed disabled:opacity-70 resize-none overflow-hidden transition-all duration-300 ${isExpanded ? 'h-12 text-right px-1' : 'h-6 whitespace-nowrap'}`}
                             placeholder="الحالة..."
+                            dir="auto"
                         />
                     )}
                 </div>

@@ -822,8 +822,11 @@ const Requests: React.FC = () => {
     }, [paymentRequest, employees]);
 
     const paginatedDataToDisplay = useMemo(() => {
+        if (dateFilter === 'today') {
+            return dataToDisplay;
+        }
         return dataToDisplay.slice(0, displayLimit);
-    }, [dataToDisplay, displayLimit]);
+    }, [dataToDisplay, displayLimit, dateFilter]);
 
     const handleLoadMore = useCallback(() => {
         if (displayLimit < dataToDisplay.length && !isPaginatingLocal) {
@@ -1225,7 +1228,7 @@ const Requests: React.FC = () => {
                         onRefresh={fetchRequests}
                         isLoading={isSearching}
                         onLoadMore={handleLoadMore}
-                        hasMore={isLoadMoreVisible || displayLimit < dataToDisplay.length}
+                        hasMore={dateFilter !== 'today' && (isLoadMoreVisible || displayLimit < dataToDisplay.length)}
                         isLoadingMore={isLoadingMore || isPaginatingLocal}
                     />
                 </>
