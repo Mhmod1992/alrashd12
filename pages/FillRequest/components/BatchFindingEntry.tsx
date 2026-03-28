@@ -180,8 +180,19 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
                         </button>
                     </div>
 
-                    <div className="flex flex-col md:flex-row items-end md:items-center gap-2 w-full md:w-auto flex-1 md:justify-end">
-                        <div className="flex flex-wrap gap-1 justify-end md:justify-center order-2 md:order-1">
+                    <div className="flex flex-col items-end gap-2 w-full md:w-auto flex-1 md:justify-end">
+                        <div className="relative w-full md:w-64 shrink-0">
+                            <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                ref={searchInputRef}
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="ابحث باسم البند..."
+                                className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-900 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            />
+                        </div>
+                        <div className="flex flex-wrap gap-1 justify-end">
                             {quickWords.map(word => (
                                 <button
                                     key={word}
@@ -194,17 +205,6 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
                                     {word}
                                 </button>
                             ))}
-                        </div>
-                        <div className="relative w-full md:w-64 shrink-0 order-1 md:order-2">
-                            <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <input
-                                ref={searchInputRef}
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                placeholder="ابحث باسم البند..."
-                                className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-900 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                            />
                         </div>
                     </div>
                 </div>
