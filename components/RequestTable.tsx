@@ -43,7 +43,35 @@ interface RequestTableProps {
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
+  searchTokens?: string[];
 }
+
+const HighlightText: React.FC<{ text: string | number | undefined | null, tokens?: string[] }> = ({ text, tokens }) => {
+    if (text === undefined || text === null) return <></>;
+    const str = String(text);
+    if (!tokens || tokens.length === 0) return <>{str}</>;
+
+    // Create a regex that matches any of the tokens, case-insensitive
+    const escapedTokens = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escapedTokens.join('|')})`, 'gi');
+    
+    const parts = str.split(regex);
+    
+    return (
+        <>
+            {parts.map((part, i) => 
+                // When splitting with a single capturing group, odd indices are the matches
+                i % 2 === 1 ? (
+                    <mark key={i} className="bg-yellow-300 dark:bg-yellow-600/60 text-black dark:text-white rounded-sm px-0.5">
+                        {part}
+                    </mark>
+                ) : (
+                    <span key={i}>{part}</span>
+                )
+            )}
+        </>
+    );
+};
 
 const StatusBadge: React.FC<{ status: RequestStatus }> = ({ status }) => {
     switch (status) {
@@ -88,7 +116,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
   title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
   onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh,
-  isLoading, onLoadMore, hasMore, isLoadingMore
+  isLoading, onLoadMore, hasMore, isLoadingMore, searchTokens
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
@@ -98,6 +126,87 @@ const RequestTable: React.FC<RequestTableProps> = ({
   const design = settings.design || 'aero';
   const isWaitingTable = title === 'طلبات بانتظار الدفع';
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Expand search tokens to include translations (Arabic <-> English)
+  const expandedSearchTokens = useMemo(() => {
+    if (!searchTokens || searchTokens.length === 0) return [];
+    
+    const expanded = new Set<string>();
+    
+    // Create maps for plate characters
+    const arToEnPlate = new Map<string, string>();
+    const enToArPlate = new Map<string, string>();
+    if (settings?.plateCharacters) {
+        settings.plateCharacters.forEach(pc => {
+            const arClean = pc.ar.replace('ـ', '');
+            arToEnPlate.set(arClean, pc.en.toLowerCase());
+            enToArPlate.set(pc.en.toLowerCase(), arClean);
+        });
+    }
+
+    searchTokens.forEach(token => {
+        const lowerToken = token.toLowerCase();
+        expanded.add(lowerToken);
+
+        // 1. Check Car Makes
+        const matchingMake = carMakes.find(m => m.name_ar.toLowerCase().includes(lowerToken) || m.name_en.toLowerCase().includes(lowerToken));
+        if (matchingMake) {
+            expanded.add(matchingMake.name_ar.toLowerCase());
+            expanded.add(matchingMake.name_en.toLowerCase());
+        }
+
+        // 2. Check Car Models
+        const matchingModel = carModels.find(m => m.name_ar.toLowerCase().includes(lowerToken) || m.name_en.toLowerCase().includes(lowerToken));
+        if (matchingModel) {
+            expanded.add(matchingModel.name_ar.toLowerCase());
+            expanded.add(matchingModel.name_en.toLowerCase());
+        }
+
+        // 3. Plate Letters & Numbers extraction
+        const lettersEn = lowerToken.replace(/[^a-z]/g, '');
+        const lettersAr = lowerToken.replace(/[^\u0600-\u06FF]/g, '');
+        const numbers = lowerToken.replace(/[^0-9]/g, '');
+
+        if (numbers) {
+            expanded.add(numbers);
+        }
+
+        if (lettersEn && lettersEn.length <= 4) {
+            let isAllPlateChars = true;
+            let arEquivalent = '';
+            for (const char of lettersEn) {
+                if (!enToArPlate.has(char)) isAllPlateChars = false;
+                arEquivalent += enToArPlate.get(char) || char;
+            }
+            if (isAllPlateChars) {
+                expanded.add(arEquivalent);
+                expanded.add(arEquivalent.split('').join(' '));
+                expanded.add(arEquivalent.split('').join('  '));
+                expanded.add(lettersEn.split('').join(' '));
+                expanded.add(lettersEn.split('').join('  '));
+            }
+        }
+
+        if (lettersAr && lettersAr.length <= 4) {
+            let isAllPlateChars = true;
+            let enEquivalent = '';
+            for (const char of lettersAr) {
+                if (!arToEnPlate.has(char)) isAllPlateChars = false;
+                enEquivalent += arToEnPlate.get(char) || char;
+            }
+            if (isAllPlateChars) {
+                expanded.add(enEquivalent);
+                expanded.add(enEquivalent.split('').join(' '));
+                expanded.add(enEquivalent.split('').join('  '));
+                expanded.add(lettersAr.split('').join(' '));
+                expanded.add(lettersAr.split('').join('  '));
+            }
+        }
+    });
+
+    // Filter out empty strings and sort by length descending to match longer phrases first
+    return Array.from(expanded).filter(t => t.trim().length > 0).sort((a, b) => b.length - a.length);
+  }, [searchTokens, carMakes, carModels, settings?.plateCharacters]);
 
   const [paymentFilter, setPaymentFilter] = useState<PaymentType | 'الكل'>('الكل');
 
@@ -501,7 +610,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                             >
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">
-                                        #{request.request_number}
+                                        #<HighlightText text={request.request_number} tokens={expandedSearchTokens} />
                                     </span>
                                 </td>
                                 <td className="px-6 py-4">
@@ -514,7 +623,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                         }}
                                         title="اضغط لعرض سجل طلبات العميل"
                                     >
-                                        {clientInfo.name}
+                                        <HighlightText text={clientInfo.name} tokens={expandedSearchTokens} />
                                         {hasHistory && (
                                             <span 
                                                 className="inline-flex items-center justify-center p-1 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 opacity-80 group-hover/client:opacity-100 transition-opacity"
@@ -524,7 +633,9 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{clientInfo.phone}</div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                        <HighlightText text={clientInfo.phone} tokens={expandedSearchTokens} />
+                                    </div>
                                     {creator && (
                                         <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
                                             بواسطة: {creator.name}
@@ -548,7 +659,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                                 onClick={(e) => handleCarClick(e, searchData)}
                                                 title="اضغط للبحث عن صور السيارة"
                                             >
-                                                <span>{carDisplayName}</span>
+                                                <span><HighlightText text={carDisplayName} tokens={expandedSearchTokens} /></span>
                                                 {request.report_stamps?.includes('CUSTOMER_REQUEST_INCOMPLETE') && (
                                                     <div className="relative group">
                                                         <AlertTriangleIcon className="w-5 h-5 text-red-500" />
@@ -558,7 +669,9 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono dir-ltr">{carInfo.plate}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono dir-ltr">
+                                                <HighlightText text={carInfo.plate} tokens={expandedSearchTokens} />
+                                            </div>
                                         </div>
                                     </div>
                                 </td>

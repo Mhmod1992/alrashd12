@@ -672,29 +672,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const isNumericQuery = /^\d+$/.test(query);
         let localResults: InspectionRequest[] = [];
 
-        if (isNumericQuery) {
+        if (isNumericQuery && exactOnly) {
             const queryNum = Number(query);
-            localResults = requests.filter(r => 
-                r.request_number === queryNum || 
-                clients.find(c => c.id === r.client_id)?.phone.includes(query)
-            );
-        } else {
+            localResults = requests.filter(r => r.request_number === queryNum);
+        } else if (!exactOnly) {
             const lowerQuery = query.toLowerCase();
+            const searchTokens = lowerQuery.split(/\s+/).filter(t => t.length > 0);
+
             localResults = requests.filter(r => {
                 const client = clients.find(c => c.id === r.client_id);
                 const car = cars.find(c => c.id === r.car_id);
                 const make = carMakes.find(m => m.id === car?.make_id);
                 const model = carModels.find(m => m.id === car?.model_id);
 
-                return (
-                    client?.name.toLowerCase().includes(lowerQuery) ||
-                    car?.plate_number?.toLowerCase().includes(lowerQuery) ||
-                    car?.vin?.toLowerCase().includes(lowerQuery) ||
-                    make?.name_ar.toLowerCase().includes(lowerQuery) ||
-                    make?.name_en?.toLowerCase().includes(lowerQuery) ||
-                    model?.name_ar.toLowerCase().includes(lowerQuery) ||
-                    model?.name_en?.toLowerCase().includes(lowerQuery)
-                );
+                // Create a comprehensive string block for this request
+                const searchableBlock = [
+                    r.request_number,
+                    client?.name,
+                    client?.phone,
+                    car?.plate_number,
+                    car?.plate_number_en,
+                    car?.vin,
+                    car?.year,
+                    make?.name_ar,
+                    make?.name_en,
+                    model?.name_ar,
+                    model?.name_en
+                ].filter(Boolean).join(' ').toLowerCase();
+
+                // Check if ALL tokens are present in the searchable block
+                return searchTokens.every(token => searchableBlock.includes(token));
             });
         }
 
@@ -737,6 +744,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             // 2. Search Clients by Phone (if numeric) or Name
             let clientIds: string[] = [];
+            const searchTokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+
             if (isNumericQuery) {
                  // Search by Phone specifically
                  const { data: foundClients } = await supabase
@@ -746,16 +755,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     .limit(50);
                  clientIds = foundClients?.map(c => c.id) || [];
             } else {
-                 // Search by Name or Phone (mixed)
-                 const { data: foundClients } = await supabase
-                    .from('clients')
-                    .select('id')
-                    .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
-                    .limit(50);
+                 // Search by Name or Phone (mixed) - using tokens for smarter search
+                 let clientQuery = supabase.from('clients').select('id');
+                 
+                 // For clients, we want to match if ANY token matches name or phone
+                 // This allows finding "محمود البري" when searching "محمود"
+                 const clientOrConditions = searchTokens.flatMap(token => [
+                     `name.ilike.%${token}%`,
+                     `phone.ilike.%${token}%`
+                 ]);
+                 
+                 if (clientOrConditions.length > 0) {
+                     clientQuery = clientQuery.or(clientOrConditions.join(','));
+                 }
+
+                 const { data: foundClients } = await clientQuery.limit(50);
                  clientIds = foundClients?.map(c => c.id) || [];
             }
 
-            // 3. Search Cars (Plate, VIN)
+            // 3. Search Cars (Plate, VIN, Year)
             const cleanQuery = query.replace(/\s/g, '');
             const letters = query.replace(/[0-9\s]/g, '');
             const numbers = query.replace(/[^0-9]/g, '');
@@ -769,6 +787,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const spacedLetters = letters.split('').join(' ');
                 variations.add(`${spacedLetters} ${numbers}`);
                 variations.add(`${spacedLetters}${numbers}`);
+                
+                // For plate searches like "1234 abc", try reversing it to "abc 1234"
+                variations.add(`${numbers} ${letters}`);
+                variations.add(`${numbers}${letters}`);
+                variations.add(`${numbers} ${spacedLetters}`);
             }
             
             const uniqueVariations = Array.from(variations);
@@ -777,6 +800,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 `plate_number_en.ilike.%${v}%`
             ]);
             orConditions.push(`vin.ilike.%${cleanQuery}%`);
+            
+            // Add year search if any token looks like a year
+            const yearTokens = searchTokens.filter(t => /^(19|20)\d{2}$/.test(t));
+            yearTokens.forEach(year => {
+                orConditions.push(`year.eq.${year}`);
+            });
+
             const orString = orConditions.join(',');
 
             const { data: carsByPlate } = await supabase
@@ -789,28 +819,69 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             // 4. Search Makes/Models
             if (!isNumericQuery) {
-                const { data: makes } = await supabase
-                    .from('car_makes')
-                    .select('id')
-                    .or(`name_ar.ilike.%${query}%,name_en.ilike.%${query}%`);
+                // Search makes using tokens
+                const makeOrConditions = searchTokens.flatMap(token => [
+                    `name_ar.ilike.%${token}%`,
+                    `name_en.ilike.%${token}%`
+                ]);
+                
+                let makesQuery = supabase.from('car_makes').select('id');
+                if (makeOrConditions.length > 0) {
+                    makesQuery = makesQuery.or(makeOrConditions.join(','));
+                }
+                const { data: makes } = await makesQuery;
                 const makeIds = makes?.map(m => m.id) || [];
 
-                const { data: models } = await supabase
-                    .from('car_models')
-                    .select('id')
-                    .or(`name_ar.ilike.%${query}%,name_en.ilike.%${query}%`);
-                const modelIds = models?.map(m => m.id) || [];
+                // Search models using tokens
+                const modelOrConditions = searchTokens.flatMap(token => [
+                    `name_ar.ilike.%${token}%`,
+                    `name_en.ilike.%${token}%`
+                ]);
+                
+                let modelsQuery = supabase.from('car_Models').select('id');
+                if (modelOrConditions.length > 0) {
+                    modelsQuery = modelsQuery.or(modelOrConditions.join(','));
+                }
+                
+                // Fallback to original table name if the above fails due to case sensitivity
+                const { data: models, error: modelsError } = await modelsQuery;
+                let finalModels = models;
+                
+                if (modelsError) {
+                    let fallbackQuery = supabase.from('car_models').select('id');
+                    if (modelOrConditions.length > 0) {
+                        fallbackQuery = fallbackQuery.or(modelOrConditions.join(','));
+                    }
+                    const { data: fallbackModels } = await fallbackQuery;
+                    finalModels = fallbackModels;
+                }
 
-                if (makeIds.length > 0 || modelIds.length > 0) {
-                    let carOrConditions: string[] = [];
-                    if (makeIds.length > 0) carOrConditions.push(`make_id.in.(${makeIds.join(',')})`);
-                    if (modelIds.length > 0) carOrConditions.push(`model_id.in.(${modelIds.join(',')})`);
+                const modelIds = finalModels?.map(m => m.id) || [];
 
-                    const { data: carsByMakeModel } = await supabase
-                        .from('cars')
-                        .select('id')
-                        .or(carOrConditions.join(','))
-                        .limit(100);
+                if (makeIds.length > 0 || modelIds.length > 0 || yearTokens.length > 0) {
+                    let carQuery = supabase.from('cars').select('id');
+                    
+                    // If we have make/model AND year, we want to find cars that match BOTH
+                    // e.g., "Patrol 2014" -> make/model matches "Patrol", year matches "2014"
+                    
+                    let makeModelOrConditions: string[] = [];
+                    if (makeIds.length > 0) makeModelOrConditions.push(`make_id.in.(${makeIds.join(',')})`);
+                    if (modelIds.length > 0) makeModelOrConditions.push(`model_id.in.(${modelIds.join(',')})`);
+                    
+                    if (makeModelOrConditions.length > 0 && yearTokens.length > 0) {
+                        // Match (Make OR Model) AND Year
+                        const yearConditions = yearTokens.map(y => `year.eq.${y}`).join(',');
+                        carQuery = carQuery.or(makeModelOrConditions.join(',')).or(yearConditions);
+                    } else if (makeModelOrConditions.length > 0) {
+                        // Match Make OR Model
+                        carQuery = carQuery.or(makeModelOrConditions.join(','));
+                    } else if (yearTokens.length > 0) {
+                        // Match Year only (already handled in step 3, but safe to include here)
+                        const yearConditions = yearTokens.map(y => `year.eq.${y}`).join(',');
+                        carQuery = carQuery.or(yearConditions);
+                    }
+
+                    const { data: carsByMakeModel } = await carQuery.limit(100);
 
                     const newCarIds = carsByMakeModel?.map(c => c.id) || [];
                     carIds = [...new Set([...carIds, ...newCarIds])];

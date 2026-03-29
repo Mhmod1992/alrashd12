@@ -1230,6 +1230,7 @@ const Requests: React.FC = () => {
                         onLoadMore={handleLoadMore}
                         hasMore={dateFilter !== 'today' && (isLoadMoreVisible || displayLimit < dataToDisplay.length)}
                         isLoadingMore={isLoadingMore || isPaginatingLocal}
+                        searchTokens={searchedRequests ? (requestNumberQuery || comprehensiveQuery).toLowerCase().split(/\s+/).filter(t => t.length > 0) : undefined}
                     />
                 </>
             )}
