@@ -1149,7 +1149,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const handleViewPreviousReport = (reqId: string) => {
-        const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${reqId}`;
+        const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${reqId}&from=print`;
         window.open(url, '_blank');
     };
 

@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import useSessionStorage from '../hooks/useSessionStorage';
 import { useAppContext } from '../context/AppContext';
 import { supabase } from '../lib/supabaseClient';
 import { InspectionRequest, RequestStatus, Car, PaymentType, Reservation } from '../types';
@@ -46,23 +47,23 @@ const Requests: React.FC = () => {
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
-        setPage, setSelectedRequestId, addNotification, fetchRequestsByCarId,
+        setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId,
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels,
-        lastRemoteDeleteId, fetchRequests, fetchRequestsCount
+        lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight
     } = useAppContext();
 
-    const [requestNumberQuery, setRequestNumberQuery] = useState('');
-    const [comprehensiveQuery, setComprehensiveQuery] = useState('');
-    const [waitingSearchTerm, setWaitingSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<RequestStatus | 'الكل' | 'active'>('الكل');
-    const [employeeFilter, setEmployeeFilter] = useState<string>('الكل');
+    const [requestNumberQuery, setRequestNumberQuery] = useSessionStorage('requests_number_query', '');
+    const [comprehensiveQuery, setComprehensiveQuery] = useSessionStorage('requests_comprehensive_query', '');
+    const [waitingSearchTerm, setWaitingSearchTerm] = useSessionStorage('requests_waiting_search', '');
+    const [statusFilter, setStatusFilter] = useSessionStorage<RequestStatus | 'الكل' | 'active'>('requests_status_filter', 'الكل');
+    const [employeeFilter, setEmployeeFilter] = useSessionStorage<string>('requests_employee_filter', 'الكل');
 
     // Date Filter State
-    const [dateFilter, setDateFilter] = useState<'today' | 'all' | 'yesterday' | 'month' | 'range'>('today');
-    const [rangeStartDate, setRangeStartDate] = useState('');
-    const [rangeEndDate, setRangeEndDate] = useState('');
+    const [dateFilter, setDateFilter] = useSessionStorage<'today' | 'all' | 'yesterday' | 'month' | 'range'>('requests_date_filter', 'today');
+    const [rangeStartDate, setRangeStartDate] = useSessionStorage('requests_range_start', '');
+    const [rangeEndDate, setRangeEndDate] = useSessionStorage('requests_range_end', '');
     const [serverFetchedData, setServerFetchedData] = useState<InspectionRequest[] | null>(null);
     const [isFetchingDateRange, setIsFetchingDateRange] = useState(false);
     const [dbTotalCount, setDbTotalCount] = useState<number | null>(null);
@@ -70,7 +71,7 @@ const Requests: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
     const [requestToUpdate, setRequestToUpdate] = useState<InspectionRequest | null>(null);
-    const [plateDisplayLanguage, setPlateDisplayLanguage] = useState<'ar' | 'en'>('ar');
+    const [plateDisplayLanguage, setPlateDisplayLanguage] = useSessionStorage<'ar' | 'en'>('requests_plate_lang', 'ar');
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [showStats, setShowStats] = useState(false);
 
@@ -98,6 +99,24 @@ const Requests: React.FC = () => {
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+
+    // Smart Back Logic: Scroll to and highlight the selected request when returning to the page
+    useEffect(() => {
+        if (selectedRequestId) {
+            // Wait for the table to render and data to be ready
+            const timer = setTimeout(() => {
+                const element = document.getElementById(`request-row-${selectedRequestId}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    triggerHighlight(selectedRequestId);
+                    // Clear the selected ID after a delay to prevent re-triggering on every render
+                    // but keep it long enough for the highlight animation to be visible
+                    setTimeout(() => setSelectedRequestId(null), 3000);
+                }
+            }, 800); // Slightly longer delay to ensure table data is loaded
+            return () => clearTimeout(timer);
+        }
+    }, [selectedRequestId, triggerHighlight, setSelectedRequestId]);
     const actionsMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -671,11 +690,15 @@ const Requests: React.FC = () => {
     const isLoadMoreVisible = searchedRequests === null && serverFetchedData === null && hasMoreRequests && dateFilter === 'all';
     const isAnyFilterActive = requestNumberQuery.trim() !== '' || comprehensiveQuery.trim() !== '' || statusFilter !== 'الكل' || employeeFilter !== 'الكل' || dateFilter !== 'today';
 
-    const [displayLimit, setDisplayLimit] = useState(10);
+    const [displayLimit, setDisplayLimit] = useSessionStorage('requests_display_limit', 10);
     const [isPaginatingLocal, setIsPaginatingLocal] = useState(false);
     const observerTarget = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        if (isFirstMount.current) {
+            isFirstMount.current = false;
+            return;
+        }
         setDisplayLimit(10);
     }, [dateFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm]);
 
@@ -1231,6 +1254,9 @@ const Requests: React.FC = () => {
                         hasMore={dateFilter !== 'today' && (isLoadMoreVisible || displayLimit < dataToDisplay.length)}
                         isLoadingMore={isLoadingMore || isPaginatingLocal}
                         searchTokens={searchedRequests ? (requestNumberQuery || comprehensiveQuery).toLowerCase().split(/\s+/).filter(t => t.length > 0) : undefined}
+                        highlightedRequestId={selectedRequestId}
+                        triggerHighlight={triggerHighlight}
+                        scrollStateKey="main_requests_table"
                     />
                 </>
             )}

@@ -44,6 +44,8 @@ interface RequestTableProps {
   hasMore?: boolean;
   isLoadingMore?: boolean;
   searchTokens?: string[];
+  highlightedRequestId?: string | null;
+  triggerHighlight?: (id: string) => void;
 }
 
 const HighlightText: React.FC<{ text: string | number | undefined | null, tokens?: string[] }> = ({ text, tokens }) => {
@@ -116,12 +118,11 @@ const RequestTable: React.FC<RequestTableProps> = ({
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
   title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
   onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh,
-  isLoading, onLoadMore, hasMore, isLoadingMore, searchTokens
+  isLoading, onLoadMore, hasMore, isLoadingMore, searchTokens, highlightedRequestId, triggerHighlight
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
-    deleteRequest, addNotification, can, updateRequest, createActivityLog,
-    highlightedRequestId
+    deleteRequest, addNotification, can, updateRequest, createActivityLog
   } = useAppContext();
   const design = settings.design || 'aero';
   const isWaitingTable = title === 'طلبات بانتظار الدفع';
@@ -264,6 +265,24 @@ const RequestTable: React.FC<RequestTableProps> = ({
     return () => tableContainer.removeEventListener('wheel', handleWheel);
   }, []);
 
+  // Scroll to highlighted row when it changes
+  useEffect(() => {
+    if (highlightedRequestId && tableContainerRef.current) {
+      const rowElement = document.getElementById(`request-row-${highlightedRequestId}`);
+      if (rowElement) {
+        // Scroll the row into view smoothly
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Remove the highlight after a delay
+        setTimeout(() => {
+            if (triggerHighlight) {
+                triggerHighlight(''); // Clear highlight
+            }
+        }, 3000);
+      }
+    }
+  }, [highlightedRequestId, triggerHighlight]);
+
   // State for Car Search Modal - Removed
 
 
@@ -353,7 +372,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
   
   const handlePrint = (e: React.MouseEvent, requestId: string) => {
     e.stopPropagation();
-    const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${requestId}`;
+    const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${requestId}&from=print`;
     window.open(url, '_blank');
   };
   
@@ -462,22 +481,20 @@ const RequestTable: React.FC<RequestTableProps> = ({
     // Helper to determine row background class based on payment status
     const getRowClasses = (req: InspectionRequest) => {
         const baseClasses = "group border-b align-middle transition-colors duration-150 last:border-0";
-        // REMOVED: cursor-pointer class logic to disable row clicking
-        const cursorClass = ''; 
         const highlightClass = req.id === highlightedRequestId ? 'animate-highlight' : '';
         
         // Highlight Unpaid (Debt) Requests
         if (req.payment_type === PaymentType.Unpaid) {
-             return `${baseClasses} bg-rose-50 border-rose-100 dark:bg-rose-900/10 dark:border-rose-900/30 hover:bg-rose-100 dark:hover:bg-rose-900/20 ${cursorClass} ${highlightClass}`;
+             return `${baseClasses} bg-rose-50 border-rose-100 dark:bg-rose-900/10 dark:border-rose-900/30 hover:bg-rose-100 dark:hover:bg-rose-900/20 ${highlightClass}`;
         }
         
         // Highlight Transfer Requests (Often need verification)
         if (req.payment_type === PaymentType.Transfer) {
-             return `${baseClasses} bg-amber-50 border-amber-100 dark:bg-amber-900/10 dark:border-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/20 ${cursorClass} ${highlightClass}`;
+             return `${baseClasses} bg-amber-50 border-amber-100 dark:bg-amber-900/10 dark:border-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/20 ${highlightClass}`;
         }
 
         // Default styling
-        return `${baseClasses} bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${cursorClass} ${highlightClass}`;
+        return `${baseClasses} bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${highlightClass}`;
     };
 
 
@@ -605,8 +622,12 @@ const RequestTable: React.FC<RequestTableProps> = ({
                             <tr 
                                 key={request.id} 
                                 id={`request-row-${request.id}`} 
-                                // REMOVED: onClick={...} to disable row click
-                                className={rowClass}
+                                onClick={(e) => {
+                                    if (!isWaitingPayment && can('fill_requests') && onRowClick) {
+                                        onRowClick(request.id);
+                                    }
+                                }}
+                                className={`${rowClass} ${!isWaitingPayment && can('fill_requests') && onRowClick ? 'cursor-pointer' : ''}`}
                             >
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">
@@ -656,7 +677,10 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                         <div>
                                             <div 
                                                 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                                                onClick={(e) => handleCarClick(e, searchData)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleCarClick(e, searchData);
+                                                }}
                                                 title="اضغط للبحث عن صور السيارة"
                                             >
                                                 <span><HighlightText text={carDisplayName} tokens={expandedSearchTokens} /></span>

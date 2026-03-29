@@ -32,6 +32,8 @@ export interface AppContextType {
     searchedRequests: InspectionRequest[] | null;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
+    highlightedRequestId: string | null;
+    triggerHighlight: (requestId: string) => void;
     isCreatingRequest: boolean;
     setIsCreatingRequest: (isCreating: boolean) => void;
     clients: Client[];
@@ -164,8 +166,6 @@ export interface AppContextType {
     realtimeStatus: 'connected' | 'connecting' | 'disconnected';
     retryConnection: () => void;
     refreshSessionAndReload: () => void;
-    highlightedRequestId: string | null;
-    triggerHighlight: (requestId: string) => void;
     unreadMessagesCount: number;
     fetchInboxMessages: () => Promise<InternalMessage[]>;
     fetchSentMessages: () => Promise<InternalMessage[]>;

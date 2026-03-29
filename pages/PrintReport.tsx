@@ -295,6 +295,27 @@ const PrintReport: React.FC = () => {
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     
+    // Check if coming from print button to hide back button
+    const searchParams = new URLSearchParams(window.location.search);
+    const fromPrint = searchParams.get('from') === 'print';
+
+    // Prevent back navigation if fromPrint is true
+    useEffect(() => {
+        if (fromPrint) {
+            window.history.pushState(null, '', window.location.href);
+            const handlePopState = () => {
+                window.history.pushState(null, '', window.location.href);
+                addNotification({ 
+                    title: 'تنبيه', 
+                    message: 'يرجى إغلاق هذه الصفحة بدلاً من الرجوع.', 
+                    type: 'info' 
+                });
+            };
+            window.addEventListener('popstate', handlePopState);
+            return () => window.removeEventListener('popstate', handlePopState);
+        }
+    }, [fromPrint, addNotification]);
+
     // Effective Data (Original OR Translated)
     const request = translatedRequest || originalRequest;
     const reportSettings = translatedSettings || settings.reportSettings;
@@ -985,7 +1006,13 @@ const PrintReport: React.FC = () => {
             <div className="flex flex-col items-center justify-center h-screen text-center p-4">
                 <RefreshCwIcon className="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" />
                 <p className="text-xl text-gray-700 dark:text-gray-300">{ request ? 'جاري تحميل بيانات التقرير...' : 'لم يتم العثور على الطلب.' }</p>
-                { !request && <Button onClick={() => setPage('requests')} className="mt-4">العودة</Button> }
+                { !request && (
+                    fromPrint ? (
+                        <Button onClick={() => window.close()} className="mt-4 bg-slate-100 text-slate-700 hover:bg-slate-200">إغلاق الصفحة</Button>
+                    ) : (
+                        <Button onClick={() => setPage('requests')} className="mt-4">العودة</Button>
+                    )
+                ) }
             </div>
         );
     }
@@ -998,10 +1025,18 @@ const PrintReport: React.FC = () => {
                     {translatedRequest && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full border border-purple-200">مترجم (مؤقت)</span>}
                 </h2>
                 <div className="flex gap-2">
-                    <Button variant="secondary" onClick={goBack} size="sm" disabled={isGenerating}>
-                        <Icon name="back" className="w-4 h-4 transform scale-x-[-1]" />
-                        <span className="hidden sm:inline ms-1">العودة</span>
-                    </Button>
+                    {!fromPrint && (
+                        <Button variant="secondary" onClick={goBack} size="sm" disabled={isGenerating}>
+                            <Icon name="back" className="w-4 h-4 transform scale-x-[-1]" />
+                            <span className="hidden sm:inline ms-1">العودة</span>
+                        </Button>
+                    )}
+                    {fromPrint && (
+                        <Button variant="secondary" onClick={() => window.close()} size="sm" className="bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">
+                            <Icon name="close" className="w-4 h-4" />
+                            <span className="hidden sm:inline ms-1">إغلاق الصفحة</span>
+                        </Button>
+                    )}
                     
                     <Button
                         variant="secondary"
