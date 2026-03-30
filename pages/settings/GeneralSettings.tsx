@@ -37,7 +37,8 @@ const GeneralSettings: React.FC = () => {
             logoUrl: currentSettings.logoUrl,
             googleMapsLink: currentSettings.googleMapsLink,
             locationUrl: currentSettings.locationUrl,
-            allowSignup: currentSettings.allowSignup
+            allowSignup: currentSettings.allowSignup,
+            feedback_url_template: currentSettings.feedback_url_template
         });
         addNotification({ title: 'نجاح', message: 'تم حفظ الإعدادات بنجاح.', type: 'success' });
     } catch (error) {}
@@ -66,6 +67,12 @@ const GeneralSettings: React.FC = () => {
                 <label htmlFor="googleMapsLink" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">⭐ رابط تقييم جوجل ماب</label>
                 <input type="text" id="googleMapsLink" value={currentSettings.googleMapsLink || ''} onChange={(e) => setCurrentSettings(prev => ({...prev, googleMapsLink: e.target.value}))} className={formInputClasses} placeholder="https://g.page/r/..." dir="ltr" />
               </div>
+          </div>
+
+          <div>
+            <label htmlFor="feedback_url_template" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">🔗 رابط تقييم العملاء (WhatsApp)</label>
+            <input type="text" id="feedback_url_template" value={currentSettings.feedback_url_template || ''} onChange={(e) => setCurrentSettings(prev => ({...prev, feedback_url_template: e.target.value}))} className={formInputClasses} placeholder="https://example.com/rate?id={id}" dir="ltr" />
+            <p className="text-[10px] text-slate-400 mt-1">استخدم {"{id}"} لوضع رقم الطلب تلقائياً في الرابط.</p>
           </div>
           
            {/* Allow Signup Toggle */}

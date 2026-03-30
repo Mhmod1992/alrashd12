@@ -1,8 +1,8 @@
 {
-  "name": " ( الراشد قيد التطوير )Edition",
-  "description": "A redesigned, modern Progressive Web App (PWA) to manage the entire workflow of a car inspection workshop, from request registration to detailed inspection reports and printing.",
+  "name": "أرشيف الورقيات الذكي",
+  "description": "نظام متكامل لأرشفة المستندات والورقيات، يتيح إدارة المسودات، رفع المرفقات، وتنظيم الأرشيف بشكل احترافي.",
   "requestFramePermissions": [
-    "microphone",
-    "camera"
+    "camera",
+    "microphone"
   ]
 }

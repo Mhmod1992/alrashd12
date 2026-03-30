@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { InspectionRequest, RequestStatus, Client, Car, CarMake, CarModel, InspectionType, Employee, PaymentType } from '../types';
 import { useAppContext } from '../context/AppContext';
 import EditIcon from './icons/EditIcon';
@@ -581,6 +582,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                     </tr>
                 </thead>
                 <tbody>
+                    <AnimatePresence mode="popLayout">
                     {displayedRequests.length > 0 ? (
                         displayedRequests.map((request) => {
                             const clientInfo = getClientInfo(request.client_id);
@@ -619,7 +621,17 @@ const RequestTable: React.FC<RequestTableProps> = ({
                         }
 
                         return (
-                            <tr 
+                            <motion.tr 
+                                layout
+                                initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                                transition={{ 
+                                    type: "spring", 
+                                    stiffness: 350, 
+                                    damping: 25, 
+                                    mass: 0.8 
+                                }}
                                 key={request.id} 
                                 id={`request-row-${request.id}`} 
                                 onClick={(e) => {
@@ -814,15 +826,20 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                         )}
                                     </div>
                                 </td>
-                            </tr>
+                            </motion.tr>
                         )
                     })) : (
-                        <tr>
+                        <motion.tr
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                        >
                             <td colSpan={isWaitingTable ? 6 : 8} className="p-8 text-center text-slate-500 dark:text-slate-400">
                                 لا توجد طلبات تطابق نوع الدفع المحدد.
                             </td>
-                        </tr>
+                        </motion.tr>
                     )}
+                    </AnimatePresence>
                 </tbody>
             </table>
             {hasMore && (

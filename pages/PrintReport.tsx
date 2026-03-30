@@ -455,7 +455,8 @@ const PrintReport: React.FC = () => {
 
                 const renderContext = {
                     canvasContext: ctx,
-                    viewport: viewport
+                    viewport: viewport,
+                    canvas: canvas
                 };
 
                 await page.render(renderContext).promise;

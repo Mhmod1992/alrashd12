@@ -1484,14 +1484,41 @@ export const FillRequest: React.FC = () => {
     const handleComplete = async () => {
         if (isLocked) return;
         if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-        const newLog = createActivityLog('تغيير حالة الطلب', 'تم تحديد الطلب كمكتمل');
-        const newLogArray = newLog ? [newLog, ...activityLog] : activityLog;
-        setActivityLog(newLogArray);
-        try {
-            await performSave(true, RequestStatus.COMPLETE, { activityLog: newLogArray });
-            addNotification({ title: 'نجاح', message: 'تم تحديد الطلب كمكتمل.', type: 'success' });
-            setPage('requests');
-        } catch { }
+
+        const onConfirmComplete = async () => {
+            const newLog = createActivityLog('تغيير حالة الطلب', 'تم تحديد الطلب كمكتمل');
+            const newLogArray = newLog ? [newLog, ...activityLog] : activityLog;
+            setActivityLog(newLogArray);
+            try {
+                await performSave(true, RequestStatus.COMPLETE, { activityLog: newLogArray });
+                addNotification({ title: 'نجاح', message: 'تم تحديد الطلب كمكتمل.', type: 'success' });
+
+                // --- WhatsApp Feedback Suggestion ---
+                if (settings.feedback_url_template && client?.phone && request) {
+                    const feedbackUrl = settings.feedback_url_template.replace('{id}', request.request_number.toString());
+                    const message = `شكراً لتعاملك معنا. نرجو منك تقييم الخدمة عبر الرابط التالي: ${feedbackUrl}`;
+                    const whatsappUrl = `https://wa.me/${client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+
+                    showConfirmModal({
+                        title: 'إرسال رابط التقييم',
+                        message: 'هل ترغب في إرسال رسالة واتساب للعميل لتقييم الخدمة؟',
+                        icon: 'info',
+                        onConfirm: () => {
+                            window.open(whatsappUrl, '_blank');
+                            setPage('requests');
+                        }
+                    });
+                } else {
+                    setPage('requests');
+                }
+            } catch { }
+        };
+
+        showConfirmModal({
+            title: 'إكمال الطلب',
+            message: 'هل أنت متأكد من رغبتك في إغلاق هذا الطلب؟ لن يتمكن الفنيون من التعديل عليه بعد ذلك.',
+            onConfirm: onConfirmComplete
+        });
     };
 
     const handleReopen = async () => {

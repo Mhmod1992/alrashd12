@@ -10,12 +10,10 @@ Font.register({
     { 
       src: 'https://raw.githubusercontent.com/google/fonts/main/ofl/tajawal/Tajawal-Regular.ttf', 
       fontWeight: 'normal',
-      format: 'truetype'
     },
     { 
       src: 'https://raw.githubusercontent.com/google/fonts/main/ofl/tajawal/Tajawal-Bold.ttf', 
       fontWeight: 'bold',
-      format: 'truetype'
     },
   ],
 });
