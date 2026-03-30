@@ -1502,6 +1502,9 @@ export const FillRequest: React.FC = () => {
             await performSave(true, RequestStatus.COMPLETE, { activityLog: newLogArray });
             addNotification({ title: 'نجاح', message: 'تم تحديد الطلب كمكتمل.', type: 'success' });
             
+            // Set flag to skip scroll restoration when returning to requests page after completion
+            window.sessionStorage.setItem('skipScrollRestoration', 'true');
+
             if (sendReview && client?.phone && settings.reviewMessage && settings.reviewLink) {
                 const message = settings.reviewMessage.replace('{review_link}', settings.reviewLink);
                 const whatsappUrl = `https://wa.me/${client.phone.replace(/\D/g, '').replace(/^0/, '966')}?text=${encodeURIComponent(message)}`;

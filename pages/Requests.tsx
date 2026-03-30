@@ -51,7 +51,7 @@ const Requests: React.FC = () => {
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels,
-        lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, createActivityLog
+        lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight
     } = useAppContext();
 
     const [requestNumberQuery, setRequestNumberQuery] = useSessionStorage('requests_number_query', '');
@@ -103,6 +103,14 @@ const Requests: React.FC = () => {
     // Smart Back Logic: Scroll to and highlight the selected request when returning to the page
     useEffect(() => {
         if (selectedRequestId) {
+            // Check if we should skip scroll restoration (e.g. after completing a request)
+            const skipScroll = window.sessionStorage.getItem('skipScrollRestoration');
+            if (skipScroll === 'true') {
+                window.sessionStorage.removeItem('skipScrollRestoration');
+                setSelectedRequestId(null);
+                return;
+            }
+
             // Wait for the table to render and data to be ready
             const timer = setTimeout(() => {
                 const element = document.getElementById(`request-row-${selectedRequestId}`);
@@ -424,22 +432,6 @@ const Requests: React.FC = () => {
     const handleOpenUpdateModal = (request: InspectionRequest) => {
         setRequestToUpdate(request);
         setIsUpdateModalOpen(true);
-    };
-
-    const handleCancelRequest = (request: InspectionRequest) => {
-        showConfirmModal({
-            title: 'إلغاء الطلب',
-            message: `هل أنت متأكد من رغبتك في إلغاء الطلب رقم ${request.request_number}؟`,
-            onConfirm: async () => {
-                try {
-                    await updateRequest({ id: request.id, status: RequestStatus.CANCELLED });
-                    addNotification({ title: 'نجاح', message: 'تم إلغاء الطلب بنجاح', type: 'success' });
-                    createActivityLog('request', 'update', undefined, request.id);
-                } catch (error) {
-                    addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء إلغاء الطلب', type: 'error' });
-                }
-            }
-        });
     };
 
     const handleRowClick = (requestId: string) => {
@@ -1230,7 +1222,6 @@ const Requests: React.FC = () => {
                         employees={employees}
                         title="طلبات بانتظار الدفع"
                         onOpenUpdateModal={handleOpenUpdateModal}
-                        onCancelRequest={handleCancelRequest}
                         plateDisplayLanguage={plateDisplayLanguage}
                         setPlateDisplayLanguage={setPlateDisplayLanguage}
                         isRefreshing={isRefreshing}
@@ -1257,7 +1248,6 @@ const Requests: React.FC = () => {
                         employees={employees}
                         title={searchedRequests ? "نتائج البحث" : (dateFilter !== 'all' ? `الطلبات (${dateFilter === 'today' ? 'اليوم' : dateFilter === 'yesterday' ? 'أمس' : 'المحددة'})` : "قائمة الطلبات النشطة")}
                         onOpenUpdateModal={handleOpenUpdateModal}
-                        onCancelRequest={handleCancelRequest}
                         plateDisplayLanguage={plateDisplayLanguage}
                         setPlateDisplayLanguage={setPlateDisplayLanguage}
                         isRefreshing={isRefreshing}
