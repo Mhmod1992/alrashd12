@@ -404,7 +404,6 @@ const Dashboard: React.FC = () => {
       carStats.filteredRequests.forEach(req => {
           let make = (req.car_snapshot?.make_ar || req.car_snapshot?.make_en || '').trim();
           let model = (req.car_snapshot?.model_ar || req.car_snapshot?.model_en || '').trim();
-          let year = req.car_snapshot?.year;
           
           if (!make || !model) {
               const car = cars.find(c => c.id === req.car_id);
@@ -414,15 +413,13 @@ const Dashboard: React.FC = () => {
                   
                   make = make || makeObj?.name_ar || makeObj?.name_en || '';
                   model = model || modelObj?.name_ar || modelObj?.name_en || '';
-                  year = year || car.year;
               }
           }
           
           if (make && model) {
-              // Group by Make and Model, optionally including Year if it's consistent
-              // The user said "Toyota Camry", so grouping by model is likely what they want
-              // but we'll keep the year for specificity as it was before, but more robustly.
-              const fullName = `${make} ${model}${year ? ` ${year}` : ''}`;
+              // Group by Make and Model ONLY to aggregate same models from different years
+              // This addresses the user's concern about "Toyota Camry" showing low numbers
+              const fullName = `${make} ${model}`;
               frequencyMap.set(fullName, (frequencyMap.get(fullName) || 0) + 1);
           } else if (make || model) {
               const name = (make || model).trim();
@@ -435,7 +432,7 @@ const Dashboard: React.FC = () => {
       return Array.from(frequencyMap.entries())
           .map(([name, count]) => ({ make: name, count }))
           .sort((a, b) => b.count - a.count)
-          .slice(0, 10); // Show top 10 instead of 7 for better overview
+          .slice(0, 15); // Show top 15 for better overview
   }, [carStats, cars, carMakes, carModels, allCarModels]);
 
   const dailyRevenueChartData = useMemo(() => {

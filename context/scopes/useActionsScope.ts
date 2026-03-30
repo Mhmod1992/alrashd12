@@ -476,6 +476,6 @@ export const useActionsScope = (
         sendInternalMessage, markMessageAsRead,
         addTechnician, updateTechnician, deleteTechnician,
         addReservation, updateReservationStatus, updateReservation, deleteReservation,
-        sendSystemNotification
+        sendSystemNotification, createActivityLog
     };
 };

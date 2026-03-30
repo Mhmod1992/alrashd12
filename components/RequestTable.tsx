@@ -634,12 +634,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                 }}
                                 key={request.id} 
                                 id={`request-row-${request.id}`} 
-                                onClick={(e) => {
-                                    if (!isWaitingPayment && can('fill_requests') && onRowClick) {
-                                        onRowClick(request.id);
-                                    }
-                                }}
-                                className={`${rowClass} ${!isWaitingPayment && can('fill_requests') && onRowClick ? 'cursor-pointer' : ''}`}
+                                className={rowClass}
                             >
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">

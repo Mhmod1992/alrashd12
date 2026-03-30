@@ -7,6 +7,7 @@ export enum RequestStatus {
   COMPLETE = 'مكتمل',
   NEW = 'جديد',
   WAITING_PAYMENT = 'بانتظار الدفع',
+  CANCELLED = 'ملغي',
 }
 
 export enum PaymentType {

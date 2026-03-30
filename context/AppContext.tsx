@@ -1220,16 +1220,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [addNotification, fetchRequests]);
 
     const fetchServerFinancials = useCallback(async (startDate: string, endDate: string, includeCompletedOnly: boolean): Promise<FinancialStats> => {
-        let query = supabase.from('inspection_requests').select('id, request_number, client_id, car_id, car_snapshot, price, status, payment_type, split_payment_details, payment_note, broker, created_at').gte('created_at', startDate).lte('created_at', endDate);
+        let query = supabase.from('inspection_requests').select(`
+            id, request_number, client_id, car_id, car_snapshot, price, status, payment_type, 
+            split_payment_details, payment_note, broker, created_at,
+            cars:car_id (
+                make:make_id (name_ar, name_en),
+                model:model_id (name_ar, name_en)
+            )
+        `).gte('created_at', startDate).lte('created_at', endDate);
         if (includeCompletedOnly) query = query.eq('status', RequestStatus.COMPLETE);
         else query = query.neq('status', 'cancelled');
         const { data: requests, error: reqError } = await query;
         if (reqError) throw reqError;
+        
+        // Process requests to ensure car_snapshot is populated if missing
+        const reqs = (requests || []).map((r: any) => {
+            const req = { ...r } as InspectionRequest;
+            if (!req.car_snapshot && r.cars) {
+                req.car_snapshot = {
+                    make_ar: r.cars.make?.name_ar || '',
+                    make_en: r.cars.make?.name_en || '',
+                    model_ar: r.cars.model?.name_ar || '',
+                    model_en: r.cars.model?.name_en || '',
+                    year: 0 // Year might be missing in this join, but make/model are most important for the chart
+                };
+            }
+            return req;
+        });
+
         const { data: expenses, error: expError } = await supabase.from('expenses').select('*').gte('date', startDate).lte('date', endDate);
         if (expError) throw expError;
         const { data: revenuesData, error: revError } = await supabase.from('other_revenues').select('*').gte('date', startDate).lte('date', endDate);
         if (revError) throw revError;
-        const reqs = requests as InspectionRequest[];
         const exps = expenses as Expense[];
         const revs: Revenue[] = (revenuesData || []).map((r: any) => ({ id: r.id, date: r.date, category: r.category, description: r.description, amount: r.amount, payment_method: r.payment_method, employeeId: r.employee_id, employeeName: r.employee_name }));
         const totalRequestsRevenue = reqs.reduce((sum, r) => sum + r.price, 0);
