@@ -73,6 +73,7 @@ export const FillRequest: React.FC = () => {
 
     const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
     const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+    const [isReviewPromptModalOpen, setIsReviewPromptModalOpen] = useState(false);
 
     // UI state
     const [isTechnicianModalOpen, setIsTechnicianModalOpen] = useState(false);
@@ -1483,42 +1484,32 @@ export const FillRequest: React.FC = () => {
 
     const handleComplete = async () => {
         if (isLocked) return;
+        
+        if (settings.enableReviewPrompt) {
+            setIsReviewPromptModalOpen(true);
+            return;
+        }
+
+        await processCompletion();
+    };
+
+    const processCompletion = async (sendReview: boolean = false) => {
         if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-
-        const onConfirmComplete = async () => {
-            const newLog = createActivityLog('تغيير حالة الطلب', 'تم تحديد الطلب كمكتمل');
-            const newLogArray = newLog ? [newLog, ...activityLog] : activityLog;
-            setActivityLog(newLogArray);
-            try {
-                await performSave(true, RequestStatus.COMPLETE, { activityLog: newLogArray });
-                addNotification({ title: 'نجاح', message: 'تم تحديد الطلب كمكتمل.', type: 'success' });
-
-                // --- WhatsApp Feedback Suggestion ---
-                if (settings.feedback_url_template && client?.phone && request) {
-                    const feedbackUrl = settings.feedback_url_template.replace('{id}', request.request_number.toString());
-                    const message = `شكراً لتعاملك معنا. نرجو منك تقييم الخدمة عبر الرابط التالي: ${feedbackUrl}`;
-                    const whatsappUrl = `https://wa.me/${client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-
-                    showConfirmModal({
-                        title: 'إرسال رابط التقييم',
-                        message: 'هل ترغب في إرسال رسالة واتساب للعميل لتقييم الخدمة؟',
-                        icon: 'info',
-                        onConfirm: () => {
-                            window.open(whatsappUrl, '_blank');
-                            setPage('requests');
-                        }
-                    });
-                } else {
-                    setPage('requests');
-                }
-            } catch { }
-        };
-
-        showConfirmModal({
-            title: 'إكمال الطلب',
-            message: 'هل أنت متأكد من رغبتك في إغلاق هذا الطلب؟ لن يتمكن الفنيون من التعديل عليه بعد ذلك.',
-            onConfirm: onConfirmComplete
-        });
+        const newLog = createActivityLog('تغيير حالة الطلب', 'تم تحديد الطلب كمكتمل');
+        const newLogArray = newLog ? [newLog, ...activityLog] : activityLog;
+        setActivityLog(newLogArray);
+        try {
+            await performSave(true, RequestStatus.COMPLETE, { activityLog: newLogArray });
+            addNotification({ title: 'نجاح', message: 'تم تحديد الطلب كمكتمل.', type: 'success' });
+            
+            if (sendReview && client?.phone && settings.reviewMessage && settings.reviewLink) {
+                const message = settings.reviewMessage.replace('{review_link}', settings.reviewLink);
+                const whatsappUrl = `https://wa.me/${client.phone.replace(/\D/g, '').replace(/^0/, '966')}?text=${encodeURIComponent(message)}`;
+                window.open(whatsappUrl, '_blank');
+            }
+            
+            setPage('requests');
+        } catch { }
     };
 
     const handleReopen = async () => {
@@ -2556,6 +2547,52 @@ export const FillRequest: React.FC = () => {
 
             <Modal isOpen={isPreviewModalOpen} onClose={() => setIsPreviewModalOpen(false)} size="4xl" title="معاينة الصورة">{previewImageUrl && <img src={previewImageUrl} alt="معاينة مكبرة" className="max-w-full max-h-[80vh] mx-auto" />}</Modal>
             <TechnicianSelectionModal isOpen={isTechnicianModalOpen} onClose={() => setIsTechnicianModalOpen(false)} request={request} categoryId={technicianModalTarget?.id || ''} categoryName={technicianModalTarget?.name || ''} />
+            <Modal isOpen={isReviewPromptModalOpen} onClose={() => setIsReviewPromptModalOpen(false)} title="طلب تقييم من العميل" size="md">
+                <div className="space-y-4">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-full text-blue-600 dark:text-blue-300 shrink-0">
+                                <WhatsappIcon className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-blue-800 dark:text-blue-200 mb-1">إرسال رابط التقييم</h4>
+                                <p className="text-sm text-blue-600 dark:text-blue-300">هل تود إرسال رسالة للعميل عبر الواتساب تطلب منه تقييم الخدمة؟</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">معاينة الرسالة:</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                            {settings.reviewMessage?.replace('{review_link}', settings.reviewLink || '') || 'لا توجد رسالة محددة في الإعدادات.'}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t dark:border-slate-700">
+                        <Button 
+                            onClick={() => {
+                                setIsReviewPromptModalOpen(false);
+                                processCompletion(true);
+                            }} 
+                            className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white"
+                            leftIcon={<WhatsappIcon className="w-5 h-5" />}
+                        >
+                            إكمال وإرسال
+                        </Button>
+                        <Button 
+                            variant="secondary" 
+                            onClick={() => {
+                                setIsReviewPromptModalOpen(false);
+                                processCompletion(false);
+                            }} 
+                            className="flex-1"
+                        >
+                            إكمال فقط
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
             <Modal isOpen={isInfoModalOpen} onClose={() => setIsInfoModalOpen(false)} title="تفاصيل الطلب" size="lg">
                 <div className="space-y-6">
                     {/* Header Stats */}

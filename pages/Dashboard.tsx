@@ -1,19 +1,19 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { FinancialStats, RequestStatus, InspectionRequest } from '../types';
-import { 
-    PieChart, Pie, Cell, 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    LineChart as ReLineChart, Line, AreaChart, Area
-} from 'recharts';
-import { 
-    Star, Car, TrendingUp, Users, 
-    Briefcase, Plus, CreditCard, FileText, 
-    RefreshCw, DollarSign, MessageSquare,
-    Award, CheckCircle2, Clock
-} from 'lucide-react';
+import { FinancialStats, InspectionRequest, Expense, Revenue, PaymentType, RequestStatus } from '../types';
+import { supabase } from '../lib/supabaseClient';
+import LineChart from '../components/LineChart';
+import Icon from '../components/Icon';
+import RefreshCwIcon from '../components/icons/RefreshCwIcon';
+import TrendingUpIcon from '../components/icons/TrendingUpIcon';
+import DollarSignIcon from '../components/icons/DollarSignIcon';
+import UsersIcon from '../components/icons/UsersIcon';
+import BriefcaseIcon from '../components/icons/BriefcaseIcon';
+import PlusIcon from '../components/icons/PlusIcon';
+import CreditCardIcon from '../components/icons/CreditCardIcon';
+import FileTextIcon from '../components/icons/FileTextIcon';
 import { Skeleton } from '../components/Skeleton';
-import { cn } from '../lib/utils';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, LineChart as RechartsLineChart, Line } from 'recharts';
 
 // --- Quick Actions Component ---
 const QuickActions: React.FC = () => {
@@ -22,25 +22,25 @@ const QuickActions: React.FC = () => {
     const actions = [
         { 
             label: 'طلب جديد', 
-            icon: <Plus className="w-5 h-5" />, 
+            icon: <PlusIcon className="w-5 h-5" />, 
             color: 'bg-blue-600 text-white', 
             action: () => { setInitialRequestModalState('new'); setPage('requests'); } 
         },
         { 
             label: 'العملاء', 
-            icon: <Users className="w-5 h-5" />, 
+            icon: <UsersIcon className="w-5 h-5" />, 
             color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300', 
             action: () => setPage('clients') 
         },
         { 
             label: 'المصروفات', 
-            icon: <CreditCard className="w-5 h-5" />, 
+            icon: <CreditCardIcon className="w-5 h-5" />, 
             color: 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300', 
             action: () => setPage('expenses') 
         },
         { 
             label: 'الطلبات', 
-            icon: <FileText className="w-5 h-5" />, 
+            icon: <FileTextIcon className="w-5 h-5" />, 
             color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300', 
             action: () => setPage('requests') 
         },
@@ -119,7 +119,7 @@ const ExecutiveKpiCard: React.FC<{
                 {trend !== undefined && (
                     <div className={`flex items-center gap-0.5 text-[10px] font-bold ${trend >= 0 ? 'text-emerald-600' : 'text-rose-500'} bg-slate-50 dark:bg-slate-900 px-1.5 py-0.5 rounded`}>
                         <span>{Math.abs(trend)}%</span>
-                        <TrendingUp className={`w-3 h-3 ${trend < 0 ? 'rotate-180' : ''}`} />
+                        <TrendingUpIcon className={`w-3 h-3 ${trend < 0 ? 'rotate-180' : ''}`} />
                     </div>
                 )}
             </div>
@@ -145,7 +145,7 @@ const EmployeeLeaderboard: React.FC<{ data: { name: string; revenue: number; rol
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-full flex flex-col">
             <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
                 <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
-                    <Users className="w-4 h-4 text-blue-500" />
+                    <UsersIcon className="w-4 h-4 text-blue-500" />
                     الأفضل أداءً
                 </h4>
             </div>
@@ -182,7 +182,7 @@ const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> 
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-full flex flex-col">
              <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
                 <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-emerald-500" />
+                    <DollarSignIcon className="w-4 h-4 text-emerald-500" />
                     أحدث العمليات
                 </h4>
             </div>
@@ -193,7 +193,7 @@ const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> 
                             <div key={idx} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-lg transition-colors flex justify-between items-center">
                                 <div className="flex items-center gap-3 overflow-hidden">
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${tx.type === 'income' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                                        {tx.type === 'income' ? <DollarSign className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
+                                        {tx.type === 'income' ? <Icon name="dollar-sign" className="w-4 h-4" /> : <Icon name="credit-card" className="w-4 h-4" />}
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{tx.description}</p>
@@ -214,198 +214,19 @@ const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> 
     );
 };
 
-// --- Car Make Analysis ---
-const CarMakeAnalysis: React.FC<{ requests: InspectionRequest[], carMakes: any[], isLoading: boolean }> = ({ requests, carMakes, isLoading }) => {
-    const data = useMemo(() => {
-        const counts: Record<string, number> = {};
-        requests.forEach(req => {
-            const make = carMakes.find(m => m.id === req.car_make_id);
-            const name = make ? make.name_ar : 'أخرى';
-            counts[name] = (counts[name] || 0) + 1;
-        });
-        return Object.entries(counts)
-            .map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value)
-            .slice(0, 5);
-    }, [requests, carMakes]);
-
-    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-
-    if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
-
-    return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-700 h-full flex flex-col">
-            <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm mb-4 flex items-center gap-2">
-                <Car className="w-4 h-4 text-blue-500" />
-                تحليل أنواع السيارات (الأكثر فحصاً)
-            </h4>
-            <div className="flex-1 min-h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                        <Pie
-                            data={data}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={5}
-                            dataKey="value"
-                        >
-                            {data.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend verticalAlign="bottom" height={36}/>
-                    </PieChart>
-                </ResponsiveContainer>
-            </div>
-        </div>
-    );
-};
-
-// --- Technician Performance ---
-const TechnicianPerformance: React.FC<{ requests: InspectionRequest[], employees: any[], isLoading: boolean }> = ({ requests, employees, isLoading }) => {
-    const data = useMemo(() => {
-        const stats: Record<string, { name: string, completed: number, avgTime: number, totalTime: number }> = {};
-        
-        requests.forEach(req => {
-            if (req.employee_id && req.status === RequestStatus.COMPLETE) {
-                const emp = employees.find(e => e.id === req.employee_id);
-                if (!emp) return;
-                
-                if (!stats[req.employee_id]) {
-                    stats[req.employee_id] = { name: emp.name, completed: 0, avgTime: 0, totalTime: 0 };
-                }
-                
-                stats[req.employee_id].completed += 1;
-                
-                // Calculate time if possible
-                if (req.created_at && req.completed_at) {
-                    const start = new Date(req.created_at).getTime();
-                    const end = new Date(req.completed_at).getTime();
-                    const diffMinutes = Math.round((end - start) / (1000 * 60));
-                    if (diffMinutes > 0 && diffMinutes < 1440) { // Limit to 24h to avoid outliers
-                        stats[req.employee_id].totalTime += diffMinutes;
-                    }
-                }
-            }
-        });
-
-        return Object.values(stats).map(s => ({
-            name: s.name.split(' ')[0],
-            completed: s.completed,
-            avgTime: s.completed > 0 ? Math.round(s.totalTime / s.completed) : 0
-        })).sort((a, b) => b.completed - a.completed);
-    }, [requests, employees]);
-
-    if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
-
-    return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-700 h-full flex flex-col">
-            <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm mb-4 flex items-center gap-2">
-                <Award className="w-4 h-4 text-amber-500" />
-                أداء الفنيين (الفحوصات المنجزة)
-            </h4>
-            <div className="flex-1 min-h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                        <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                        <Tooltip cursor={{fill: 'transparent'}} />
-                        <Bar dataKey="completed" fill="#3b82f6" radius={[4, 4, 0, 0]} name="المنجزة" />
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
-        </div>
-    );
-};
-
-// --- Customer Feedback Summary ---
-const CustomerFeedbackSummary: React.FC<{ requests: InspectionRequest[], isLoading: boolean }> = ({ requests, isLoading }) => {
-    const feedbackList = useMemo(() => {
-        return requests
-            .filter(r => r.rating !== undefined)
-            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-            .slice(0, 5);
-    }, [requests]);
-
-    const avgRating = useMemo(() => {
-        const rated = requests.filter(r => r.rating !== undefined);
-        if (rated.length === 0) return 0;
-        return (rated.reduce((sum, r) => sum + (r.rating || 0), 0) / rated.length).toFixed(1);
-    }, [requests]);
-
-    const lowRatings = useMemo(() => {
-        return requests
-            .filter(r => r.rating !== undefined && r.rating <= 2)
-            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-            .slice(0, 3);
-    }, [requests]);
-
-    if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
-
-    return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-700 h-full flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-                <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-purple-500" />
-                    تقييمات العملاء
-                </h4>
-                <div className="flex items-center gap-1 bg-purple-50 dark:bg-purple-900/30 px-2 py-1 rounded-lg">
-                    <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                    <span className="text-xs font-black text-purple-700 dark:text-purple-300">{avgRating}</span>
-                </div>
-            </div>
-
-            {lowRatings.length > 0 && (
-                <div className="mb-4 p-2 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 rounded-lg animate-pulse">
-                    <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 text-[10px] font-bold mb-1">
-                        <CheckCircle2 className="w-3 h-3 rotate-180" />
-                        تنبيه: يوجد تقييمات منخفضة تحتاج مراجعة
-                    </div>
-                </div>
-            )}
-            
-            <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar pr-1">
-                {feedbackList.length > 0 ? (
-                    feedbackList.map((fb, idx) => (
-                        <div key={idx} className="p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-100 dark:border-slate-700">
-                            <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] font-bold text-slate-500">طلب #{fb.request_number}</span>
-                                <div className="flex gap-0.5">
-                                    {[...Array(5)].map((_, i) => (
-                                        <Star 
-                                            key={i} 
-                                            className={cn(
-                                                "w-2.5 h-2.5",
-                                                i < (fb.rating || 0) ? "text-amber-500 fill-amber-500" : "text-slate-300 dark:text-slate-600"
-                                            )} 
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                            {fb.feedback_comment && (
-                                <p className="text-[11px] text-slate-700 dark:text-slate-300 italic leading-tight">
-                                    "{fb.feedback_comment}"
-                                </p>
-                            )}
-                        </div>
-                    ))
-                ) : (
-                    <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">لا توجد تقييمات بعد.</div>
-                )}
-            </div>
-        </div>
-    );
-};
-
 const Dashboard: React.FC = () => {
-  const { authUser, fetchServerFinancials, employees, carMakes, setPage, setInitialRequestModalState } = useAppContext();
-  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'year'>('month');
+  const { authUser, fetchServerFinancials, employees, cars, carMakes, carModels } = useAppContext();
+  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [stats, setStats] = useState<FinancialStats | null>(null);
-  const [comparisonStats, setComparisonStats] = useState<{ label: string, revenue: number }[]>([]);
+  const [prevStats, setPrevStats] = useState<FinancialStats | null>(null);
+  const [pulseStats, setPulseStats] = useState<FinancialStats | null>(null);
+  const [prevPulseStats, setPrevPulseStats] = useState<FinancialStats | null>(null);
+  const [monthStats, setMonthStats] = useState<FinancialStats | null>(null);
+  const [prevMonthStats, setPrevMonthStats] = useState<FinancialStats | null>(null);
+  const [carFilter, setCarFilter] = useState<'yesterday' | 'week' | 'month' | 'all'>('month');
+  const [carStats, setCarStats] = useState<FinancialStats | null>(null);
+  const [allCarModels, setAllCarModels] = useState<any[]>([]);
+  const [isCarLoading, setIsCarLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
@@ -415,44 +236,65 @@ const Dashboard: React.FC = () => {
           const now = new Date();
           let start = new Date();
           let end = new Date();
+          let prevStart = new Date();
+          let prevEnd = new Date();
 
           if (activePeriod === 'today') {
               start.setHours(0, 0, 0, 0);
               end.setHours(23, 59, 59, 999);
+              prevStart = new Date(start); prevStart.setDate(prevStart.getDate() - 1);
+              prevEnd = new Date(end); prevEnd.setDate(prevEnd.getDate() - 1);
           } else if (activePeriod === 'week') {
               const day = now.getDay();
-              const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+              const diff = now.getDate() - day; // Start on Sunday
               start = new Date(now.setDate(diff));
               start.setHours(0,0,0,0);
               end = new Date();
               end.setHours(23,59,59,999);
+              prevStart = new Date(start); prevStart.setDate(prevStart.getDate() - 7);
+              prevEnd = new Date(end); prevEnd.setDate(prevEnd.getDate() - 7);
           } else if (activePeriod === 'month') {
               start = new Date(now.getFullYear(), now.getMonth(), 1);
               end.setHours(23, 59, 59, 999);
-          } else if (activePeriod === 'year') {
-              start = new Date(now.getFullYear(), 0, 1);
-              end.setHours(23, 59, 59, 999);
+              prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+              prevEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
           }
 
           const currentStats = await fetchServerFinancials(start.toISOString(), end.toISOString(), false);
+          const previousStats = await fetchServerFinancials(prevStart.toISOString(), prevEnd.toISOString(), false);
+          
+          // Always fetch 30-day pulse data
+          const pulseEnd = new Date();
+          pulseEnd.setHours(23, 59, 59, 999);
+          const pulseStart = new Date();
+          pulseStart.setDate(pulseEnd.getDate() - 29);
+          pulseStart.setHours(0, 0, 0, 0);
+          
+          const prevPulseEnd = new Date(pulseStart);
+          prevPulseEnd.setDate(prevPulseEnd.getDate() - 1);
+          prevPulseEnd.setHours(23, 59, 59, 999);
+          const prevPulseStart = new Date(prevPulseEnd);
+          prevPulseStart.setDate(prevPulseEnd.getDate() - 29);
+          prevPulseStart.setHours(0, 0, 0, 0);
+
+          const currentPulseStats = await fetchServerFinancials(pulseStart.toISOString(), pulseEnd.toISOString(), false);
+          const previousPulseStats = await fetchServerFinancials(prevPulseStart.toISOString(), prevPulseEnd.toISOString(), false);
+
+          // Always fetch current calendar month and previous calendar month
+          const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+          const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+          
+          const currentMonthStatsData = await fetchServerFinancials(currentMonthStart.toISOString(), currentMonthEnd.toISOString(), false);
+          const prevMonthStatsData = await fetchServerFinancials(prevMonthStart.toISOString(), prevMonthEnd.toISOString(), false);
+
           setStats(currentStats);
-
-          // Fetch comparison data for the last 6 months
-          const comparisonData = [];
-          for (let i = 5; i >= 0; i--) {
-              const d = new Date();
-              d.setMonth(now.getMonth() - i);
-              const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
-              const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-              
-              const monthStats = await fetchServerFinancials(monthStart.toISOString(), monthEnd.toISOString(), true);
-              comparisonData.push({
-                  label: d.toLocaleDateString('ar-SA', { month: 'short' }),
-                  revenue: monthStats.totalRevenue
-              });
-          }
-          setComparisonStats(comparisonData);
-
+          setPrevStats(previousStats);
+          setPulseStats(currentPulseStats);
+          setPrevPulseStats(previousPulseStats);
+          setMonthStats(currentMonthStatsData);
+          setPrevMonthStats(prevMonthStatsData);
           setLastRefreshed(new Date());
 
       } catch (error) {
@@ -462,9 +304,57 @@ const Dashboard: React.FC = () => {
       }
   };
 
+  const loadCarData = async () => {
+      setIsCarLoading(true);
+      try {
+          const now = new Date();
+          let start = new Date();
+          let end = new Date();
+
+          if (carFilter === 'yesterday') {
+              start.setDate(now.getDate() - 1);
+              start.setHours(0, 0, 0, 0);
+              end = new Date(start);
+              end.setHours(23, 59, 59, 999);
+          } else if (carFilter === 'week') {
+              const day = now.getDay();
+              const diff = now.getDate() - day; // Start on Sunday
+              start = new Date(now.setDate(diff));
+              start.setHours(0,0,0,0);
+              end = new Date();
+              end.setHours(23,59,59,999);
+          } else if (carFilter === 'month') {
+              start = new Date(now.getFullYear(), now.getMonth(), 1);
+              start.setHours(0,0,0,0);
+              end = new Date();
+              end.setHours(23, 59, 59, 999);
+          } else if (carFilter === 'all') {
+              start = new Date(2000, 0, 1);
+              end = new Date();
+              end.setHours(23, 59, 59, 999);
+          }
+
+          const stats = await fetchServerFinancials(start.toISOString(), end.toISOString(), false);
+          
+          // Fetch all car models to ensure fallback grouping works correctly
+          const { data: modelsData } = await supabase.from('car_models').select('*');
+          if (modelsData) setAllCarModels(modelsData);
+          
+          setCarStats(stats);
+      } catch (error) {
+          console.error("Car Data Load Error", error);
+      } finally {
+          setIsCarLoading(false);
+      }
+  };
+
   useEffect(() => {
       loadData();
   }, [activePeriod]);
+
+  useEffect(() => {
+      loadCarData();
+  }, [carFilter]);
 
   // Derived Data
   const totalRevenue = stats?.totalRevenue || 0;
@@ -503,6 +393,141 @@ const Dashboard: React.FC = () => {
 
   const pieData = stats?.paymentDistribution || [];
 
+  // Data for advanced charts
+  const carInspectionFrequencyData = useMemo(() => {
+      if (!carStats) return [];
+      const frequencyMap = new Map<string, number>();
+      
+      // Use allCarModels if available, fallback to context carModels
+      const modelsToUse = allCarModels.length > 0 ? allCarModels : carModels;
+
+      carStats.filteredRequests.forEach(req => {
+          let make = (req.car_snapshot?.make_ar || req.car_snapshot?.make_en || '').trim();
+          let model = (req.car_snapshot?.model_ar || req.car_snapshot?.model_en || '').trim();
+          let year = req.car_snapshot?.year;
+          
+          if (!make || !model) {
+              const car = cars.find(c => c.id === req.car_id);
+              if (car) {
+                  const makeObj = carMakes.find(m => m.id === car.make_id);
+                  const modelObj = modelsToUse.find(m => m.id === car.model_id);
+                  
+                  make = make || makeObj?.name_ar || makeObj?.name_en || '';
+                  model = model || modelObj?.name_ar || modelObj?.name_en || '';
+                  year = year || car.year;
+              }
+          }
+          
+          if (make && model) {
+              // Group by Make and Model, optionally including Year if it's consistent
+              // The user said "Toyota Camry", so grouping by model is likely what they want
+              // but we'll keep the year for specificity as it was before, but more robustly.
+              const fullName = `${make} ${model}${year ? ` ${year}` : ''}`;
+              frequencyMap.set(fullName, (frequencyMap.get(fullName) || 0) + 1);
+          } else if (make || model) {
+              const name = (make || model).trim();
+              if (name) {
+                  frequencyMap.set(name, (frequencyMap.get(name) || 0) + 1);
+              }
+          }
+      });
+      
+      return Array.from(frequencyMap.entries())
+          .map(([name, count]) => ({ make: name, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10); // Show top 10 instead of 7 for better overview
+  }, [carStats, cars, carMakes, carModels, allCarModels]);
+
+  const dailyRevenueChartData = useMemo(() => {
+      if (!pulseStats || !prevPulseStats) return [];
+      
+      const data: any[] = [];
+      const now = new Date();
+      
+      // Always show a 30-day pulse
+      for (let i = 29; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(now.getDate() - i);
+          data.push({ 
+              label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric' }), 
+              dateStr: d.toLocaleDateString('en-CA'),
+              current: 0, 
+              previous: 0 
+          });
+      }
+      
+      const prevDataMap = new Map<string, number>();
+      for (let i = 29; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(now.getDate() - 30 - i);
+          prevDataMap.set(d.toLocaleDateString('en-CA'), 0);
+      }
+
+      pulseStats.filteredRequests.forEach(req => {
+          const dateStr = new Date(req.created_at).toLocaleDateString('en-CA');
+          const dayData = data.find(d => d.dateStr === dateStr);
+          if (dayData) dayData.current += req.price;
+      });
+      pulseStats.filteredRevenues?.forEach(rev => {
+          const dateStr = new Date(rev.date).toLocaleDateString('en-CA');
+          const dayData = data.find(d => d.dateStr === dateStr);
+          if (dayData) dayData.current += rev.amount;
+      });
+
+      prevPulseStats.filteredRequests.forEach(req => {
+          const dateStr = new Date(req.created_at).toLocaleDateString('en-CA');
+          if (prevDataMap.has(dateStr)) {
+              prevDataMap.set(dateStr, prevDataMap.get(dateStr)! + req.price);
+          }
+      });
+      prevPulseStats.filteredRevenues?.forEach(rev => {
+          const dateStr = new Date(rev.date).toLocaleDateString('en-CA');
+          if (prevDataMap.has(dateStr)) {
+              prevDataMap.set(dateStr, prevDataMap.get(dateStr)! + rev.amount);
+          }
+      });
+
+      // Map previous 30 days to the current 30 days for comparison
+      const prevValues = Array.from(prevDataMap.values());
+      data.forEach((d, index) => {
+          d.previous = prevValues[index] || 0;
+      });
+      
+      return data;
+  }, [pulseStats, prevPulseStats]);
+
+  const monthlyRequestsComparisonData = useMemo(() => {
+      if (!monthStats || !prevMonthStats) return [];
+      
+      const data: any[] = [];
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      
+      for (let i = 1; i <= daysInCurrentMonth; i++) {
+          data.push({
+              day: i,
+              current: 0,
+              previous: 0
+          });
+      }
+
+      monthStats.filteredRequests.forEach(req => {
+          const day = new Date(req.created_at).getDate();
+          const dayData = data.find(d => d.day === day);
+          if (dayData) dayData.current += 1;
+      });
+
+      prevMonthStats.filteredRequests.forEach(req => {
+          const day = new Date(req.created_at).getDate();
+          const dayData = data.find(d => d.day === day);
+          if (dayData) dayData.previous += 1;
+      });
+
+      return data;
+  }, [monthStats, prevMonthStats]);
+
   // Date Formatting for Welcome
   const today = new Date();
   const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -518,7 +543,7 @@ const Dashboard: React.FC = () => {
                     مرحباً، {authUser?.name.split(' ')[0]} <span className="text-2xl">👋</span>
                 </h1>
                 <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1 rounded-full w-fit border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <Clock className="w-4 h-4 text-blue-500" />
+                    <Icon name="calendar-clock" className="w-4 h-4 text-blue-500" />
                     <span>{formattedDate}</span>
                 </p>
             </div>
@@ -526,7 +551,7 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 self-end md:self-auto">
                  <PeriodToggle activePeriod={activePeriod} onChange={setActivePeriod} isLoading={isLoading} />
                  <button onClick={loadData} disabled={isLoading} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors">
-                     <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
+                     <RefreshCwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                  </button>
             </div>
         </div>
@@ -540,7 +565,7 @@ const Dashboard: React.FC = () => {
                 title="صافي الربح" 
                 value={`${netProfit.toLocaleString()}`} 
                 trend={12} 
-                icon={<DollarSign />} 
+                icon={<DollarSignIcon />} 
                 bgClass="bg-emerald-100 dark:bg-emerald-900/30"
                 colorClass="text-emerald-600 dark:text-emerald-400"
                 isLoading={isLoading} 
@@ -549,7 +574,7 @@ const Dashboard: React.FC = () => {
                 title="الدخل الكلي" 
                 value={`${totalRevenue.toLocaleString()}`} 
                 trend={5} 
-                icon={<TrendingUp />} 
+                icon={<Icon name="sparkles" />} 
                 bgClass="bg-blue-100 dark:bg-blue-900/30"
                 colorClass="text-blue-600 dark:text-blue-400"
                 isLoading={isLoading} 
@@ -558,7 +583,7 @@ const Dashboard: React.FC = () => {
                 title="متوسط الفاتورة" 
                 value={`${avgTicket}`} 
                 trend={-2} 
-                icon={<Briefcase />} 
+                icon={<BriefcaseIcon />} 
                 bgClass="bg-amber-100 dark:bg-amber-900/30"
                 colorClass="text-amber-600 dark:text-amber-400"
                 isLoading={isLoading} 
@@ -566,90 +591,159 @@ const Dashboard: React.FC = () => {
              <ExecutiveKpiCard 
                 title="سيارات بالورشة" 
                 value={activeCars.toString()} 
-                icon={<Car />} 
+                icon={<Icon name="car" />} 
                 bgClass="bg-rose-100 dark:bg-rose-900/30"
                 colorClass="text-rose-600 dark:text-rose-400"
                 isLoading={isLoading} 
             />
         </div>
 
-        {/* Advanced Analytics Section */}
-        <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-black text-slate-800 dark:text-white">إحصائيات متقدمة</h2>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Revenue Comparison */}
-                <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-700">
-                    <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm mb-4 flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-emerald-500" />
-                        مقارنة الإيرادات الشهرية
-                    </h4>
-                    <div className="h-[250px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={comparisonStats}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                                <Tooltip cursor={{fill: 'slate-50'}} />
-                                <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} name="الإيرادات" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Car Make Analysis */}
-                <CarMakeAnalysis requests={stats?.filteredRequests || []} carMakes={carMakes} isLoading={isLoading} />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-                {/* Technician Performance */}
-                <TechnicianPerformance requests={stats?.filteredRequests || []} employees={employees} isLoading={isLoading} />
-                
-                {/* Customer Feedback */}
-                <CustomerFeedbackSummary requests={stats?.filteredRequests || []} isLoading={isLoading} />
-
-                {/* Top Performers */}
-                <EmployeeLeaderboard data={leaderboardData} isLoading={isLoading} />
-            </div>
-        </div>
-
-        {/* Bottom Section: Trends & Transactions */}
+        {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
              {/* Main Chart */}
-             <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4">
-                 <div className="flex justify-between items-center mb-4">
+             <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 relative overflow-hidden">
+                 {/* ECG Grid Background */}
+                 <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05]" style={{ backgroundImage: 'linear-gradient(#ef4444 1px, transparent 1px), linear-gradient(90deg, #ef4444 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+                 
+                 <div className="flex justify-between items-center mb-4 relative z-10">
                      <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
-                         <TrendingUp className="w-4 h-4 text-blue-500" />
-                         تحليل الإيرادات (30 يوم)
+                         <Icon name="activity" className="w-4 h-4 text-rose-500" />
+                         نبض الإيرادات (يومي)
                      </h3>
                      <span className="text-[10px] text-slate-400">{lastRefreshed.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                  </div>
-                 <div className="w-full h-48">
+                 <div className="w-full h-64 relative z-10">
                      {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={chartData}>
-                                <defs>
-                                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                                <Tooltip />
-                                <Area type="monotone" dataKey="value" stroke="#3b82f6" fillOpacity={1} fill="url(#colorRev)" />
-                            </AreaChart>
+                             <RechartsLineChart data={dailyRevenueChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.5} />
+                                 <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                                 <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                                 <RechartsTooltip 
+                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
+                                     formatter={(value: number, name: string) => [`${value.toLocaleString()} ريال`, name]}
+                                 />
+                                 <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
+                                 <Line 
+                                    type="monotone" 
+                                    dataKey="current" 
+                                    name="الحالي"
+                                    stroke="#ef4444" 
+                                    strokeWidth={3} 
+                                    dot={false} 
+                                    activeDot={{ r: 6, fill: '#ef4444', stroke: '#fff', strokeWidth: 2 }} 
+                                    animationDuration={1500}
+                                    animationEasing="ease-in-out"
+                                 />
+                                 <Line 
+                                    type="monotone" 
+                                    dataKey="previous" 
+                                    name="السابق"
+                                    stroke="#94a3b8" 
+                                    strokeWidth={2} 
+                                    strokeDasharray="5 5"
+                                    dot={false} 
+                                    activeDot={{ r: 4, fill: '#94a3b8', stroke: '#fff', strokeWidth: 2 }} 
+                                    animationDuration={1500}
+                                    animationEasing="ease-in-out"
+                                 />
+                             </RechartsLineChart>
                          </ResponsiveContainer>
                      )}
                  </div>
              </div>
 
-             {/* Recent Transactions */}
-             <RecentTransactions transactions={transactionFeed} isLoading={isLoading} />
+             {/* Car Inspection Frequency Chart */}
+             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 flex flex-col">
+                 <div className="flex justify-between items-center mb-6">
+                     <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
+                         <Icon name="car" className="w-4 h-4 text-blue-500" />
+                         أكثر السيارات فحصاً
+                     </h3>
+                     <select 
+                         value={carFilter} 
+                         onChange={(e) => setCarFilter(e.target.value as any)}
+                         className="text-xs border-slate-200 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                     >
+                         <option value="yesterday">أمس</option>
+                         <option value="week">هذا الأسبوع</option>
+                         <option value="month">هذا الشهر</option>
+                         <option value="all">الكل</option>
+                     </select>
+                 </div>
+                 <div className="w-full h-72 relative z-10">
+                     {isCarLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
+                         <ResponsiveContainer width="100%" height="100%">
+                             <BarChart 
+                               data={carInspectionFrequencyData} 
+                               layout="vertical" 
+                               margin={{ top: 10, right: 30, left: 40, bottom: 10 }}
+                             >
+                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" opacity={0.5} />
+                                 <XAxis type="number" hide />
+                                 <YAxis 
+                                   dataKey="make" 
+                                   type="category" 
+                                   axisLine={false} 
+                                   tickLine={false} 
+                                   fontSize={10} 
+                                   stroke="#64748b" 
+                                   width={120}
+                                   tick={{ fill: '#64748b', fontWeight: 500 }}
+                                 />
+                                 <RechartsTooltip 
+                                     cursor={{fill: 'rgba(59, 130, 246, 0.1)'}}
+                                     contentStyle={{ 
+                                       borderRadius: '12px', 
+                                       border: 'none', 
+                                       boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                                       backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                       padding: '8px 12px'
+                                     }}
+                                     formatter={(value: number) => [`${value} سيارة`, 'إجمالي الفحوصات']}
+                                 />
+                                 <Bar dataKey="count" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={20} />
+                             </BarChart>
+                         </ResponsiveContainer>
+                     )}
+                 </div>
+             </div>
+        </div>
+
+        {/* Monthly Requests Comparison Chart */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 mb-6">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
+                    <Icon name="bar-chart-2" className="w-4 h-4 text-emerald-500" />
+                    مقارنة عدد الطلبات (الشهر الحالي مقابل السابق)
+                </h3>
+            </div>
+            <div className="w-full h-72">
+                {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={monthlyRequestsComparisonData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
+                            <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                            <RechartsTooltip 
+                                cursor={{fill: 'rgba(148, 163, 184, 0.1)'}}
+                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                formatter={(value: number, name: string) => [`${value} طلب`, name]}
+                                labelFormatter={(label) => `يوم ${label}`}
+                            />
+                            <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
+                            <Bar dataKey="current" name="الشهر الحالي" fill="#10b981" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="previous" name="الشهر الماضي" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                )}
+            </div>
+        </div>
+
+        {/* Bottom Lists */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-80">
+            <EmployeeLeaderboard data={leaderboardData} isLoading={isLoading} />
+            <RecentTransactions transactions={transactionFeed} isLoading={isLoading} />
         </div>
     </div>
   );

@@ -20,6 +20,7 @@ import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import InAppScannerModal from '../components/InAppScannerModal';
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 // Configure PDF.js worker using Vite's ?url import

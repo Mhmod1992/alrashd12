@@ -9,11 +9,11 @@ Font.register({
   fonts: [
     { 
       src: 'https://raw.githubusercontent.com/google/fonts/main/ofl/tajawal/Tajawal-Regular.ttf', 
-      fontWeight: 'normal',
+      fontWeight: 'normal'
     },
     { 
       src: 'https://raw.githubusercontent.com/google/fonts/main/ofl/tajawal/Tajawal-Bold.ttf', 
-      fontWeight: 'bold',
+      fontWeight: 'bold'
     },
   ],
 });

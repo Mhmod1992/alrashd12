@@ -281,8 +281,6 @@ export interface InspectionRequest {
   report_stamps?: ReportStamp[];
   report_url?: string;
   report_generated_at?: string;
-  rating?: number;
-  feedback_comment?: string;
 }
 
 export interface PlateCharacterMap {
@@ -409,9 +407,11 @@ export interface Settings {
   locationUrl?: string;
   databaseCapacity: number;
   storageCapacity: number;
-  feedback_url_template?: string;
   setupCompleted?: boolean;
   allowSignup?: boolean; // New setting to toggle signup button
+  enableReviewPrompt?: boolean;
+  reviewLink?: string;
+  reviewMessage?: string;
 }
 
 export interface UserPreferences {

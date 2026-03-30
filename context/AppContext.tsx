@@ -1220,7 +1220,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [addNotification, fetchRequests]);
 
     const fetchServerFinancials = useCallback(async (startDate: string, endDate: string, includeCompletedOnly: boolean): Promise<FinancialStats> => {
-        let query = supabase.from('inspection_requests').select('id, request_number, client_id, car_id, price, status, payment_type, split_payment_details, payment_note, broker, created_at').gte('created_at', startDate).lte('created_at', endDate);
+        let query = supabase.from('inspection_requests').select('id, request_number, client_id, car_id, car_snapshot, price, status, payment_type, split_payment_details, payment_note, broker, created_at').gte('created_at', startDate).lte('created_at', endDate);
         if (includeCompletedOnly) query = query.eq('status', RequestStatus.COMPLETE);
         else query = query.neq('status', 'cancelled');
         const { data: requests, error: reqError } = await query;

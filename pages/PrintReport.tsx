@@ -19,6 +19,7 @@ import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import { pdf } from '@react-pdf/renderer';
 import OrderPdf from '../components/reports/OrderPdf';
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 // Configure PDF.js worker using Vite's ?url import

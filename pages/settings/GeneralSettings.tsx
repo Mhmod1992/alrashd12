@@ -38,7 +38,9 @@ const GeneralSettings: React.FC = () => {
             googleMapsLink: currentSettings.googleMapsLink,
             locationUrl: currentSettings.locationUrl,
             allowSignup: currentSettings.allowSignup,
-            feedback_url_template: currentSettings.feedback_url_template
+            enableReviewPrompt: currentSettings.enableReviewPrompt,
+            reviewLink: currentSettings.reviewLink,
+            reviewMessage: currentSettings.reviewMessage
         });
         addNotification({ title: 'نجاح', message: 'تم حفظ الإعدادات بنجاح.', type: 'success' });
     } catch (error) {}
@@ -68,12 +70,6 @@ const GeneralSettings: React.FC = () => {
                 <input type="text" id="googleMapsLink" value={currentSettings.googleMapsLink || ''} onChange={(e) => setCurrentSettings(prev => ({...prev, googleMapsLink: e.target.value}))} className={formInputClasses} placeholder="https://g.page/r/..." dir="ltr" />
               </div>
           </div>
-
-          <div>
-            <label htmlFor="feedback_url_template" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">🔗 رابط تقييم العملاء (WhatsApp)</label>
-            <input type="text" id="feedback_url_template" value={currentSettings.feedback_url_template || ''} onChange={(e) => setCurrentSettings(prev => ({...prev, feedback_url_template: e.target.value}))} className={formInputClasses} placeholder="https://example.com/rate?id={id}" dir="ltr" />
-            <p className="text-[10px] text-slate-400 mt-1">استخدم {"{id}"} لوضع رقم الطلب تلقائياً في الرابط.</p>
-          </div>
           
            {/* Allow Signup Toggle */}
            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex justify-between items-center">
@@ -90,6 +86,53 @@ const GeneralSettings: React.FC = () => {
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
               </label>
+           </div>
+
+           {/* Review Prompt Settings */}
+           <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
+              <div className="flex justify-between items-center mb-4 border-b border-slate-200 dark:border-slate-700 pb-4">
+                  <div>
+                      <span className="block text-sm font-bold text-slate-700 dark:text-slate-200">تفعيل نافذة طلب التقييم عند إكمال الفحص</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">عند تفعيل هذا الخيار، ستظهر نافذة تذكير لإرسال رسالة تقييم للعميل عبر الواتساب عند إكمال أي طلب.</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                          type="checkbox" 
+                          checked={currentSettings.enableReviewPrompt ?? false} 
+                          onChange={(e) => setCurrentSettings(prev => ({...prev, enableReviewPrompt: e.target.checked}))} 
+                          className="sr-only peer" 
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                  </label>
+              </div>
+
+              {currentSettings.enableReviewPrompt && (
+                  <div className="space-y-4 animate-fade-in">
+                      <div>
+                          <label htmlFor="reviewLink" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">🔗 رابط التقييم (Google Maps أو غيره)</label>
+                          <input 
+                              type="text" 
+                              id="reviewLink" 
+                              value={currentSettings.reviewLink || ''} 
+                              onChange={(e) => setCurrentSettings(prev => ({...prev, reviewLink: e.target.value}))} 
+                              className={formInputClasses} 
+                              placeholder="https://g.page/r/..." 
+                              dir="ltr" 
+                          />
+                      </div>
+                      <div>
+                          <label htmlFor="reviewMessage" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">💬 نص رسالة الواتساب</label>
+                          <textarea 
+                              id="reviewMessage" 
+                              value={currentSettings.reviewMessage || "عزيزي العميل، سعدنا بخدمتك في مركزنا. رأيك يهمنا ويساعدنا على التطور، نرجو التكرم بتقييم تجربتك عبر الرابط التالي:\n{review_link}"} 
+                              onChange={(e) => setCurrentSettings(prev => ({...prev, reviewMessage: e.target.value}))} 
+                              className={`${formInputClasses} min-h-[100px] resize-y`} 
+                              placeholder="اكتب نص الرسالة هنا... استخدم {review_link} لإدراج الرابط تلقائياً"
+                          />
+                          <p className="text-xs text-slate-500 mt-1">يمكنك استخدام المتغير <code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">{`{review_link}`}</code> ليتم استبداله برابط التقييم أعلاه.</p>
+                      </div>
+                  </div>
+              )}
            </div>
 
           <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700">
