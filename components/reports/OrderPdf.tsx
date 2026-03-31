@@ -768,6 +768,21 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
     allImageNotes.push({ note, categoryName: reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة' })
   );
 
+  // Helper function to render bold text in PDF
+  const renderMarkdownText = (text: string) => {
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return (
+          <Text key={index} style={{ fontFamily: 'Tajawal', fontWeight: 'bold', color: '#1e40af' }}>
+            {part.slice(2, -2)}
+          </Text>
+        );
+      }
+      return <Text key={index}>{part}</Text>;
+    });
+  };
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -1201,6 +1216,63 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
               <Text style={styles.sectionDigitalLabel}>
                 {reportDirection === 'ltr' ? 'Digital Copy - نسخة رقمية' : 'نسخة رقمية - Digital Copy'}
               </Text>
+            </View>
+          </View>
+        )}
+
+        {/* AI Analysis */}
+        {request.ai_analysis && (
+          <View style={[styles.categorySection, { borderColor: reportSettings.borderColor }]} wrap={false}>
+            <Text style={[styles.categoryTitle, { backgroundColor: reportSettings.findingsHeaderBackgroundColor, color: reportSettings.findingsHeaderFontColor, borderBottomColor: reportSettings.borderColor }]}>
+              {reportDirection === 'ltr' ? "Technical Report Explanation" : "شرح التقرير الفني"}
+            </Text>
+            <View style={styles.categoryContent}>
+              {/* Watermark Pattern */}
+              <View style={styles.noteWatermarkContainer}>
+                {Array(15).fill(0).map((_, i) => (
+                  <Text key={i} style={styles.noteWatermarkText}>{reportDirection === 'ltr' ? "Analysis" : "تحليل"}</Text>
+                ))}
+              </View>
+              <View style={styles.notesSection}>
+                {request.ai_analysis.split('\n').filter(line => line.trim() !== '').map((line, idx) => {
+                  // Check if line has bold text
+                  const hasBold = line.includes('**');
+                  if (hasBold) {
+                    const parts = line.split(/(\*\*.*?\*\*)/g);
+                    return (
+                      <View key={idx} style={styles.noteItem} wrap={false}>
+                        <View style={styles.noteBullet} />
+                        <Text style={styles.noteText}>
+                          {parts.map((part, i) => {
+                            if (part.startsWith('**') && part.endsWith('**')) {
+                              return (
+                                <Text key={i} style={{ fontFamily: 'Tajawal', fontWeight: 'bold', fontSize: layoutSettings.sections.fontSize.technicianNotesHeader, color: reportSettings.primaryColor }}>
+                                  {part.slice(2, -2)}
+                                </Text>
+                              );
+                            }
+                            return (
+                              <Text key={i} style={{ fontSize: layoutSettings.sections.fontSize.technicianNotesHeader - 2, color: '#475569' }}>
+                                {part}
+                              </Text>
+                            );
+                          })}
+                        </Text>
+                      </View>
+                    );
+                  }
+                  
+                  // Regular line (no bold)
+                  return (
+                    <View key={idx} style={styles.noteItem} wrap={false}>
+                      <View style={styles.noteBullet} />
+                      <Text style={[styles.noteText, { fontSize: layoutSettings.sections.fontSize.technicianNotesHeader - 2, color: '#475569' }]}>
+                        {line}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           </View>
         )}

@@ -416,7 +416,7 @@ const ImportRequestsModal: React.FC<ImportRequestsModalProps> = ({ isOpen, onClo
             <div className="space-y-6 p-4">
                 {!previewData ? (
                     <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                        <Icon name="upload-cloud" className="w-16 h-16 text-blue-500 mb-4" />
+                        <Icon name="upload" className="w-16 h-16 text-blue-500 mb-4" />
                         <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-2">اختر ملف الطلبات (JSON)</h3>
                         <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 text-center max-w-md">
                             قم برفع ملف JSON الذي تم تصديره مسبقاً من النظام. سيقوم النظام بمطابقة العملاء والسيارات لتجنب التكرار.
@@ -433,7 +433,7 @@ const ImportRequestsModal: React.FC<ImportRequestsModalProps> = ({ isOpen, onClo
                             disabled={isImporting}
                             className="flex items-center gap-2"
                         >
-                            {isImporting ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <Icon name="file-json" className="w-5 h-5" />}
+                            {isImporting ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <Icon name="document-report" className="w-5 h-5" />}
                             <span>{isImporting ? importProgress || 'جاري المعالجة...' : 'اختيار ملف JSON'}</span>
                         </Button>
                     </div>
@@ -441,7 +441,7 @@ const ImportRequestsModal: React.FC<ImportRequestsModalProps> = ({ isOpen, onClo
                     <div className="space-y-6 animate-fade-in">
                         <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
                             <h3 className="font-bold text-blue-800 dark:text-blue-300 mb-4 flex items-center gap-2">
-                                <Icon name="info" className="w-5 h-5" />
+                                <Icon name="document-report" className="w-5 h-5" />
                                 ملخص الاستيراد
                             </h3>
                             <div className="grid grid-cols-2 gap-4">
@@ -481,7 +481,7 @@ const ImportRequestsModal: React.FC<ImportRequestsModalProps> = ({ isOpen, onClo
                         <div className="flex justify-end gap-3 pt-4 border-t dark:border-slate-700">
                             <Button variant="secondary" onClick={() => setPreviewData(null)} disabled={isImporting}>إلغاء</Button>
                             <Button onClick={confirmImport} disabled={isImporting || previewData.readyToImport === 0} className="flex items-center gap-2">
-                                {isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="check" className="w-4 h-4" />}
+                                {isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="check-circle" className="w-4 h-4" />}
                                 <span>{isImporting ? importProgress || 'جاري الاستيراد...' : 'تأكيد وبدء الاستيراد'}</span>
                             </Button>
                         </div>

@@ -1264,7 +1264,6 @@ const Requests: React.FC = () => {
                         searchTokens={searchedRequests ? (requestNumberQuery || comprehensiveQuery).toLowerCase().split(/\s+/).filter(t => t.length > 0) : undefined}
                         highlightedRequestId={selectedRequestId}
                         triggerHighlight={triggerHighlight}
-                        scrollStateKey="main_requests_table"
                     />
                 </>
             )}
@@ -1279,7 +1278,6 @@ const Requests: React.FC = () => {
                         brokers={brokers}
                         onCancel={() => setIsModalOpen(false)}
                         onSuccess={handleSuccess}
-                        onProcessing={handleProcessing}
                     />
                 </Modal>
             )}

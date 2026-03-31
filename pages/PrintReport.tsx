@@ -8,11 +8,13 @@ import WhatsappIcon from '../components/icons/WhatsappIcon';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import SparklesIcon from '../components/icons/SparklesIcon';
 import ReportTranslationModal from '../components/ReportTranslationModal';
+import AiAnalysisModal from '../components/AiAnalysisModal';
 import Modal from '../components/Modal'; 
 import { InspectionRequest, ReportSettings, CustomFindingCategory, Note } from '../types';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import CameraIcon from '../components/icons/CameraIcon';
+import ReactMarkdown from 'react-markdown';
 import UploadIcon from '../components/icons/UploadIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
@@ -266,6 +268,7 @@ const PrintReport: React.FC = () => {
     const [translatedCategories, setTranslatedCategories] = useState<CustomFindingCategory[] | null>(null);
     const [reportDirection, setReportDirection] = useState<'rtl' | 'ltr'>('rtl');
     const [isTranslationModalOpen, setIsTranslationModalOpen] = useState(false);
+    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
     // Paper Archive State
     const [isPaperModalOpen, setIsPaperModalOpen] = useState(false);
@@ -575,6 +578,14 @@ const PrintReport: React.FC = () => {
 
     const handlePrint = () => {
         window.print();
+    };
+
+    const handleSaveAiAnalysis = async (analysis: string) => {
+        if (!originalRequest) return;
+        await updateRequest({
+            id: originalRequest.id,
+            ai_analysis: analysis
+        });
     };
 
     const handleTranslateComplete = (
@@ -1050,6 +1061,11 @@ const PrintReport: React.FC = () => {
                         <span className="hidden sm:inline ms-1">المرفقات ({paperImages.length})</span>
                     </Button>
 
+                    <Button onClick={() => setIsAiModalOpen(true)} variant="secondary" size="sm" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+                        <SparklesIcon className="w-4 h-4" />
+                        <span className="hidden sm:inline ms-1">تحليل التقرير</span>
+                    </Button>
+
                     {translatedRequest ? (
                         <Button onClick={handleClearTranslation} variant="secondary" size="sm" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100">
                             <Icon name="refresh-cw" className="w-4 h-4" />
@@ -1140,6 +1156,19 @@ const PrintReport: React.FC = () => {
                 />
             )}
 
+            {originalRequest && (
+                <AiAnalysisModal
+                    isOpen={isAiModalOpen}
+                    onClose={() => setIsAiModalOpen(false)}
+                    request={originalRequest}
+                    categories={customFindingCategories}
+                    predefinedFindings={predefinedFindings}
+                    apiKey={settings.geminiApiKey}
+                    addNotification={addNotification}
+                    onSave={handleSaveAiAnalysis}
+                />
+            )}
+
             {/* Paper Archive Viewer & Manager Modal */}
             <Modal isOpen={isPaperModalOpen} onClose={() => setIsPaperModalOpen(false)} title="أرشيف الطلب (المرفقات)" size="4xl">
                 <div className="flex flex-col h-[85vh] md:h-[70vh]">
@@ -1200,7 +1229,7 @@ const PrintReport: React.FC = () => {
                                         className="p-3 rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all flex items-center justify-center gap-2"
                                         title="رفع ملف PDF"
                                     >
-                                        <Icon name="file-text" className="w-5 h-5" />
+                                        <Icon name="document-report" className="w-5 h-5" />
                                         <span className="font-bold text-sm hidden sm:inline">رفع PDF</span>
                                     </button>
                                 </div>
@@ -1218,7 +1247,7 @@ const PrintReport: React.FC = () => {
                                         className="p-3 rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all flex items-center justify-center gap-2"
                                         title="رفع ملف PDF"
                                     >
-                                        <Icon name="file-text" className="w-5 h-5" />
+                                        <Icon name="document-report" className="w-5 h-5" />
                                         <span className="font-bold text-sm hidden sm:inline">رفع PDF</span>
                                     </button>
                                 </div>

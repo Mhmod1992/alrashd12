@@ -166,7 +166,7 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
                             onClick={toggleFlash}
                             className={`absolute top-4 left-4 z-20 p-3 rounded-full transition-all ${isFlashOn ? 'bg-amber-400 text-slate-900 shadow-lg' : 'bg-black/50 text-white border border-white/20'}`}
                         >
-                            <Icon name={isFlashOn ? "sun" : "zap"} className="w-5 h-5" />
+                            <Icon name={isFlashOn ? "sparkles" : "sparkles"} className="w-5 h-5" />
                         </button>
                     )}
 
@@ -180,7 +180,7 @@ const InAppScannerModal: React.FC<InAppScannerModalProps> = ({ isOpen, onClose, 
 
                 {scannerError ? (
                     <div className="mt-6 w-full p-4 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-xl border border-red-100 dark:border-red-800 text-center">
-                        <Icon name="x-circle" className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                        <Icon name="close" className="w-10 h-10 mx-auto mb-2 opacity-50" />
                         <p className="font-bold text-sm mb-3 whitespace-pre-wrap">{scannerError}</p>
                         <button 
                             onClick={startScanner}

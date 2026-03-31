@@ -12,7 +12,7 @@ const TechnicalSettings: React.FC = () => {
     const design = settings.design || 'aero';
 
     const tabs = [
-        { id: 'inspection', label: 'باقات وبنود الفحص', icon: 'clipboard-list' },
+        { id: 'inspection', label: 'باقات وبنود الفحص', icon: 'findings' },
         { id: 'cars', label: 'قاعدة بيانات السيارات', icon: 'cars' },
         { id: 'draft', label: 'إعدادات المسودة اليدوية', icon: 'edit' },
     ] as const;

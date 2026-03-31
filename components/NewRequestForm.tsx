@@ -625,6 +625,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         }, 300);
     };
 
+    const handleMakeFocus = () => {
+        setIsMakeDropdownOpen(true);
+    };
+
     // --- Server-Side Search for Make ---
     const handleMakeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
@@ -1305,6 +1309,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         canViewHistory={can('view_car_history_on_create')}
                         carMakeSearchTerm={carMakeSearchTerm}
                         handleMakeChange={handleMakeChange}
+                        handleMakeFocus={handleMakeFocus}
                         setIsMakeDropdownOpen={setIsMakeDropdownOpen}
                         handleKeyDown={handleKeyDown}
                         isMakeDropdownOpen={isMakeDropdownOpen}

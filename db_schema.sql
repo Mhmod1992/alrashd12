@@ -183,7 +183,8 @@ CREATE TABLE IF NOT EXISTS inspection_requests (
     technician_assignments JSONB,
     report_stamps TEXT[],
     report_url TEXT,
-    report_generated_at TIMESTAMPTZ
+    report_generated_at TIMESTAMPTZ,
+    ai_analysis TEXT
 );
 
 -- Reservations Table

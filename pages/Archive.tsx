@@ -149,7 +149,7 @@ const Archive: React.FC = () => {
                                     className={`${formInputClasses} pl-10`} 
                                 />
                             </div>
-                            <Button onClick={handleSearch} disabled={isLoading}>
+                            <Button onClick={() => handleSearch()} disabled={isLoading}>
                                 {isLoading ? 'جاري البحث...' : 'بحث'}
                             </Button>
                              <label className="flex items-center cursor-pointer group p-2 rounded-lg bg-slate-100 dark:bg-slate-900/50">

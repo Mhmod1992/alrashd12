@@ -455,6 +455,40 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         </FindingCategorySection>
                     )}
 
+                    {request.ai_analysis && (
+                        <FindingCategorySection title={reportDirection === 'ltr' ? "Technical Report Explanation" : "شرح التقرير الفني"} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection}>
+                            <div data-setting-section="text-disclaimer" className={`bg-white rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', ...generateWatermarkStyle(reportDirection === 'ltr' ? 'Analysis' : 'تحليل', reportSettings) }}>
+                                <div className="relative z-10 space-y-1 p-0 m-0">
+                                    {request.ai_analysis.split('\n').filter(line => line.trim() !== '').map((line, idx) => {
+                                        const hasBold = line.includes('**');
+                                        if (hasBold) {
+                                            const parts = line.split(/(\*\*.*?\*\*)/g);
+                                            return (
+                                                <div key={idx} className={`py-1 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
+                                                    <span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span>
+                                                    <div className="flex-1 min-w-0 break-words whitespace-pre-wrap">
+                                                        {parts.map((part, i) => {
+                                                            if (part.startsWith('**') && part.endsWith('**')) {
+                                                                return <span key={i} className={`font-bold ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: reportSettings.primaryColor }}>{part.slice(2, -2)}</span>;
+                                                            }
+                                                            return <span key={i} className={`opacity-80 ${isPrintView ? 'text-[10px]' : 'text-xs'}`} style={{ color: settings.reportSettings.textColor }}>{part}</span>;
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return (
+                                            <div key={idx} className={`py-1 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
+                                                <span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span>
+                                                <div className="flex-1 min-w-0 break-words whitespace-pre-wrap opacity-80" style={{ color: settings.reportSettings.textColor, fontSize: isPrintView ? '10px' : '0.75rem' }}>{line}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </FindingCategorySection>
+                    )}
+
                     {allImageNotes.length > 0 && (
                         <FindingCategorySection title={reportDirection === 'ltr' ? "Attachments" : "الصور والملاحظات المرفقة"} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection}>
                             <div className={`grid grid-cols-3 ${isPrintView ? 'gap-2' : 'gap-3'}`}>{allImageNotes.map(({ note, categoryName }) => <ImageNoteCard key={note.id} note={note} categoryName={categoryName} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} />)}</div>

@@ -282,6 +282,7 @@ export interface InspectionRequest {
   report_stamps?: ReportStamp[];
   report_url?: string;
   report_generated_at?: string;
+  ai_analysis?: string;
 }
 
 export interface PlateCharacterMap {

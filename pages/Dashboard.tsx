@@ -418,11 +418,12 @@ const Dashboard: React.FC = () => {
           
           if (make && model) {
               // Group by Make and Model ONLY to aggregate same models from different years
-              // This addresses the user's concern about "Toyota Camry" showing low numbers
-              const fullName = `${make} ${model}`;
+              // We also strip any 4-digit year from the model name to ensure clean grouping
+              const cleanModel = model.replace(/\b(19|20)\d{2}\b/g, '').trim();
+              const fullName = `${make} ${cleanModel}`;
               frequencyMap.set(fullName, (frequencyMap.get(fullName) || 0) + 1);
           } else if (make || model) {
-              const name = (make || model).trim();
+              const name = (make || model).trim().replace(/\b(19|20)\d{2}\b/g, '').trim();
               if (name) {
                   frequencyMap.set(name, (frequencyMap.get(name) || 0) + 1);
               }
@@ -600,11 +601,11 @@ const Dashboard: React.FC = () => {
              {/* Main Chart */}
              <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 relative overflow-hidden">
                  {/* ECG Grid Background */}
-                 <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05]" style={{ backgroundImage: 'linear-gradient(#ef4444 1px, transparent 1px), linear-gradient(90deg, #ef4444 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+                 <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05]" style={{ backgroundImage: 'linear-gradient(#3b82f6 1px, transparent 1px), linear-gradient(90deg, #3b82f6 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
                  
                  <div className="flex justify-between items-center mb-4 relative z-10">
                      <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
-                         <Icon name="activity" className="w-4 h-4 text-rose-500" />
+                         <Icon name="history" className="w-4 h-4 text-blue-500" />
                          نبض الإيرادات (يومي)
                      </h3>
                      <span className="text-[10px] text-slate-400">{lastRefreshed.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
@@ -625,10 +626,10 @@ const Dashboard: React.FC = () => {
                                     type="monotone" 
                                     dataKey="current" 
                                     name="الحالي"
-                                    stroke="#ef4444" 
+                                    stroke="#3b82f6" 
                                     strokeWidth={3} 
                                     dot={false} 
-                                    activeDot={{ r: 6, fill: '#ef4444', stroke: '#fff', strokeWidth: 2 }} 
+                                    activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} 
                                     animationDuration={1500}
                                     animationEasing="ease-in-out"
                                  />
@@ -673,21 +674,22 @@ const Dashboard: React.FC = () => {
                          <ResponsiveContainer width="100%" height="100%">
                              <BarChart 
                                data={carInspectionFrequencyData} 
-                               layout="vertical" 
-                               margin={{ top: 10, right: 30, left: 40, bottom: 10 }}
+                               margin={{ top: 10, right: 10, left: 0, bottom: 40 }}
                              >
                                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" opacity={0.5} />
-                                 <XAxis type="number" hide />
-                                 <YAxis 
-                                   dataKey="make" 
-                                   type="category" 
-                                   axisLine={false} 
-                                   tickLine={false} 
-                                   fontSize={10} 
-                                   stroke="#64748b" 
-                                   width={120}
-                                   tick={{ fill: '#64748b', fontWeight: 500 }}
-                                 />
+                                 <XAxis 
+                                    dataKey="make" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    fontSize={9} 
+                                    stroke="#64748b" 
+                                    interval={0}
+                                    angle={-45}
+                                    textAnchor="end"
+                                    height={60}
+                                    tick={{ fill: '#64748b', fontWeight: 500 }}
+                                  />
+                                 <YAxis hide />
                                  <RechartsTooltip 
                                      cursor={{fill: 'rgba(59, 130, 246, 0.1)'}}
                                      contentStyle={{ 
@@ -699,7 +701,7 @@ const Dashboard: React.FC = () => {
                                      }}
                                      formatter={(value: number) => [`${value} سيارة`, 'إجمالي الفحوصات']}
                                  />
-                                 <Bar dataKey="count" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={20} />
+                                 <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={30} />
                              </BarChart>
                          </ResponsiveContainer>
                      )}
@@ -711,8 +713,8 @@ const Dashboard: React.FC = () => {
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 mb-6">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
-                    <Icon name="bar-chart-2" className="w-4 h-4 text-emerald-500" />
-                    مقارنة عدد الطلبات (الشهر الحالي مقابل السابق)
+                    <Icon name="document-report" className="w-4 h-4 text-emerald-500" />
+                    مقارنة عدد السيارات (الشهر الحالي مقابل السابق)
                 </h3>
             </div>
             <div className="w-full h-72">
@@ -725,7 +727,7 @@ const Dashboard: React.FC = () => {
                             <RechartsTooltip 
                                 cursor={{fill: 'rgba(148, 163, 184, 0.1)'}}
                                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                formatter={(value: number, name: string) => [`${value} طلب`, name]}
+                                formatter={(value: number, name: string) => [`${value} سيارة`, name]}
                                 labelFormatter={(label) => `يوم ${label}`}
                             />
                             <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>

@@ -304,9 +304,9 @@ const RequestTable: React.FC<RequestTableProps> = ({
     const modelObj = carModels.find(m => m.id === car.model_id);
 
     const makeEn = makeObj?.name_en;
-    const makeAr = makeObj?.name;
+    const makeAr = makeObj?.name_ar;
     const modelEn = modelObj?.name_en;
-    const modelAr = modelObj?.name;
+    const modelAr = modelObj?.name_ar;
 
     // Prefer English for search query, fallback to Arabic
     const searchMake = makeEn || makeAr || '';
@@ -596,8 +596,8 @@ const RequestTable: React.FC<RequestTableProps> = ({
                         const searchData = request.car_snapshot ? {
                             name: carDisplayName,
                             raw: {
-                                make: request.car_snapshot.make_en || request.car_snapshot.make || '',
-                                model: request.car_snapshot.model_en || request.car_snapshot.model || '',
+                                make: request.car_snapshot.make_en || request.car_snapshot.make_ar || '',
+                                model: request.car_snapshot.model_en || request.car_snapshot.model_ar || '',
                                 year: request.car_snapshot.year
                             }
                         } : carInfo;

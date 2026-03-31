@@ -2428,7 +2428,7 @@ export const FillRequest: React.FC = () => {
                             </div>
                             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                                 {can('change_request_status') && (
-                                    <Button variant="outline" onClick={handleReopen} className="flex-1 sm:flex-none border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                    <Button variant="secondary" onClick={handleReopen} className="flex-1 sm:flex-none border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
                                         إعادة فتح الطلب
                                     </Button>
                                 )}
