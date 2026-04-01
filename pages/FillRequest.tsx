@@ -1564,7 +1564,7 @@ export const FillRequest: React.FC = () => {
 
                     // Auto-add/remove notes if stamping as INCOMPLETE
                     if (isAdding && stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
-                        const noteText = "لم يتم إكمال الطلب بناءً على طلب العميل.";
+                        const noteText = "لم يتم إكمال الفحص  بناءً على طلب العميل.";
                         const updatedCategoryNotes = { ...categoryNotes };
                         
                         visibleFindingCategories.forEach(cat => {
