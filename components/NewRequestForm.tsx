@@ -568,12 +568,22 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         addNotification({ title: 'تم الربط', message: 'سيتم استخدام ملف السيارة الموجود في النظام.', type: 'info' });
     };
 
-    const handleSplitCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = Number(e.target.value);
-        setSplitCashAmount(val);
-        if (inspectionPrice !== '') {
-            setSplitCardAmount(Number(inspectionPrice) - val);
+    // Sync split payment when price changes
+    useEffect(() => {
+        if (paymentType === PaymentType.Split) {
+            const price = Number(inspectionPrice) || 0;
+            // If cash is already set, keep it but cap it at the new price
+            const newCash = Math.min(splitCashAmount, price);
+            setSplitCashAmount(newCash);
+            setSplitCardAmount(price - newCash);
         }
+    }, [inspectionPrice, paymentType]);
+
+    const handleSplitCashChange = (val: number) => {
+        const price = Number(inspectionPrice) || 0;
+        const cash = Math.max(0, Math.min(val, price));
+        setSplitCashAmount(cash);
+        setSplitCardAmount(price - cash);
     };
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1357,7 +1367,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         paymentNote={paymentNote}
                         setPaymentNote={setPaymentNote}
                         splitCashAmount={splitCashAmount}
-                        setSplitCashAmount={setSplitCashAmount}
+                        onSplitCashChange={handleSplitCashChange}
                         splitCardAmount={splitCardAmount}
                         typeInputRef={typeInputRef}
                         priceInputRef={priceInputRef}

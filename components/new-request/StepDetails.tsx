@@ -14,7 +14,7 @@ interface StepDetailsProps {
     paymentNote: string;
     setPaymentNote: (val: string) => void;
     splitCashAmount: number;
-    setSplitCashAmount: (val: number) => void;
+    onSplitCashChange: (val: number) => void;
     splitCardAmount: number;
     typeInputRef: React.RefObject<HTMLSelectElement>;
     priceInputRef: React.RefObject<HTMLInputElement>;
@@ -94,14 +94,12 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                                             type="number"
                                             value={props.splitCashAmount}
                                             onChange={(e) => {
-                                                const v = Number(e.target.value);
-                                                props.setSplitCashAmount(v);
-                                                if (props.inspectionPrice !== '') {
-                                                    // This should be handled in parent usually, but simple calculation is fine here
-                                                    // Ideally pass a handler: onSplitCashChange
-                                                }
+                                                const v = e.target.value === '' ? 0 : Number(e.target.value);
+                                                props.onSplitCashChange(v);
                                             }}
                                             className="w-full p-2 text-sm border rounded dark:bg-slate-800 dark:border-slate-600"
+                                            min="0"
+                                            max={props.inspectionPrice || 0}
                                         />
                                     </div>
                                     <div>
