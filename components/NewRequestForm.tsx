@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation } from '../types';
+import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode } from '../types';
 import Button from './Button';
 import { uuidv4 } from '../lib/utils';
 import Modal from './Modal';
@@ -75,6 +75,14 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [plateNums, setPlateNums] = useState('');
     const [inspectionTypeId, setInspectionTypeId] = useState('');
     const [inspectionPrice, setInspectionPrice] = useState<number | ''>('');
+    const [taxMode, setTaxMode] = useState<TaxMode>(TaxMode.None);
+
+    const calculatedPrice = useMemo(() => {
+        const base = Number(inspectionPrice) || 0;
+        if (taxMode === TaxMode.Add) return Math.round(base * 1.15 * 100) / 100;
+        if (taxMode === TaxMode.Deduct) return Math.round((base / 1.15) * 100) / 100;
+        return base;
+    }, [inspectionPrice, taxMode]);
 
     // Default payment to Unpaid for receptionists
     const [paymentType, setPaymentType] = useState<PaymentType | ''>(isReceptionist ? PaymentType.Unpaid : '');
@@ -934,7 +942,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     if (!paymentType) newErrors['paymentType'] = true;
                     if (paymentType === PaymentType.Split) {
                         const totalSplit = splitCashAmount + splitCardAmount;
-                        if (totalSplit !== Number(inspectionPrice)) {
+                        if (Math.abs(totalSplit - (Number(inspectionPrice) || 0)) > 0.01) {
                             addNotification({ title: 'خطأ في الدفع', message: 'المبالغ غير متطابقة.', type: 'error' });
                             return false;
                         }
@@ -1361,6 +1369,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         inspectionTypes={inspectionTypes}
                         inspectionPrice={inspectionPrice}
                         setInspectionPrice={setInspectionPrice}
+                        taxMode={taxMode}
+                        setTaxMode={setTaxMode}
+                        calculatedPrice={calculatedPrice}
                         paymentType={paymentType}
                         setPaymentType={setPaymentType}
                         isReceptionist={isReceptionist}

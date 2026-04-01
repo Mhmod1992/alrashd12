@@ -672,10 +672,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const isNumericQuery = /^\d+$/.test(query);
         let localResults: InspectionRequest[] = [];
 
-        if (isNumericQuery && exactOnly) {
-            const queryNum = Number(query);
-            localResults = requests.filter(r => r.request_number === queryNum);
-        } else if (!exactOnly) {
+        if (exactOnly) {
+            // STRICT ORDER ID SEARCH
+            if (isNumericQuery) {
+                const queryNum = Number(query);
+                localResults = requests.filter(r => r.request_number === queryNum);
+            } else {
+                // If exactOnly is requested but query is not numeric, we can't find an order ID
+                setSearchedRequests([]);
+                setIsRefreshing(false);
+                return;
+            }
+        } else {
+            // GENERAL COMPREHENSIVE SEARCH
             const lowerQuery = query.toLowerCase();
             const searchTokens = lowerQuery.split(/\s+/).filter(t => t.length > 0);
 
@@ -713,8 +722,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             let requestsByNumber: InspectionRequest[] = [];
 
-            // 1. If numeric, search by Request Number first
-            if (isNumericQuery) {
+            // 1. If exactOnly, search by Request Number ONLY
+            if (exactOnly && isNumericQuery) {
                 const { data, error } = await supabase
                     .from('inspection_requests')
                     .select('*')
@@ -724,10 +733,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (!error && data) {
                     requestsByNumber = data;
                 }
-            }
 
-            // If exactOnly is true, we stop here and only return results by request number
-            if (exactOnly) {
                 // Merge with local results to ensure we don't lose anything (though DB is source of truth)
                 const merged = [...requestsByNumber];
                 localResults.forEach(lr => {

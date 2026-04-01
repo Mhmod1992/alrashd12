@@ -18,6 +18,12 @@ export enum PaymentType {
   Unpaid = 'غير مدفوع',
 }
 
+export enum TaxMode {
+  None = 'none',
+  Add = 'add',
+  Deduct = 'deduct',
+}
+
 export type Role = 'general_manager' | 'manager' | 'employee' | 'receptionist';
 
 export const PERMISSIONS = {

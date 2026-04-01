@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { InspectionType, PaymentType } from '../../types';
+import { InspectionType, PaymentType, TaxMode } from '../../types';
 
 interface StepDetailsProps {
     inspectionTypeId: string;
@@ -8,6 +8,9 @@ interface StepDetailsProps {
     inspectionTypes: InspectionType[];
     inspectionPrice: number | '';
     setInspectionPrice: (val: number | '') => void;
+    taxMode: TaxMode;
+    setTaxMode: (val: TaxMode) => void;
+    calculatedPrice: number;
     paymentType: PaymentType | '';
     setPaymentType: (val: PaymentType) => void;
     isReceptionist: boolean;
@@ -56,6 +59,34 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                         required
                         className={props.getInputClass('inspectionPrice')}
                     />
+                    
+                    <div className="mt-3 flex flex-wrap gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                            <input 
+                                type="checkbox" 
+                                checked={props.taxMode === TaxMode.Add}
+                                onChange={() => props.setTaxMode(props.taxMode === TaxMode.Add ? TaxMode.None : TaxMode.Add)}
+                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                            />
+                            <span className="text-xs font-medium text-slate-600 dark:text-slate-400 group-hover:text-blue-600 transition-colors">إضافة ضريبة 15%</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                            <input 
+                                type="checkbox" 
+                                checked={props.taxMode === TaxMode.Deduct}
+                                onChange={() => props.setTaxMode(props.taxMode === TaxMode.Deduct ? TaxMode.None : TaxMode.Deduct)}
+                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                            />
+                            <span className="text-xs font-medium text-slate-600 dark:text-slate-400 group-hover:text-blue-600 transition-colors">استقطاع ضريبة 15%</span>
+                        </label>
+                    </div>
+
+                    {props.taxMode !== TaxMode.None && props.inspectionPrice !== '' && (
+                        <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded text-xs animate-fade-in">
+                            <span className="text-blue-700 dark:text-blue-300 font-bold">معاينة السعر مع الضريبة (للعرض فقط): </span>
+                            <span className="text-blue-800 dark:text-blue-200 font-black text-sm">{props.calculatedPrice} ريال</span>
+                        </div>
+                    )}
                 </div>
                 {!props.isReceptionist && (
                     <div>
@@ -99,7 +130,7 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                                             }}
                                             className="w-full p-2 text-sm border rounded dark:bg-slate-800 dark:border-slate-600"
                                             min="0"
-                                            max={props.inspectionPrice || 0}
+                                            max={Number(props.inspectionPrice) || 0}
                                         />
                                     </div>
                                     <div>

@@ -298,52 +298,92 @@ const Requests: React.FC = () => {
 
     const [isSearching, setIsSearching] = useState(false);
 
-    // --- SEARCH EXECUTION ---
-    const executeSearch = useCallback((term: string, exact: boolean = false) => {
-        const trimmedTerm = term.trim();
+    const clearFilters = useCallback(() => {
+        setRequestNumberQuery('');
+        setComprehensiveQuery('');
+        setStatusFilter('الكل');
+        setEmployeeFilter('الكل');
+        setRangeStartDate('');
+        setRangeEndDate('');
+        setDateFilter('today'); 
+        clearSearchedRequests();
 
+        // Clear search from URL
+        const params = new URLSearchParams(window.location.search);
+        let changed = false;
+        if (params.has('search')) {
+            params.delete('search');
+            changed = true;
+        }
+        if (params.has('order_id')) {
+            params.delete('order_id');
+            changed = true;
+        }
+        if (changed) {
+            const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+            window.history.replaceState(window.history.state, '', newUrl);
+        }
+    }, [setRequestNumberQuery, setComprehensiveQuery, setStatusFilter, setEmployeeFilter, setRangeStartDate, setRangeEndDate, setDateFilter, clearSearchedRequests]);
+
+    // --- SEARCH EXECUTION ---
+    const executeSearch = useCallback((orderIdTerm?: string, generalTerm?: string) => {
         if (searchDebounceRef.current) {
             window.clearTimeout(searchDebounceRef.current);
         }
 
         const params = new URLSearchParams(window.location.search);
-        if (trimmedTerm === '') {
-            clearSearchedRequests();
-            setIsSearching(false);
-            if (params.has('search')) {
-                params.delete('search');
-                const newUrl = `${window.location.pathname}?${params.toString()}`;
-                window.history.replaceState(window.history.state, '', newUrl);
-            }
-            return;
+        
+        // Use provided terms or fall back to current state
+        const finalOrderId = orderIdTerm !== undefined ? orderIdTerm.trim() : requestNumberQuery.trim();
+        const finalGeneral = generalTerm !== undefined ? generalTerm.trim() : comprehensiveQuery.trim();
+
+        // Sync to URL
+        if (finalOrderId) {
+            params.set('order_id', finalOrderId);
+        } else {
+            params.delete('order_id');
         }
 
-        // Sync search to URL
-        if (params.get('search') !== trimmedTerm) {
-            params.set('search', trimmedTerm);
-            const newUrl = `${window.location.pathname}?${params.toString()}`;
-            window.history.replaceState(window.history.state, '', newUrl);
+        if (finalGeneral) {
+            params.set('search', finalGeneral);
+        } else {
+            params.delete('search');
+        }
+
+        const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+        window.history.replaceState(window.history.state, '', newUrl);
+
+        if (!finalOrderId && !finalGeneral) {
+            // If both search fields are empty, reset all filters to default
+            clearFilters();
+            setIsSearching(false);
+            return;
         }
 
         setIsSearching(true);
         searchDebounceRef.current = window.setTimeout(async () => {
-            await searchRequestByNumber(trimmedTerm, exact);
+            // Priority: If Order ID is present, search by it (exact)
+            if (finalOrderId) {
+                await searchRequestByNumber(finalOrderId, true);
+            } else if (finalGeneral) {
+                await searchRequestByNumber(finalGeneral, false);
+            }
             setIsSearching(false);
         }, 400);
-    }, [searchRequestByNumber, clearSearchedRequests]);
+    }, [requestNumberQuery, comprehensiveQuery, searchRequestByNumber, clearSearchedRequests, clearFilters]);
 
     const handleRequestNumberQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value.replace(/\D/g, '');
         setRequestNumberQuery(term);
-        if (comprehensiveQuery) setComprehensiveQuery('');
-        executeSearch(term, true);
+        // Independent: No longer clearing comprehensiveQuery
+        executeSearch(term, undefined);
     };
 
     const handleComprehensiveQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;
         setComprehensiveQuery(term);
-        if (requestNumberQuery) setRequestNumberQuery('');
-        executeSearch(term, false);
+        // Independent: No longer clearing requestNumberQuery
+        executeSearch(undefined, term);
     };
 
     const searchInitialized = useRef(false);
@@ -353,14 +393,27 @@ const Requests: React.FC = () => {
         if (searchInitialized.current) return;
 
         const params = new URLSearchParams(window.location.search);
+        const orderIdParam = params.get('order_id');
         const searchParam = params.get('search');
+        
+        let shouldSearch = false;
+
+        if (orderIdParam) {
+            setRequestNumberQuery(orderIdParam);
+            shouldSearch = true;
+        }
+        
         if (searchParam) {
             setComprehensiveQuery(searchParam);
+            shouldSearch = true;
+        }
+
+        if (shouldSearch) {
             setDateFilter('all');
-            executeSearch(searchParam);
+            executeSearch(orderIdParam || undefined, searchParam || undefined);
             searchInitialized.current = true;
         }
-    }, [executeSearch]);
+    }, [executeSearch, setRequestNumberQuery, setComprehensiveQuery, setDateFilter]);
 
     // --- SERVER SIDE DATE FETCHING LOGIC ---
     const executeDateFetch = useCallback(async (start: string, end: string) => {
@@ -450,25 +503,6 @@ const Requests: React.FC = () => {
             addNotification({ title: 'خطأ', message: 'فشل تحميل سجل السيارة.', type: 'error' });
         } finally {
             setIsLoadingHistory(false);
-        }
-    };
-
-    const clearFilters = () => {
-        setRequestNumberQuery('');
-        setComprehensiveQuery('');
-        setStatusFilter('الكل');
-        setEmployeeFilter('الكل');
-        setRangeStartDate('');
-        setRangeEndDate('');
-        setDateFilter('today'); 
-        clearSearchedRequests();
-
-        // Clear search from URL
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('search')) {
-            params.delete('search');
-            const newUrl = `${window.location.pathname}?${params.toString()}`;
-            window.history.replaceState(window.history.state, '', newUrl);
         }
     };
 
@@ -1092,6 +1126,8 @@ const Requests: React.FC = () => {
                                     <SearchIcon className="h-5 w-5 text-slate-400" />
                                 </span>
                                 <input
+                                    id="order-id-search"
+                                    name="order-id-search"
                                     type="text"
                                     placeholder="بحث برقم الطلب"
                                     value={requestNumberQuery}
@@ -1104,6 +1140,8 @@ const Requests: React.FC = () => {
                                     <SearchIcon className="h-5 w-5 text-slate-400" />
                                 </span>
                                 <input
+                                    id="general-search"
+                                    name="general-search"
                                     type="text"
                                     placeholder="بحث بالعميل، الهاتف، السيارة..."
                                     value={comprehensiveQuery}
