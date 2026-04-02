@@ -13,7 +13,7 @@ import PlusIcon from '../components/icons/PlusIcon';
 import CreditCardIcon from '../components/icons/CreditCardIcon';
 import FileTextIcon from '../components/icons/FileTextIcon';
 import { Skeleton } from '../components/Skeleton';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, LineChart as RechartsLineChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, LineChart as RechartsLineChart, Line, ReferenceLine, LabelList, ComposedChart, Area } from 'recharts';
 
 // --- Quick Actions Component ---
 const QuickActions: React.FC = () => {
@@ -217,17 +217,35 @@ const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> 
 const Dashboard: React.FC = () => {
   const { authUser, fetchServerFinancials, employees, cars, carMakes, carModels } = useAppContext();
   const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'year'>('today');
-  const [stats, setStats] = useState<FinancialStats | null>(null);
+  const [stats, setStats] = useState<FinancialStats | null>(() => {
+      const cached = localStorage.getItem('dashboard_main_stats_cache');
+      return cached ? JSON.parse(cached).data : null;
+  });
   const [prevStats, setPrevStats] = useState<FinancialStats | null>(null);
-  const [pulseStats, setPulseStats] = useState<FinancialStats | null>(null);
-  const [prevPulseStats, setPrevPulseStats] = useState<FinancialStats | null>(null);
-  const [monthStats, setMonthStats] = useState<FinancialStats | null>(null);
+  const [pulseStats, setPulseStats] = useState<FinancialStats | null>(() => {
+      const cached = localStorage.getItem('dashboard_revenue_pulse_cache');
+      return cached ? JSON.parse(cached).data : null;
+  });
+  const [forecastData, setForecastData] = useState<any[]>(() => {
+      const cached = localStorage.getItem('dashboard_forecast_cache');
+      return cached ? JSON.parse(cached) : [];
+  });
+  const [monthStats, setMonthStats] = useState<FinancialStats | null>(() => {
+      const cached = localStorage.getItem('dashboard_month_stats_cache');
+      return cached ? JSON.parse(cached).data : null;
+  });
   const [prevMonthStats, setPrevMonthStats] = useState<FinancialStats | null>(null);
   const [carFilter, setCarFilter] = useState<'yesterday' | 'week' | 'month' | 'all'>('month');
-  const [carStats, setCarStats] = useState<FinancialStats | null>(null);
-  const [allCarModels, setAllCarModels] = useState<any[]>([]);
-  const [isCarLoading, setIsCarLoading] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
+  const [carStats, setCarStats] = useState<FinancialStats | null>(() => {
+      const cached = localStorage.getItem('dashboard_car_stats_cache');
+      return cached ? JSON.parse(cached).data : null;
+  });
+  const [allCarModels, setAllCarModels] = useState<any[]>(() => {
+      const cached = localStorage.getItem('dashboard_car_models_cache');
+      return cached ? JSON.parse(cached) : [];
+  });
+  const [isCarLoading, setIsCarLoading] = useState(!localStorage.getItem('dashboard_car_stats_cache'));
+  const [isLoading, setIsLoading] = useState(!localStorage.getItem('dashboard_main_stats_cache'));
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
   const loadData = async () => {
@@ -260,41 +278,114 @@ const Dashboard: React.FC = () => {
               prevEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
           }
 
-          const currentStats = await fetchServerFinancials(start.toISOString(), end.toISOString(), false);
-          const previousStats = await fetchServerFinancials(prevStart.toISOString(), prevEnd.toISOString(), false);
-          
-          // Always fetch 30-day pulse data
+          // --- Performance Optimization: Caching for Past Data ---
+          const CACHE_KEY = 'dashboard_revenue_pulse_cache';
+          const CACHE_EXPIRY = 6 * 60 * 60 * 1000; // 6 hours
+          const cachedStr = localStorage.getItem(CACHE_KEY);
+          let pastPulseStats: FinancialStats | null = null;
+          let shouldFetchFullPulse = true;
+
+          if (cachedStr) {
+              try {
+                  const cached = JSON.parse(cachedStr);
+                  const isExpired = Date.now() - cached.timestamp > CACHE_EXPIRY;
+                  const cacheDate = new Date(cached.timestamp).toLocaleDateString('en-CA');
+                  const todayStr = now.toLocaleDateString('en-CA');
+                  
+                  if (!isExpired && cacheDate === todayStr) {
+                      pastPulseStats = cached.data;
+                      shouldFetchFullPulse = false;
+                  }
+              } catch (e) {
+                  console.error("Cache parse error", e);
+              }
+          }
+
           const pulseEnd = new Date();
           pulseEnd.setHours(23, 59, 59, 999);
           const pulseStart = new Date();
-          pulseStart.setDate(pulseEnd.getDate() - 29);
+          pulseStart.setDate(pulseEnd.getDate() - 60); // Fetch 60 days for last month comparison
           pulseStart.setHours(0, 0, 0, 0);
-          
-          const prevPulseEnd = new Date(pulseStart);
-          prevPulseEnd.setDate(prevPulseEnd.getDate() - 1);
-          prevPulseEnd.setHours(23, 59, 59, 999);
-          const prevPulseStart = new Date(prevPulseEnd);
-          prevPulseStart.setDate(prevPulseEnd.getDate() - 29);
-          prevPulseStart.setHours(0, 0, 0, 0);
-
-          const currentPulseStats = await fetchServerFinancials(pulseStart.toISOString(), pulseEnd.toISOString(), false);
-          const previousPulseStats = await fetchServerFinancials(prevPulseStart.toISOString(), prevPulseEnd.toISOString(), false);
 
           // Always fetch current calendar month and previous calendar month
           const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
           const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
           const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
           const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-          
-          const currentMonthStatsData = await fetchServerFinancials(currentMonthStart.toISOString(), currentMonthEnd.toISOString(), false);
-          const prevMonthStatsData = await fetchServerFinancials(prevMonthStart.toISOString(), prevMonthEnd.toISOString(), false);
+
+          const [currentStats, previousStats, todayPulseStats, fullPulseStats, currentMonthStatsData, prevMonthStatsData] = await Promise.all([
+              fetchServerFinancials(start.toISOString(), end.toISOString(), false),
+              fetchServerFinancials(prevStart.toISOString(), prevEnd.toISOString(), false),
+              fetchServerFinancials(now.toLocaleDateString('en-CA') + 'T00:00:00Z', pulseEnd.toISOString(), false), // Today only
+              shouldFetchFullPulse ? fetchServerFinancials(pulseStart.toISOString(), pulseEnd.toISOString(), false) : Promise.resolve(null),
+              fetchServerFinancials(currentMonthStart.toISOString(), currentMonthEnd.toISOString(), false),
+              fetchServerFinancials(prevMonthStart.toISOString(), prevMonthEnd.toISOString(), false)
+          ]);
 
           setStats(currentStats);
           setPrevStats(previousStats);
-          setPulseStats(currentPulseStats);
-          setPrevPulseStats(previousPulseStats);
+          localStorage.setItem('dashboard_main_stats_cache', JSON.stringify({ timestamp: Date.now(), data: currentStats }));
+
+          let finalPulse: FinancialStats;
+          if (shouldFetchFullPulse && fullPulseStats) {
+              finalPulse = fullPulseStats;
+              localStorage.setItem(CACHE_KEY, JSON.stringify({
+                  timestamp: Date.now(),
+                  data: fullPulseStats
+              }));
+          } else if (pastPulseStats) {
+              const mergedDaily = { ...pastPulseStats.daily };
+              const todayKey = now.toLocaleDateString('en-CA');
+              mergedDaily[todayKey] = todayPulseStats.daily[todayKey] || { 
+                  date: todayKey, cars: 0, revenue: 0, cash: 0, card: 0, transfer: 0, unpaid: 0, expenses: 0, commission: 0 
+              };
+              
+              finalPulse = {
+                  ...pastPulseStats,
+                  daily: mergedDaily,
+                  totalRevenue: (Object.values(mergedDaily) as any[]).reduce((sum: number, d: any) => sum + (d.revenue || 0), 0)
+              } as FinancialStats;
+          } else {
+              finalPulse = todayPulseStats;
+          }
+
+          setPulseStats(finalPulse);
+
+          // --- Forecasting Logic (Weighted Moving Average) ---
+          const forecast: any[] = [];
+          const dailyData = finalPulse.daily;
+          
+          for (let i = 1; i <= 7; i++) {
+              const futureDate = new Date(now);
+              futureDate.setDate(now.getDate() + i);
+              const dayOfWeek = futureDate.getDay();
+              
+              let sum = 0;
+              let count = 0;
+              for (let w = 1; w <= 4; w++) {
+                  const pastDate = new Date(futureDate);
+                  pastDate.setDate(futureDate.getDate() - (w * 7));
+                  const pastKey = pastDate.toLocaleDateString('en-CA');
+                  if (dailyData[pastKey]) {
+                      const weight = (5 - w); 
+                      sum += dailyData[pastKey].revenue * weight;
+                      count += weight;
+                  }
+              }
+              
+              const predictedRevenue = count > 0 ? Math.round(sum / count) : 0;
+              forecast.push({
+                  label: futureDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric' }),
+                  dateStr: futureDate.toLocaleDateString('en-CA'),
+                  revenue: predictedRevenue
+              });
+          }
+          setForecastData(forecast);
+          localStorage.setItem('dashboard_forecast_cache', JSON.stringify(forecast));
+
           setMonthStats(currentMonthStatsData);
           setPrevMonthStats(prevMonthStatsData);
+          localStorage.setItem('dashboard_month_stats_cache', JSON.stringify({ timestamp: Date.now(), data: currentMonthStatsData }));
           setLastRefreshed(new Date());
 
       } catch (error) {
@@ -334,13 +425,18 @@ const Dashboard: React.FC = () => {
               end.setHours(23, 59, 59, 999);
           }
 
-          const stats = await fetchServerFinancials(start.toISOString(), end.toISOString(), false);
+          const [stats, { data: modelsData }] = await Promise.all([
+              fetchServerFinancials(start.toISOString(), end.toISOString(), false),
+              supabase.from('car_models').select('*')
+          ]);
           
-          // Fetch all car models to ensure fallback grouping works correctly
-          const { data: modelsData } = await supabase.from('car_models').select('*');
-          if (modelsData) setAllCarModels(modelsData);
+          if (modelsData) {
+              setAllCarModels(modelsData);
+              localStorage.setItem('dashboard_car_models_cache', JSON.stringify(modelsData));
+          }
           
           setCarStats(stats);
+          localStorage.setItem('dashboard_car_stats_cache', JSON.stringify({ timestamp: Date.now(), data: stats }));
       } catch (error) {
           console.error("Car Data Load Error", error);
       } finally {
@@ -437,62 +533,68 @@ const Dashboard: React.FC = () => {
   }, [carStats, cars, carMakes, carModels, allCarModels]);
 
   const dailyRevenueChartData = useMemo(() => {
-      if (!pulseStats || !prevPulseStats) return [];
+      if (!pulseStats) return [];
       
       const data: any[] = [];
       const now = new Date();
+      const todayStr = now.toLocaleDateString('en-CA');
       
-      // Always show a 30-day pulse
-      for (let i = 29; i >= 0; i--) {
-          const d = new Date();
+      // Centric View: 7 days past + Today + 7 days forecast
+      // Past 7 days
+      for (let i = 7; i >= 1; i--) {
+          const d = new Date(now);
           d.setDate(now.getDate() - i);
+          const dStr = d.toLocaleDateString('en-CA');
+          const dayData = pulseStats.daily[dStr] || { revenue: 0 };
+          
+          const lastMonthDate = new Date(d);
+          lastMonthDate.setDate(d.getDate() - 28);
+          const lastMonthData = pulseStats.daily[lastMonthDate.toLocaleDateString('en-CA')] || { revenue: 0 };
+
           data.push({ 
               label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric' }), 
-              dateStr: d.toLocaleDateString('en-CA'),
-              current: 0, 
-              previous: 0 
+              dateStr: dStr,
+              actual: dayData.revenue,
+              lastMonth: lastMonthData.revenue,
+              forecast: null,
+              isToday: false
           });
       }
-      
-      const prevDataMap = new Map<string, number>();
-      for (let i = 29; i >= 0; i--) {
-          const d = new Date();
-          d.setDate(now.getDate() - 30 - i);
-          prevDataMap.set(d.toLocaleDateString('en-CA'), 0);
-      }
 
-      pulseStats.filteredRequests.forEach(req => {
-          const dateStr = new Date(req.created_at).toLocaleDateString('en-CA');
-          const dayData = data.find(d => d.dateStr === dateStr);
-          if (dayData) dayData.current += req.price;
-      });
-      pulseStats.filteredRevenues?.forEach(rev => {
-          const dateStr = new Date(rev.date).toLocaleDateString('en-CA');
-          const dayData = data.find(d => d.dateStr === dateStr);
-          if (dayData) dayData.current += rev.amount;
+      // Today
+      const todayData = pulseStats.daily[todayStr] || { revenue: 0 };
+      const lastMonthTodayDate = new Date(now);
+      lastMonthTodayDate.setDate(now.getDate() - 28);
+      const lastMonthTodayData = pulseStats.daily[lastMonthTodayDate.toLocaleDateString('en-CA')] || { revenue: 0 };
+
+      data.push({
+          label: 'اليوم',
+          dateStr: todayStr,
+          actual: todayData.revenue,
+          lastMonth: lastMonthTodayData.revenue,
+          forecast: null,
+          isToday: true
       });
 
-      prevPulseStats.filteredRequests.forEach(req => {
-          const dateStr = new Date(req.created_at).toLocaleDateString('en-CA');
-          if (prevDataMap.has(dateStr)) {
-              prevDataMap.set(dateStr, prevDataMap.get(dateStr)! + req.price);
-          }
-      });
-      prevPulseStats.filteredRevenues?.forEach(rev => {
-          const dateStr = new Date(rev.date).toLocaleDateString('en-CA');
-          if (prevDataMap.has(dateStr)) {
-              prevDataMap.set(dateStr, prevDataMap.get(dateStr)! + rev.amount);
-          }
+      // Forecast 7 days
+      forecastData.forEach(f => {
+          const fDate = new Date(f.dateStr);
+          const lastMonthFDate = new Date(fDate);
+          lastMonthFDate.setDate(fDate.getDate() - 28);
+          const lastMonthFData = pulseStats.daily[lastMonthFDate.toLocaleDateString('en-CA')] || { revenue: 0 };
+
+          data.push({
+              label: f.label,
+              dateStr: f.dateStr,
+              actual: null,
+              lastMonth: lastMonthFData.revenue,
+              forecast: f.revenue,
+              isToday: false
+          });
       });
 
-      // Map previous 30 days to the current 30 days for comparison
-      const prevValues = Array.from(prevDataMap.values());
-      data.forEach((d, index) => {
-          d.previous = prevValues[index] || 0;
-      });
-      
       return data;
-  }, [pulseStats, prevPulseStats]);
+  }, [pulseStats, forecastData]);
 
   const monthlyRequestsComparisonData = useMemo(() => {
       if (!monthStats || !prevMonthStats) return [];
@@ -606,14 +708,14 @@ const Dashboard: React.FC = () => {
                  <div className="flex justify-between items-center mb-4 relative z-10">
                      <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
                          <Icon name="history" className="w-4 h-4 text-blue-500" />
-                         نبض الإيرادات (يومي)
+                         تدفق الإيرادات اليومي
                      </h3>
                      <span className="text-[10px] text-slate-400">{lastRefreshed.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                  </div>
                  <div className="w-full h-64 relative z-10">
                      {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
                          <ResponsiveContainer width="100%" height="100%">
-                             <RechartsLineChart data={dailyRevenueChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                             <ComposedChart data={dailyRevenueChartData} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.5} />
                                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                                  <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
@@ -622,30 +724,46 @@ const Dashboard: React.FC = () => {
                                      formatter={(value: number, name: string) => [`${value.toLocaleString()} ريال`, name]}
                                  />
                                  <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
-                                 <Line 
-                                    type="monotone" 
-                                    dataKey="current" 
-                                    name="الحالي"
-                                    stroke="#3b82f6" 
-                                    strokeWidth={3} 
-                                    dot={false} 
-                                    activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} 
-                                    animationDuration={1500}
-                                    animationEasing="ease-in-out"
-                                 />
-                                 <Line 
-                                    type="monotone" 
-                                    dataKey="previous" 
-                                    name="السابق"
+                                 
+                                 {/* Highlight Today */}
+                                 <ReferenceLine 
+                                    x="اليوم"
                                     stroke="#94a3b8" 
-                                    strokeWidth={2} 
-                                    strokeDasharray="5 5"
-                                    dot={false} 
-                                    activeDot={{ r: 4, fill: '#94a3b8', stroke: '#fff', strokeWidth: 2 }} 
-                                    animationDuration={1500}
-                                    animationEasing="ease-in-out"
+                                    strokeDasharray="3 3"
                                  />
-                             </RechartsLineChart>
+
+                                 {/* Layer 2: Background Shadow (Past Month) */}
+                                 <Area 
+                                    type="monotone" 
+                                    dataKey="lastMonth" 
+                                    name="الشهر الماضي" 
+                                    fill="#f1f5f9" 
+                                    stroke="#cbd5e1" 
+                                    strokeWidth={2}
+                                    strokeDasharray="4 4"
+                                    animationDuration={1500}
+                                 />
+
+                                 {/* Layer 1: Actual Revenue (Bars) */}
+                                 <Bar 
+                                    dataKey="actual" 
+                                    name="الواقع" 
+                                    fill="#3b82f6" 
+                                    radius={[4, 4, 0, 0]} 
+                                    barSize={20}
+                                    animationDuration={1500}
+                                 />
+
+                                 {/* Layer 3: Forecast Revenue (Bars) */}
+                                 <Bar 
+                                    dataKey="forecast" 
+                                    name="توقعات الأداء" 
+                                    fill="#93c5fd" 
+                                    radius={[4, 4, 0, 0]} 
+                                    barSize={20}
+                                    animationDuration={1500}
+                                 />
+                             </ComposedChart>
                          </ResponsiveContainer>
                      )}
                  </div>
@@ -673,25 +791,19 @@ const Dashboard: React.FC = () => {
                      {isCarLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
                          <ResponsiveContainer width="100%" height="100%">
                              <BarChart 
+                               layout="vertical"
                                data={carInspectionFrequencyData} 
-                               margin={{ top: 10, right: 10, left: 0, bottom: 40 }}
+                               margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
                              >
-                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" opacity={0.5} />
-                                 <XAxis 
+                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#e2e8f0" opacity={0.5} />
+                                 <XAxis type="number" hide />
+                                 <YAxis 
                                     dataKey="make" 
-                                    axisLine={false} 
-                                    tickLine={false} 
-                                    fontSize={9} 
-                                    stroke="#64748b" 
-                                    interval={0}
-                                    angle={-45}
-                                    textAnchor="end"
-                                    height={60}
-                                    tick={{ fill: '#64748b', fontWeight: 500 }}
+                                    type="category"
+                                    hide
                                   />
-                                 <YAxis hide />
                                  <RechartsTooltip 
-                                     cursor={{fill: 'rgba(59, 130, 246, 0.1)'}}
+                                     cursor={{fill: 'rgba(59, 130, 246, 0.05)'}}
                                      contentStyle={{ 
                                        borderRadius: '12px', 
                                        border: 'none', 
@@ -701,7 +813,10 @@ const Dashboard: React.FC = () => {
                                      }}
                                      formatter={(value: number) => [`${value} سيارة`, 'إجمالي الفحوصات']}
                                  />
-                                 <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={30} />
+                                 <Bar dataKey="count" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={24}>
+                                     <LabelList dataKey="make" position="center" fill="#ffffff" fontSize={11} fontWeight="bold" />
+                                     <LabelList dataKey="count" position="insideRight" fill="#ffffff" fontSize={11} fontWeight="bold" dx={-10} />
+                                 </Bar>
                              </BarChart>
                          </ResponsiveContainer>
                      )}

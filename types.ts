@@ -521,6 +521,7 @@ export interface FinancialStats {
   totalCommissions: number;
   netProfit: number;
   ledgerData: any[];
+  daily: Record<string, any>;
   dailyRevenueChart: { label: string; value: number }[];
   paymentDistribution: { label: string; value: number; color: string }[];
   brokerSummary: { name: string; amount: number; count: number }[];

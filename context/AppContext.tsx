@@ -1339,6 +1339,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             totalCommissions,
             netProfit,
             ledgerData,
+            daily: dailyMap,
             dailyRevenueChart,
             paymentDistribution,
             brokerSummary: Object.values(brokerSummaryMap),

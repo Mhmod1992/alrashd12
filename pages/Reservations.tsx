@@ -39,6 +39,19 @@ const Reservations: React.FC = () => {
     const [isParsing, setIsParsing] = useState(false);
     const [parsedData, setParsedData] = useState<Partial<Reservation> | null>(null);
     
+    const [isManualMode, setIsManualMode] = useState(() => {
+        return localStorage.getItem('reservationInputMode') === 'manual';
+    });
+    const [manualForm, setManualForm] = useState({
+        client_name: '',
+        client_phone: '',
+        car_make: '',
+        car_model: '',
+        car_year: '',
+        service_type: 'فحص شامل',
+        notes: ''
+    });
+
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
@@ -66,6 +79,36 @@ const Reservations: React.FC = () => {
             addNotification({ title: 'خطأ', message: 'فشل تحليل النص. تأكد من استخدام النموذج الصحيح.', type: 'error' });
         } finally {
             setIsParsing(false);
+        }
+    };
+
+    const toggleInputMode = () => {
+        const newMode = !isManualMode;
+        setIsManualMode(newMode);
+        localStorage.setItem('reservationInputMode', newMode ? 'manual' : 'auto');
+    };
+
+    const handleSaveManual = async () => {
+        if (!manualForm.client_phone.trim()) {
+            addNotification({ title: 'خطأ', message: 'رقم الجوال إلزامي.', type: 'error' });
+            return;
+        }
+        try {
+            const car_details = [manualForm.car_make, manualForm.car_model, manualForm.car_year].filter(Boolean).join(' ');
+            await addReservation({
+                source_text: 'إدخال يدوي',
+                client_name: manualForm.client_name || 'غير معروف',
+                client_phone: manualForm.client_phone,
+                car_details: car_details || 'غير محدد',
+                plate_text: '',
+                service_type: manualForm.service_type || 'فحص عام',
+                notes: manualForm.notes || ''
+            });
+            setIsAddModalOpen(false);
+            setManualForm({ client_name: '', client_phone: '', car_make: '', car_model: '', car_year: '', service_type: 'فحص شامل', notes: '' });
+        } catch (error) {
+            // Error notification is handled inside addReservation context if needed, but we can add a fallback
+            console.error("Failed to save manual reservation", error);
         }
     };
 
@@ -247,77 +290,128 @@ const Reservations: React.FC = () => {
 
             {/* Add Reservation Modal */}
             <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="إضافة حجز من واتساب" size="lg">
-                {!parsedData ? (
-                    <div className="space-y-4">
-                        <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg text-sm text-purple-800 dark:text-purple-200 border border-purple-100 dark:border-purple-800">
-                            <p className="font-bold flex items-center gap-2 mb-1">
-                                <SparklesIcon className="w-4 h-4" />
-                                التحليل بالنموذج الثابت
-                            </p>
-                            <p>قم بنسخ رسالة الحجز (التي تحتوي على النموذج المعتمد) من الواتساب وألصقها هنا. سيقوم النظام باستخراج البيانات تلقائياً.</p>
-                            <div className="mt-2 text-xs bg-white dark:bg-slate-800 p-2 rounded border dark:border-slate-700 font-mono" dir="ltr">
-                                *اسم العميل:* ...<br/>
-                                *رقم الهاتف:* ...<br/>
-                                *الشركة:* ...<br/>
-                                *الموديل:* ...<br/>
-                                ...
+                
+                {/* Toggle Mode */}
+                <div className="flex items-center justify-end mb-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border dark:border-slate-700">
+                    <label className="flex items-center cursor-pointer">
+                        <div className="relative">
+                            <input type="checkbox" className="sr-only" checked={isManualMode} onChange={toggleInputMode} />
+                            <div className={`block w-12 h-7 rounded-full transition-colors ${isManualMode ? 'bg-purple-500' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
+                            <div className={`dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${isManualMode ? 'transform translate-x-5' : ''}`}></div>
+                        </div>
+                        <span className="mr-3 text-sm font-bold text-slate-700 dark:text-slate-300">إدخال البيانات يدوياً</span>
+                    </label>
+                </div>
+
+                {isManualMode ? (
+                    <div className="space-y-4 animate-fade-in">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">اسم العميل (اختياري)</label>
+                                <input type="text" value={manualForm.client_name} onChange={e => setManualForm({...manualForm, client_name: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">رقم الجوال <span className="text-red-500">*</span></label>
+                                <input type="text" value={manualForm.client_phone} onChange={e => setManualForm({...manualForm, client_phone: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600 dir-ltr text-right" placeholder="05xxxxxxxx" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">الشركة المصنعة</label>
+                                <input type="text" value={manualForm.car_make} onChange={e => setManualForm({...manualForm, car_make: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" placeholder="مثال: تويوتا" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">نوع السيارة (الموديل)</label>
+                                <input type="text" value={manualForm.car_model} onChange={e => setManualForm({...manualForm, car_model: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" placeholder="مثال: كامري" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">سنة الصنع</label>
+                                <input type="text" value={manualForm.car_year} onChange={e => setManualForm({...manualForm, car_year: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" placeholder="مثال: 2023" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">نوع الخدمة</label>
+                                <input type="text" value={manualForm.service_type} onChange={e => setManualForm({...manualForm, service_type: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات إضافية</label>
+                                <textarea value={manualForm.notes} onChange={e => setManualForm({...manualForm, notes: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" rows={2} />
                             </div>
                         </div>
-                        <textarea 
-                            className="w-full h-40 p-4 border rounded-xl bg-slate-50 dark:bg-slate-900 dark:border-slate-700 focus:ring-2 focus:ring-purple-500 text-sm"
-                            placeholder="ألصق نص الرسالة هنا..."
-                            value={rawText}
-                            onChange={e => setRawText(e.target.value)}
-                        ></textarea>
-                        <div className="flex justify-end pt-2">
-                            <Button onClick={handlePaste} disabled={isParsing || !rawText.trim()} className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/30">
-                                {isParsing ? <RefreshCwIcon className="w-5 h-5 animate-spin"/> : <SparklesIcon className="w-5 h-5"/>}
-                                <span className="ms-2">{isParsing ? 'جاري التحليل...' : 'تحليل النص واستخراج البيانات'}</span>
-                            </Button>
+                        <div className="flex justify-end pt-4 border-t dark:border-slate-700">
+                            <Button onClick={handleSaveManual} disabled={!manualForm.client_phone.trim()}>حفظ الحجز</Button>
                         </div>
                     </div>
                 ) : (
-                    <div className="space-y-4 animate-fade-in">
-                        <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 flex items-center gap-3">
-                            <CheckCircleIcon className="w-6 h-6 text-green-600" />
-                            <div>
-                                <h4 className="font-bold text-green-800 dark:text-green-300">تم استخراج البيانات بنجاح</h4>
-                                <p className="text-xs text-green-700 dark:text-green-400">يرجى مراجعة البيانات أدناه قبل الحفظ.</p>
+                    !parsedData ? (
+                        <div className="space-y-4 animate-fade-in">
+                            <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg text-sm text-purple-800 dark:text-purple-200 border border-purple-100 dark:border-purple-800">
+                                <p className="font-bold flex items-center gap-2 mb-1">
+                                    <SparklesIcon className="w-4 h-4" />
+                                    التحليل بالنموذج الثابت
+                                </p>
+                                <p>قم بنسخ رسالة الحجز (التي تحتوي على النموذج المعتمد) من الواتساب وألصقها هنا. سيقوم النظام باستخراج البيانات تلقائياً.</p>
+                                <div className="mt-2 text-xs bg-white dark:bg-slate-800 p-2 rounded border dark:border-slate-700 font-mono" dir="ltr">
+                                    *اسم العميل:* ...<br/>
+                                    *رقم الهاتف:* ...<br/>
+                                    *الشركة:* ...<br/>
+                                    *الموديل:* ...<br/>
+                                    ...
+                                </div>
+                            </div>
+                            <textarea 
+                                className="w-full h-40 p-4 border rounded-xl bg-slate-50 dark:bg-slate-900 dark:border-slate-700 focus:ring-2 focus:ring-purple-500 text-sm"
+                                placeholder="ألصق نص الرسالة هنا..."
+                                value={rawText}
+                                onChange={e => setRawText(e.target.value)}
+                            ></textarea>
+                            <div className="flex justify-end pt-2">
+                                <Button onClick={handlePaste} disabled={isParsing || !rawText.trim()} className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/30">
+                                    {isParsing ? <RefreshCwIcon className="w-5 h-5 animate-spin"/> : <SparklesIcon className="w-5 h-5"/>}
+                                    <span className="ms-2">{isParsing ? 'جاري التحليل...' : 'تحليل النص واستخراج البيانات'}</span>
+                                </Button>
                             </div>
                         </div>
+                    ) : (
+                        <div className="space-y-4 animate-fade-in">
+                            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 flex items-center gap-3">
+                                <CheckCircleIcon className="w-6 h-6 text-green-600" />
+                                <div>
+                                    <h4 className="font-bold text-green-800 dark:text-green-300">تم استخراج البيانات بنجاح</h4>
+                                    <p className="text-xs text-green-700 dark:text-green-400">يرجى مراجعة البيانات أدناه قبل الحفظ.</p>
+                                </div>
+                            </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">اسم العميل</label>
-                                <input type="text" value={parsedData.client_name || ''} onChange={e => setParsedData({...parsedData, client_name: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">اسم العميل</label>
+                                    <input type="text" value={parsedData.client_name || ''} onChange={e => setParsedData({...parsedData, client_name: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">رقم الجوال</label>
+                                    <input type="text" value={parsedData.client_phone || ''} onChange={e => setParsedData({...parsedData, client_phone: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600 dir-ltr text-right" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">تفاصيل السيارة</label>
+                                    <input type="text" value={parsedData.car_details || ''} onChange={e => setParsedData({...parsedData, car_details: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">نص اللوحة</label>
+                                    <input type="text" value={parsedData.plate_text || ''} onChange={e => setParsedData({...parsedData, plate_text: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">نوع الخدمة المطلوبة</label>
+                                    <input type="text" value={parsedData.service_type || ''} onChange={e => setParsedData({...parsedData, service_type: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
+                                </div>
+                                 <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات إضافية</label>
+                                    <textarea value={parsedData.notes || ''} onChange={e => setParsedData({...parsedData, notes: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" rows={2} />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">رقم الجوال</label>
-                                <input type="text" value={parsedData.client_phone || ''} onChange={e => setParsedData({...parsedData, client_phone: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600 dir-ltr text-right" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">تفاصيل السيارة</label>
-                                <input type="text" value={parsedData.car_details || ''} onChange={e => setParsedData({...parsedData, car_details: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">نص اللوحة</label>
-                                <input type="text" value={parsedData.plate_text || ''} onChange={e => setParsedData({...parsedData, plate_text: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-xs font-bold text-slate-500 mb-1">نوع الخدمة المطلوبة</label>
-                                <input type="text" value={parsedData.service_type || ''} onChange={e => setParsedData({...parsedData, service_type: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                            </div>
-                             <div className="md:col-span-2">
-                                <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات إضافية</label>
-                                <textarea value={parsedData.notes || ''} onChange={e => setParsedData({...parsedData, notes: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" rows={2} />
-                            </div>
-                        </div>
 
-                        <div className="flex justify-end gap-2 pt-4 border-t dark:border-slate-700">
-                            <Button variant="secondary" onClick={() => setParsedData(null)}>إلغاء وإعادة المحاولة</Button>
-                            <Button onClick={handleSaveReservation}>حفظ الحجز</Button>
+                            <div className="flex justify-end gap-2 pt-4 border-t dark:border-slate-700">
+                                <Button variant="secondary" onClick={() => setParsedData(null)}>إلغاء وإعادة المحاولة</Button>
+                                <Button onClick={handleSaveReservation}>حفظ الحجز</Button>
+                            </div>
                         </div>
-                    </div>
+                    )
                 )}
             </Modal>
 
