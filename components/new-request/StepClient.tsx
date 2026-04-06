@@ -30,6 +30,7 @@ interface StepClientProps {
     unpaidDebtAlert: any[] | null;
     getInputClass: (name: string) => string;
     existingClientSummary?: { count: number; lastVisit: string; name: string } | null;
+    isReservationMode?: boolean;
 }
 
 const StepClient: React.FC<StepClientProps> = (props) => {
@@ -57,7 +58,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                             onChange={props.onNameChange}
                             onFocus={props.onNameFocus}
                             onKeyDown={(e) => props.onKeyDown(e, 'name')}
-                            required
+                            required={!props.isReservationMode}
                             className={props.getInputClass('clientName')}
                             autoFocus
                             autoComplete="off"
@@ -93,7 +94,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                             onChange={props.onPhoneChange}
                             onFocus={props.onPhoneFocus}
                             onKeyDown={(e) => props.onKeyDown(e, 'phone')}
-                            required
+                            required={!props.isReservationMode}
                             placeholder="05xxxxxxxx"
                             maxLength={10}
                             style={{ direction: 'ltr', textAlign: 'right' }}

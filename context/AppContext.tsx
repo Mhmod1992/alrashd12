@@ -1479,6 +1479,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const plate_text = extract('رقم اللوحة');
         const service_type = extract('نوع الخدمة');
+        const priceStr = extract('السعر');
+        const price = priceStr ? Number(priceStr.replace(/[^0-9.]/g, '')) : undefined;
 
         return {
             client_name,
@@ -1486,6 +1488,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             car_details,
             plate_text,
             service_type,
+            price,
             notes: text
         };
     }, []);

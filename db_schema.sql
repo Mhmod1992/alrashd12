@@ -190,6 +190,7 @@ CREATE TABLE IF NOT EXISTS inspection_requests (
 -- Reservations Table
 CREATE TABLE IF NOT EXISTS reservations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reservation_number SERIAL,
     source_text TEXT,
     client_name TEXT,
     client_phone TEXT,
@@ -200,6 +201,8 @@ CREATE TABLE IF NOT EXISTS reservations (
     status TEXT DEFAULT 'new',
     car_make_id UUID,
     car_model_id UUID,
+    price NUMERIC DEFAULT 0,
+    payment_type TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 

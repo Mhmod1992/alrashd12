@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import InstallPwaBanner from './components/InstallPwaBanner';
 import Button from './components/Button'; // Import Button
 import RefreshCwIcon from './components/icons/RefreshCwIcon'; // Import Refresh Icon
+import LogOutIcon from './components/icons/LogOutIcon'; // Import LogOut Icon
 import WifiOffIcon from './components/icons/WifiOffIcon'; // Import WifiOff Icon
 import IncomingRequestNotifier from './components/IncomingRequestNotifier'; // Import the new notifier
 
@@ -48,7 +49,7 @@ const PageLoader = () => (
 
 const AppContent: React.FC = () => {
   // Added setPage to destructuring
-  const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, refreshSessionAndReload, isOnline, isCreatingRequest } = useAppContext();
+  const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, logout, refreshSessionAndReload, isOnline, isCreatingRequest } = useAppContext();
   const [isSidebarOpen, setSidebarOpen] = React.useState(false);
 
 
@@ -165,14 +166,14 @@ const AppContent: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 p-4 animate-fade-in" dir="rtl">
         <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-slate-200 dark:border-slate-700">
           <div className="mx-auto mb-6 bg-red-50 dark:bg-red-900/30 w-20 h-20 rounded-full flex items-center justify-center animate-pulse">
-            <RefreshCwIcon className="w-10 h-10 text-red-500" />
+            <LogOutIcon className="w-10 h-10 text-red-500" />
           </div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">النظام لا يستجيب</h2>
           <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
-            يبدو أن هناك مشكلة في الاتصال أو تحميل البيانات. يرجى تحديث النظام للمتابعة.
+            يبدو أن هناك مشكلة في الاتصال أو تحميل البيانات. يرجى العودة لتسجيل الدخول للمتابعة.
           </p>
-          <Button onClick={refreshSessionAndReload} className="w-full justify-center py-3 text-lg shadow-lg shadow-red-500/20" variant="danger" leftIcon={<RefreshCwIcon className="w-5 h-5" />}>
-            تحديث النظام
+          <Button onClick={logout} className="w-full justify-center py-3 text-lg shadow-lg shadow-red-500/20" variant="danger" leftIcon={<LogOutIcon className="w-5 h-5" />}>
+            العودة لتسجيل الدخول
           </Button>
         </div>
       </div>

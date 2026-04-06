@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Reservation } from '../types';
+import { Reservation, PaymentType } from '../types';
 import Button from '../components/Button';
 import Icon from '../components/Icon';
 import Modal from '../components/Modal';
@@ -10,6 +10,8 @@ import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import SparklesIcon from '../components/icons/SparklesIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import TrashIcon from '../components/icons/TrashIcon';
+import SearchIcon from '../components/icons/SearchIcon';
+import CalendarIcon from '../components/icons/CalendarIcon';
 
 const Reservations: React.FC = () => {
     const { 
@@ -42,17 +44,43 @@ const Reservations: React.FC = () => {
     const [isManualMode, setIsManualMode] = useState(() => {
         return localStorage.getItem('reservationInputMode') === 'manual';
     });
-    const [manualForm, setManualForm] = useState({
-        client_name: '',
-        client_phone: '',
-        car_make: '',
-        car_model: '',
-        car_year: '',
-        service_type: 'فحص شامل',
-        notes: ''
-    });
 
     const [isLoading, setIsLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [timeFilter, setTimeFilter] = useState<'today' | 'all'>('all');
+
+    const filteredReservations = useMemo(() => {
+        let result = [...reservations];
+
+        // Time Filter
+        if (timeFilter === 'today') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            result = result.filter(r => {
+                const resDate = new Date(r.created_at);
+                resDate.setHours(0, 0, 0, 0);
+                return resDate.getTime() === today.getTime();
+            });
+        }
+
+        // Search Filter
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase().trim();
+            result = result.filter(r => {
+                const carDetails = (r.car_details || '').toLowerCase();
+                const clientPhone = (r.client_phone || '').toLowerCase();
+                const clientName = (r.client_name || '').toLowerCase();
+                const resNum = r.reservation_number ? `#RSV-${r.reservation_number}`.toLowerCase() : '';
+                
+                return carDetails.includes(term) || 
+                       clientPhone.includes(term) || 
+                       clientName.includes(term) ||
+                       resNum.includes(term);
+            });
+        }
+
+        return result;
+    }, [reservations, searchTerm, timeFilter]);
 
     useEffect(() => {
         const load = async () => {
@@ -88,30 +116,6 @@ const Reservations: React.FC = () => {
         localStorage.setItem('reservationInputMode', newMode ? 'manual' : 'auto');
     };
 
-    const handleSaveManual = async () => {
-        if (!manualForm.client_phone.trim()) {
-            addNotification({ title: 'خطأ', message: 'رقم الجوال إلزامي.', type: 'error' });
-            return;
-        }
-        try {
-            const car_details = [manualForm.car_make, manualForm.car_model, manualForm.car_year].filter(Boolean).join(' ');
-            await addReservation({
-                source_text: 'إدخال يدوي',
-                client_name: manualForm.client_name || 'غير معروف',
-                client_phone: manualForm.client_phone,
-                car_details: car_details || 'غير محدد',
-                plate_text: '',
-                service_type: manualForm.service_type || 'فحص عام',
-                notes: manualForm.notes || ''
-            });
-            setIsAddModalOpen(false);
-            setManualForm({ client_name: '', client_phone: '', car_make: '', car_model: '', car_year: '', service_type: 'فحص شامل', notes: '' });
-        } catch (error) {
-            // Error notification is handled inside addReservation context if needed, but we can add a fallback
-            console.error("Failed to save manual reservation", error);
-        }
-    };
-
     const handleSaveReservation = async () => {
         if (!parsedData) return;
         try {
@@ -122,7 +126,8 @@ const Reservations: React.FC = () => {
                 car_details: parsedData.car_details || '',
                 plate_text: parsedData.plate_text || '',
                 service_type: parsedData.service_type || 'فحص عام',
-                notes: parsedData.notes || ''
+                notes: parsedData.notes || '',
+                price: parsedData.price || 0
             });
             setIsAddModalOpen(false);
             setRawText('');
@@ -204,6 +209,54 @@ const Reservations: React.FC = () => {
                 </div>
             </div>
 
+            {/* Filters & Search */}
+            <div className="flex flex-col md:flex-row gap-4 mb-6 items-center">
+                <div className="flex bg-white dark:bg-slate-800 p-1 rounded-lg border dark:border-slate-700 shadow-sm">
+                    <button
+                        onClick={() => setTimeFilter('today')}
+                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${
+                            timeFilter === 'today' 
+                            ? 'bg-blue-600 text-white shadow-md' 
+                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                    >
+                        <CalendarIcon className="w-4 h-4" />
+                        حجوزات اليوم
+                    </button>
+                    <button
+                        onClick={() => setTimeFilter('all')}
+                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${
+                            timeFilter === 'all' 
+                            ? 'bg-blue-600 text-white shadow-md' 
+                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                    >
+                        عرض الكل
+                    </button>
+                </div>
+
+                <div className="relative flex-1 w-full">
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <SearchIcon className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="البحث باسم السيارة، رقم الهاتف، أو اسم العميل..."
+                        className="block w-full pr-10 pl-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl leading-5 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm transition-all shadow-sm"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {searchTerm && (
+                        <button 
+                            onClick={() => setSearchTerm('')}
+                            className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 hover:text-slate-600"
+                        >
+                            <Icon name="close" className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden border border-slate-100 dark:border-slate-700">
                 {isLoading ? (
                     <div className="p-12 text-center text-slate-500">
@@ -221,20 +274,26 @@ const Reservations: React.FC = () => {
                         <table className="w-full text-sm text-right">
                             <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 uppercase text-xs font-bold border-b dark:border-slate-700">
                                 <tr>
+                                    <th className="px-6 py-4">رقم الحجز</th>
                                     <th className="px-6 py-4">العميل</th>
                                     <th className="px-6 py-4">السيارة</th>
+                                    <th className="px-6 py-4">سعر الفحص</th>
                                     <th className="px-6 py-4">نوع الخدمة</th>
+                                    <th className="px-6 py-4">ملاحظات</th>
                                     <th className="px-6 py-4">الحالة</th>
                                     <th className="px-6 py-4">تاريخ الورود</th>
                                     <th className="px-6 py-4 text-left">إجراءات</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y dark:divide-slate-700">
-                                {reservations.map(res => (
+                                {filteredReservations.map(res => (
                                     <tr key={res.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+                                        <td className="px-6 py-4 font-bold text-blue-600 dark:text-blue-400">
+                                            {res.reservation_number ? `RSV-${res.reservation_number}` : '---'}
+                                        </td>
                                         <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name}</div>
-                                            <div className="text-xs text-slate-500 dir-ltr text-right font-mono">{res.client_phone}</div>
+                                            <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name || 'غير معروف'}</div>
+                                            <div className="text-xs text-slate-500 dir-ltr text-right font-mono">{res.client_phone || '---'}</div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="text-slate-700 dark:text-slate-300 font-medium">{res.car_details}</div>
@@ -244,7 +303,13 @@ const Reservations: React.FC = () => {
                                                 </div>
                                             )}
                                         </td>
+                                        <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">
+                                            {res.price ? `${res.price} ريال` : '---'}
+                                        </td>
                                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{res.service_type}</td>
+                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title={res.notes}>
+                                            {res.notes || '---'}
+                                        </td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                                                 res.status === 'new' ? 'bg-blue-100 text-blue-700' : 
@@ -289,13 +354,13 @@ const Reservations: React.FC = () => {
             </div>
 
             {/* Add Reservation Modal */}
-            <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="إضافة حجز من واتساب" size="lg">
+            <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="إضافة حجز جديد" size="lg">
                 
                 {/* Toggle Mode */}
                 <div className="flex items-center justify-end mb-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border dark:border-slate-700">
                     <label className="flex items-center cursor-pointer">
                         <div className="relative">
-                            <input type="checkbox" className="sr-only" checked={isManualMode} onChange={toggleInputMode} />
+                            <input type="checkbox" id="input-mode-toggle" className="sr-only" checked={isManualMode} onChange={toggleInputMode} />
                             <div className={`block w-12 h-7 rounded-full transition-colors ${isManualMode ? 'bg-purple-500' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
                             <div className={`dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${isManualMode ? 'transform translate-x-5' : ''}`}></div>
                         </div>
@@ -304,40 +369,20 @@ const Reservations: React.FC = () => {
                 </div>
 
                 {isManualMode ? (
-                    <div className="space-y-4 animate-fade-in">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">اسم العميل (اختياري)</label>
-                                <input type="text" value={manualForm.client_name} onChange={e => setManualForm({...manualForm, client_name: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">رقم الجوال <span className="text-red-500">*</span></label>
-                                <input type="text" value={manualForm.client_phone} onChange={e => setManualForm({...manualForm, client_phone: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600 dir-ltr text-right" placeholder="05xxxxxxxx" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">الشركة المصنعة</label>
-                                <input type="text" value={manualForm.car_make} onChange={e => setManualForm({...manualForm, car_make: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" placeholder="مثال: تويوتا" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">نوع السيارة (الموديل)</label>
-                                <input type="text" value={manualForm.car_model} onChange={e => setManualForm({...manualForm, car_model: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" placeholder="مثال: كامري" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">سنة الصنع</label>
-                                <input type="text" value={manualForm.car_year} onChange={e => setManualForm({...manualForm, car_year: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" placeholder="مثال: 2023" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">نوع الخدمة</label>
-                                <input type="text" value={manualForm.service_type} onChange={e => setManualForm({...manualForm, service_type: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات إضافية</label>
-                                <textarea value={manualForm.notes} onChange={e => setManualForm({...manualForm, notes: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" rows={2} />
-                            </div>
-                        </div>
-                        <div className="flex justify-end pt-4 border-t dark:border-slate-700">
-                            <Button onClick={handleSaveManual} disabled={!manualForm.client_phone.trim()}>حفظ الحجز</Button>
-                        </div>
+                    <div className="animate-fade-in">
+                        <NewRequestForm 
+                            clients={clients}
+                            carMakes={carMakes}
+                            carModels={carModels}
+                            inspectionTypes={inspectionTypes}
+                            brokers={brokers}
+                            isReservationMode={true}
+                            onCancel={() => setIsAddModalOpen(false)}
+                            onSuccess={() => {
+                                setIsAddModalOpen(false);
+                                fetchReservations();
+                            }}
+                        />
                     </div>
                 ) : (
                     !parsedData ? (
@@ -370,46 +415,31 @@ const Reservations: React.FC = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-4 animate-fade-in">
-                            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 flex items-center gap-3">
+                        <div className="animate-fade-in">
+                            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 flex items-center gap-3 mb-6">
                                 <CheckCircleIcon className="w-6 h-6 text-green-600" />
                                 <div>
                                     <h4 className="font-bold text-green-800 dark:text-green-300">تم استخراج البيانات بنجاح</h4>
-                                    <p className="text-xs text-green-700 dark:text-green-400">يرجى مراجعة البيانات أدناه قبل الحفظ.</p>
+                                    <p className="text-xs text-green-700 dark:text-green-400">يرجى مراجعة البيانات وتكملة النواقص قبل الحفظ.</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">اسم العميل</label>
-                                    <input type="text" value={parsedData.client_name || ''} onChange={e => setParsedData({...parsedData, client_name: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">رقم الجوال</label>
-                                    <input type="text" value={parsedData.client_phone || ''} onChange={e => setParsedData({...parsedData, client_phone: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600 dir-ltr text-right" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">تفاصيل السيارة</label>
-                                    <input type="text" value={parsedData.car_details || ''} onChange={e => setParsedData({...parsedData, car_details: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">نص اللوحة</label>
-                                    <input type="text" value={parsedData.plate_text || ''} onChange={e => setParsedData({...parsedData, plate_text: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">نوع الخدمة المطلوبة</label>
-                                    <input type="text" value={parsedData.service_type || ''} onChange={e => setParsedData({...parsedData, service_type: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" />
-                                </div>
-                                 <div className="md:col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات إضافية</label>
-                                    <textarea value={parsedData.notes || ''} onChange={e => setParsedData({...parsedData, notes: e.target.value})} className="w-full p-2 border rounded-lg bg-white dark:bg-slate-700 text-sm dark:border-slate-600" rows={2} />
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end gap-2 pt-4 border-t dark:border-slate-700">
-                                <Button variant="secondary" onClick={() => setParsedData(null)}>إلغاء وإعادة المحاولة</Button>
-                                <Button onClick={handleSaveReservation}>حفظ الحجز</Button>
-                            </div>
+                            <NewRequestForm 
+                                clients={clients}
+                                carMakes={carMakes}
+                                carModels={carModels}
+                                inspectionTypes={inspectionTypes}
+                                brokers={brokers}
+                                isReservationMode={true}
+                                initialReservationData={parsedData}
+                                onCancel={() => setParsedData(null)}
+                                onSuccess={() => {
+                                    setIsAddModalOpen(false);
+                                    setParsedData(null);
+                                    setRawText('');
+                                    fetchReservations();
+                                }}
+                            />
                         </div>
                     )
                 )}

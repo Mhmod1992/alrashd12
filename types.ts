@@ -70,6 +70,7 @@ export type Permission = keyof typeof PERMISSIONS;
 
 export interface Reservation {
   id: string;
+  reservation_number?: number;
   source_text: string;
   client_name: string;
   client_phone: string;
@@ -80,6 +81,8 @@ export interface Reservation {
   status: 'new' | 'confirmed' | 'converted' | 'cancelled';
   car_make_id?: string;
   car_model_id?: string;
+  price?: number;
+  payment_type?: PaymentType;
   created_at: string;
 }
 

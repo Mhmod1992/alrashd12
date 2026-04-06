@@ -90,10 +90,11 @@ const Requests: React.FC = () => {
     const [paymentMethod, setPaymentMethod] = useState<PaymentType>(PaymentType.Cash);
     const [splitCashAmount, setSplitCashAmount] = useState<number>(0);
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
-    const [activatingRes, setActivatingRes] = useState<Reservation | null>(null);
-    const [isActivating, setIsActivating] = useState(false);
-    const [isReservationsModalOpen, setIsReservationsModalOpen] = useState(false);
-    const [reservationSearchTerm, setReservationSearchTerm] = useState('');
+
+    const [isReservationsAccordionOpen, setIsReservationsAccordionOpen] = useState(false);
+    const [reservationMiniSearchTerm, setReservationMiniSearchTerm] = useState('');
+    const [reservationMiniFilter, setReservationMiniFilter] = useState<'today' | 'yesterday' | 'all'>('today');
+    const [prefilledReservation, setPrefilledReservation] = useState<Reservation | null>(null);
 
     const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -178,9 +179,57 @@ const Requests: React.FC = () => {
         setIsProcessingModalOpen(true);
     };
 
+    const filteredMiniReservations = useMemo(() => {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const yesterday = today - 86400000;
+
+        return reservations.filter(res => {
+            // Filter by status (only 'new' or 'confirmed'?)
+            // The user said "Incoming Today's Reservations" with badge of "new"
+            // Let's show all that are not 'converted' or 'cancelled'
+            if (res.status === 'converted' || res.status === 'cancelled') return false;
+
+            // Filter by date
+            const resDate = new Date(res.created_at).getTime();
+            if (reservationMiniFilter === 'today') {
+                if (resDate < today) return false;
+            } else if (reservationMiniFilter === 'yesterday') {
+                if (resDate < yesterday || resDate >= today) return false;
+            }
+
+            // Filter by search
+            if (reservationMiniSearchTerm.trim()) {
+                const term = reservationMiniSearchTerm.toLowerCase();
+                return (
+                    res.client_name?.toLowerCase().includes(term) ||
+                    res.client_phone?.includes(term) ||
+                    res.car_details?.toLowerCase().includes(term) ||
+                    res.reservation_number?.toString().includes(term)
+                );
+            }
+
+            return true;
+        });
+    }, [reservations, reservationMiniFilter, reservationMiniSearchTerm]);
+
+    const todayNewReservationsCount = useMemo(() => {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        return reservations.filter(r => r.status === 'new' && new Date(r.created_at).getTime() >= today).length;
+    }, [reservations]);
+
+    const handleConvertReservation = (res: Reservation) => {
+        setPrefilledReservation(res);
+        setIsModalOpen(true);
+    };
+
     const handleSuccess = (newRequest?: InspectionRequest) => {
         setIsProcessingModalOpen(false);
-        // The global success modal is handled by AppContext/NewRequestForm
+        if (prefilledReservation) {
+            updateReservationStatus(prefilledReservation.id, 'converted');
+            setPrefilledReservation(null);
+        }
     };
 
     // --- REAL-TIME SYNC FOR FILTERED DATA ---
@@ -602,104 +651,7 @@ const Requests: React.FC = () => {
         window.open(whatsappUrl, '_blank');
     };
 
-    const handleActivateClick = (res: Reservation) => {
-        setActivatingRes(res);
-        let price = 0;
-        const priceMatch = res.notes?.match(/السعر:\s*(\d+)/);
-        if (priceMatch) price = parseInt(priceMatch[1]);
-
-        setPaymentMethod(PaymentType.Cash);
-        setSplitCashAmount(0);
-        setSplitCardAmount(price || 0);
-        setIsPaymentModalOpen(true);
-    };
-
-    const confirmActivation = async () => {
-        if (!activatingRes || !authUser) return;
-        setIsActivating(true);
-        try {
-            // 1. Find or Create Client
-            let client = clients.find(c => c.phone === activatingRes.client_phone);
-            if (!client) {
-                const results = await searchClients(activatingRes.client_phone);
-                client = results.find(c => c.phone === activatingRes.client_phone);
-                if (!client) {
-                    client = await addClient({ id: uuidv4() as any, name: activatingRes.client_name, phone: activatingRes.client_phone });
-                }
-            }
-
-            // 2. Find or Create Car
-            let car = cars.find(c => c.plate_number === activatingRes.plate_text);
-            const parts = activatingRes.car_details.split(' - ');
-
-            if (!car) {
-                const year = parseInt(parts[2]?.trim()) || new Date().getFullYear();
-
-                car = await addCar({
-                    id: uuidv4() as any,
-                    make_id: activatingRes.car_make_id || '',
-                    model_id: activatingRes.car_model_id || '',
-                    year: year,
-                    plate_number: activatingRes.plate_text,
-                    plate_number_en: activatingRes.plate_text,
-                });
-            }
-
-            // 3. Create Request
-            const price = paymentMethod === PaymentType.Split ? (splitCashAmount + splitCardAmount) : (paymentMethod === PaymentType.Cash ? splitCashAmount : splitCardAmount);
-
-            const makeObj = carMakes.find(m => m.id === activatingRes.car_make_id);
-            const modelObj = carModels.find(m => m.id === activatingRes.car_model_id);
-
-            const typeMatch = activatingRes.notes?.match(/نوع الفحص:\s*([^|]+)/);
-            const typeName = typeMatch ? typeMatch[1].trim() : '';
-            const iType = inspectionTypes.find(t => t.name === typeName);
-
-            await addRequest({
-                id: uuidv4() as any,
-                client_id: client.id,
-                car_id: car.id,
-                car_snapshot: {
-                    make_ar: makeObj?.name_ar || parts[0]?.trim() || '',
-                    make_en: makeObj?.name_en || '',
-                    model_ar: modelObj?.name_ar || parts[1]?.trim() || '',
-                    model_en: modelObj?.name_en || '',
-                    year: parseInt(parts[2]?.trim()) || new Date().getFullYear()
-                },
-                inspection_type_id: iType?.id || inspectionTypes[0]?.id || '',
-                price: price,
-                status: RequestStatus.NEW,
-                payment_type: paymentMethod,
-                split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
-                created_at: new Date().toISOString(),
-                employee_id: authUser.id,
-                inspection_data: {},
-                general_notes: [],
-                category_notes: {},
-                structured_findings: [],
-                activity_log: [],
-                attached_files: []
-            } as any);
-
-            // 4. Update Reservation
-            await updateReservationStatus(activatingRes.id, 'converted');
-
-            addNotification({ title: 'تم التفعيل', message: 'تم فتح طلب فحص جديد وتحصيل المبلغ.', type: 'success' });
-            setIsPaymentModalOpen(false);
-            setActivatingRes(null);
-        } catch (error) {
-            console.error(error);
-            addNotification({ title: 'خطأ', message: 'فشل تفعيل الحجز.', type: 'error' });
-        } finally {
-            setIsActivating(false);
-        }
-    };
-
     const confirmPayment = async () => {
-        if (activatingRes) {
-            await confirmActivation();
-            return;
-        }
         if (!paymentRequest) return;
         if (paymentMethod === PaymentType.Split) {
             if (splitCashAmount + splitCardAmount !== paymentRequest.price) {
@@ -942,18 +894,6 @@ const Requests: React.FC = () => {
 
                 {/* 2. Main Actions (Center) */}
                 <div className="flex items-center justify-center gap-3 order-3 md:order-2 w-full">
-                    {reservations.filter(r => r.status === 'confirmed').length > 0 && (
-                        <button
-                            onClick={() => setIsReservationsModalOpen(true)}
-                            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg shadow-amber-200 dark:shadow-none transition-all"
-                        >
-                            <Icon name="calendar-check" className="w-5 h-5" />
-                            <span>الحجوزات</span>
-                            <span className="bg-white text-amber-600 px-1.5 py-0.5 rounded-full text-xs">
-                                {reservations.filter(r => r.status === 'confirmed').length}
-                            </span>
-                        </button>
-                    )}
                     {can('create_requests') && (
                         <div className="flex gap-2">
                             <Button 
@@ -971,103 +911,119 @@ const Requests: React.FC = () => {
                 <div className="hidden md:block order-3"></div>
             </div>
 
-            {/* Modal for Confirmed Reservations Table */}
-            <Modal
-                isOpen={isReservationsModalOpen}
-                onClose={() => setIsReservationsModalOpen(false)}
-                title="قائمة الحجوزات المؤكدة بانتظار الحضور"
-                size="5xl"
-            >
-                <div className="space-y-4">
-                    <div className="relative">
-                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                            <SearchIcon className="h-4 h-4 text-slate-400" />
-                        </span>
-                        <input
-                            type="text"
-                            placeholder="بحث في الحجوزات (الاسم، الهاتف، السيارة...)"
-                            value={reservationSearchTerm}
-                            onChange={(e) => setReservationSearchTerm(e.target.value)}
-                            className="block w-full p-2.5 pl-9 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-800 text-sm"
-                        />
+            {/* The Hybrid Hub: Reservations Accordion */}
+            <div className="mb-6">
+                <button
+                    onClick={() => setIsReservationsAccordionOpen(!isReservationsAccordionOpen)}
+                    className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 shadow-sm border ${
+                        isReservationsAccordionOpen 
+                        ? 'bg-blue-600 text-white border-blue-500' 
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-blue-400'
+                    }`}
+                >
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${isReservationsAccordionOpen ? 'bg-white/20' : 'bg-blue-50 dark:bg-blue-900/30'}`}>
+                            <Icon name="calendar-check" className={`w-5 h-5 ${isReservationsAccordionOpen ? 'text-white' : 'text-blue-600'}`} />
+                        </div>
+                        <span className="font-bold text-lg">حجوزات اليوم الواردة</span>
+                        {todayNewReservationsCount > 0 && (
+                            <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-bounce">
+                                {todayNewReservationsCount}
+                            </span>
+                        )}
                     </div>
+                    <Icon 
+                        name="chevron-down" 
+                        className={`w-6 h-6 transition-transform duration-300 ${isReservationsAccordionOpen ? 'rotate-180' : ''}`} 
+                    />
+                </button>
 
-                    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-                        <table className="w-full text-right text-sm">
-                            <thead className="bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 font-bold text-xs uppercase">
-                                <tr>
-                                    <th className="p-3">العميل</th>
-                                    <th className="p-3">السيارة</th>
-                                    <th className="p-3">التفاصيل / السعر</th>
-                                    <th className="p-3">تاريخ الحجز</th>
-                                    <th className="p-3 text-center">بواسطة</th>
-                                    <th className="p-3 text-center">الإجراء</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {reservations
-                                    .filter(r => r.status === 'confirmed')
-                                    .filter(r =>
-                                        !reservationSearchTerm ||
-                                        r.client_name?.includes(reservationSearchTerm) ||
-                                        r.client_phone?.includes(reservationSearchTerm) ||
-                                        r.car_details?.includes(reservationSearchTerm) ||
-                                        r.notes?.includes(reservationSearchTerm)
-                                    )
-                                    .map(res => (
-                                        <tr key={res.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                {isReservationsAccordionOpen && (
+                    <div className="mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in-down">
+                        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row gap-4 items-center justify-between bg-slate-50/50 dark:bg-slate-900/20">
+                            <div className="flex items-center bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg shadow-inner w-full md:w-auto">
+                                <button
+                                    onClick={() => setReservationMiniFilter('today')}
+                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'today' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
+                                >
+                                    اليوم
+                                </button>
+                                <button
+                                    onClick={() => setReservationMiniFilter('yesterday')}
+                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'yesterday' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
+                                >
+                                    أمس
+                                </button>
+                                <button
+                                    onClick={() => setReservationMiniFilter('all')}
+                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'all' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
+                                >
+                                    الكل
+                                </button>
+                            </div>
+
+                            <div className="relative w-full md:w-64">
+                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                    <SearchIcon className="h-4 w-4 text-slate-400" />
+                                </span>
+                                <input
+                                    type="text"
+                                    placeholder="بحث سريع..."
+                                    value={reservationMiniSearchTerm}
+                                    onChange={(e) => setReservationMiniSearchTerm(e.target.value)}
+                                    className="block w-full p-2 pl-9 border border-slate-200 dark:border-slate-600 rounded-lg text-xs bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right text-sm">
+                                <thead className="bg-slate-50 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-wider">
+                                    <tr>
+                                        <th className="p-3">رقم الحجز</th>
+                                        <th className="p-3">العميل</th>
+                                        <th className="p-3">السيارة</th>
+                                        <th className="p-3 text-center">الإجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                    {filteredMiniReservations.map(res => (
+                                        <tr key={res.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors">
+                                            <td className="p-3 font-mono text-xs text-blue-600 dark:text-blue-400">
+                                                #RSV-{res.reservation_number}
+                                            </td>
                                             <td className="p-3">
                                                 <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name}</div>
-                                                <div className="text-xs text-slate-500 font-mono tracking-wider dir-ltr inline-block">{res.client_phone}</div>
+                                                <div className="text-[10px] text-slate-500">{res.client_phone}</div>
                                             </td>
                                             <td className="p-3">
-                                                <div className="flex items-center gap-2">
-                                                    <Icon name="car" className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                                                    <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[150px]">{res.car_details}</span>
-                                                </div>
-                                                <div className="text-[10px] text-slate-400 mt-1">{res.plate_text}</div>
-                                            </td>
-                                            <td className="p-3">
-                                                <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 p-2 rounded-lg border border-amber-100 dark:border-amber-800/50 text-[11px] font-medium">
-                                                    {res.notes || res.service_type}
-                                                </div>
-                                            </td>
-                                            <td className="p-3 text-xs text-slate-500">
-                                                {new Date(res.created_at).toLocaleDateString('ar-SA')}
+                                                <div className="font-medium text-slate-700 dark:text-slate-300">{res.car_details}</div>
+                                                <div className="text-[10px] text-slate-400">{res.plate_text}</div>
                                             </td>
                                             <td className="p-3 text-center">
-                                                <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full text-slate-600 dark:text-slate-400">واتساب</span>
-                                            </td>
-                                            <td className="p-3 text-center">
-                                                <Button
-                                                    onClick={() => {
-                                                        setIsReservationsModalOpen(false);
-                                                        handleActivateClick(res);
-                                                    }}
-                                                    size="sm"
-                                                    className="bg-green-600 hover:bg-green-700 shadow-sm"
-                                                    leftIcon={<Icon name="check-circle" className="w-4 h-4" />}
+                                                <button
+                                                    onClick={() => handleConvertReservation(res)}
+                                                    className="inline-flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm"
                                                 >
-                                                    تفعيل وفتح طلب
-                                                </Button>
+                                                    <Icon name="refresh-cw" className="w-3 h-3" />
+                                                    <span>تحويل</span>
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
-                                {reservations.filter(r => r.status === 'confirmed').length === 0 && (
-                                    <tr>
-                                        <td colSpan={6} className="p-12 text-center">
-                                            <div className="flex flex-col items-center gap-2 text-slate-400">
-                                                <Icon name="calendar-check" className="w-12 h-12 opacity-20" />
-                                                <p className="italic">لا توجد حجوزات مؤكدة حالياً</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+                                    {filteredMiniReservations.length === 0 && (
+                                        <tr>
+                                            <td colSpan={4} className="p-8 text-center text-slate-400 italic text-xs">
+                                                لا توجد حجوزات تطابق البحث
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
-            </Modal>
+                )}
+            </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4 mb-6 space-y-4 animate-slide-in-down">
                 {searchedRequests === null && (
@@ -1307,15 +1263,16 @@ const Requests: React.FC = () => {
             )}
 
             {isModalOpen && (
-                <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="إنشاء طلب جديد" size="4xl">
+                <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setPrefilledReservation(null); }} title="إنشاء طلب جديد" size="4xl">
                     <NewRequestForm
                         clients={clients}
                         carMakes={carMakes}
                         carModels={carModels}
                         inspectionTypes={inspectionTypes}
                         brokers={brokers}
-                        onCancel={() => setIsModalOpen(false)}
+                        onCancel={() => { setIsModalOpen(false); setPrefilledReservation(null); }}
                         onSuccess={handleSuccess}
+                        initialReservationData={prefilledReservation || undefined}
                     />
                 </Modal>
             )}
@@ -1427,15 +1384,8 @@ const Requests: React.FC = () => {
                     )}
                 </div>
                 <div className="flex justify-end gap-2 pt-4 mt-2 border-t dark:border-slate-700">
-                    <Button variant="secondary" onClick={() => { setIsPaymentModalOpen(false); setActivatingRes(null); }}>إلغاء</Button>
-                    <Button onClick={confirmPayment} disabled={isActivating}>
-                        {isActivating ? (
-                            <span className="flex items-center gap-2">
-                                <RefreshCwIcon className="w-4 h-4 animate-spin" />
-                                جاري التفعيل...
-                            </span>
-                        ) : (activatingRes ? 'تفعيل الحجز وفتح الطلب' : 'تأكيد الاستلام')}
-                    </Button>
+                    <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)}>إلغاء</Button>
+                    <Button onClick={confirmPayment}>تأكيد الاستلام</Button>
                 </div>
             </Modal>
 

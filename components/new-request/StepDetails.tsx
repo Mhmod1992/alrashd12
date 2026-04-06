@@ -16,6 +16,8 @@ interface StepDetailsProps {
     isReceptionist: boolean;
     paymentNote: string;
     setPaymentNote: (val: string) => void;
+    reservationNotes?: string;
+    setReservationNotes?: (val: string) => void;
     splitCashAmount: number;
     onSplitCashChange: (val: number) => void;
     splitCardAmount: number;
@@ -23,6 +25,7 @@ interface StepDetailsProps {
     priceInputRef: React.RefObject<HTMLInputElement>;
     getInputClass: (name: string) => string;
     onInspectionTypeFocus?: () => void;
+    isReservationMode?: boolean;
 }
 
 const StepDetails: React.FC<StepDetailsProps> = (props) => {
@@ -42,7 +45,7 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                         value={props.inspectionTypeId}
                         onChange={(e) => props.setInspectionTypeId(e.target.value)}
                         onFocus={props.onInspectionTypeFocus}
-                        required
+                        required={!props.isReservationMode}
                         className={props.getInputClass('inspectionType')}
                     >
                         <option value="" disabled>اختر نوع الفحص</option>
@@ -56,9 +59,23 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                         type="number"
                         value={props.inspectionPrice}
                         onChange={(e) => props.setInspectionPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                        required
+                        required={!props.isReservationMode}
                         className={props.getInputClass('inspectionPrice')}
                     />
+                    
+                    {props.inspectionTypeId && props.inspectionPrice !== '' && (
+                        (() => {
+                            const selectedType = props.inspectionTypes.find(t => t.id === props.inspectionTypeId);
+                            if (selectedType && selectedType.price !== props.inspectionPrice) {
+                                return (
+                                    <div className="mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 animate-pulse">
+                                        <span>⚠️ السعر يختلف عن السعر الافتراضي ({selectedType.price} ريال)</span>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()
+                    )}
                     
                     <div className="mt-3 flex flex-wrap gap-4">
                         <label className="flex items-center gap-2 cursor-pointer group">
@@ -88,13 +105,13 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                         </div>
                     )}
                 </div>
-                {!props.isReceptionist && (
+                {!props.isReceptionist && !props.isReservationMode && (
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">طريقة الدفع</label>
                         <select
                             value={props.paymentType}
                             onChange={(e) => props.setPaymentType(e.target.value as PaymentType)}
-                            required
+                            required={!props.isReservationMode}
                             className={props.getInputClass('paymentType')}
                         >
                             <option value="" disabled>اختر طريقة الدفع</option>
@@ -148,6 +165,21 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                     </div>
                 )}
             </div>
+
+            {props.isReservationMode && props.setReservationNotes && (
+                <div className="mt-6 animate-fade-in">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        ملاحظات الحجز (مثال: اليوم الساعة 4)
+                    </label>
+                    <textarea
+                        value={props.reservationNotes}
+                        onChange={(e) => props.setReservationNotes!(e.target.value)}
+                        className={formInputClasses}
+                        rows={2}
+                        placeholder="أضف أي ملاحظات إضافية هنا..."
+                    />
+                </div>
+            )}
         </fieldset>
     );
 };

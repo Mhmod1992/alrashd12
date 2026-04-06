@@ -25,8 +25,9 @@ interface NewRequestFormProps {
     brokers: Broker[];
     onCancel: () => void;
     onSuccess: (newRequest?: InspectionRequest) => void;
-    initialReservationData?: Reservation;
+    initialReservationData?: Partial<Reservation>;
     initialData?: InspectionRequest; // For Edit Mode
+    isReservationMode?: boolean;
 }
 
 const NewRequestForm: React.FC<NewRequestFormProps> = ({
@@ -38,7 +39,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     onCancel,
     onSuccess,
     initialReservationData,
-    initialData
+    initialData,
+    isReservationMode = false
 }) => {
     const {
         settings, authUser, addClient, addCar, addRequest, addNotification,
@@ -47,7 +49,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
-        fetchAndUpdateSingleRequest, setIsCreatingRequest, updateClient
+        fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation
     } = useAppContext();
 
     // Responsive Logic
@@ -57,7 +59,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     // Determine Role & Mode
     const isReceptionist = authUser?.role === 'receptionist';
     const isEditMode = !!initialData;
-    const TOTAL_STEPS = isReceptionist ? 3 : 4;
+    const TOTAL_STEPS = (isReceptionist || isReservationMode) ? 3 : 4;
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -66,6 +68,23 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     }, []);
 
     // Form state
+    const [showClientFields, setShowClientFields] = useState(() => {
+        const saved = localStorage.getItem('showClientFields');
+        return saved !== null ? JSON.parse(saved) : true;
+    });
+    const [showPlateField, setShowPlateField] = useState(() => {
+        const saved = localStorage.getItem('showPlateField');
+        return saved !== null ? JSON.parse(saved) : true;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('showClientFields', JSON.stringify(showClientFields));
+    }, [showClientFields]);
+
+    useEffect(() => {
+        localStorage.setItem('showPlateField', JSON.stringify(showPlateField));
+    }, [showPlateField]);
+
     const [clientName, setClientName] = useState('');
     const [clientPhone, setClientPhone] = useState('');
     const [carMakeId, setCarMakeId] = useState('');
@@ -90,6 +109,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
 
     const [paymentNote, setPaymentNote] = useState('');
+    const [reservationNotes, setReservationNotes] = useState('');
     const [useBroker, setUseBroker] = useState(false);
     const [brokerId, setBrokerId] = useState('');
     const [brokerCommission, setBrokerCommission] = useState(0);
@@ -311,19 +331,42 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const englishBottom = useMemo(() => plateNums.replace(/\s/g, '').replace(/\D/g, '').slice(0, 4).split('').join(' '), [plateNums]);
     const arabicTop = useMemo(() => convertToArabicNumerals(englishBottom), [englishBottom]);
 
-    // NEW: Reservation Data Parsing for Manual Fill
+    // NEW: Smart Data Fragmentation Logic
+    const compoundMakes = ['مرسيدس بنز', 'لاند روفر', 'رينج روفر', 'استون مارتن', 'الفا روميو', 'جراند شيروكي'];
+
     const reservationFillData = useMemo(() => {
         if (!initialReservationData) return null;
+
+        let carText = (initialReservationData.car_details || '').trim();
+        
+        // 1. Extract Year (4 digits starting with 19 or 20)
+        const yearMatch = carText.match(/\b(19|20)\d{2}\b/);
+        const year = yearMatch ? yearMatch[0] : '';
+        if (yearMatch) {
+            carText = carText.replace(yearMatch[0], '').trim();
+        }
+
+        // 2. Extract Make (Handle compound names)
+        let make = '';
+        let model = '';
+        
+        const foundCompound = compoundMakes.find(cm => carText.startsWith(cm));
+        if (foundCompound) {
+            make = foundCompound;
+            model = carText.replace(foundCompound, '').trim();
+        } else {
+            const parts = carText.split(/\s+/);
+            make = parts[0] || '';
+            model = parts.slice(1).join(' ').trim();
+        }
+
+        // 3. Extract Price
+        const price = initialReservationData.price || 0;
 
         const plateText = initialReservationData.plate_text || '';
         const plateNums = plateText.match(/\d+/g)?.join('') || '';
         const plateLetters = plateText.replace(/[0-9]/g, '').replace(/\s+/g, ' ').trim();
         const formattedLetters = plateLetters.length > 0 && !plateLetters.includes(' ') ? plateLetters.split('').join(' ') : plateLetters;
-
-        const carParts = (initialReservationData.car_details || '').split(' - ');
-        const make = carParts[0] || '';
-        const model = carParts[1] || '';
-        const year = carParts[2] || '';
 
         return {
             name: initialReservationData.client_name || '',
@@ -333,11 +376,13 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             year,
             plateNums,
             plateChars: formattedLetters,
-            service: initialReservationData.service_type || ''
+            service: initialReservationData.service_type || '',
+            price,
+            originalText: initialReservationData.car_details || ''
         };
     }, [initialReservationData]);
 
-    const handleManualFill = (field: 'name' | 'phone' | 'make' | 'model' | 'year' | 'plate' | 'service') => {
+    const handleManualFill = (field: 'name' | 'phone' | 'make' | 'model' | 'year' | 'plate' | 'service' | 'price') => {
         if (!reservationFillData) return;
 
         switch (field) {
@@ -372,6 +417,14 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 break;
             case 'make':
                 setCarMakeSearchTerm(reservationFillData.make);
+                // Validation Alert
+                if (/\d/.test(reservationFillData.make) || reservationFillData.make.split(/\s+/).length > 2) {
+                    addNotification({
+                        title: 'تنبيه التوزيع',
+                        message: 'يرجى التأكد من فصل اسم الشركة عن الموديل يدوياً.',
+                        type: 'warning'
+                    });
+                }
                 setTimeout(() => {
                     makeInputRef.current?.focus();
                     setIsMakeDropdownOpen(true);
@@ -386,16 +439,27 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 }, 50);
                 break;
             case 'model':
-                addNotification({
-                    title: 'تنبيه',
-                    message: 'يرجى كتابة الموديل يدوياً لضمان اختياره بشكل صحيح من القائمة.',
-                    type: 'info'
-                });
-                setTimeout(() => modelInputRef.current?.focus(), 50);
+                setCarModelSearchTerm(reservationFillData.model);
+                setTimeout(() => {
+                    modelInputRef.current?.focus();
+                    setIsModelDropdownOpen(true);
+                    if (reservationFillData.model.length >= 1 && carMakeId) {
+                        setIsSearchingModel(true);
+                        searchCarModels(carMakeId, reservationFillData.model).then(results => {
+                            setModelSuggestions(results);
+                            setIsModelDropdownOpen(results.length > 0);
+                            setIsSearchingModel(false);
+                        });
+                    }
+                }, 50);
                 break;
             case 'year':
                 const yr = parseInt(reservationFillData.year);
-                if (!isNaN(yr)) setCarYear(yr);
+                if (!isNaN(yr)) {
+                    setCarYear(yr);
+                } else {
+                    setCarYear(undefined as any);
+                }
                 setTimeout(() => yearInputRef.current?.focus(), 50);
                 break;
             case 'plate':
@@ -421,8 +485,25 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     setTimeout(() => typeInputRef.current?.focus(), 50);
                 }
                 break;
+            case 'price':
+                if (reservationFillData.price > 0) {
+                    setInspectionPrice(reservationFillData.price);
+                }
+                break;
         }
     };
+
+    useEffect(() => {
+        if (initialReservationData && reservationFillData) {
+            // Do not fill fields automatically as requested
+            
+            addNotification({
+                title: 'بيانات الحجز جاهزة',
+                message: 'انقر على البيانات في الشريط الأخضر العلوي لتعبئة الحقول بسرعة.',
+                type: 'info'
+            });
+        }
+    }, [initialReservationData, reservationFillData]);
 
     // Reset suggestion indices when lists change
     useEffect(() => setNameSuggestionIndex(-1), [nameSuggestions]);
@@ -911,22 +992,28 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
         switch (step) {
             case 1:
-                if (!clientName.trim()) newErrors['clientName'] = true;
-                if (clientPhone.length < 10) newErrors['clientPhone'] = true;
+                if (showClientFields) {
+                    if (!clientName.trim()) newErrors['clientName'] = true;
+                    if (clientPhone.length < 10) newErrors['clientPhone'] = true;
+                }
 
                 checkField('clientName', nameInputRef);
                 checkField('clientPhone', phoneInputRef);
                 break;
             case 2:
-                if (useChassisNumber) {
-                    if (chassisNumber.length < 5) newErrors['chassisNumber'] = true;
-                } else {
-                    if (plateChars.trim().length < 1) newErrors['plateChars'] = true;
-                    if (plateNums.trim().length < 1) newErrors['plateNums'] = true;
+                if (!isReservationMode) {
+                    if (useChassisNumber) {
+                        if (chassisNumber.length < 5) newErrors['chassisNumber'] = true;
+                    } else if (showPlateField) {
+                        if (plateChars.trim().length < 1) newErrors['plateChars'] = true;
+                        if (plateNums.trim().length < 1) newErrors['plateNums'] = true;
+                    }
                 }
+                
                 if (!foundHistory) {
                     if (!carMakeId) newErrors['carMake'] = true;
                     if (!carModelId) newErrors['carModel'] = true;
+                    if (!carYear || carYear < 1900 || carYear > 2100) newErrors['carYear'] = true;
                 }
 
                 checkField('chassisNumber', chassisInputRef);
@@ -934,17 +1021,21 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 checkField('plateNums', plateNumInputRef);
                 checkField('carMake', makeInputRef);
                 checkField('carModel', modelInputRef);
+                checkField('carYear', yearInputRef);
                 break;
             case 3:
                 if (!inspectionTypeId) newErrors['inspectionType'] = true;
                 if (Number(inspectionPrice) <= 0) newErrors['inspectionPrice'] = true;
-                if (!isReceptionist) {
-                    if (!paymentType) newErrors['paymentType'] = true;
-                    if (paymentType === PaymentType.Split) {
-                        const totalSplit = splitCashAmount + splitCardAmount;
-                        if (Math.abs(totalSplit - (Number(inspectionPrice) || 0)) > 0.01) {
-                            addNotification({ title: 'خطأ في الدفع', message: 'المبالغ غير متطابقة.', type: 'error' });
-                            return false;
+
+                if (!isReservationMode) {
+                    if (!isReceptionist) {
+                        if (!paymentType) newErrors['paymentType'] = true;
+                        if (paymentType === PaymentType.Split) {
+                            const totalSplit = splitCashAmount + splitCardAmount;
+                            if (Math.abs(totalSplit - (Number(inspectionPrice) || 0)) > 0.01) {
+                                addNotification({ title: 'خطأ في الدفع', message: 'المبالغ غير متطابقة.', type: 'error' });
+                                return false;
+                            }
                         }
                     }
                 }
@@ -988,8 +1079,44 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setCurrentStep(prev => prev - 1);
     };
 
+    const handleReservationSubmit = async () => {
+        if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
+
+        try {
+            const make = contextCarMakes.find(m => m.id === carMakeId);
+            const model = contextCarModels.find(m => m.id === carModelId);
+            const type = inspectionTypes.find(t => t.id === inspectionTypeId);
+
+            const car_details = `${make?.name_ar || carMakeSearchTerm} ${model?.name_ar || carModelSearchTerm} ${carYear}`;
+            const plate_text = useChassisNumber ? `شاصي ${chassisNumber}` : `${plateChars} ${plateNums}`;
+
+            await addReservation({
+                source_text: initialReservationData?.source_text || 'إدخال يدوي (نموذج ديناميكي)',
+                client_name: clientName,
+                client_phone: clientPhone,
+                car_details,
+                plate_text,
+                service_type: type?.name || 'فحص عام',
+                notes: reservationNotes || paymentNote,
+                car_make_id: carMakeId,
+                car_model_id: carModelId,
+                price: Number(inspectionPrice) || 0
+            });
+
+            onSuccess();
+        } catch (error) {
+            console.error("Failed to save reservation", error);
+            addNotification({ title: 'خطأ', message: 'فشل حفظ الحجز.', type: 'error' });
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isReservationMode) {
+            await handleReservationSubmit();
+            return;
+        }
+        // ... existing handleSubmit logic ...
 
         if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
 
@@ -1263,37 +1390,64 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
             <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 pb-20 md:pb-0">
 
+                {/* Toggles for display - ONLY in Reservation Mode */}
+                {isReservationMode && (
+                    <div className="flex flex-wrap gap-4 mb-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border dark:border-slate-700 shadow-sm">
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                            <input 
+                                type="checkbox" 
+                                checked={showClientFields} 
+                                onChange={(e) => setShowClientFields(e.target.checked)}
+                                className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 transition-all"
+                            />
+                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors">إظهار بيانات العميل</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                            <input 
+                                type="checkbox" 
+                                checked={showPlateField} 
+                                onChange={(e) => setShowPlateField(e.target.checked)}
+                                className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 transition-all"
+                            />
+                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors">إظهار حقل اللوحة</span>
+                        </label>
+                    </div>
+                )}
+
                 <ReservationReviewCard 
                     data={reservationFillData} 
                     onManualFill={handleManualFill} 
                 />
 
                 <div className={isMobile && currentStep !== 1 ? 'hidden' : 'block animate-fade-in'}>
-                    <StepClient 
-                        clientName={clientName}
-                        clientPhone={clientPhone}
-                        onNameChange={handleNameChange}
-                        onPhoneChange={handlePhoneChange}
-                        onNameFocus={handleNameFocus}
-                        onPhoneFocus={handlePhoneFocus}
-                        onKeyDown={handleKeyDown}
-                        nameInputRef={nameInputRef}
-                        phoneInputRef={phoneInputRef}
-                        isSearchingClientName={isSearchingClientName}
-                        isSearchingClientPhone={isSearchingClientPhone}
-                        isNameSuggestionsOpen={isNameSuggestionsOpen}
-                        isPhoneSuggestionsOpen={isPhoneSuggestionsOpen}
-                        nameSuggestions={nameSuggestions}
-                        phoneSuggestions={phoneSuggestions}
-                        nameSuggestionIndex={nameSuggestionIndex}
-                        phoneSuggestionIndex={phoneSuggestionIndex}
-                        setNameSuggestionIndex={setNameSuggestionIndex}
-                        setPhoneSuggestionIndex={setPhoneSuggestionIndex}
-                        onClientSelection={handleClientSelection}
-                        unpaidDebtAlert={unpaidDebtAlert}
-                        getInputClass={getInputClass}
-                        existingClientSummary={existingClientSummary}
-                    />
+                    {(isReservationMode ? showClientFields : true) && (
+                        <StepClient 
+                            clientName={clientName}
+                            clientPhone={clientPhone}
+                            onNameChange={handleNameChange}
+                            onPhoneChange={handlePhoneChange}
+                            onNameFocus={handleNameFocus}
+                            onPhoneFocus={handlePhoneFocus}
+                            onKeyDown={handleKeyDown}
+                            nameInputRef={nameInputRef}
+                            phoneInputRef={phoneInputRef}
+                            isSearchingClientName={isSearchingClientName}
+                            isSearchingClientPhone={isSearchingClientPhone}
+                            isNameSuggestionsOpen={isNameSuggestionsOpen}
+                            isPhoneSuggestionsOpen={isPhoneSuggestionsOpen}
+                            nameSuggestions={nameSuggestions}
+                            phoneSuggestions={phoneSuggestions}
+                            nameSuggestionIndex={nameSuggestionIndex}
+                            phoneSuggestionIndex={phoneSuggestionIndex}
+                            setNameSuggestionIndex={setNameSuggestionIndex}
+                            setPhoneSuggestionIndex={setPhoneSuggestionIndex}
+                            onClientSelection={handleClientSelection}
+                            unpaidDebtAlert={unpaidDebtAlert}
+                            getInputClass={getInputClass}
+                            existingClientSummary={existingClientSummary}
+                            isReservationMode={isReservationMode}
+                        />
+                    )}
                 </div>
 
                 <div className={isMobile && currentStep !== 2 ? 'hidden' : 'block animate-fade-in'} ref={carSectionRef}>
@@ -1359,6 +1513,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         arabicBottom={arabicBottom}
                         englishTop={englishTop}
                         englishBottom={englishBottom}
+                        isReservationMode={isReservationMode}
+                        showPlateField={isReservationMode ? showPlateField : true}
                     />
                 </div>
 
@@ -1373,10 +1529,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         setTaxMode={setTaxMode}
                         calculatedPrice={calculatedPrice}
                         paymentType={paymentType}
-                        setPaymentType={setPaymentType}
+                        setPaymentType={setPaymentType as any}
                         isReceptionist={isReceptionist}
                         paymentNote={paymentNote}
                         setPaymentNote={setPaymentNote}
+                        reservationNotes={reservationNotes}
+                        setReservationNotes={setReservationNotes}
                         splitCashAmount={splitCashAmount}
                         onSplitCashChange={handleSplitCashChange}
                         splitCardAmount={splitCardAmount}
@@ -1384,10 +1542,11 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         priceInputRef={priceInputRef}
                         getInputClass={getInputClass}
                         onInspectionTypeFocus={scrollToBottom}
+                        isReservationMode={isReservationMode}
                     />
                 </div>
 
-                {!isReceptionist && (
+                {!isReceptionist && !isReservationMode && (
                     <div className={isMobile && currentStep !== 4 ? 'hidden' : 'block animate-fade-in'}>
                         <StepBroker 
                             useBroker={useBroker}
@@ -1414,9 +1573,13 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                         التالي <ChevronRightIcon className="w-4 h-4 ms-2 transform rotate-180" />
                                     </Button>
                                 ) : (
-                                    <Button type="submit" className="w-2/3 flex-1 justify-center font-bold text-lg">
-                                        {initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionist ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب'))}
-                                    </Button>
+                                    <Button 
+                                    type="submit" 
+                                    className="w-2/3 flex-1 justify-center font-bold text-lg"
+                                    disabled={isCreatingRequest || (isReservationMode && (!carMakeId || !carModelId || !carYear || !inspectionTypeId || !inspectionPrice))}
+                                >
+                                    {isReservationMode ? 'حفظ الحجز' : (initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionist ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب')))}
+                                </Button>
                                 )}
                             </>
                         ) : (
@@ -1424,8 +1587,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                 <Button type="button" variant="secondary" onClick={onCancel}>
                                     إلغاء
                                 </Button>
-                                <Button type="submit" className="font-bold">
-                                    {initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionist ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب'))}
+                                <Button 
+                                    type="submit" 
+                                    className="font-bold"
+                                    disabled={isCreatingRequest || (isReservationMode && (!carMakeId || !carModelId || !carYear || !inspectionTypeId || !inspectionPrice))}
+                                >
+                                    {isReservationMode ? 'حفظ الحجز' : (initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionist ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب')))}
                                 </Button>
                             </>
                         )}

@@ -72,6 +72,8 @@ interface StepCarProps {
     arabicBottom: string;
     englishTop: string;
     englishBottom: string;
+    isReservationMode?: boolean;
+    showPlateField?: boolean;
 }
 
 const StepCar: React.FC<StepCarProps> = (props) => {
@@ -81,7 +83,7 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                 <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
                 بيانات السيارة
             </legend>
-            <div className="mb-6">
+            <div className={`mb-6 ${!props.showPlateField && !props.useChassisNumber ? 'hidden' : ''}`}>
                 <div className="flex justify-between items-center mb-2">
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                         {props.useChassisNumber ? 'رقم الشاصي (VIN)' : 'رقم اللوحة'}
@@ -93,64 +95,68 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                 </div>
 
                 {!props.useChassisNumber ? (
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 relative">
-                            <input
-                                ref={props.plateCharInputRef}
-                                type="text"
-                                placeholder="الأحرف"
-                                value={props.plateChars}
-                                onChange={(e) => {
-                                    const rawVal = e.target.value.replace(/\s/g, '');
-                                    
-                                    // Filter characters based on settings (allow only those in plateCharacters array)
-                                    // Checks against both Arabic and English chars defined in settings
-                                    const validChars = rawVal.split('').filter(char => {
-                                        return props.settings.plateCharacters.some(pc => 
-                                            pc.ar === char || pc.en.toLowerCase() === char.toLowerCase()
-                                        );
-                                    }).join('');
-                                    
-                                    props.setPlateChars(validChars.slice(0, 4).split('').join(' '));
-                                }}
-                                className={`${props.getInputClass('plateChars')} text-center font-bold text-lg`}
-                                style={{ direction: /[\u0600-\u06FF]/.test(props.plateChars) ? 'rtl' : 'ltr' }}
-                                autoComplete="off"
-                            />
-                            <input
-                                ref={props.plateNumInputRef}
-                                type="text"
-                                placeholder="أرقام"
-                                value={props.plateNums}
-                                onChange={(e) => {
-                                    const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                                    props.setPlateNums(val.split('').join(' '));
-                                }}
-                                className={`${props.getInputClass('plateNums')} text-center font-bold text-lg`}
-                                style={{ direction: 'ltr' }}
-                                autoComplete="off"
-                            />
-                            <Button type="button" variant="secondary" onClick={() => props.setIsScannerOpen(true)} className="p-3" title="مسح اللوحة بالكاميرا">
-                                <Icon name="scan-plate" className="w-5 h-5" />
-                            </Button>
+                    props.showPlateField && (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 relative">
+                                <input
+                                    ref={props.plateCharInputRef}
+                                    type="text"
+                                    placeholder="الأحرف"
+                                    value={props.plateChars}
+                                    onChange={(e) => {
+                                        const rawVal = e.target.value.replace(/\s/g, '');
+                                        
+                                        // Filter characters based on settings (allow only those in plateCharacters array)
+                                        // Checks against both Arabic and English chars defined in settings
+                                        const validChars = rawVal.split('').filter(char => {
+                                            return props.settings.plateCharacters.some(pc => 
+                                                pc.ar === char || pc.en.toLowerCase() === char.toLowerCase()
+                                            );
+                                        }).join('');
+                                        
+                                        props.setPlateChars(validChars.slice(0, 4).split('').join(' '));
+                                    }}
+                                    required={!props.isReservationMode}
+                                    className={`${props.getInputClass('plateChars')} text-center font-bold text-lg`}
+                                    style={{ direction: /[\u0600-\u06FF]/.test(props.plateChars) ? 'rtl' : 'ltr' }}
+                                    autoComplete="off"
+                                />
+                                <input
+                                    ref={props.plateNumInputRef}
+                                    type="text"
+                                    placeholder="أرقام"
+                                    value={props.plateNums}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                        props.setPlateNums(val.split('').join(' '));
+                                    }}
+                                    required={!props.isReservationMode}
+                                    className={`${props.getInputClass('plateNums')} text-center font-bold text-lg`}
+                                    style={{ direction: 'ltr' }}
+                                    autoComplete="off"
+                                />
+                                <Button type="button" variant="secondary" onClick={() => props.setIsScannerOpen(true)} className="p-3" title="مسح اللوحة بالكاميرا">
+                                    <Icon name="scan-plate" className="w-5 h-5" />
+                                </Button>
 
-                            {props.isCheckingHistory && (
-                                <div className="absolute left-[-30px] top-1/2 transform -translate-y-1/2">
-                                    <RefreshCwIcon className="w-5 h-5 animate-spin text-blue-500" />
-                                </div>
-                            )}
+                                {props.isCheckingHistory && (
+                                    <div className="absolute left-[-30px] top-1/2 transform -translate-y-1/2">
+                                        <RefreshCwIcon className="w-5 h-5 animate-spin text-blue-500" />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg shadow-inner flex justify-center">
+                                <LicensePlatePreview
+                                    arabicTop={props.arabicTop}
+                                    arabicBottom={props.arabicBottom}
+                                    englishTop={props.englishTop}
+                                    englishBottom={props.englishBottom}
+                                    settings={props.settings.platePreviewSettings}
+                                    plateCharacters={props.settings.plateCharacters}
+                                />
+                            </div>
                         </div>
-                        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg shadow-inner flex justify-center">
-                            <LicensePlatePreview
-                                arabicTop={props.arabicTop}
-                                arabicBottom={props.arabicBottom}
-                                englishTop={props.englishTop}
-                                englishBottom={props.englishBottom}
-                                settings={props.settings.platePreviewSettings}
-                                plateCharacters={props.settings.plateCharacters}
-                            />
-                        </div>
-                    </div>
+                    )
                 ) : (
                     <div className="relative">
                         <input
@@ -159,6 +165,7 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                             value={props.chassisNumber}
                             onChange={e => props.setChassisNumber(e.target.value.toUpperCase())}
                             style={{ direction: 'ltr' }}
+                            required={!props.isReservationMode}
                             className={props.getInputClass('chassisNumber')}
                             placeholder="WBA..."
                             autoComplete="off"
