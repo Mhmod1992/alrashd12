@@ -1272,6 +1272,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     car_id: carId,
                     created_at: requestDate.toISOString(),
                     employee_id: authUser.id,
+                    reservation_id: initialReservationData?.id,
                     inspection_data: {},
                     general_notes: [],
                     category_notes: {},

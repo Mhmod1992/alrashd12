@@ -50,8 +50,8 @@ const Requests: React.FC = () => {
         setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId,
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
-        searchClients, addClient, addCar, searchCarMakes, searchCarModels,
-        lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight
+        searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
+        lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations
     } = useAppContext();
 
     const [requestNumberQuery, setRequestNumberQuery] = useSessionStorage('requests_number_query', '');
@@ -94,6 +94,9 @@ const Requests: React.FC = () => {
     const [isReservationsAccordionOpen, setIsReservationsAccordionOpen] = useState(false);
     const [reservationMiniSearchTerm, setReservationMiniSearchTerm] = useState('');
     const [reservationMiniFilter, setReservationMiniFilter] = useState<'today' | 'yesterday' | 'all'>('today');
+    const [reservationSearchResults, setReservationSearchResults] = useState<Reservation[] | null>(null);
+    const [isSearchingReservations, setIsSearchingReservations] = useState(false);
+    const [selectedNote, setSelectedNote] = useState<string | null>(null);
     const [prefilledReservation, setPrefilledReservation] = useState<Reservation | null>(null);
 
     const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
@@ -179,15 +182,38 @@ const Requests: React.FC = () => {
         setIsProcessingModalOpen(true);
     };
 
+    // Smart search for reservations in accordion
+    useEffect(() => {
+        if (!reservationMiniSearchTerm.trim()) {
+            setReservationSearchResults(null);
+            return;
+        }
+
+        const delayDebounceFn = setTimeout(async () => {
+            setIsSearchingReservations(true);
+            try {
+                const results = await searchReservations(reservationMiniSearchTerm);
+                setReservationSearchResults(results);
+            } catch (error) {
+                console.error("Search error:", error);
+            } finally {
+                setIsSearchingReservations(false);
+            }
+        }, 500);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [reservationMiniSearchTerm, searchReservations]);
+
     const filteredMiniReservations = useMemo(() => {
+        const source = reservationSearchResults !== null ? reservationSearchResults : reservations;
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         const yesterday = today - 86400000;
 
-        return reservations.filter(res => {
+        return source.filter(res => {
+            if (reservationSearchResults !== null) return true; // Already filtered by DB search
+
             // Filter by status (only 'new' or 'confirmed'?)
-            // The user said "Incoming Today's Reservations" with badge of "new"
-            // Let's show all that are not 'converted' or 'cancelled'
             if (res.status === 'converted' || res.status === 'cancelled') return false;
 
             // Filter by date
@@ -198,26 +224,21 @@ const Requests: React.FC = () => {
                 if (resDate < yesterday || resDate >= today) return false;
             }
 
-            // Filter by search
-            if (reservationMiniSearchTerm.trim()) {
-                const term = reservationMiniSearchTerm.toLowerCase();
-                return (
-                    res.client_name?.toLowerCase().includes(term) ||
-                    res.client_phone?.includes(term) ||
-                    res.car_details?.toLowerCase().includes(term) ||
-                    res.reservation_number?.toString().includes(term)
-                );
-            }
-
             return true;
         });
-    }, [reservations, reservationMiniFilter, reservationMiniSearchTerm]);
+    }, [reservations, reservationMiniFilter, reservationSearchResults]);
 
     const todayNewReservationsCount = useMemo(() => {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         return reservations.filter(r => r.status === 'new' && new Date(r.created_at).getTime() >= today).length;
     }, [reservations]);
+
+    // Ensure car models are loaded for reservations to show English names
+    useEffect(() => {
+        const makeIds = new Set(reservations.map(r => r.car_make_id).filter(Boolean) as string[]);
+        makeIds.forEach(id => fetchCarModelsByMake(id));
+    }, [reservations, fetchCarModelsByMake]);
 
     const handleConvertReservation = (res: Reservation) => {
         setPrefilledReservation(res);
@@ -968,11 +989,16 @@ const Requests: React.FC = () => {
                                 </span>
                                 <input
                                     type="text"
-                                    placeholder="بحث سريع..."
+                                    placeholder="بحث ذكي (رقم، عميل، سيارة، هاتف)..."
                                     value={reservationMiniSearchTerm}
                                     onChange={(e) => setReservationMiniSearchTerm(e.target.value)}
                                     className="block w-full p-2 pl-9 border border-slate-200 dark:border-slate-600 rounded-lg text-xs bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500"
                                 />
+                                {isSearchingReservations && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                        <RefreshCwIcon className="w-3 h-3 animate-spin text-blue-500" />
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -981,40 +1007,95 @@ const Requests: React.FC = () => {
                                 <thead className="bg-slate-50 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-wider">
                                     <tr>
                                         <th className="p-3">رقم الحجز</th>
-                                        <th className="p-3">العميل</th>
                                         <th className="p-3">السيارة</th>
+                                        <th className="p-3">العميل</th>
+                                        <th className="p-3">الملاحظات</th>
+                                        <th className="p-3">الحالة</th>
                                         <th className="p-3 text-center">الإجراء</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                    {filteredMiniReservations.map(res => (
-                                        <tr key={res.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors">
-                                            <td className="p-3 font-mono text-xs text-blue-600 dark:text-blue-400">
-                                                #RSV-{res.reservation_number}
-                                            </td>
-                                            <td className="p-3">
-                                                <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name}</div>
-                                                <div className="text-[10px] text-slate-500">{res.client_phone}</div>
-                                            </td>
-                                            <td className="p-3">
-                                                <div className="font-medium text-slate-700 dark:text-slate-300">{res.car_details}</div>
-                                                <div className="text-[10px] text-slate-400">{res.plate_text}</div>
-                                            </td>
-                                            <td className="p-3 text-center">
-                                                <button
-                                                    onClick={() => handleConvertReservation(res)}
-                                                    className="inline-flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm"
-                                                >
-                                                    <Icon name="refresh-cw" className="w-3 h-3" />
-                                                    <span>تحويل</span>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {filteredMiniReservations.map(res => {
+                                        const isWhatsApp = res.source_text?.toLowerCase().includes('whatsapp') || res.source_text?.includes('واتساب');
+                                        
+                                        return (
+                                            <tr key={res.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors">
+                                                <td className="p-3 font-mono text-xs">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-blue-600 dark:text-blue-400 font-bold">
+                                                            {res.reservation_number ? `#RSV-${String(res.reservation_number).padStart(4, '0')}` : '---'}
+                                                        </span>
+                                                        {isWhatsApp && (
+                                                            <div className="bg-green-100 dark:bg-green-900/30 p-1 rounded-full" title="حجز واتساب">
+                                                                <WhatsappIcon className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="font-medium text-slate-700 dark:text-slate-300">
+                                                        {(() => {
+                                                            const make = carMakes.find(m => m.id === res.car_make_id);
+                                                            const model = carModels.find(m => m.id === res.car_model_id);
+                                                            if (make && model) {
+                                                                return `${make.name_en} ${model.name_en}`;
+                                                            }
+                                                            return res.car_details;
+                                                        })()}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400 font-mono">{res.plate_text}</div>
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name}</div>
+                                                    <div className="text-[10px] text-slate-500 font-mono">{res.client_phone}</div>
+                                                </td>
+                                                <td className="p-3 max-w-[150px]">
+                                                    {res.notes ? (
+                                                        <div 
+                                                            className="relative overflow-hidden cursor-pointer hover:text-blue-500 transition-colors"
+                                                            onClick={() => setSelectedNote(res.notes || null)}
+                                                        >
+                                                            <div className={`${res.notes.length > 25 ? 'animate-marquee whitespace-nowrap' : ''} text-xs text-slate-600 dark:text-slate-400`}>
+                                                                {res.notes}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-300 dark:text-slate-600 text-xs">-</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-3">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                        res.status === 'new' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                                                        res.status === 'confirmed' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
+                                                        res.status === 'converted' ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400' :
+                                                        'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                    }`}>
+                                                        {res.status === 'new' ? 'جديد' : 
+                                                         res.status === 'confirmed' ? 'مؤكد' : 
+                                                         res.status === 'converted' ? 'تم التحويل' : 'ملغي'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <button
+                                                        onClick={() => handleConvertReservation(res)}
+                                                        disabled={res.status === 'converted'}
+                                                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                                                            res.status === 'converted' 
+                                                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                                                            : 'bg-green-500 hover:bg-green-600 text-white'
+                                                        }`}
+                                                    >
+                                                        <Icon name="refresh-cw" className="w-3 h-3" />
+                                                        <span>تحويل</span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                     {filteredMiniReservations.length === 0 && (
                                         <tr>
-                                            <td colSpan={4} className="p-8 text-center text-slate-400 italic text-xs">
-                                                لا توجد حجوزات تطابق البحث
+                                            <td colSpan={6} className="p-8 text-center text-slate-400 italic text-xs">
+                                                {isSearchingReservations ? 'جاري البحث...' : 'لا توجد حجوزات تطابق البحث'}
                                             </td>
                                         </tr>
                                     )}
@@ -1263,7 +1344,7 @@ const Requests: React.FC = () => {
             )}
 
             {isModalOpen && (
-                <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setPrefilledReservation(null); }} title="إنشاء طلب جديد" size="4xl">
+                <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setPrefilledReservation(null); }} title="إنشاء طلب جديد" size="5xl">
                     <NewRequestForm
                         clients={clients}
                         carMakes={carMakes}
@@ -1274,6 +1355,19 @@ const Requests: React.FC = () => {
                         onSuccess={handleSuccess}
                         initialReservationData={prefilledReservation || undefined}
                     />
+                </Modal>
+            )}
+
+            {selectedNote && (
+                <Modal isOpen={!!selectedNote} onClose={() => setSelectedNote(null)} title="تفاصيل الملاحظة" size="md">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border dark:border-slate-700 max-h-[60vh] overflow-y-auto">
+                        <p className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
+                            {selectedNote}
+                        </p>
+                    </div>
+                    <div className="mt-6 flex justify-end">
+                        <Button onClick={() => setSelectedNote(null)}>إغلاق</Button>
+                    </div>
                 </Modal>
             )}
 
@@ -1299,7 +1393,7 @@ const Requests: React.FC = () => {
             </Modal>
 
             {isUpdateModalOpen && requestToUpdate && (
-                <Modal isOpen={isUpdateModalOpen} onClose={() => setIsUpdateModalOpen(false)} title={`تحديث الطلب #${requestToUpdate.request_number}`} size="4xl">
+                <Modal isOpen={isUpdateModalOpen} onClose={() => setIsUpdateModalOpen(false)} title={`تحديث الطلب #${requestToUpdate.request_number}`} size="5xl">
                     <NewRequestForm
                         initialData={requestToUpdate}
                         clients={clients}

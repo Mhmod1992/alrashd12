@@ -121,7 +121,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchRequestsByDateRange,
         fetchRequestsCount,
         fetchPaperArchiveRequests,
-        fetchAllPaperArchiveRequests
+        fetchAllPaperArchiveRequests,
+        searchReservations
     } = useDataScope(authUser);
 
     const {
@@ -276,6 +277,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         setSearchedRequests(prev => prev ? prev.filter(r => r.id !== deletedId) : null);
                         setLastRemoteDeleteId(deletedId);
                         setTimeout(() => setLastRemoteDeleteId(null), 1000);
+                    }
+                }
+            )
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        const newRes = payload.new as Reservation;
+                        setReservations(prev => {
+                            if (prev.some(r => r.id === newRes.id)) return prev;
+                            return [newRes, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                        });
+                        // Optional: Add a notification for new reservation
+                        if (authUserRef.current) {
+                            addNotification({ 
+                                title: 'حجز جديد', 
+                                message: `تم استلام حجز جديد للعميل: ${newRes.client_name}`, 
+                                type: 'info' 
+                            });
+                        }
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedRes = payload.new as Reservation;
+                        setReservations(prev => prev.map(r => r.id === updatedRes.id ? { ...r, ...updatedRes } : r));
+                    } else if (payload.eventType === 'DELETE') {
+                        const deletedId = payload.old.id;
+                        setReservations(prev => prev.filter(r => r.id !== deletedId));
                     }
                 }
             )
@@ -1602,7 +1628,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchPayrollDraft, savePayrollDraft, checkIfEmployeePaidThisMonth, fetchEmployeeTransactionsForMonth,
         isSessionError,
         incomingRequest, setIncomingRequest,
-        reservations, fetchReservations, addReservation, updateReservationStatus, updateReservation, deleteReservation, parseReservationText,
+        reservations, fetchReservations, addReservation, updateReservationStatus, updateReservation, deleteReservation, searchReservations, parseReservationText,
         fetchRequestTabContent, fetchFullRequestForSave, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
         lastRemoteDeleteId, setLastRemoteDeleteId,
         fetchPaperArchiveRequests,

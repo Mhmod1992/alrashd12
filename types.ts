@@ -292,6 +292,7 @@ export interface InspectionRequest {
   report_url?: string;
   report_generated_at?: string;
   ai_analysis?: string;
+  reservation_id?: string;
 }
 
 export interface PlateCharacterMap {

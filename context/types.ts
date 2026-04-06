@@ -203,6 +203,7 @@ export interface AppContextType {
     updateReservationStatus: (id: string, status: 'new' | 'confirmed' | 'converted' | 'cancelled') => Promise<void>;
     updateReservation: (id: string, data: Partial<Omit<Reservation, 'id' | 'created_at'>>) => Promise<void>;
     deleteReservation: (id: string) => Promise<void>;
+    searchReservations: (query: string) => Promise<Reservation[]>;
     parseReservationText: (text: string) => Promise<Partial<Reservation>>;
     // --- Remote Deletion Event ---
     lastRemoteDeleteId: string | null;

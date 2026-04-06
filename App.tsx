@@ -320,6 +320,14 @@ function App() {
 const PrintStyles = () => (
   <style type="text/css">
     {`
+      @keyframes marquee {
+        0% { transform: translateX(100%); }
+        100% { transform: translateX(-100%); }
+      }
+      .animate-marquee {
+        display: inline-block;
+        animation: marquee 10s linear infinite;
+      }
       @media print {
         @page {
           margin: 10mm; /* Standard margin to allow browser header/footer (page numbers) */

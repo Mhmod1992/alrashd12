@@ -24,6 +24,7 @@ const Reservations: React.FC = () => {
         showConfirmModal,
         settings,
         can,
+        fetchCarModelsByMake,
         // Dependencies for NewRequestForm
         clients,
         carMakes,
@@ -31,6 +32,12 @@ const Reservations: React.FC = () => {
         inspectionTypes,
         brokers
     } = useAppContext();
+
+    // Ensure car models are loaded for reservations to show English names
+    useEffect(() => {
+        const makeIds = new Set(reservations.map(r => r.car_make_id).filter(Boolean) as string[]);
+        makeIds.forEach(id => fetchCarModelsByMake(id));
+    }, [reservations, fetchCarModelsByMake]);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
@@ -288,15 +295,24 @@ const Reservations: React.FC = () => {
                             <tbody className="divide-y dark:divide-slate-700">
                                 {filteredReservations.map(res => (
                                     <tr key={res.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
-                                        <td className="px-6 py-4 font-bold text-blue-600 dark:text-blue-400">
-                                            {res.reservation_number ? `RSV-${res.reservation_number}` : '---'}
+                                        <td className="px-6 py-4 font-bold text-blue-600 dark:text-blue-400 font-mono">
+                                            {res.reservation_number ? `RSV-${String(res.reservation_number).padStart(4, '0')}` : '---'}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name || 'غير معروف'}</div>
                                             <div className="text-xs text-slate-500 dir-ltr text-right font-mono">{res.client_phone || '---'}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="text-slate-700 dark:text-slate-300 font-medium">{res.car_details}</div>
+                                            <div className="text-slate-700 dark:text-slate-300 font-medium">
+                                                {(() => {
+                                                    const make = carMakes.find(m => m.id === res.car_make_id);
+                                                    const model = carModels.find(m => m.id === res.car_model_id);
+                                                    if (make && model) {
+                                                        return `${make.name_en} ${model.name_en}`;
+                                                    }
+                                                    return res.car_details;
+                                                })()}
+                                            </div>
                                             {res.plate_text && (
                                                 <div className="text-xs font-mono bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded inline-block mt-1 border dark:border-slate-600">
                                                     {res.plate_text}
@@ -354,7 +370,7 @@ const Reservations: React.FC = () => {
             </div>
 
             {/* Add Reservation Modal */}
-            <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="إضافة حجز جديد" size="lg">
+            <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="إضافة حجز جديد" size="5xl">
                 
                 {/* Toggle Mode */}
                 <div className="flex items-center justify-end mb-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border dark:border-slate-700">
@@ -447,7 +463,7 @@ const Reservations: React.FC = () => {
 
             {/* Convert to Request Modal - Reuses NewRequestForm */}
             {isConvertModalOpen && selectedReservation && (
-                <Modal isOpen={isConvertModalOpen} onClose={() => setIsConvertModalOpen(false)} title="تحويل الحجز إلى طلب فحص" size="4xl">
+                <Modal isOpen={isConvertModalOpen} onClose={() => setIsConvertModalOpen(false)} title="تحويل الحجز إلى طلب فحص" size="5xl">
                     <NewRequestForm
                         clients={clients}
                         carMakes={carMakes}

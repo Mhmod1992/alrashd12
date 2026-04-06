@@ -637,9 +637,14 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                 className={rowClass}
                             >
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">
-                                        #<HighlightText text={request.request_number} tokens={expandedSearchTokens} />
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        {request.reservation_id && (
+                                            <WhatsappIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
+                                        )}
+                                        <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">
+                                            #<HighlightText text={request.request_number} tokens={expandedSearchTokens} />
+                                        </span>
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4">
                                     <div 

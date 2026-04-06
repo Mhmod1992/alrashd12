@@ -184,7 +184,8 @@ CREATE TABLE IF NOT EXISTS inspection_requests (
     report_stamps TEXT[],
     report_url TEXT,
     report_generated_at TIMESTAMPTZ,
-    ai_analysis TEXT
+    ai_analysis TEXT,
+    reservation_id UUID REFERENCES reservations(id)
 );
 
 -- Reservations Table

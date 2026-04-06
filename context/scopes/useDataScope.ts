@@ -331,6 +331,30 @@ export const useDataScope = (
         return requestsData;
     }, [addNotification, ensureEntitiesLoaded]);
 
+    const searchReservations = useCallback(async (query: string): Promise<Reservation[]> => {
+        if (!query.trim()) return [];
+        
+        let supabaseQuery = supabase.from('reservations').select('*');
+        
+        // Smart search: reservation_number, client_name, client_phone, car_details, plate_text
+        const isNumeric = /^\d+$/.test(query);
+        
+        if (isNumeric) {
+            supabaseQuery = supabaseQuery.or(`reservation_number.eq.${query},client_phone.ilike.%${query}%`);
+        } else {
+            supabaseQuery = supabaseQuery.or(`client_name.ilike.%${query}%,car_details.ilike.%${query}%,plate_text.ilike.%${query}%,notes.ilike.%${query}%`);
+        }
+        
+        const { data, error } = await supabaseQuery.order('created_at', { ascending: false }).limit(20);
+        
+        if (error) {
+            console.error("Error searching reservations:", error);
+            return [];
+        }
+        
+        return data as Reservation[];
+    }, []);
+
     const fetchAllPaperArchiveRequests = useCallback(async (): Promise<InspectionRequest[]> => {
         // Fetches ALL requests up to a limit for archiving purposes
         const { data, error } = await supabase.from('inspection_requests')
@@ -392,6 +416,7 @@ export const useDataScope = (
         fetchRequestsByDateRange,
         fetchRequestsCount,
         fetchPaperArchiveRequests,
-        fetchAllPaperArchiveRequests
+        fetchAllPaperArchiveRequests,
+        searchReservations
     };
 };
