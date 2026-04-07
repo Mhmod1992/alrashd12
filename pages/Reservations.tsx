@@ -25,6 +25,7 @@ const Reservations: React.FC = () => {
         settings,
         can,
         fetchCarModelsByMake,
+        sendWhatsAppMessage,
         // Dependencies for NewRequestForm
         clients,
         carMakes,
@@ -165,7 +166,7 @@ const Reservations: React.FC = () => {
         setSelectedReservation(null);
     };
 
-    const handleWhatsAppContact = (res: Reservation) => {
+    const handleWhatsAppContact = async (res: Reservation) => {
         if (!res.client_phone) {
             addNotification({ title: 'خطأ', message: 'لا يوجد رقم هاتف لهذا الحجز.', type: 'error' });
             return;
@@ -176,8 +177,8 @@ const Reservations: React.FC = () => {
         // Add country code if missing (assuming Saudi Arabia +966)
         const phoneWithCode = cleanPhone.startsWith('966') ? cleanPhone : `966${cleanPhone.startsWith('0') ? cleanPhone.substring(1) : cleanPhone}`;
         
-        const message = encodeURIComponent(`مرحباً ${res.client_name}، نؤكد استلام حجزك لسيارة ${res.car_details} لفحص ${res.service_type}. يرجى تأكيد الموعد.`);
-        window.open(`https://wa.me/${phoneWithCode}?text=${message}`, '_blank');
+        const message = `مرحباً ${res.client_name}، نؤكد استلام حجزك لسيارة ${res.car_details} لفحص ${res.service_type}. يرجى تأكيد الموعد.`;
+        await sendWhatsAppMessage(phoneWithCode, message);
     };
 
     if (!can('manage_reservations')) {

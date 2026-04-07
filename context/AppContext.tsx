@@ -1598,6 +1598,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [carMakes, carModels, setIsRefreshing]);
 
+    const sendWhatsAppMessage = useCallback(async (phone: string, text: string): Promise<boolean> => {
+        const mode = settings.whatsappMode || 'manual';
+        const apiUrl = settings.whatsappApiUrl;
+
+        if (mode === 'api' && apiUrl) {
+            try {
+                const response = await fetch(`${apiUrl.replace(/\/$/, '')}/api/send`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'ngrok-skip-browser-warning': 'true',
+                    },
+                    body: JSON.stringify({ phone, message: text }),
+                });
+
+                if (response.ok) {
+                    addNotification({ title: 'نجاح', message: 'تم إرسال رسالة الواتساب عبر الخادم بنجاح', type: 'success' });
+                    return true;
+                } else {
+                    console.error('WhatsApp API Error:', await response.text());
+                    addNotification({ title: 'فشل الإرسال التلقائي', message: 'تعذر الإرسال عبر الخادم، سيتم فتح الواتساب اليدوي', type: 'warning' });
+                }
+            } catch (error) {
+                console.error('WhatsApp API Connection Error:', error);
+                addNotification({ title: 'فشل الاتصال بالخادم', message: 'تعذر الاتصال بخادم الواتساب، سيتم فتح الواتساب اليدوي', type: 'warning' });
+            }
+        }
+
+        // Fallback to manual mode
+        const formattedPhone = phone.replace(/\D/g, '');
+        const encodedText = encodeURIComponent(text);
+        window.open(`https://wa.me/${formattedPhone}?text=${encodedText}`, '_blank');
+        return true;
+    }, [settings.whatsappMode, settings.whatsappApiUrl, addNotification]);
+
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
         requests, clients, cars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
@@ -1635,7 +1670,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchAllPaperArchiveRequests,
         fetchRequests,
         isCreatingRequest,
-        setIsCreatingRequest
+        setIsCreatingRequest,
+        sendWhatsAppMessage
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

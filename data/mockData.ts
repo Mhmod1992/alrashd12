@@ -74,6 +74,8 @@ export const mockSettings: Settings = {
     databaseCapacity: 500,
     storageCapacity: 1, 
     allowSignup: true,
+    whatsappMode: 'manual',
+    whatsappApiUrl: '',
     plateCharacters: [
         { ar: 'أ', en: 'A' }, { ar: 'ب', en: 'B' }, { ar: 'ح', en: 'J' },
         { ar: 'د', en: 'D' }, { ar: 'ر', en: 'R' }, { ar: 'س', en: 'S' },

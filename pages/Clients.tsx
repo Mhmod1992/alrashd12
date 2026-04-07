@@ -22,7 +22,7 @@ const Clients: React.FC = () => {
         addClient, updateClient, deleteClient, showConfirmModal, 
         addNotification, setPage, setSelectedRequestId, settings, 
         selectedClientId, setSelectedClientId, clients: contextClients,
-        fetchClientRequestsFiltered // Use the filtered version
+        fetchClientRequestsFiltered, sendWhatsAppMessage
     } = useAppContext();
     const design = settings.design || 'aero';
     const [searchTerm, setSearchTerm] = useState('');
@@ -337,7 +337,7 @@ const Clients: React.FC = () => {
         }
     };
 
-    const handleSendWhatsAppReminder = () => {
+    const handleSendWhatsAppReminder = async () => {
         if (!selectedClient) return;
         let phone = selectedClient.phone.replace(/\D/g, '');
         if (phone.startsWith('05')) {
@@ -348,11 +348,10 @@ const Clients: React.FC = () => {
 
         const message = `مرحباً ${selectedClient.name}،\n\nنود تذكيركم بوجود مبلغ مستحق قدره ${clientFinancials.totalRemaining} ريال. يرجى المبادرة بالسداد في أقرب فرصة.\n\nشكراً لتعاملكم معنا.\n${settings.appName}`;
         
-        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
+        await sendWhatsAppMessage(phone, message);
     };
     
-    const handleOpenWhatsappChat = () => {
+    const handleOpenWhatsappChat = async () => {
         if (!selectedClient) return;
         let phone = selectedClient.phone.replace(/\D/g, '');
         if (phone.startsWith('05')) {
@@ -360,7 +359,7 @@ const Clients: React.FC = () => {
         } else if (phone.length === 9 && phone.startsWith('5')) {
             phone = '966' + phone;
         }
-        window.open(`https://wa.me/${phone}`, '_blank');
+        await sendWhatsAppMessage(phone, '');
     };
 
     const primaryColor = design === 'classic' ? 'teal' : design === 'glass' ? 'indigo' : 'blue';

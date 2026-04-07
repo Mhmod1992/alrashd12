@@ -424,6 +424,8 @@ export interface Settings {
   enableReviewPrompt?: boolean;
   reviewLink?: string;
   reviewMessage?: string;
+  whatsappMode?: 'manual' | 'api';
+  whatsappApiUrl?: string;
 }
 
 export interface UserPreferences {
@@ -436,7 +438,7 @@ export interface UserPreferences {
   isTechnician?: boolean; // Add isTechnician here
 }
 
-export type SettingsPage = 'general' | 'appearance' | 'request' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management' | 'technical';
+export type SettingsPage = 'general' | 'appearance' | 'request' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management' | 'technical' | 'whatsapp';
 
 export interface Employee {
   id: string;

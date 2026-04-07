@@ -27,6 +27,7 @@ const WaitingForPaymentRequests: React.FC = () => {
         updateRequest,
         employees,
         brokers,
+        sendWhatsAppMessage,
     } = useAppContext();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,7 +65,7 @@ const WaitingForPaymentRequests: React.FC = () => {
         return waiting.filter(r => String(r.request_number).includes(searchTerm.trim()));
     }, [requests, searchTerm]);
 
-    const handleResendWhatsApp = (request: InspectionRequest) => {
+    const handleResendWhatsApp = async (request: InspectionRequest) => {
         const client = clients.find(c => c.id === request.client_id);
         if (!client || !client.phone) {
             addNotification({ title: 'خطأ', message: 'رقم هاتف العميل غير موجود.', type: 'error' });
@@ -80,8 +81,7 @@ const WaitingForPaymentRequests: React.FC = () => {
     
         const message = `مرحباً ${client.name}،\n\nنود تذكيركم بالطلب رقم #${request.request_number} الذي لا يزال بانتظار الدفع.\n\nالمبلغ المطلوب: ${request.price} ريال.\n\nشكراً لكم.`;
         
-        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
+        await sendWhatsAppMessage(phone, message);
     };
 
     const handleProcessPaymentClick = (request: InspectionRequest) => {

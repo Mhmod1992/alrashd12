@@ -47,7 +47,7 @@ const Requests: React.FC = () => {
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
-        setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId,
+        setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage,
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
@@ -652,7 +652,7 @@ const Requests: React.FC = () => {
         }
     };
 
-    const handleResendWhatsApp = (request: InspectionRequest) => {
+    const handleResendWhatsApp = async (request: InspectionRequest) => {
         const client = clients.find(c => c.id === request.client_id);
         if (!client || !client.phone) {
             addNotification({ title: 'خطأ', message: 'رقم هاتف العميل غير موجود.', type: 'error' });
@@ -668,8 +668,7 @@ const Requests: React.FC = () => {
 
         const message = `مرحباً ${client.name}،\n\nنود تذكيركم بالطلب رقم #${request.request_number} الذي لا يزال بانتظار الدفع.\n\nالمبلغ المطلوب: ${request.price} ريال.\n\nشكراً لكم.`;
 
-        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
+        await sendWhatsAppMessage(phone, message);
     };
 
     const confirmPayment = async () => {

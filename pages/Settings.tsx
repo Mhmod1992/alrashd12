@@ -17,6 +17,7 @@ import PlateSettings from './settings/PlateSettings';
 import ReportSettingsPage from './settings/ReportSettings'; // Renamed to avoid clash
 import DatabaseManagement from './settings/DatabaseManagement'; // Now acts as Maintenance
 import ApiSettings from './settings/ApiSettings';
+import WhatsAppSettings from './settings/WhatsAppSettings';
 
 // Define the Sidebar Item Interface
 interface SidebarItem {
@@ -85,6 +86,7 @@ const Settings: React.FC = () => {
         {
             title: 'إعدادات متقدمة',
             items: [
+                { id: 'whatsapp', label: 'إعدادات المراسلة (WhatsApp)', icon: 'message-circle', permission: 'manage_settings_general', component: WhatsAppSettings },
                 { id: 'api', label: 'ربط الخدمات (API)', icon: 'sparkles', permission: 'manage_api_keys', component: ApiSettings },
             ]
         }

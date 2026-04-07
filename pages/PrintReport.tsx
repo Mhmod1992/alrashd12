@@ -256,7 +256,7 @@ const PrintReport: React.FC = () => {
         selectedRequestId, requests, clients, cars, carMakes, 
         carModels, inspectionTypes, setPage, predefinedFindings, 
         customFindingCategories, settings, addNotification, goBack,
-        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage, authUser, technicians, employees
+        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage, authUser, technicians, employees, sendWhatsAppMessage
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
@@ -978,7 +978,7 @@ const PrintReport: React.FC = () => {
         }
     };
 
-    const openWhatsapp = (link: string) => {
+    const openWhatsapp = async (link: string) => {
         let phone = client?.phone.replace(/\D/g, '') || ''; 
         if (phone.startsWith('05')) phone = '966' + phone.substring(1);
         else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
@@ -990,7 +990,7 @@ const PrintReport: React.FC = () => {
 
         const message = `تحية طيبة، السيد/ة ${clientName} المحترم/ة،\n\nنود إفادتكم بصدور تقرير الفحص الفني لمركبتكم ${carInfo}. يمكنكم استعراض التفاصيل الكاملة من خلال الرابط:\n🔗 ${link}\n\nنسعى دوماً لتقديم أفضل تجربة لعملائنا، لذا تهمنا مشاركتكم لتقييم الخدمة عبر الرابط التالي:\n⭐ ${reviewLink}\n\nمع خالص التقدير، إدارة وفريق ${workshopName}`;
         
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+        await sendWhatsAppMessage(phone, message);
     };
 
     const handleDownloadPdf = async () => {

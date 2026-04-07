@@ -20,7 +20,8 @@ const NewRequestSuccessModal: React.FC = () => {
         requests,
         clients,
         addNotification,
-        inspectionTypes
+        inspectionTypes,
+        sendWhatsAppMessage
     } = useAppContext();
 
     if (!newRequestSuccessState.isOpen) {
@@ -54,7 +55,7 @@ const NewRequestSuccessModal: React.FC = () => {
         hideNewRequestSuccessModal();
     };
 
-    const handleSendToClient = () => {
+    const handleSendToClient = async () => {
         if (!request) return;
 
         const client = clients.find(c => c.id === request.client_id);
@@ -75,8 +76,7 @@ const NewRequestSuccessModal: React.FC = () => {
 
         const message = `أهلاً ${client.name}، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${request.request_number}*\n📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
         
-        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
+        await sendWhatsAppMessage(phone, message);
         hideNewRequestSuccessModal();
         
         // Ensure receptionist goes to waiting list after sending message

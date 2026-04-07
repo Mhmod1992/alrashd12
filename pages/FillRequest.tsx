@@ -60,7 +60,7 @@ export const FillRequest: React.FC = () => {
         deleteImage, can, settings, goBack, showConfirmModal, createActivityLog,
         fetchRequestTabContent, fetchFullRequestForSave, setIsFocusMode,
         hasUnsavedChanges, setHasUnsavedChanges, unreadMessagesCount, setIsMailboxOpen, technicians,
-        fetchAndUpdateSingleRequest
+        fetchAndUpdateSingleRequest, sendWhatsAppMessage
     } = useAppContext();
 
     const focusRingClass = `focus:ring-${settings.design === 'classic' ? 'teal' : settings.design === 'glass' ? 'indigo' : 'blue'}-500`;
@@ -1507,8 +1507,8 @@ export const FillRequest: React.FC = () => {
 
             if (sendReview && client?.phone && settings.reviewMessage && settings.reviewLink) {
                 const message = settings.reviewMessage.replace('{review_link}', settings.reviewLink);
-                const whatsappUrl = `https://wa.me/${client.phone.replace(/\D/g, '').replace(/^0/, '966')}?text=${encodeURIComponent(message)}`;
-                window.open(whatsappUrl, '_blank');
+                const phone = client.phone.replace(/\D/g, '').replace(/^0/, '966');
+                await sendWhatsAppMessage(phone, message);
             }
             
             setPage('requests');
@@ -2640,15 +2640,13 @@ export const FillRequest: React.FC = () => {
                                     <div className="flex items-center gap-2">
                                         <span className="font-medium text-slate-800 dark:text-slate-200 font-mono tracking-wider" dir="ltr">{client?.phone}</span>
                                         {client?.phone && (
-                                            <a 
-                                                href={`https://wa.me/${client.phone.replace(/\D/g, '').replace(/^0/, '966')}`} 
-                                                target="_blank" 
-                                                rel="noreferrer"
+                                            <button 
+                                                onClick={() => sendWhatsAppMessage(client.phone.replace(/\D/g, '').replace(/^0/, '966'), '')}
                                                 className="p-1.5 bg-[#25D366] text-white rounded-full hover:bg-[#128C7E] transition-colors shadow-sm"
                                                 title="محادثة واتساب"
                                             >
                                                 <WhatsappIcon className="w-3.5 h-3.5" />
-                                            </a>
+                                            </button>
                                         )}
                                     </div>
                                 </div>
