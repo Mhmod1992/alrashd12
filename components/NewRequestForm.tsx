@@ -109,6 +109,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
 
     const [paymentNote, setPaymentNote] = useState('');
+    const [isFromReservation, setIsFromReservation] = useState(false);
     const [reservationNotes, setReservationNotes] = useState('');
     const [useBroker, setUseBroker] = useState(false);
     const [brokerId, setBrokerId] = useState('');
@@ -247,7 +248,15 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             setInspectionTypeId(req.inspection_type_id);
             setInspectionPrice(req.price);
             setPaymentType(req.payment_type);
-            setPaymentNote(req.payment_note || '');
+            
+            const rawNote = req.payment_note || '';
+            if (rawNote.includes('[WA-RES]')) {
+                setIsFromReservation(true);
+                setPaymentNote(rawNote.replace('[WA-RES]', '').trim());
+            } else {
+                setPaymentNote(rawNote);
+            }
+
             if (req.payment_type === PaymentType.Split && req.split_payment_details) {
                 setSplitCashAmount(req.split_payment_details.cash);
                 setSplitCardAmount(req.split_payment_details.card);
@@ -265,6 +274,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         }
     }, [initialData, clients, cars, contextCarMakes, contextCarModels]);
 
+
+    useEffect(() => {
+        if (initialReservationData) {
+            setIsFromReservation(true);
+        }
+    }, [initialReservationData]);
 
     // Helper to get input classes dynamically based on error state
     const getInputClass = (fieldName: string) => {
@@ -1153,29 +1168,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 client = updatedClient;
             }
             
-            // Reservation Handling
-            if (initialReservationData) {
-                const make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
-                const model = contextCarModels.find(m => m.id === carModelId) || modelSuggestions.find(m => m.id === carModelId);
-
-                const plateValue = useChassisNumber ? (chassisNumber || '') : (previewArabicChars + ' ' + plateNums);
-
-                await updateReservation(initialReservationData.id, {
-                    client_name: clientName,
-                    client_phone: clientPhone,
-                    car_details: `${make?.name_ar || carMakeSearchTerm} - ${model?.name_ar || carModelSearchTerm} - ${carYear}`,
-                    car_make_id: make?.id,
-                    car_model_id: model?.id,
-                    plate_text: plateValue,
-                    status: 'confirmed',
-                    notes: `نوع الفحص: ${inspectionTypes.find(t => t.id === inspectionTypeId)?.name || 'غير محدد'} | السعر: ${inspectionPrice}`
-                });
-
-                addNotification({ title: 'تم التثبيت', message: 'تم تأكيد بيانات الحجز وتثبيته بنجاح.', type: 'success' });
-                onSuccess({ id: 'reservation-confirmed' } as any); 
-                return;
-            }
-
+            // Reservation Handling - Logic moved to final success block to ensure request is created first
+            
             // Construct Common Data
             let make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
             let model = contextCarModels.find(m => m.id === carModelId) || modelSuggestions.find(m => m.id === carModelId);
@@ -1213,7 +1207,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 car_snapshot: carSnapshot,
                 inspection_type_id: inspectionTypeId,
                 payment_type: finalPaymentType as PaymentType,
-                payment_note: (paymentType === PaymentType.Transfer || paymentType === PaymentType.Unpaid) && paymentNote.trim() ? paymentNote.trim() : undefined,
+                payment_note: (initialReservationData || isFromReservation) 
+                    ? `[WA-RES] ${paymentNote.trim()}`.trim() 
+                    : ((paymentType === PaymentType.Transfer || paymentType === PaymentType.Unpaid) && paymentNote.trim() ? paymentNote.trim() : undefined),
                 split_payment_details: paymentType === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
                 price: Number(inspectionPrice),
                 status: newStatus,
@@ -1272,7 +1268,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     car_id: carId,
                     created_at: requestDate.toISOString(),
                     employee_id: authUser.id,
-                    reservation_id: initialReservationData?.id,
                     inspection_data: {},
                     general_notes: [],
                     category_notes: {},
@@ -1282,6 +1277,28 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 };
                 const newAddedRequest = await addRequest(newReq as any);
                 if (newAddedRequest) {
+                    // If this was a conversion from a reservation, update the reservation status
+                    if (initialReservationData && initialReservationData.id) {
+                        try {
+                            const make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
+                            const model = contextCarModels.find(m => m.id === carModelId) || modelSuggestions.find(m => m.id === carModelId);
+                            const plateValue = useChassisNumber ? (chassisNumber || '') : (previewArabicChars + ' ' + plateNums);
+
+                            await updateReservation(initialReservationData.id, {
+                                client_name: clientName,
+                                client_phone: clientPhone,
+                                car_details: `${make?.name_ar || carMakeSearchTerm} - ${model?.name_ar || carModelSearchTerm} - ${carYear}`,
+                                car_make_id: make?.id,
+                                car_model_id: model?.id,
+                                plate_text: plateValue,
+                                status: 'converted',
+                                notes: `تم التحويل لطلب رقم: ${newAddedRequest.request_number}`
+                            });
+                        } catch (resError) {
+                            console.error("Failed to update reservation status", resError);
+                        }
+                    }
+
                     showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number);
                     onSuccess(newAddedRequest);
                 }
