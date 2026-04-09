@@ -294,6 +294,7 @@ const PrintReport: React.FC = () => {
 
     const [isDataReady, setIsDataReady] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
     const [loadingState, setLoadingState] = useState('');
     const [previewScale, setPreviewScale] = useState(1);
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
@@ -319,6 +320,18 @@ const PrintReport: React.FC = () => {
             return () => window.removeEventListener('popstate', handlePopState);
         }
     }, [fromPrint, addNotification]);
+
+    // Prevent page closure during WhatsApp sending
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isSendingWhatsApp) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [isSendingWhatsApp]);
 
     // Effective Data (Original OR Translated)
     const request = translatedRequest || originalRequest;
@@ -932,7 +945,9 @@ const PrintReport: React.FC = () => {
 
     const handleWhatsAppShare = async () => {
         if (!client?.phone) { addNotification({ title: 'بيانات ناقصة', message: 'رقم هاتف العميل غير متوفر.', type: 'warning' }); return; }
-        
+        if (isSendingWhatsApp) return;
+
+        setIsSendingWhatsApp(true);
         try {
             // --- OPTIMIZATION: Check if we can reuse an existing report ---
             // Only reuse if:
@@ -945,8 +960,7 @@ const PrintReport: React.FC = () => {
                 
                 // If generated after last update, use existing link
                 if (generatedAt > updatedAt) {
-                    openWhatsapp(originalRequest.report_url);
-                    addNotification({ title: 'تم الإرسال', message: 'تمت مشاركة التقرير الحالي بنجاح.', type: 'success' });
+                    await openWhatsapp(originalRequest.report_url);
                     return;
                 }
             }
@@ -968,13 +982,13 @@ const PrintReport: React.FC = () => {
                 });
             }
             
-            openWhatsapp(publicUrl);
-            addNotification({ title: 'تم', message: 'تم توليد وإرسال تقرير جديد.', type: 'success' });
+            await openWhatsapp(publicUrl);
         } catch (error: any) { 
             console.error('WhatsApp Share Error:', error);
             addNotification({ title: 'خطأ', message: 'فشل الإرسال.', type: 'error' }); 
         } finally {
             setLoadingState('');
+            setIsSendingWhatsApp(false);
         }
     };
 
@@ -983,14 +997,15 @@ const PrintReport: React.FC = () => {
         if (phone.startsWith('05')) phone = '966' + phone.substring(1);
         else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
 
-        const clientName = client?.name ? `*${client.name}*` : 'العميل';
+        const clientNameRaw = client?.name || 'العميل';
+        const clientNameFormatted = `*${clientNameRaw}*`;
         const carInfo = `*${carMake?.name_ar || carMake?.name_en || ''} ${carModel?.name_ar || carModel?.name_en || ''} ${car?.year || ''}*`.trim();
         const workshopName = `*${settings.appName}*`;
         const reviewLink = reportSettings.qrCodeContent || settings.googleMapsLink || '';
 
-        const message = `تحية طيبة، السيد/ة ${clientName} المحترم/ة،\n\nنود إفادتكم بصدور تقرير الفحص الفني لمركبتكم ${carInfo}. يمكنكم استعراض التفاصيل الكاملة من خلال الرابط:\n🔗 ${link}\n\nنسعى دوماً لتقديم أفضل تجربة لعملائنا، لذا تهمنا مشاركتكم لتقييم الخدمة عبر الرابط التالي:\n⭐ ${reviewLink}\n\nمع خالص التقدير، إدارة وفريق ${workshopName}`;
+        const message = `تحية طيبة، السيد/ة ${clientNameFormatted} المحترم/ة،\n\nنود إفادتكم بصدور تقرير الفحص الفني لمركبتكم ${carInfo}. يمكنكم استعراض التفاصيل الكاملة من خلال الرابط:\n🔗 ${link}\n\nنسعى دوماً لتقديم أفضل تجربة لعملائنا، لذا تهمنا مشاركتكم لتقييم الخدمة عبر الرابط التالي:\n⭐ ${reviewLink}\n\nمع خالص التقدير، إدارة وفريق ${workshopName}`;
         
-        await sendWhatsAppMessage(phone, message);
+        await sendWhatsAppMessage(phone, message, clientNameRaw);
     };
 
     const handleDownloadPdf = async () => {
@@ -1078,9 +1093,9 @@ const PrintReport: React.FC = () => {
                         </Button>
                     )}
 
-                    <Button onClick={handleWhatsAppShare} variant="whatsapp" size="sm" disabled={isGenerating}>
-                        <WhatsappIcon className="w-4 h-4" />
-                        <span className="hidden sm:inline ms-1">إرسال</span>
+                    <Button onClick={handleWhatsAppShare} variant="whatsapp" size="sm" disabled={isGenerating || isSendingWhatsApp}>
+                        <WhatsappIcon className={`w-4 h-4 ${isSendingWhatsApp ? 'animate-spin' : ''}`} />
+                        <span className="hidden sm:inline ms-1">{isSendingWhatsApp ? 'جاري الإرسال...' : 'إرسال'}</span>
                     </Button>
                      <Button variant="secondary" onClick={handlePrint} size="sm" disabled={isGenerating}>
                         <Icon name="print" className="w-4 h-4" />

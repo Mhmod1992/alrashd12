@@ -6,6 +6,7 @@ import Header from './components/Header';
 import NotificationContainer from './components/NotificationContainer';
 import ConfirmModal from './components/ConfirmModal';
 import NewRequestSuccessModal from './components/NewRequestSuccessModal';
+import WhatsAppSuccessModal from './components/WhatsAppSuccessModal';
 import { AppShellSkeleton } from './components/Skeleton';
 import Modal from './components/Modal';
 import InactiveAccount from './pages/InactiveAccount';
@@ -49,7 +50,7 @@ const PageLoader = () => (
 
 const AppContent: React.FC = () => {
   // Added setPage to destructuring
-  const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, logout, refreshSessionAndReload, isOnline, isCreatingRequest } = useAppContext();
+  const { page, setPage, isLoading, isSetupComplete, authUser, settings, isFocusMode, isMailboxOpen, setIsMailboxOpen, can, isSessionError, logout, refreshSessionAndReload, isOnline, isCreatingRequest, whatsappSuccessModal, hideWhatsAppSuccessModal } = useAppContext();
   const [isSidebarOpen, setSidebarOpen] = React.useState(false);
 
 
@@ -286,6 +287,12 @@ const AppContent: React.FC = () => {
       <NotificationContainer />
       <ConfirmModal />
       <NewRequestSuccessModal />
+      <WhatsAppSuccessModal 
+        isOpen={whatsappSuccessModal.isOpen} 
+        onClose={hideWhatsAppSuccessModal} 
+        clientName={whatsappSuccessModal.clientName} 
+        phone={whatsappSuccessModal.phone} 
+      />
       <InstallPwaBanner />
       <IncomingRequestNotifier />
 

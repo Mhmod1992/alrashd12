@@ -205,7 +205,10 @@ export interface AppContextType {
     deleteReservation: (id: string) => Promise<void>;
     searchReservations: (query: string) => Promise<Reservation[]>;
     parseReservationText: (text: string) => Promise<Partial<Reservation>>;
-    sendWhatsAppMessage: (phone: string, text: string) => Promise<boolean>;
+    sendWhatsAppMessage: (phone: string, text: string, clientName?: string) => Promise<boolean>;
+    whatsappSuccessModal: { isOpen: boolean; clientName: string; phone: string; };
+    showWhatsAppSuccessModal: (clientName: string, phone: string) => void;
+    hideWhatsAppSuccessModal: () => void;
     // --- Remote Deletion Event ---
     lastRemoteDeleteId: string | null;
     setLastRemoteDeleteId: (id: string | null) => void;

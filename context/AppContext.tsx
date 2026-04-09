@@ -173,6 +173,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
     const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; }>({ isOpen: false, requestNumber: null, requestId: null });
+    const [whatsappSuccessModal, setWhatsappSuccessModal] = useState<{ isOpen: boolean; clientName: string; phone: string; }>({ isOpen: false, clientName: '', phone: '' });
     const [shouldPrintDraft, setShouldPrintDraft] = useState(false);
 
     const isManualLogout = useRef(false);
@@ -1159,6 +1160,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber }), []);
     const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null }), []);
 
+    const showWhatsAppSuccessModal = useCallback((clientName: string, phone: string) => setWhatsappSuccessModal({ isOpen: true, clientName, phone }), []);
+    const hideWhatsAppSuccessModal = useCallback(() => setWhatsappSuccessModal(prev => ({ ...prev, isOpen: false })), []);
+
     const fetchFinancialsData = useCallback(async (filter: 'today' | 'week' | 'month' | 'year'): Promise<{ requests: InspectionRequest[], expenses: Expense[] }> => {
         const now = new Date();
         let startDate: Date;
@@ -1598,7 +1602,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [carMakes, carModels, setIsRefreshing]);
 
-    const sendWhatsAppMessage = useCallback(async (phone: string, text: string): Promise<boolean> => {
+    const sendWhatsAppMessage = useCallback(async (phone: string, text: string, clientName?: string): Promise<boolean> => {
         const mode = settings.whatsappMode || 'manual';
         const apiUrl = settings.whatsappApiUrl;
 
@@ -1609,12 +1613,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     headers: {
                         'Content-Type': 'application/json',
                         'ngrok-skip-browser-warning': 'true',
+                        'Authorization': `Bearer ${settings.whatsappApiKey || ''}`,
                     },
                     body: JSON.stringify({ phone, message: text }),
                 });
 
                 if (response.ok) {
-                    addNotification({ title: 'نجاح', message: 'تم إرسال رسالة الواتساب عبر الخادم بنجاح', type: 'success' });
+                    if (clientName) {
+                        showWhatsAppSuccessModal(clientName, phone);
+                    } else {
+                        addNotification({ title: 'نجاح', message: 'تم إرسال رسالة الواتساب عبر الخادم بنجاح', type: 'success' });
+                    }
                     return true;
                 } else {
                     console.error('WhatsApp API Error:', await response.text());
@@ -1631,7 +1640,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const encodedText = encodeURIComponent(text);
         window.open(`https://wa.me/${formattedPhone}?text=${encodedText}`, '_blank');
         return true;
-    }, [settings.whatsappMode, settings.whatsappApiUrl, addNotification]);
+    }, [settings.whatsappMode, settings.whatsappApiUrl, addNotification, showWhatsAppSuccessModal]);
 
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
@@ -1651,6 +1660,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         showConfirmModal, hideConfirmModal, isLoading, isRefreshing, isSetupComplete, startSetupProcess, can,
         findOrCreateCarMake, findOrCreateCarModel, initialRequestModalState, setInitialRequestModalState,
         currentDbUsage, currentStorageUsage, newRequestSuccessState, showNewRequestSuccessModal, hideNewRequestSuccessModal,
+        whatsappSuccessModal, showWhatsAppSuccessModal, hideWhatsAppSuccessModal,
         shouldPrintDraft, setShouldPrintDraft, fetchFinancialsData, createActivityLog, systemLogs, searchClients,
         searchCars, searchClientsPage, fetchClientRequests, fetchClientRequestsFiltered, getClientFinancialSummary, fetchRequestsByCarId, fetchRequestByRequestNumber, fetchRequestByRequestNumberForAuth, fetchRequestsByDateRange, fetchRequestsCount,
         checkCarHistory,

@@ -426,6 +426,7 @@ export interface Settings {
   reviewMessage?: string;
   whatsappMode?: 'manual' | 'api';
   whatsappApiUrl?: string;
+  whatsappApiKey?: string;
 }
 
 export interface UserPreferences {

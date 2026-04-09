@@ -76,7 +76,7 @@ const NewRequestSuccessModal: React.FC = () => {
 
         const message = `أهلاً ${client.name}، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${request.request_number}*\n📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
         
-        await sendWhatsAppMessage(phone, message);
+        await sendWhatsAppMessage(phone, message, client.name);
         hideNewRequestSuccessModal();
         
         // Ensure receptionist goes to waiting list after sending message
