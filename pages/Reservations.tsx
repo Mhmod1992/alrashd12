@@ -6,7 +6,6 @@ import Button from '../components/Button';
 import Icon from '../components/Icon';
 import Modal from '../components/Modal';
 import NewRequestForm from '../components/NewRequestForm';
-import { WhatsAppLiveFeed } from '../components/whatsapp/WhatsAppLiveFeed';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import SparklesIcon from '../components/icons/SparklesIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
@@ -210,63 +209,56 @@ const Reservations: React.FC = () => {
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                <div className="lg:col-span-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
-                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
-                                    <Icon name="calendar-clock" className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div>
-                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">حجوزات اليوم</div>
-                                    <div className="text-2xl font-black text-slate-800 dark:text-slate-100">
-                                        {reservations.filter(r => {
-                                            const today = new Date();
-                                            const resDate = new Date(r.created_at);
-                                            return resDate.toDateString() === today.toDateString();
-                                        }).length}
-                                    </div>
-                                </div>
-                            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                            <Icon name="calendar-clock" className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                         </div>
-                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
-                                    <Icon name="sparkles" className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-                                </div>
-                                <div>
-                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">بانتظار التحويل</div>
-                                    <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.filter(r => r.status === 'new').length}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
-                                    <Icon name="check-circle" className="w-6 h-6 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div>
-                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">تم تحويلها</div>
-                                    <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.filter(r => r.status === 'converted').length}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
-                                    <Icon name="archive" className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <div>
-                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">إجمالي الحجوزات</div>
-                                    <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.length}</div>
-                                </div>
+                        <div>
+                            <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">حجوزات اليوم</div>
+                            <div className="text-2xl font-black text-slate-800 dark:text-slate-100">
+                                {reservations.filter(r => {
+                                    const today = new Date();
+                                    const resDate = new Date(r.created_at);
+                                    return resDate.toDateString() === today.toDateString();
+                                }).length}
                             </div>
                         </div>
                     </div>
                 </div>
-                <div className="lg:col-span-1">
-                    <WhatsAppLiveFeed />
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
+                            <Icon name="sparkles" className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div>
+                            <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">بانتظار التحويل</div>
+                            <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.filter(r => r.status === 'new').length}</div>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
+                            <Icon name="check-circle" className="w-6 h-6 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                            <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">تم تحويلها</div>
+                            <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.filter(r => r.status === 'converted').length}</div>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                            <Icon name="archive" className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <div>
+                            <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">إجمالي الحجوزات</div>
+                            <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.length}</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
