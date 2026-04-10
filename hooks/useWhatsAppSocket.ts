@@ -28,7 +28,11 @@ export const useWhatsAppSocket = (url: string, apiKey: string) => {
     socketRef.current.on('disconnect', () => setIsConnected(false));
     socketRef.current.on('connect_error', (err) => console.error('Socket connection error:', err));
 
-    // 2. Listen for new messages
+    // 2. Listen for new messages (and debug all events)
+    socketRef.current.onAny((event, ...args) => {
+      console.log('Socket Event Received:', event, args);
+    });
+
     socketRef.current.on('message', (message: Message) => {
       setMessages((prev) => [...prev, message]);
     });
