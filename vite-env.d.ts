@@ -1,3 +1,14 @@
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_WSAPP_PRO_URL: string
+  readonly VITE_WSAPP_PRO_API_KEY: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+
 declare module '*?url' {
   const content: string;
   export default content;

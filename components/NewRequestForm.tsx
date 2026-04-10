@@ -509,16 +509,40 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     useEffect(() => {
-        if (initialReservationData && reservationFillData) {
-            // Do not fill fields automatically as requested
+        if (initialReservationData && isReservationMode) {
+            setClientName(initialReservationData.client_name || '');
+            setClientPhone(initialReservationData.client_phone || '');
+            setCarMakeId(initialReservationData.car_make_id || '');
+            setCarModelId(initialReservationData.car_model_id || '');
             
+            // Extract year from car_details if possible
+            const yearMatch = initialReservationData.car_details?.match(/\b(19|20)\d{2}\b/);
+            if (yearMatch) setCarYear(parseInt(yearMatch[0]));
+
+            // Extract plate info
+            const plateText = initialReservationData.plate_text || '';
+            if (plateText.startsWith('شاصي')) {
+                setUseChassisNumber(true);
+                setChassisNumber(plateText.replace('شاصي ', ''));
+            } else {
+                const parts = plateText.split(' ');
+                const nums = parts.find(p => /^\d+$/.test(p)) || '';
+                const letters = parts.filter(p => !/^\d+$/.test(p)).join(' ');
+                setPlateNums(nums);
+                setPlateChars(letters);
+            }
+
+            setInspectionPrice(initialReservationData.price || '');
+            setReservationNotes(initialReservationData.notes || '');
+        } else if (initialReservationData && reservationFillData) {
+            // This is for WhatsApp conversion (not reservation mode)
             addNotification({
                 title: 'بيانات الحجز جاهزة',
                 message: 'انقر على البيانات في الشريط الأخضر العلوي لتعبئة الحقول بسرعة.',
                 type: 'info'
             });
         }
-    }, [initialReservationData, reservationFillData]);
+    }, [initialReservationData, reservationFillData, isReservationMode]);
 
     // Reset suggestion indices when lists change
     useEffect(() => setNameSuggestionIndex(-1), [nameSuggestions]);
@@ -1098,14 +1122,14 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
 
         try {
-            const make = contextCarMakes.find(m => m.id === carMakeId);
-            const model = contextCarModels.find(m => m.id === carModelId);
+            const make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
+            const model = contextCarModels.find(m => m.id === carModelId) || modelSuggestions.find(m => m.id === carModelId);
             const type = inspectionTypes.find(t => t.id === inspectionTypeId);
 
             const car_details = `${make?.name_ar || carMakeSearchTerm} ${model?.name_ar || carModelSearchTerm} ${carYear}`;
             const plate_text = useChassisNumber ? `شاصي ${chassisNumber}` : `${plateChars} ${plateNums}`;
 
-            await addReservation({
+            const reservationData = {
                 source_text: initialReservationData?.source_text || 'إدخال يدوي (نموذج ديناميكي)',
                 client_name: clientName,
                 client_phone: clientPhone,
@@ -1116,7 +1140,14 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 car_make_id: carMakeId,
                 car_model_id: carModelId,
                 price: Number(inspectionPrice) || 0
-            });
+            };
+
+            if (initialReservationData?.id) {
+                await updateReservation(initialReservationData.id, reservationData);
+                addNotification({ title: 'تم التحديث', message: 'تم تحديث بيانات الحجز بنجاح.', type: 'success' });
+            } else {
+                await addReservation(reservationData);
+            }
 
             onSuccess();
         } catch (error) {

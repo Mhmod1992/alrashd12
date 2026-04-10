@@ -6,6 +6,7 @@ import Button from '../components/Button';
 import Icon from '../components/Icon';
 import Modal from '../components/Modal';
 import NewRequestForm from '../components/NewRequestForm';
+import { WhatsAppLiveFeed } from '../components/whatsapp/WhatsAppLiveFeed';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import SparklesIcon from '../components/icons/SparklesIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
@@ -41,8 +42,10 @@ const Reservations: React.FC = () => {
     }, [reservations, fetchCarModelsByMake]);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
     const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+    const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
     
     // Add Modal State
     const [rawText, setRawText] = useState('');
@@ -161,6 +164,11 @@ const Reservations: React.FC = () => {
         setIsConvertModalOpen(true);
     };
 
+    const handleEdit = (res: Reservation) => {
+        setEditingReservation(res);
+        setIsEditModalOpen(true);
+    };
+
     const handleSuccessConvert = () => {
         setIsConvertModalOpen(false);
         setSelectedReservation(null);
@@ -202,41 +210,85 @@ const Reservations: React.FC = () => {
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
-                    <div className="text-blue-600 dark:text-blue-400 text-xs font-bold uppercase mb-1">حجوزات جديدة</div>
-                    <div className="text-2xl font-black text-blue-800 dark:text-blue-200">{reservations.filter(r => r.status === 'new').length}</div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                <div className="lg:col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                                    <Icon name="calendar-clock" className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <div>
+                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">حجوزات اليوم</div>
+                                    <div className="text-2xl font-black text-slate-800 dark:text-slate-100">
+                                        {reservations.filter(r => {
+                                            const today = new Date();
+                                            const resDate = new Date(r.created_at);
+                                            return resDate.toDateString() === today.toDateString();
+                                        }).length}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
+                                    <Icon name="sparkles" className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                                </div>
+                                <div>
+                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">بانتظار التحويل</div>
+                                    <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.filter(r => r.status === 'new').length}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
+                                    <Icon name="check-circle" className="w-6 h-6 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div>
+                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">تم تحويلها</div>
+                                    <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.filter(r => r.status === 'converted').length}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                                    <Icon name="archive" className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                                </div>
+                                <div>
+                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">إجمالي الحجوزات</div>
+                                    <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.length}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-100 dark:border-green-800">
-                    <div className="text-green-600 dark:text-green-400 text-xs font-bold uppercase mb-1">تم تحويلها لطلبات</div>
-                    <div className="text-2xl font-black text-green-800 dark:text-green-200">{reservations.filter(r => r.status === 'converted').length}</div>
-                </div>
-                <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl border border-purple-100 dark:border-purple-800">
-                    <div className="text-purple-600 dark:text-purple-400 text-xs font-bold uppercase mb-1">إجمالي الحجوزات</div>
-                    <div className="text-2xl font-black text-purple-800 dark:text-purple-200">{reservations.length}</div>
+                <div className="lg:col-span-1">
+                    <WhatsAppLiveFeed />
                 </div>
             </div>
 
             {/* Filters & Search */}
-            <div className="flex flex-col md:flex-row gap-4 mb-6 items-center">
-                <div className="flex bg-white dark:bg-slate-800 p-1 rounded-lg border dark:border-slate-700 shadow-sm">
+            <div className="flex flex-col md:flex-row gap-4 mb-6 items-center bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
                     <button
                         onClick={() => setTimeFilter('today')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${
+                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
                             timeFilter === 'today' 
-                            ? 'bg-blue-600 text-white shadow-md' 
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm' 
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
                     >
-                        <CalendarIcon className="w-4 h-4" />
                         حجوزات اليوم
                     </button>
                     <button
                         onClick={() => setTimeFilter('all')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${
+                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
                             timeFilter === 'all' 
-                            ? 'bg-blue-600 text-white shadow-md' 
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm' 
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
                     >
                         عرض الكل
@@ -244,13 +296,13 @@ const Reservations: React.FC = () => {
                 </div>
 
                 <div className="relative flex-1 w-full">
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
                         <SearchIcon className="h-5 w-5 text-slate-400" />
                     </div>
                     <input
                         type="text"
                         placeholder="البحث باسم السيارة، رقم الهاتف، أو اسم العميل..."
-                        className="block w-full pr-10 pl-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl leading-5 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm transition-all shadow-sm"
+                        className="block w-full pr-12 pl-4 py-3 border-none rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 sm:text-sm transition-all"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -279,86 +331,110 @@ const Reservations: React.FC = () => {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-right">
-                            <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 uppercase text-xs font-bold border-b dark:border-slate-700">
+                        <table className="w-full text-[13px] text-right">
+                            <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 uppercase text-[11px] font-bold border-b dark:border-slate-700">
                                 <tr>
-                                    <th className="px-6 py-4">رقم الحجز</th>
-                                    <th className="px-6 py-4">العميل</th>
-                                    <th className="px-6 py-4">السيارة</th>
-                                    <th className="px-6 py-4">سعر الفحص</th>
-                                    <th className="px-6 py-4">نوع الخدمة</th>
-                                    <th className="px-6 py-4">ملاحظات</th>
-                                    <th className="px-6 py-4">الحالة</th>
-                                    <th className="px-6 py-4">تاريخ الورود</th>
-                                    <th className="px-6 py-4 text-left">إجراءات</th>
+                                    <th className="px-4 py-3 text-slate-400 font-bold">رقم الحجز</th>
+                                    <th className="px-4 py-3 text-slate-400 font-bold">العميل</th>
+                                    <th className="px-4 py-3 text-slate-400 font-bold">السيارة</th>
+                                    <th className="px-4 py-3 text-slate-400 font-bold">سنة الصنع</th>
+                                    <th className="px-4 py-3 text-slate-400 font-bold">السعر</th>
+                                    <th className="px-4 py-3 text-slate-400 font-bold">نوع الخدمة</th>
+                                    <th className="px-4 py-3 text-slate-400 font-bold">الحالة</th>
+                                    <th className="px-4 py-3 text-slate-400 font-bold">التاريخ</th>
+                                    <th className="px-4 py-3 text-left text-slate-400 font-bold">إجراءات</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y dark:divide-slate-700">
                                 {filteredReservations.map(res => (
                                     <tr key={res.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
-                                        <td className="px-6 py-4 font-bold text-blue-600 dark:text-blue-400 font-mono">
+                                        <td className="px-4 py-3 font-bold text-blue-600 dark:text-blue-400 font-mono">
                                             {res.reservation_number ? `RSV-${String(res.reservation_number).padStart(4, '0')}` : '---'}
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name || 'غير معروف'}</div>
-                                            <div className="text-xs text-slate-500 dir-ltr text-right font-mono">{res.client_phone || '---'}</div>
+                                        <td className="px-4 py-3">
+                                            <div>
+                                                <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name || 'غير معروف'}</div>
+                                                <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                                                    <Icon name="phone" className="w-3 h-3" />
+                                                    {res.client_phone || '---'}
+                                                </div>
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-slate-700 dark:text-slate-300 font-medium">
+                                        <td className="px-4 py-3">
+                                            <div className="text-slate-700 dark:text-slate-300 font-bold">
                                                 {(() => {
                                                     const make = carMakes.find(m => m.id === res.car_make_id);
                                                     const model = carModels.find(m => m.id === res.car_model_id);
                                                     if (make && model) {
                                                         return `${make.name_en} ${model.name_en}`;
                                                     }
-                                                    return res.car_details;
+                                                    return res.car_details.replace(/\b(19|20)\d{2}\b/, '').replace(/ - $/, '').trim();
                                                 })()}
                                             </div>
                                             {res.plate_text && (
-                                                <div className="text-xs font-mono bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded inline-block mt-1 border dark:border-slate-600">
+                                                <div className="text-[10px] font-mono bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-800 inline-block mt-1">
                                                     {res.plate_text}
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">
-                                            {res.price ? `${res.price} ريال` : '---'}
-                                        </td>
-                                        <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{res.service_type}</td>
-                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title={res.notes}>
-                                            {res.notes || '---'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                                res.status === 'new' ? 'bg-blue-100 text-blue-700' : 
-                                                res.status === 'converted' ? 'bg-green-100 text-green-700' : 
-                                                'bg-red-100 text-red-700'
-                                            }`}>
-                                                {res.status === 'new' ? 'جديد' : res.status === 'converted' ? 'تم التحويل' : 'ملغي'}
+                                        <td className="px-4 py-3">
+                                            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-[11px] font-bold border dark:border-slate-600">
+                                                {res.car_details.match(/\b(19|20)\d{2}\b/)?.[0] || '---'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-xs text-slate-500 font-numeric">
-                                            {new Date(res.created_at).toLocaleDateString('en-GB')}
+                                        <td className="px-4 py-3">
+                                            <div className="font-black text-blue-600 dark:text-blue-400">
+                                                {res.price ? `${res.price} ر.س` : '---'}
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 text-left">
-                                            <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <td className="px-4 py-3">
+                                            <span className="text-[11px] bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-2 py-1 rounded-lg font-medium border border-purple-100 dark:border-purple-800">
+                                                {res.service_type}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                                res.status === 'new' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 
+                                                res.status === 'converted' ? 'bg-green-100 text-green-700 border border-green-200' : 
+                                                'bg-slate-100 text-slate-700 border border-slate-200'
+                                            }`}>
+                                                {res.status === 'new' ? 'بانتظار التحويل' : res.status === 'converted' ? 'تم التحويل' : 'ملغي'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-[10px] text-slate-400 font-bold">
+                                            {new Date(res.created_at).toLocaleDateString('ar-SA', { day: 'numeric', month: 'short' })}
+                                        </td>
+                                        <td className="px-4 py-3 text-left">
+                                            <div className="flex justify-end gap-1">
                                                 {res.status === 'new' && (
-                                                    <Button size="sm" onClick={() => handleConvert(res)}>
-                                                        إنشاء طلب
-                                                    </Button>
+                                                    <button 
+                                                        onClick={() => handleConvert(res)}
+                                                        className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all"
+                                                        title="تحويل لطلب"
+                                                    >
+                                                        <Icon name="refresh-cw" className="w-4 h-4" />
+                                                    </button>
                                                 )}
                                                 <button 
+                                                    onClick={() => handleEdit(res)} 
+                                                    className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all"
+                                                    title="تعديل"
+                                                >
+                                                    <Icon name="edit" className="w-4 h-4" />
+                                                </button>
+                                                <button 
                                                     onClick={() => handleWhatsAppContact(res)} 
-                                                    className="p-2 text-green-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                                                    className="p-1.5 text-green-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-xl transition-all"
                                                     title="تواصل واتساب"
                                                 >
-                                                    <Icon name="whatsapp" className="w-5 h-5" />
+                                                    <Icon name="whatsapp" className="w-4 h-4" />
                                                 </button>
                                                 <button 
                                                     onClick={() => handleDelete(res.id)} 
-                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                    className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
                                                     title="حذف"
                                                 >
-                                                    <TrashIcon className="w-5 h-5" />
+                                                    <TrashIcon className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         </td>
@@ -474,6 +550,30 @@ const Reservations: React.FC = () => {
                         onCancel={() => setIsConvertModalOpen(false)}
                         onSuccess={handleSuccessConvert}
                         initialReservationData={selectedReservation}
+                    />
+                </Modal>
+            )}
+
+            {/* Edit Reservation Modal - Reuses NewRequestForm */}
+            {isEditModalOpen && editingReservation && (
+                <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="تعديل بيانات الحجز" size="5xl">
+                    <NewRequestForm
+                        clients={clients}
+                        carMakes={carMakes}
+                        carModels={carModels}
+                        inspectionTypes={inspectionTypes}
+                        brokers={brokers}
+                        isReservationMode={true}
+                        initialReservationData={editingReservation}
+                        onCancel={() => {
+                            setIsEditModalOpen(false);
+                            setEditingReservation(null);
+                        }}
+                        onSuccess={() => {
+                            setIsEditModalOpen(false);
+                            setEditingReservation(null);
+                            fetchReservations();
+                        }}
                     />
                 </Modal>
             )}
