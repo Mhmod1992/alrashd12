@@ -385,7 +385,7 @@ const Reservations: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                            <span className={`inline-block whitespace-nowrap px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                                 res.status === 'new' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 
                                                 res.status === 'converted' ? 'bg-green-100 text-green-700 border border-green-200' : 
                                                 'bg-slate-100 text-slate-700 border border-slate-200'

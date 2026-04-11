@@ -49,7 +49,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
-        fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation
+        fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation, page
     } = useAppContext();
 
     // Responsive Logic
@@ -57,9 +57,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [currentStep, setCurrentStep] = useState(1);
 
     // Determine Role & Mode
-    const isReceptionist = authUser?.role === 'receptionist';
+    const isReceptionistRole = authUser?.role === 'receptionist';
+    const isReceptionistMode = isReceptionistRole || page === 'waiting-requests';
     const isEditMode = !!initialData;
-    const TOTAL_STEPS = (isReceptionist || isReservationMode) ? 3 : 4;
+    const TOTAL_STEPS = (isReceptionistMode || isReservationMode) ? 3 : 4;
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -104,7 +105,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     }, [inspectionPrice, taxMode]);
 
     // Default payment to Unpaid for receptionists
-    const [paymentType, setPaymentType] = useState<PaymentType | ''>(isReceptionist ? PaymentType.Unpaid : '');
+    const [paymentType, setPaymentType] = useState<PaymentType | ''>(isReceptionistMode ? PaymentType.Unpaid : '');
     const [splitCashAmount, setSplitCashAmount] = useState<number>(0);
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
 
@@ -1135,7 +1136,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 if (Number(inspectionPrice) <= 0) newErrors['inspectionPrice'] = true;
 
                 if (!isReservationMode) {
-                    if (!isReceptionist) {
+                    if (!isReceptionistMode) {
                         if (!paymentType) newErrors['paymentType'] = true;
                         if (paymentType === PaymentType.Split) {
                             const totalSplit = splitCashAmount + splitCardAmount;
@@ -1298,8 +1299,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 year: carYear
             };
 
-            const newStatus = isReceptionist ? RequestStatus.WAITING_PAYMENT : (isEditMode && initialData ? initialData.status : RequestStatus.NEW);
-            const finalPaymentType = isReceptionist ? PaymentType.Unpaid : paymentType;
+            const newStatus = isReceptionistMode ? RequestStatus.WAITING_PAYMENT : (isEditMode && initialData ? initialData.status : RequestStatus.NEW);
+            const finalPaymentType = isReceptionistMode ? PaymentType.Unpaid : paymentType;
 
             const requestData = {
                 client_id: client.id,
@@ -1312,7 +1313,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 split_payment_details: paymentType === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
                 price: Number(inspectionPrice),
                 status: newStatus,
-                broker: (!isReceptionist && useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : null,
+                broker: (!isReceptionistMode && useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : null,
                 updated_at: new Date().toISOString() // Force update timestamp
             };
 
@@ -1647,7 +1648,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         calculatedPrice={calculatedPrice}
                         paymentType={paymentType}
                         setPaymentType={setPaymentType as any}
-                        isReceptionist={isReceptionist}
+                        isReceptionist={isReceptionistMode}
                         paymentNote={paymentNote}
                         setPaymentNote={setPaymentNote}
                         reservationNotes={reservationNotes}
@@ -1674,7 +1675,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     />
                 </div>
 
-                {!isReceptionist && !isReservationMode && (
+                {!isReceptionistMode && !isReservationMode && (
                     <div className={isMobile && currentStep !== 4 ? 'hidden' : 'block animate-fade-in'}>
                         <StepBroker 
                             useBroker={useBroker}
@@ -1706,7 +1707,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                     className="w-2/3 flex-1 justify-center font-bold text-lg"
                                     disabled={isCreatingRequest || (isReservationMode && (!carMakeId || !carModelId || !carYear || !inspectionTypeId || !inspectionPrice))}
                                 >
-                                    {isReservationMode ? 'حفظ الحجز' : (initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionist ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب')))}
+                                    {isReservationMode ? 'حفظ الحجز' : (initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionistMode ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب')))}
                                 </Button>
                                 )}
                             </>
@@ -1720,7 +1721,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                     className="font-bold"
                                     disabled={isCreatingRequest || (isReservationMode && (!carMakeId || !carModelId || !carYear || !inspectionTypeId || !inspectionPrice))}
                                 >
-                                    {isReservationMode ? 'حفظ الحجز' : (initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionist ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب')))}
+                                    {isReservationMode ? 'حفظ الحجز' : (initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionistMode ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب')))}
                                 </Button>
                             </>
                         )}
