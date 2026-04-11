@@ -122,6 +122,11 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [carModelSearchTerm, setCarModelSearchTerm] = useState('');
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
+    const [inspectionTypeSearchTerm, setInspectionTypeSearchTerm] = useState('');
+    const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
+    const [typeSuggestionIndex, setTypeSuggestionIndex] = useState(-1);
+    const typeDropdownRef = useRef<HTMLDivElement>(null);
+    const typeListRef = useRef<HTMLUListElement>(null);
 
     // State for suggestions
     const [phoneSuggestions, setPhoneSuggestions] = useState<Client[]>([]);
@@ -175,7 +180,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const plateCharInputRef = useRef<HTMLInputElement>(null);
     const plateNumInputRef = useRef<HTMLInputElement>(null);
     const chassisInputRef = useRef<HTMLInputElement>(null);
-    const typeInputRef = useRef<HTMLSelectElement>(null);
+    const typeInputRef = useRef<HTMLInputElement>(null);
     const priceInputRef = useRef<HTMLInputElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -246,6 +251,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
             // Details
             setInspectionTypeId(req.inspection_type_id);
+            const typeObj = inspectionTypes.find(t => t.id === req.inspection_type_id);
+            if (typeObj) setInspectionTypeSearchTerm(typeObj.name);
             setInspectionPrice(req.price);
             setPaymentType(req.payment_type);
             
@@ -491,6 +498,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                     if (matchedType) {
                         setInspectionTypeId(matchedType.id);
+                        setInspectionTypeSearchTerm(matchedType.name);
                         setInspectionPrice(matchedType.price);
                         addNotification({ title: 'تم الاختيار', message: `تم تحديد نوع الفحص: ${matchedType.name}`, type: 'success' });
                     } else {
@@ -588,6 +596,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
                 setIsModelDropdownOpen(false);
             }
+            if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target as Node)) {
+                setIsTypeDropdownOpen(false);
+            }
             if (phoneInputRef.current && !phoneInputRef.current.parentElement?.contains(event.target as Node)) {
                 setIsPhoneSuggestionsOpen(false);
             }
@@ -598,6 +609,28 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // Scroll Sync for Dropdowns
+    useEffect(() => {
+        if (isMakeDropdownOpen && makeListRef.current && makeSuggestionIndex >= 0) {
+            const item = makeListRef.current.children[makeSuggestionIndex] as HTMLElement;
+            if (item) item.scrollIntoView({ block: 'nearest' });
+        }
+    }, [makeSuggestionIndex, isMakeDropdownOpen]);
+
+    useEffect(() => {
+        if (isModelDropdownOpen && modelListRef.current && modelSuggestionIndex >= 0) {
+            const item = modelListRef.current.children[modelSuggestionIndex] as HTMLElement;
+            if (item) item.scrollIntoView({ block: 'nearest' });
+        }
+    }, [modelSuggestionIndex, isModelDropdownOpen]);
+
+    useEffect(() => {
+        if (isTypeDropdownOpen && typeListRef.current && typeSuggestionIndex >= 0) {
+            const item = typeListRef.current.children[typeSuggestionIndex] as HTMLElement;
+            if (item) item.scrollIntoView({ block: 'nearest' });
+        }
+    }, [typeSuggestionIndex, isTypeDropdownOpen]);
 
     // --- Automatic History Check Effect ---
     useEffect(() => {
@@ -785,21 +818,23 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         if (debounceRef.current) clearTimeout(debounceRef.current);
         setIsSearchingMake(true);
         debounceRef.current = window.setTimeout(async () => {
-            const results = await searchCarMakes(val);
+            const results = await searchCarMakes(val.trim());
             setMakeSuggestions(results);
             setIsSearchingMake(false);
         }, 300);
     };
 
     const displayMakes = useMemo(() => {
-        if (carMakeSearchTerm.trim()) {
-            return makeSuggestions.length > 0 ? makeSuggestions : contextCarMakes.filter(m => m.name_ar.includes(carMakeSearchTerm) || m.name_en.toLowerCase().includes(carMakeSearchTerm.toLowerCase()));
+        const term = carMakeSearchTerm.trim();
+        if (term) {
+            return makeSuggestions.length > 0 ? makeSuggestions : contextCarMakes.filter(m => m.name_ar.includes(term) || m.name_en.toLowerCase().includes(term.toLowerCase()));
         }
         return contextCarMakes;
     }, [carMakeSearchTerm, makeSuggestions, contextCarMakes]);
 
     const displayModels = useMemo(() => {
-        if (carModelSearchTerm.trim()) {
+        const term = carModelSearchTerm.trim();
+        if (term) {
             return modelSuggestions;
         }
         return contextCarModels.filter(m => m.make_id === carMakeId);
@@ -821,7 +856,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         if (debounceRef.current) clearTimeout(debounceRef.current);
         setIsSearchingModel(true);
         debounceRef.current = window.setTimeout(async () => {
-            const results = await searchCarModels(carMakeId, val);
+            const results = await searchCarModels(carMakeId, val.trim());
             setModelSuggestions(results);
             setIsSearchingModel(false);
         }, 300);
@@ -889,13 +924,15 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 setUnpaidDebtAlert(null);
                 if (!isMobile && carSectionRef.current) {
                     carSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    setTimeout(() => {
-                        if (useChassisNumber) {
-                            chassisInputRef.current?.focus();
-                        } else {
-                            plateCharInputRef.current?.focus();
-                        }
-                    }, 500);
+                    if (history.length === 0) {
+                        setTimeout(() => {
+                            if (useChassisNumber) {
+                                chassisInputRef.current?.focus();
+                            } else {
+                                plateCharInputRef.current?.focus();
+                            }
+                        }, 500);
+                    }
                 }
             }
         } catch (error) {
@@ -905,7 +942,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         }
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, type: 'name' | 'phone' | 'make' | 'model') => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, type: 'name' | 'phone' | 'make' | 'model' | 'inspectionType') => {
         let suggestions: any[], isOpen: boolean, setIndex: Function, index: number, selectFn: Function, setOpen: Function;
 
         switch (type) {
@@ -913,6 +950,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             case 'phone': [suggestions, isOpen, setIndex, index, selectFn, setOpen] = [phoneSuggestions, isPhoneSuggestionsOpen, setPhoneSuggestionIndex, phoneSuggestionIndex, handleClientSelection, setIsPhoneSuggestionsOpen]; break;
             case 'make': [suggestions, isOpen, setIndex, index, selectFn, setOpen] = [displayMakes, isMakeDropdownOpen, setMakeSuggestionIndex, makeSuggestionIndex, handleMakeSelection, setIsMakeDropdownOpen]; break;
             case 'model': [suggestions, isOpen, setIndex, index, selectFn, setOpen] = [displayModels, isModelDropdownOpen, setModelSuggestionIndex, modelSuggestionIndex, handleModelSelection, setIsModelDropdownOpen]; break;
+            case 'inspectionType': [suggestions, isOpen, setIndex, index, selectFn, setOpen] = [displayInspectionTypes, isTypeDropdownOpen, setTypeSuggestionIndex, typeSuggestionIndex, handleTypeSelection, setIsTypeDropdownOpen]; break;
             default: return;
         }
 
@@ -1020,6 +1058,36 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             }
         });
     };
+
+    const handleTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setInspectionTypeSearchTerm(val);
+        setInspectionTypeId('');
+        setErrors(prev => ({ ...prev, inspectionType: false }));
+        setIsTypeDropdownOpen(true);
+    };
+
+    const handleTypeFocus = () => {
+        setIsTypeDropdownOpen(true);
+        scrollToBottom();
+    };
+
+    const handleTypeSelection = (type: InspectionType) => {
+        setInspectionTypeId(type.id);
+        setInspectionTypeSearchTerm(type.name);
+        setInspectionPrice(type.price);
+        setIsTypeDropdownOpen(false);
+        setErrors(prev => ({ ...prev, inspectionType: false }));
+        priceInputRef.current?.focus();
+    };
+
+    const displayInspectionTypes = useMemo(() => {
+        const term = inspectionTypeSearchTerm.trim().toLowerCase();
+        if (term) {
+            return inspectionTypes.filter(t => t.name.toLowerCase().includes(term));
+        }
+        return inspectionTypes;
+    }, [inspectionTypeSearchTerm, inspectionTypes]);
 
     const validateStep = (step: number) => {
         const newErrors: Record<string, boolean> = {};
@@ -1590,8 +1658,19 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         typeInputRef={typeInputRef}
                         priceInputRef={priceInputRef}
                         getInputClass={getInputClass}
-                        onInspectionTypeFocus={scrollToBottom}
+                        onInspectionTypeFocus={handleTypeFocus}
                         isReservationMode={isReservationMode}
+                        inspectionTypeSearchTerm={inspectionTypeSearchTerm}
+                        handleTypeChange={handleTypeChange}
+                        isTypeDropdownOpen={isTypeDropdownOpen}
+                        setIsTypeDropdownOpen={setIsTypeDropdownOpen}
+                        displayInspectionTypes={displayInspectionTypes}
+                        handleTypeSelection={handleTypeSelection}
+                        typeSuggestionIndex={typeSuggestionIndex}
+                        setTypeSuggestionIndex={setTypeSuggestionIndex}
+                        typeDropdownRef={typeDropdownRef}
+                        typeListRef={typeListRef}
+                        handleKeyDown={handleKeyDown}
                     />
                 </div>
 
@@ -1658,7 +1737,19 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     visitCount={existingClientSummary.count}
                     lastVisit={existingClientSummary.lastVisit}
                     isVip={existingClientSummary.isVip}
-                    onClose={() => setIsWelcomeCardVisible(false)}
+                    onClose={() => {
+                        setIsWelcomeCardVisible(false);
+                        if (!isMobile && carSectionRef.current) {
+                            carSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            setTimeout(() => {
+                                if (useChassisNumber) {
+                                    chassisInputRef.current?.focus();
+                                } else {
+                                    plateCharInputRef.current?.focus();
+                                }
+                            }, 300);
+                        }
+                    }}
                     onViewHistory={() => {
                         const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(clientPhone)}`;
                         window.open(url, '_blank');

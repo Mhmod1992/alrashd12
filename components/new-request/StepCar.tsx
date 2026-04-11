@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import Button from '../Button';
 import Icon from '../Icon';
 import RefreshCwIcon from '../icons/RefreshCwIcon';
@@ -9,6 +9,44 @@ import SparklesIcon from '../icons/SparklesIcon';
 import ChevronDownIcon from '../icons/ChevronDownIcon';
 import PlusIcon from '../icons/PlusIcon';
 import { CarMake, CarModel, Car, InspectionRequest, Client, Settings } from '../../types';
+
+const ScrollableItem: React.FC<{ nameEn: string; nameAr?: string; isActive: boolean }> = ({ nameEn, nameAr, isActive }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLSpanElement>(null);
+    const [shouldScroll, setShouldScroll] = useState(false);
+    const [scrollDist, setScrollDist] = useState('0px');
+
+    useEffect(() => {
+        if (containerRef.current && contentRef.current) {
+            const containerWidth = containerRef.current.offsetWidth;
+            const contentWidth = contentRef.current.scrollWidth;
+            if (contentWidth > containerWidth) {
+                setShouldScroll(true);
+                setScrollDist(`${contentWidth - containerWidth + 20}px`);
+            } else {
+                setShouldScroll(false);
+            }
+        }
+    }, [nameEn, nameAr]);
+
+    return (
+        <div 
+            ref={containerRef} 
+            className={`scroll-container ${isActive ? 'scroll-active' : ''} ${shouldScroll ? 'should-scroll' : ''}`}
+            style={{ '--scroll-dist': scrollDist } as any}
+        >
+            <span ref={contentRef} className="scroll-content flex items-center gap-2">
+                <span className="font-bold text-slate-900 dark:text-slate-100">{nameEn}</span>
+                {nameAr && (
+                    <>
+                        <span className="text-slate-300 dark:text-slate-600 font-light">|</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{nameAr}</span>
+                    </>
+                )}
+            </span>
+        </div>
+    );
+};
 
 interface StepCarProps {
     useChassisNumber: boolean;
@@ -276,9 +314,13 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                                     key={make.id}
                                     onMouseDown={() => props.handleMakeSelection(make)}
                                     onMouseOver={() => props.setMakeSuggestionIndex(index)}
-                                    className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.makeSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
+                                    className={`px-4 py-2 cursor-pointer ${index === props.makeSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
                                 >
-                                    {make.name_en} {make.name_ar ? `(${make.name_ar})` : ''}
+                                    <ScrollableItem 
+                                        nameEn={make.name_en} 
+                                        nameAr={make.name_ar} 
+                                        isActive={index === props.makeSuggestionIndex} 
+                                    />
                                 </li>
                             ))}
                             {props.carMakeSearchTerm.trim() && !props.displayMakes.some(m => m.name_en.toLowerCase() === props.carMakeSearchTerm.trim().toLowerCase() || (m.name_ar && m.name_ar.toLowerCase() === props.carMakeSearchTerm.trim().toLowerCase())) && (
@@ -320,9 +362,13 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                                     key={model.id}
                                     onMouseDown={() => props.handleModelSelection(model)}
                                     onMouseOver={() => props.setModelSuggestionIndex(index)}
-                                    className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.modelSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
+                                    className={`px-4 py-2 cursor-pointer ${index === props.modelSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
                                 >
-                                    {model.name_en} {model.name_ar ? `(${model.name_ar})` : ''}
+                                    <ScrollableItem 
+                                        nameEn={model.name_en} 
+                                        nameAr={model.name_ar} 
+                                        isActive={index === props.modelSuggestionIndex} 
+                                    />
                                 </li>
                             ))}
                             {props.displayModels.length === 0 && !props.isLoadingModels && (

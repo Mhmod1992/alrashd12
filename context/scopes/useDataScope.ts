@@ -148,7 +148,7 @@ export const useDataScope = (
         if (loadedMakesForModels.has(makeId)) return;
 
         try {
-            const { data: models, error } = await supabase.from('car_models').select('*').eq('make_id', makeId);
+            const { data: models, error } = await supabase.from('car_models').select('*').eq('make_id', makeId).order('name_en', { ascending: true });
             if (error) throw error;
 
             if (models) {
@@ -166,7 +166,7 @@ export const useDataScope = (
 
     const fetchCarMakes = useCallback(async () => {
         try {
-            const { data, error } = await supabase.from('car_makes').select('*').order('name_ar', { ascending: true });
+            const { data, error } = await supabase.from('car_makes').select('*').order('name_en', { ascending: true });
             if (error) throw error;
             setCarMakes(data || []);
         } catch (error) {

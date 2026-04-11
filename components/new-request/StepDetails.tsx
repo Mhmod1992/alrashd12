@@ -1,6 +1,38 @@
 
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { InspectionType, PaymentType, TaxMode } from '../../types';
+
+const ScrollableItem: React.FC<{ name: string; isActive: boolean }> = ({ name, isActive }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLSpanElement>(null);
+    const [shouldScroll, setShouldScroll] = useState(false);
+    const [scrollDist, setScrollDist] = useState('0px');
+
+    useEffect(() => {
+        if (containerRef.current && contentRef.current) {
+            const containerWidth = containerRef.current.offsetWidth;
+            const contentWidth = contentRef.current.scrollWidth;
+            if (contentWidth > containerWidth) {
+                setShouldScroll(true);
+                setScrollDist(`${contentWidth - containerWidth + 20}px`);
+            } else {
+                setShouldScroll(false);
+            }
+        }
+    }, [name]);
+
+    return (
+        <div 
+            ref={containerRef} 
+            className={`scroll-container ${isActive ? 'scroll-active' : ''} ${shouldScroll ? 'should-scroll' : ''}`}
+            style={{ '--scroll-dist': scrollDist } as any}
+        >
+            <span ref={contentRef} className="scroll-content font-bold text-slate-900 dark:text-slate-100">
+                {name}
+            </span>
+        </div>
+    );
+};
 
 interface StepDetailsProps {
     inspectionTypeId: string;
@@ -21,11 +53,22 @@ interface StepDetailsProps {
     splitCashAmount: number;
     onSplitCashChange: (val: number) => void;
     splitCardAmount: number;
-    typeInputRef: React.RefObject<HTMLSelectElement>;
+    typeInputRef: React.RefObject<HTMLInputElement>;
     priceInputRef: React.RefObject<HTMLInputElement>;
     getInputClass: (name: string) => string;
     onInspectionTypeFocus?: () => void;
     isReservationMode?: boolean;
+    inspectionTypeSearchTerm?: string;
+    handleTypeChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    isTypeDropdownOpen?: boolean;
+    setIsTypeDropdownOpen?: (val: boolean) => void;
+    displayInspectionTypes?: InspectionType[];
+    handleTypeSelection?: (type: InspectionType) => void;
+    typeSuggestionIndex?: number;
+    setTypeSuggestionIndex?: (idx: number) => void;
+    typeDropdownRef?: React.RefObject<HTMLDivElement>;
+    typeListRef?: React.RefObject<HTMLUListElement>;
+    handleKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, type: 'name' | 'phone' | 'make' | 'model' | 'inspectionType') => void;
 }
 
 const StepDetails: React.FC<StepDetailsProps> = (props) => {
@@ -38,19 +81,47 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                 تفاصيل الطلب
             </legend>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+                <div className="relative" ref={props.typeDropdownRef}>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">نوع الفحص</label>
-                    <select
-                        ref={props.typeInputRef}
-                        value={props.inspectionTypeId}
-                        onChange={(e) => props.setInspectionTypeId(e.target.value)}
-                        onFocus={props.onInspectionTypeFocus}
-                        required={!props.isReservationMode}
-                        className={props.getInputClass('inspectionType')}
-                    >
-                        <option value="" disabled>اختر نوع الفحص</option>
-                        {props.inspectionTypes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                    </select>
+                    <div className="relative">
+                        <input
+                            ref={props.typeInputRef}
+                            type="text"
+                            value={props.inspectionTypeSearchTerm || ''}
+                            onChange={props.handleTypeChange}
+                            onFocus={props.onInspectionTypeFocus}
+                            onKeyDown={(e) => props.handleKeyDown && props.handleKeyDown(e, 'inspectionType')}
+                            placeholder="ابحث أو اختر نوع الفحص"
+                            required={!props.isReservationMode && !props.inspectionTypeId}
+                            className={props.getInputClass('inspectionType')}
+                            autoComplete="off"
+                        />
+                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 cursor-pointer" onClick={() => props.setIsTypeDropdownOpen && props.setIsTypeDropdownOpen(!props.isTypeDropdownOpen)}>
+                            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div>
+                    {props.isTypeDropdownOpen && props.displayInspectionTypes && (
+                        <ul ref={props.typeListRef} className="absolute z-20 w-full bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
+                            {props.displayInspectionTypes.map((type, index) => (
+                                <li
+                                    key={type.id}
+                                    onMouseDown={() => props.handleTypeSelection && props.handleTypeSelection(type)}
+                                    onMouseOver={() => props.setTypeSuggestionIndex && props.setTypeSuggestionIndex(index)}
+                                    className={`px-4 py-2 cursor-pointer ${index === props.typeSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
+                                >
+                                    <ScrollableItem 
+                                        name={type.name} 
+                                        isActive={index === props.typeSuggestionIndex} 
+                                    />
+                                </li>
+                            ))}
+                            {props.displayInspectionTypes.length === 0 && (
+                                <li className="px-4 py-2 text-slate-500 dark:text-slate-400 text-sm">لا توجد نتائج</li>
+                            )}
+                        </ul>
+                    )}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">قيمة الفحص (ريال)</label>

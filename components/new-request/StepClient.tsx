@@ -60,7 +60,6 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                             onKeyDown={(e) => props.onKeyDown(e, 'name')}
                             required={!props.isReservationMode}
                             className={props.getInputClass('clientName')}
-                            autoFocus
                             autoComplete="off"
                         />
                         {props.isSearchingClientName && (
@@ -99,6 +98,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                             maxLength={10}
                             style={{ direction: 'ltr', textAlign: 'right' }}
                             className={props.getInputClass('clientPhone')}
+                            autoFocus
                             autoComplete="off"
                         />
                         {props.isSearchingClientPhone && (

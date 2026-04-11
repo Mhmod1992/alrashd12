@@ -336,6 +336,37 @@ const PrintStyles = () => (
         display: inline-block;
         animation: marquee 10s linear infinite;
       }
+      .scroll-container {
+        overflow: hidden;
+        white-space: nowrap;
+        width: 100%;
+        display: flex;
+        align-items: center;
+      }
+      .scroll-content {
+        display: inline-block;
+        white-space: nowrap;
+        will-change: transform;
+      }
+      /* Only animate if the parent has the 'should-scroll' class */
+      .scroll-container.should-scroll:hover .scroll-content,
+      .scroll-container.should-scroll.scroll-active .scroll-content {
+        animation: scroll-rtl 8s linear infinite alternate;
+        padding-left: 30px;
+      }
+      @keyframes scroll-rtl {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(calc(100% - 100% + 20px)); } /* Placeholder logic, will refine in component */
+      }
+      /* Refined scroll animation using CSS variables for precision */
+      .scroll-container.should-scroll:hover .scroll-content,
+      .scroll-container.should-scroll.scroll-active .scroll-content {
+        animation: scroll-dynamic var(--scroll-duration, 5s) linear infinite alternate;
+      }
+      @keyframes scroll-dynamic {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(var(--scroll-dist, 50%)); }
+      }
       @media print {
         @page {
           margin: 10mm; /* Standard margin to allow browser header/footer (page numbers) */

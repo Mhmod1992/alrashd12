@@ -27,12 +27,19 @@ const ClientWelcomeCard: React.FC<ClientWelcomeCardProps> = ({
     const [show, setShow] = useState(false);
 
     useEffect(() => {
+        let timer: NodeJS.Timeout;
         if (isVisible) {
             setShow(true);
+            timer = setTimeout(() => {
+                onClose();
+            }, 5000);
         } else {
             setShow(false);
         }
-    }, [isVisible]);
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
+    }, [isVisible, onClose]);
 
     if (!show) return null;
 
