@@ -18,8 +18,7 @@ import RefreshCwIcon from './components/icons/RefreshCwIcon'; // Import Refresh 
 import LogOutIcon from './components/icons/LogOutIcon'; // Import LogOut Icon
 import WifiOffIcon from './components/icons/WifiOffIcon'; // Import WifiOff Icon
 import IncomingRequestNotifier from './components/IncomingRequestNotifier'; // Import the new notifier
-
-// Lazy Load Pages
+import { WhatsAppMessagesTest } from './components/WhatsAppMessagesTest'; // Import the test component
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Requests = lazy(() => import('./pages/Requests'));
 const Clients = lazy(() => import('./pages/Clients'));
@@ -231,8 +230,10 @@ const AppContent: React.FC = () => {
         return <Employees />;
       case 'reservations':
         return <Reservations />;
+      case 'whatsapp-test':
+        return <WhatsAppMessagesTest />;
       default:
-        return <Dashboard />;
+        return <Dashboard />; // Revert to Dashboard as default
     }
   };
 

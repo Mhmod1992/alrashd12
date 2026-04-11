@@ -44,6 +44,12 @@ const QuickActions: React.FC = () => {
             color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300', 
             action: () => setPage('requests') 
         },
+        { 
+            label: 'تجربة واتساب', 
+            icon: <Icon name="whatsapp" className="w-5 h-5" />, 
+            color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300', 
+            action: () => setPage('whatsapp-test') 
+        },
     ];
 
     return (

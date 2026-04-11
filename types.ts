@@ -1,6 +1,6 @@
 
 
-export type Page = 'dashboard' | 'requests' | 'waiting-requests' | 'clients' | 'settings' | 'fill-request' | 'print-report' | 'financials' | 'request-draft' | 'profile' | 'brokers' | 'expenses' | 'revenues' | 'mailbox' | 'archive' | 'paper-archive' | 'employees' | 'reservations';
+export type Page = 'dashboard' | 'requests' | 'waiting-requests' | 'clients' | 'settings' | 'fill-request' | 'print-report' | 'financials' | 'request-draft' | 'profile' | 'brokers' | 'expenses' | 'revenues' | 'mailbox' | 'archive' | 'paper-archive' | 'employees' | 'reservations' | 'whatsapp-test';
 
 export enum RequestStatus {
   IN_PROGRESS = 'قيد التنفيذ',
