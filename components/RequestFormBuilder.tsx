@@ -31,7 +31,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
     onSuccess 
 }) => {
     const {
-        settings, authUser, addClient, addCar, addRequest, addNotification,
+        settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addNotification,
         findOrCreateCarMake, findOrCreateCarModel, addBroker, showNewRequestSuccessModal, hideNewRequestSuccessModal,
         searchClients, searchCarMakes, searchCarModels, checkCarHistory,
         updateRequestAndAssociatedData, fetchCarModelsByMake, fetchClientRequests,
@@ -685,9 +685,32 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب.', type: 'success' });
                 onSuccess(); // Close modal
             } else {
-                // CREATE
-                const newReq = await addRequest({ id: uuidv4(), ...reqData } as any);
-                showNewRequestSuccessModal(newReq.id, newReq.request_number);
+                // CREATE - Use Optimized Single Shot
+                const newAddedRequest = await addRequestOptimized({
+                    clientName,
+                    clientPhone,
+                    carMakeId: (await findOrCreateCarMake(carMakeSearchTerm)).id,
+                    carModelId: (await findOrCreateCarModel(carModelSearchTerm, (await findOrCreateCarMake(carMakeSearchTerm)).id)).id,
+                    carYear,
+                    plateNumber: useChassisNumber ? null : `${previewArabicChars.replace(/\s/g, '')} ${plateNums.replace(/\s/g, '')}`,
+                    plateNumberEn: useChassisNumber ? null : `${previewEnglishChars.replace(/\s/g, '')} ${plateNums.replace(/\s/g, '')}`,
+                    vin: useChassisNumber ? chassisNumber : null,
+                    carSnapshot,
+                    inspectionTypeId,
+                    paymentType: reqData.payment_type as string,
+                    paymentNote: reqData.payment_note || '',
+                    splitPaymentDetails: reqData.split_payment_details,
+                    price: reqData.price,
+                    status: reqData.status,
+                    employeeId: authUser?.id || '',
+                    broker: reqData.broker,
+                    createdAt: reqData.created_at,
+                    reservationId: null // RequestFormBuilder doesn't seem to handle reservations directly like NewRequestForm
+                });
+
+                if (newAddedRequest) {
+                    showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number);
+                }
             }
 
         } catch (error) {

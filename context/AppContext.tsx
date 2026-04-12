@@ -11,7 +11,7 @@ import {
     FinancialStats, ArchiveResult, PaymentType, PayrollDraft, PayrollItem, Reservation
 } from '../types';
 import { mockSettings } from '../data/mockData';
-import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString } from '../lib/utils';
+import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile } from '../lib/utils';
 import { AppContextType, CarHistoryResult } from './types';
 import { useNavigationScope } from './scopes/useNavigationScope';
 import { useThemeScope } from './scopes/useThemeScope';
@@ -126,7 +126,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } = useDataScope(authUser);
 
     const {
-        updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest,
+        updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest, addRequestOptimized,
         ensureLocalClient, addClient, updateClient, deleteClient,
         addCar,
         addInspectionType, updateInspectionType, deleteInspectionType,
@@ -1185,12 +1185,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return { requests: finalRequests, expenses: expensesData || [] };
     }, [ensureEntitiesLoaded]);
 
-    const uploadImage = useCallback(async (file: File, bucket: string): Promise<string> => {
+    const uploadImage = useCallback(async (file: File, bucket: string, folder?: string, customFileName?: string): Promise<string> => {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("Not authenticated");
-        const fileExt = file.name.split('.').pop();
-        const filePath = `${uuidv4()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+        
+        // Compress the image before uploading (max 1200px, 70% quality)
+        const compressedFile = await compressImageFile(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
+        
+        const fileExt = compressedFile.name.split('.').pop();
+        const fileName = customFileName ? `${customFileName}.${fileExt}` : `${uuidv4()}.${fileExt}`;
+        const filePath = folder ? `${folder}/${fileName}` : fileName;
+        
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, compressedFile);
         if (uploadError) throw uploadError;
         const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
         return data.publicUrl;
@@ -1648,7 +1654,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, clearSearchedRequests, searchedRequests,
         searchQuery, setSearchQuery, highlightedRequestId, triggerHighlight,
         customFindingCategories, predefinedFindings, selectedRequestId, setSelectedRequestId, selectedClientId, setSelectedClientId,
-        authUser, setAuthUser, login, logout, updateOwnPassword, settings, updateSettings, addRequest, updateRequest, deleteRequest, deleteRequestsBatch,
+        authUser, setAuthUser, login, logout, updateOwnPassword, settings, updateSettings, addRequest, addRequestOptimized, updateRequest, deleteRequest, deleteRequestsBatch,
         fetchAndUpdateSingleRequest, updateRequestAndAssociatedData, addClient, updateClient, deleteClient, ensureLocalClient, addCar,
         uploadImage, deleteImage, addInspectionType, updateInspectionType, deleteInspectionType, addFindingCategory,
         updateFindingCategory, deleteFindingCategory, addPredefinedFinding, updatePredefinedFinding, deletePredefinedFinding,

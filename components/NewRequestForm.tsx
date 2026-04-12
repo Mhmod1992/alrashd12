@@ -43,7 +43,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     isReservationMode = false
 }) => {
     const {
-        settings, authUser, addClient, addCar, addRequest, addNotification,
+        settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addNotification,
         addCarMake, addCarModel, addBroker, showNewRequestSuccessModal, hideNewRequestSuccessModal, showConfirmModal,
         searchClients, searchCarMakes, searchCarModels, checkCarHistory,
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
@@ -1231,7 +1231,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             await handleReservationSubmit();
             return;
         }
-        // ... existing handleSubmit logic ...
 
         if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
 
@@ -1245,31 +1244,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setIsCreatingRequest(true);
 
         try {
-            // Find or Create Client
-            let client: Client | undefined;
-            client = clients.find(c => c.phone === clientPhone);
-
-            if (!client) {
-                const existingClients = await searchClients(clientPhone);
-                client = existingClients.find(c => c.phone === clientPhone);
-
-                if (client) {
-                    ensureLocalClient(client);
-                } else {
-                    client = { id: uuidv4(), name: clientName, phone: clientPhone };
-                    await addClient(client);
-                }
-            }
-
-            // Update client name if it changed
-            if (client && client.name !== clientName) {
-                const updatedClient = { ...client, name: clientName };
-                await updateClient(updatedClient);
-                client = updatedClient;
-            }
-            
-            // Reservation Handling - Logic moved to final success block to ensure request is created first
-            
             // Construct Common Data
             let make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
             let model = contextCarModels.find(m => m.id === carModelId) || modelSuggestions.find(m => m.id === carModelId);
@@ -1302,22 +1276,37 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             const newStatus = isReceptionistMode ? RequestStatus.WAITING_PAYMENT : (isEditMode && initialData ? initialData.status : RequestStatus.NEW);
             const finalPaymentType = isReceptionistMode ? PaymentType.Unpaid : paymentType;
 
-            const requestData = {
-                client_id: client.id,
-                car_snapshot: carSnapshot,
-                inspection_type_id: inspectionTypeId,
-                payment_type: finalPaymentType as PaymentType,
-                payment_note: (initialReservationData || isFromReservation) 
-                    ? `[WA-RES] ${paymentNote.trim()}`.trim() 
-                    : ((paymentType === PaymentType.Transfer || paymentType === PaymentType.Unpaid) && paymentNote.trim() ? paymentNote.trim() : undefined),
-                split_payment_details: paymentType === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
-                price: Number(inspectionPrice),
-                status: newStatus,
-                broker: (!isReceptionistMode && useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : null,
-                updated_at: new Date().toISOString() // Force update timestamp
-            };
+            const paymentNoteValue = (initialReservationData || isFromReservation) 
+                ? `[WA-RES] ${paymentNote.trim()}`.trim() 
+                : ((paymentType === PaymentType.Transfer || paymentType === PaymentType.Unpaid) && paymentNote.trim() ? paymentNote.trim() : undefined);
+
+            const splitPaymentDetails = paymentType === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined;
+            const brokerValue = (!isReceptionistMode && useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : null;
 
             if (isEditMode && initialData) {
+                // Find or Create Client (Only for Edit Mode)
+                let client: Client | undefined;
+                client = clients.find(c => c.phone === clientPhone);
+
+                if (!client) {
+                    const existingClients = await searchClients(clientPhone);
+                    client = existingClients.find(c => c.phone === clientPhone);
+
+                    if (client) {
+                        ensureLocalClient(client);
+                    } else {
+                        client = { id: uuidv4(), name: clientName, phone: clientPhone };
+                        await addClient(client);
+                    }
+                }
+
+                // Update client name if it changed
+                if (client && client.name !== clientName) {
+                    const updatedClient = { ...client, name: clientName };
+                    await updateClient(updatedClient);
+                    client = updatedClient;
+                }
+
                  await updateRequestAndAssociatedData({
                     originalRequest: initialData,
                     formData: {
@@ -1330,7 +1319,18 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             plate_number_en: plateNumberEnglish,
                             vin: vin
                         },
-                        request: requestData as any
+                        request: {
+                            client_id: client.id,
+                            car_snapshot: carSnapshot,
+                            inspection_type_id: inspectionTypeId,
+                            payment_type: finalPaymentType as PaymentType,
+                            payment_note: paymentNoteValue,
+                            split_payment_details: splitPaymentDetails,
+                            price: Number(inspectionPrice),
+                            status: newStatus,
+                            broker: brokerValue,
+                            updated_at: new Date().toISOString()
+                        } as any
                     }
                 });
 
@@ -1340,65 +1340,35 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
             } else {
-                let carId = '';
-                if (foundHistory) {
-                    carId = foundHistory.car.id;
-                } else {
-                    const car: Car = {
-                        id: uuidv4(),
-                        make_id: make.id,
-                        model_id: model.id,
-                        year: carYear,
-                        plate_number: plateNumberArabic,
-                        plate_number_en: plateNumberEnglish,
-                        vin: vin
-                    };
-                    await addCar(car);
-                    carId = car.id;
-                }
                 // Custom Date Logic: If before 4 AM, count as previous day
                 const requestDate = new Date();
                 if (requestDate.getHours() < 4) {
                     requestDate.setDate(requestDate.getDate() - 1);
                 }
 
-                const newReq = {
-                    id: uuidv4(),
-                    ...requestData,
-                    car_id: carId,
-                    created_at: requestDate.toISOString(),
-                    employee_id: authUser.id,
-                    inspection_data: {},
-                    general_notes: [],
-                    category_notes: {},
-                    structured_findings: [],
-                    activity_log: [],
-                    attached_files: [],
-                };
-                const newAddedRequest = await addRequest(newReq as any);
+                const newAddedRequest = await addRequestOptimized({
+                    clientName,
+                    clientPhone,
+                    carMakeId: make.id,
+                    carModelId: model.id,
+                    carYear,
+                    plateNumber: plateNumberArabic,
+                    plateNumberEn: plateNumberEnglish,
+                    vin: vin,
+                    carSnapshot,
+                    inspectionTypeId,
+                    paymentType: finalPaymentType as string,
+                    paymentNote: paymentNoteValue || '',
+                    splitPaymentDetails: splitPaymentDetails,
+                    price: Number(inspectionPrice),
+                    status: newStatus,
+                    employeeId: authUser.id,
+                    broker: brokerValue,
+                    createdAt: requestDate.toISOString(),
+                    reservationId: initialReservationData?.id || null
+                });
+
                 if (newAddedRequest) {
-                    // If this was a conversion from a reservation, update the reservation status
-                    if (initialReservationData && initialReservationData.id) {
-                        try {
-                            const make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
-                            const model = contextCarModels.find(m => m.id === carModelId) || modelSuggestions.find(m => m.id === carModelId);
-                            const plateValue = useChassisNumber ? (chassisNumber || '') : (previewArabicChars + ' ' + plateNums);
-
-                            await updateReservation(initialReservationData.id, {
-                                client_name: clientName,
-                                client_phone: clientPhone,
-                                car_details: `${make?.name_ar || carMakeSearchTerm} - ${model?.name_ar || carModelSearchTerm} - ${carYear}`,
-                                car_make_id: make?.id,
-                                car_model_id: model?.id,
-                                plate_text: plateValue,
-                                status: 'converted',
-                                notes: `تم التحويل لطلب رقم: ${newAddedRequest.request_number}`
-                            });
-                        } catch (resError) {
-                            console.error("Failed to update reservation status", resError);
-                        }
-                    }
-
                     showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number);
                     onSuccess(newAddedRequest);
                 }

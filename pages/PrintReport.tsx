@@ -385,7 +385,7 @@ const PrintReport: React.FC = () => {
         setIsSourceChoiceModalOpen(true);
     };
 
-    const processFiles = async (files: File[], type: string) => {
+    const processFiles = async (files: File[], type: string, source: 'image' | 'pdf' = 'image') => {
         if (!originalRequest) return;
         setIsUploading(true);
         setUploadStats(null);
@@ -409,10 +409,26 @@ const PrintReport: React.FC = () => {
 
                 totalOptimizedSize += optimizedFile.size;
 
-                const publicUrl = await uploadImage(optimizedFile, 'attached_files'); 
+                let folder = 'drafts';
+                let prefix = 'Draft';
+
+                if (source === 'pdf') {
+                    folder = 'pdf_extracts';
+                    prefix = 'PDF-Extract';
+                } else if (type === 'manual_paper') {
+                    folder = 'colored_attachments';
+                    prefix = 'Colored';
+                } else if (type === 'internal_draft') {
+                    folder = 'drafts';
+                    prefix = 'Draft';
+                }
+
+                const timestamp = Date.now();
+                const customFileName = `Req-${originalRequest.request_number}_${prefix}_${timestamp}_${i+1}`;
+                const publicUrl = await uploadImage(optimizedFile, 'attached_files', folder, customFileName); 
                 
                 newAttachments.push({
-                    name: `req_${originalRequest.request_number}_${type}_${Date.now()}_${i}.jpg`,
+                    name: customFileName + '.jpg',
                     type: type,
                     data: publicUrl
                 });
@@ -513,7 +529,7 @@ const PrintReport: React.FC = () => {
                 }
                 
                 if (allExtractedImages.length > 0) {
-                    processFiles(allExtractedImages, currentUploadType);
+                    processFiles(allExtractedImages, currentUploadType, 'pdf');
                 }
             } catch (error) {
                 addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء استخراج صفحات PDF.', type: 'error' });

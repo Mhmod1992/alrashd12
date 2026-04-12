@@ -17,6 +17,62 @@ export const uuidv4 = (): string => {
     });
 };
 
+export const compressImageFile = (file: File, options: { maxWidth: number; maxHeight: number; quality: number; }): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+        return resolve(file); // Return original if not an image
+    }
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > options.maxWidth) {
+          height = Math.round((height * options.maxWidth) / width);
+          width = options.maxWidth;
+        }
+      } else {
+        if (height > options.maxHeight) {
+          width = Math.round((width * options.maxHeight) / height);
+          height = options.maxHeight;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(img.src);
+        return resolve(file); // Fallback to original
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(img.src);
+      
+      canvas.toBlob((blob) => {
+          if (!blob) {
+              return resolve(file); // Fallback
+          }
+          // Preserve original type to keep transparency for PNGs (like logos)
+          const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const ext = outType === 'image/png' ? '.png' : '.jpg';
+          
+          const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ext, {
+              type: outType,
+              lastModified: Date.now(),
+          });
+          resolve(newFile);
+      }, file.type === 'image/png' ? 'image/png' : 'image/jpeg', options.quality);
+    };
+    img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        resolve(file); // Fallback to original on error
+    }
+  });
+};
+
 export const compressImageToBase64 = (file: File, options: { maxWidth: number; maxHeight: number; quality: number; }): Promise<string> => {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {

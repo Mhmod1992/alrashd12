@@ -479,7 +479,9 @@ export const FillRequest: React.FC = () => {
             const note = uploadedGeneralNotes[i];
             if ((note.status === 'saving' || note.status === 'error') && note.localFile) {
                 try {
-                    const url = await uploadImage(note.localFile, 'note_images');
+                    const timestamp = Date.now();
+                    const customFileName = `Req-${request.request_number}_Colored_${timestamp}_${i+1}`;
+                    const url = await uploadImage(note.localFile, 'note_images', 'colored_attachments', customFileName);
                     uploadedGeneralNotes[i] = { ...note, image: url, localFile: undefined };
                 } catch (e) {
                     console.error("Retry upload failed for general note:", note.id, e);
@@ -497,7 +499,9 @@ export const FillRequest: React.FC = () => {
                 const note = uploadedCategoryNotes[catId][i];
                 if ((note.status === 'saving' || note.status === 'error') && note.localFile) {
                     try {
-                        const url = await uploadImage(note.localFile, 'note_images');
+                        const timestamp = Date.now();
+                        const customFileName = `Req-${request.request_number}_Colored_${timestamp}_${catId}_${i+1}`;
+                        const url = await uploadImage(note.localFile, 'note_images', 'colored_attachments', customFileName);
                         uploadedCategoryNotes[catId][i] = { ...note, image: url, localFile: undefined };
                     } catch (e) {
                         console.error("Retry upload failed for category note:", note.id, e);
@@ -969,7 +973,9 @@ export const FillRequest: React.FC = () => {
         try {
             let imageUrl: string | undefined = undefined;
             if (file) {
-                imageUrl = await uploadImage(file, 'note_images');
+                const timestamp = Date.now();
+                const customFileName = `Req-${request.request_number}_Colored_${timestamp}_1`;
+                imageUrl = await uploadImage(file, 'note_images', 'colored_attachments', customFileName);
             }
 
             if (previewUrl && imageUrl !== previewUrl) {
@@ -1267,7 +1273,9 @@ export const FillRequest: React.FC = () => {
         try {
             let finalImageUrl = modalNoteData.image || undefined;
             if (modalNoteFile) {
-                finalImageUrl = await uploadImage(modalNoteFile, 'note_images');
+                const timestamp = Date.now();
+                const customFileName = `Req-${request.request_number}_Colored_${timestamp}_Modal`;
+                finalImageUrl = await uploadImage(modalNoteFile, 'note_images', 'colored_attachments', customFileName);
                 if (originalNote.image && originalNote.image !== finalImageUrl) {
                     trackDataTransfer(200);
                     deleteImage(originalNote.image).catch(err => {

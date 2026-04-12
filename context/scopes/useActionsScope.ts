@@ -118,6 +118,62 @@ export const useActionsScope = (
         return data;
     }, [sendSystemNotification, fetchRequests, addNotification]);
 
+    const addRequestOptimized = useCallback(async (payload: {
+        clientName: string;
+        clientPhone: string;
+        carMakeId: string;
+        carModelId: string;
+        carYear: number;
+        plateNumber: string | null;
+        plateNumberEn: string | null;
+        vin: string | null;
+        carSnapshot: any;
+        inspectionTypeId: string;
+        paymentType: string;
+        paymentNote: string;
+        splitPaymentDetails: any;
+        price: number;
+        status: string;
+        employeeId: string;
+        broker: any;
+        createdAt: string;
+        reservationId?: string | null;
+    }): Promise<InspectionRequest> => {
+        const { data, error } = await supabase.rpc('create_inspection_request_v3', {
+            p_client_name: payload.clientName,
+            p_client_phone: payload.clientPhone,
+            p_car_make_id: payload.carMakeId,
+            p_car_model_id: payload.carModelId,
+            p_car_year: payload.carYear,
+            p_plate_number: payload.plateNumber ?? null,
+            p_plate_number_en: payload.plateNumberEn ?? null,
+            p_vin: payload.vin ?? null,
+            p_car_snapshot: payload.carSnapshot,
+            p_inspection_type_id: payload.inspectionTypeId,
+            p_payment_type: payload.paymentType,
+            p_payment_note: payload.paymentNote ?? '',
+            p_split_payment_details: payload.splitPaymentDetails ?? null,
+            p_price: payload.price,
+            p_status: payload.status,
+            p_employee_id: payload.employeeId,
+            p_broker: payload.broker ?? null,
+            p_created_at: payload.createdAt,
+            p_reservation_id: payload.reservationId ?? null
+        });
+
+        if (error) throw error;
+        
+        // Update local state immediately with the returned data
+        const newRequest = data as InspectionRequest;
+        setRequests(prev => [newRequest, ...prev]);
+        
+        // Trigger a background fetch to update clients and other metadata (like history counts)
+        fetchRequests().catch(console.error);
+        
+        addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
+        return newRequest;
+    }, [setRequests, addNotification, fetchRequests]);
+
 
     // --- CLIENTS ---
     const ensureLocalClient = useCallback((client: Client) => {
@@ -461,7 +517,7 @@ export const useActionsScope = (
     }, [setReservations]);
 
     return {
-        updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest,
+        updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest, addRequestOptimized,
         ensureLocalClient, addClient, updateClient, deleteClient,
         addCar,
         addInspectionType, updateInspectionType, deleteInspectionType,

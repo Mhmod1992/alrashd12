@@ -5,7 +5,140 @@ import Icon from '../../components/Icon';
 import { DraftSettings as DraftSettingsType } from '../../types';
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
 import DownloadIcon from '../../components/icons/DownloadIcon';
-import { urlToBase64, base64ToFile } from '../../lib/utils';
+import TrashIcon from '../../components/icons/TrashIcon';
+import { urlToBase64, base64ToFile, formatBytes } from '../../lib/utils';
+import { supabase } from '../../lib/supabaseClient';
+
+const DraftCleanup: React.FC = () => {
+    const { addNotification } = useAppContext();
+    const [isCleaning, setIsCleaning] = useState(false);
+    const [daysToKeep, setDaysToKeep] = useState(30);
+    const [stats, setStats] = useState<{ count: number, size: number } | null>(null);
+    const [isCalculating, setIsCalculating] = useState(false);
+
+    const calculateStats = async () => {
+        setIsCalculating(true);
+        try {
+            const { data, error } = await supabase.storage.from('attached_files').list('drafts', { limit: 10000 });
+            if (error) throw error;
+            
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+            
+            let count = 0;
+            let size = 0;
+            
+            data?.forEach(file => {
+                if (file.name !== '.emptyFolderPlaceholder' && new Date(file.created_at) < cutoffDate) {
+                    count++;
+                    size += file.metadata?.size || 0;
+                }
+            });
+            
+            setStats({ count, size });
+        } catch (error) {
+            console.error("Error calculating stats:", error);
+            addNotification({ title: 'خطأ', message: 'فشل حساب الملفات القديمة.', type: 'error' });
+        } finally {
+            setIsCalculating(false);
+        }
+    };
+
+    const handleCleanup = async () => {
+        if (!stats || stats.count === 0) return;
+        
+        if (!window.confirm(`هل أنت متأكد من حذف ${stats.count} ملف نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+        
+        setIsCleaning(true);
+        try {
+            const { data, error } = await supabase.storage.from('attached_files').list('drafts', { limit: 10000 });
+            if (error) throw error;
+            
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+            
+            const filesToDelete = data
+                ?.filter(file => file.name !== '.emptyFolderPlaceholder' && new Date(file.created_at) < cutoffDate)
+                .map(file => `drafts/${file.name}`);
+                
+            if (filesToDelete && filesToDelete.length > 0) {
+                // Delete in batches of 100
+                for (let i = 0; i < filesToDelete.length; i += 100) {
+                    const batch = filesToDelete.slice(i, i + 100);
+                    const { error: deleteError } = await supabase.storage.from('attached_files').remove(batch);
+                    if (deleteError) throw deleteError;
+                }
+                addNotification({ title: 'نجاح', message: `تم حذف ${filesToDelete.length} ملف بنجاح وتوفير ${formatBytes(stats.size)}.`, type: 'success' });
+                setStats(null);
+            }
+        } catch (error) {
+            console.error("Error cleaning up drafts:", error);
+            addNotification({ title: 'خطأ', message: 'فشل حذف الملفات.', type: 'error' });
+        } finally {
+            setIsCleaning(false);
+        }
+    };
+
+    return (
+        <div className="mt-8 p-6 border border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900/30 rounded-xl">
+            <div className="flex items-start gap-4">
+                <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg">
+                    <TrashIcon className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                    <h4 className="text-lg font-bold text-red-800 dark:text-red-300 mb-2">تنظيف مساحة التخزين (المسودات القديمة)</h4>
+                    <p className="text-sm text-red-600 dark:text-red-400 mb-4">
+                        هذه الأداة تقوم بالبحث عن صور المسودات المؤقتة التي تم رفعها مسبقاً وحذفها نهائياً لتوفير المساحة في السيرفر. لن يتم حذف الصور الرسمية للسيارات، بل فقط المسودات الورقية.
+                    </p>
+                    
+                    <div className="flex flex-wrap items-center gap-4 mb-4">
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">حذف المسودات الأقدم من:</label>
+                            <select 
+                                value={daysToKeep} 
+                                onChange={(e) => { setDaysToKeep(Number(e.target.value)); setStats(null); }}
+                                className="border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 rounded-md shadow-sm text-sm"
+                            >
+                                <option value={7}>7 أيام</option>
+                                <option value={15}>15 يوم</option>
+                                <option value={30}>30 يوم</option>
+                                <option value={60}>60 يوم</option>
+                                <option value={90}>90 يوم</option>
+                            </select>
+                        </div>
+                        
+                        <Button variant="secondary" size="sm" onClick={calculateStats} disabled={isCalculating || isCleaning}>
+                            {isCalculating ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="search" className="w-4 h-4" />}
+                            فحص المساحة
+                        </Button>
+                    </div>
+
+                    {stats !== null && (
+                        <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-red-100 dark:border-red-900/20 mb-4 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-slate-600 dark:text-slate-400">الملفات الجاهزة للحذف:</p>
+                                <p className="text-xl font-bold text-slate-800 dark:text-slate-200">{stats.count} ملف</p>
+                            </div>
+                            <div className="text-left">
+                                <p className="text-sm text-slate-600 dark:text-slate-400">المساحة التي سيتم توفيرها:</p>
+                                <p className="text-xl font-bold text-green-600 dark:text-green-400">{formatBytes(stats.size)}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {stats !== null && stats.count > 0 && (
+                        <Button variant="danger" onClick={handleCleanup} disabled={isCleaning}>
+                            {isCleaning ? 'جاري الحذف...' : 'تأكيد الحذف النهائي'}
+                        </Button>
+                    )}
+                    {stats !== null && stats.count === 0 && (
+                        <p className="text-sm font-medium text-green-600 dark:text-green-400">لا توجد مسودات قديمة للحذف.</p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const DraftPreview: React.FC<{ settings: DraftSettingsType }> = ({ settings }) => {
     // A simplified, static version of PrintablePage for preview purposes
@@ -405,6 +538,9 @@ const DraftSettings: React.FC = () => {
                     حفظ التغييرات
                 </Button>
             </div>
+
+            {/* Storage Cleanup Section */}
+            <DraftCleanup />
         </div>
     );
 };

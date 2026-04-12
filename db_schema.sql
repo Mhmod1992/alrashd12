@@ -19,6 +19,102 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- دالة إنشاء طلب فحص متكاملة (Single Shot)
+-- تقوم بالتعامل مع العميل والسيارة والطلب في عملية واحدة آمنة وسريعة
+CREATE OR REPLACE FUNCTION create_inspection_request_v3(
+    p_client_name TEXT,
+    p_client_phone TEXT,
+    p_car_make_id UUID,
+    p_car_model_id UUID,
+    p_car_year INTEGER,
+    p_plate_number TEXT,
+    p_plate_number_en TEXT,
+    p_vin TEXT,
+    p_car_snapshot JSONB,
+    p_inspection_type_id UUID,
+    p_payment_type TEXT,
+    p_payment_note TEXT,
+    p_split_payment_details JSONB,
+    p_price NUMERIC,
+    p_status TEXT,
+    p_employee_id UUID,
+    p_broker JSONB,
+    p_created_at TIMESTAMPTZ,
+    p_reservation_id UUID DEFAULT NULL
+) RETURNS JSONB AS $$
+DECLARE
+    v_client_id UUID;
+    v_car_id UUID;
+    v_request_id UUID;
+    v_result JSONB;
+BEGIN
+    -- 1. التعامل مع العميل (بحث أو إنشاء)
+    SELECT id INTO v_client_id FROM clients WHERE phone = p_client_phone LIMIT 1;
+    
+    IF v_client_id IS NULL THEN
+        INSERT INTO clients (name, phone)
+        VALUES (p_client_name, p_client_phone)
+        RETURNING id INTO v_client_id;
+    ELSE
+        -- تحديث الاسم إذا تغير لضمان دقة البيانات
+        UPDATE clients SET name = p_client_name WHERE id = v_client_id AND name != p_client_name;
+    END IF;
+
+    -- 2. التعامل مع السيارة (بحث أو إنشاء)
+    IF p_vin IS NOT NULL AND p_vin != '' THEN
+        SELECT id INTO v_car_id FROM cars WHERE vin = p_vin LIMIT 1;
+    ELSIF p_plate_number IS NOT NULL AND p_plate_number != '' THEN
+        SELECT id INTO v_car_id FROM cars WHERE plate_number = p_plate_number LIMIT 1;
+    END IF;
+
+    IF v_car_id IS NULL THEN
+        INSERT INTO cars (make_id, model_id, year, plate_number, plate_number_en, vin)
+        VALUES (p_car_make_id, p_car_model_id, p_car_year, p_plate_number, p_plate_number_en, p_vin)
+        RETURNING id INTO v_car_id;
+    ELSE
+        -- تحديث بيانات السيارة لضمان مطابقتها للطلب الحالي
+        UPDATE cars 
+        SET make_id = p_car_make_id, 
+            model_id = p_car_model_id, 
+            year = p_car_year,
+            plate_number = p_plate_number,
+            plate_number_en = p_plate_number_en,
+            vin = p_vin
+        WHERE id = v_car_id;
+    END IF;
+
+    -- 3. إنشاء طلب الفحص
+    INSERT INTO inspection_requests (
+        client_id, car_id, car_snapshot, inspection_type_id, 
+        payment_type, payment_note, split_payment_details, 
+        price, status, employee_id, broker, created_at, reservation_id,
+        inspection_data, general_notes, category_notes, structured_findings, activity_log, attached_files
+    )
+    VALUES (
+        v_client_id, v_car_id, p_car_snapshot, p_inspection_type_id, 
+        p_payment_type, p_payment_note, p_split_payment_details, 
+        p_price, p_status, p_employee_id, p_broker, p_created_at, p_reservation_id,
+        '{}'::jsonb, '[]'::jsonb, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb
+    )
+    RETURNING id INTO v_request_id;
+
+    -- 4. تحديث حالة الحجز إذا كان الطلب محولاً من حجز
+    IF p_reservation_id IS NOT NULL THEN
+        UPDATE reservations 
+        SET status = 'converted',
+            notes = COALESCE(notes, '') || ' (تم التحويل لطلب رقم: ' || (SELECT request_number::text FROM inspection_requests WHERE id = v_request_id) || ')'
+        WHERE id = p_reservation_id;
+    END IF;
+
+    -- 5. جلب بيانات الطلب كاملة لإعادتها للتطبيق فوراً
+    SELECT row_to_json(r) INTO v_result FROM (
+        SELECT * FROM inspection_requests WHERE id = v_request_id
+    ) r;
+
+    RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Trigger function to automate creating an employee profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
@@ -117,6 +213,26 @@ CREATE TABLE IF NOT EXISTS technicians (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Reservations Table
+CREATE TABLE IF NOT EXISTS reservations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reservation_number SERIAL,
+    source_text TEXT,
+    client_name TEXT,
+    client_phone TEXT,
+    car_details TEXT,
+    plate_text TEXT,
+    service_type TEXT,
+    notes TEXT,
+    status TEXT DEFAULT 'new',
+    car_make_id UUID,
+    car_model_id UUID,
+    car_year INTEGER,
+    price NUMERIC DEFAULT 0,
+    payment_type TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Custom Finding Categories Table
 CREATE TABLE IF NOT EXISTS custom_finding_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -186,25 +302,6 @@ CREATE TABLE IF NOT EXISTS inspection_requests (
     report_generated_at TIMESTAMPTZ,
     ai_analysis TEXT,
     reservation_id UUID REFERENCES reservations(id)
-);
-
--- Reservations Table
-CREATE TABLE IF NOT EXISTS reservations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reservation_number SERIAL,
-    source_text TEXT,
-    client_name TEXT,
-    client_phone TEXT,
-    car_details TEXT,
-    plate_text TEXT,
-    service_type TEXT,
-    notes TEXT,
-    status TEXT DEFAULT 'new',
-    car_make_id UUID,
-    car_model_id UUID,
-    price NUMERIC DEFAULT 0,
-    payment_type TEXT,
-    created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Payroll Drafts Table

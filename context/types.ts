@@ -61,6 +61,27 @@ export interface AppContextType {
     settings: Settings;
     updateSettings: (newSettings: Partial<Settings>) => Promise<void>;
     addRequest: (request: Omit<InspectionRequest, 'request_number'>) => Promise<InspectionRequest>;
+    addRequestOptimized: (payload: {
+        clientName: string;
+        clientPhone: string;
+        carMakeId: string;
+        carModelId: string;
+        carYear: number;
+        plateNumber: string | null;
+        plateNumberEn: string | null;
+        vin: string | null;
+        carSnapshot: any;
+        inspectionTypeId: string;
+        paymentType: string;
+        paymentNote: string;
+        splitPaymentDetails: any;
+        price: number;
+        status: string;
+        employeeId: string;
+        broker: any;
+        createdAt: string;
+        reservationId?: string | null;
+    }) => Promise<InspectionRequest>;
     updateRequest: (updatedRequest: Partial<InspectionRequest> & { id: string }) => Promise<void>;
     fetchAndUpdateSingleRequest: (requestId: string) => Promise<void>;
     fetchRequestTabContent: (requestId: string, group: 'general' | 'categories' | 'gallery') => Promise<void>;
@@ -80,7 +101,7 @@ export interface AppContextType {
     deleteClient: (id: string) => Promise<void>;
     ensureLocalClient: (client: Client) => void;
     addCar: (car: Car) => Promise<Car>;
-    uploadImage: (file: File, bucket: string) => Promise<string>;
+    uploadImage: (file: File, bucket: string, folder?: string, customFileName?: string) => Promise<string>;
     deleteImage: (imageUrl: string) => Promise<void>;
     addInspectionType: (type: Omit<InspectionType, 'id'>) => Promise<InspectionType>;
     updateInspectionType: (type: InspectionType) => Promise<void>;
