@@ -974,10 +974,22 @@ const PrintReport: React.FC = () => {
                 const generatedAt = new Date(originalRequest.report_generated_at).getTime();
                 const updatedAt = originalRequest.updated_at ? new Date(originalRequest.updated_at).getTime() : 0;
                 
-                // If generated after last update, use existing link
+                // If generated after last update, verify the link is still valid
                 if (generatedAt > updatedAt) {
-                    await openWhatsapp(originalRequest.report_url);
-                    return;
+                    try {
+                        // Attempt a HEAD request to check if the file exists
+                        const response = await fetch(originalRequest.report_url, { method: 'HEAD' });
+                        if (response.ok) {
+                            // File exists, reuse the link
+                            await openWhatsapp(originalRequest.report_url);
+                            return;
+                        } else {
+                            console.log("Existing report URL returned non-OK status. Generating a new one.");
+                        }
+                    } catch (fetchError) {
+                        // If fetch fails (e.g., CORS, network error, or file deleted), assume it's invalid and generate a new one
+                        console.log("Could not verify existing report URL. Generating a new one.", fetchError);
+                    }
                 }
             }
 
