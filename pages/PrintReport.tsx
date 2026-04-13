@@ -959,6 +959,24 @@ const PrintReport: React.FC = () => {
         }
     };
 
+    const uploadReportToStorage = async (blob: Blob): Promise<string> => {
+        setLoadingState('جاري الرفع إلى الأرشيف...');
+        const pdfFilename = getPdfFilename();
+        const customNameWithoutExt = pdfFilename.replace(/\.pdf$/, '');
+        const file = new File([blob], pdfFilename, { type: 'application/pdf' });
+        const publicUrl = await uploadImage(file, 'reports', undefined, customNameWithoutExt);
+        
+        // Only update the database if we are NOT in translation mode
+        if (originalRequest && !translatedRequest) { 
+            await updateRequest({ 
+                id: originalRequest.id, 
+                report_url: publicUrl, 
+                report_generated_at: new Date().toISOString() 
+            });
+        }
+        return publicUrl;
+    };
+
     const handleWhatsAppShare = async () => {
         if (!client?.phone) { addNotification({ title: 'بيانات ناقصة', message: 'رقم هاتف العميل غير متوفر.', type: 'warning' }); return; }
         if (isSendingWhatsApp) return;
@@ -997,19 +1015,7 @@ const PrintReport: React.FC = () => {
             const blob = await generateNativePdfBlob();
             if (!blob) return;
             
-            setLoadingState('جاري الرفع إلى السيرفر...');
-            const file = new File([blob], getPdfFilename(), { type: 'application/pdf' });
-            const publicUrl = await uploadImage(file, 'reports');
-            
-            // Only update the database if we are NOT in translation mode
-            if (originalRequest && !translatedRequest) { 
-                await updateRequest({ 
-                    id: originalRequest.id, 
-                    report_url: publicUrl, 
-                    report_generated_at: new Date().toISOString() 
-                });
-            }
-            
+            const publicUrl = await uploadReportToStorage(blob);
             await openWhatsapp(publicUrl);
         } catch (error: any) { 
             console.error('WhatsApp Share Error:', error);
@@ -1042,19 +1048,31 @@ const PrintReport: React.FC = () => {
     };
 
     const handleDownloadNativePdf = async () => {
-        const blob = await generateNativePdfBlob();
-        if (!blob) return;
+        try {
+            const blob = await generateNativePdfBlob();
+            if (!blob) return;
 
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = getPdfFilename();
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+            // Also upload to storage if it doesn't exist yet to keep archive in sync
+            if (!originalRequest?.report_url) {
+                await uploadReportToStorage(blob);
+            }
 
-        addNotification({ title: 'تم بنجاح', message: 'تم تحميل التقرير بصيغة PDF حقيقية.', type: 'success' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = getPdfFilename();
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            addNotification({ title: 'تم بنجاح', message: 'تم تحميل التقرير وأرشفته في السيرفر.', type: 'success' });
+        } catch (error) {
+            console.error('Download error:', error);
+            addNotification({ title: 'خطأ', message: 'فشل تحميل التقرير.', type: 'error' });
+        } finally {
+            setLoadingState('');
+        }
     };
 
     if (!request || !isDataReady) {

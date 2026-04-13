@@ -718,9 +718,9 @@ const Dashboard: React.FC = () => {
                      </h3>
                      <span className="text-[10px] text-slate-400">{lastRefreshed.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                  </div>
-                 <div className="w-full h-64 relative z-10">
+                 <div className="w-full h-64 relative z-10" style={{ minHeight: '256px' }}>
                      {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                         <ResponsiveContainer width="100%" height="100%">
+                         <ResponsiveContainer width="100%" height="100%" debounce={50}>
                              <ComposedChart data={dailyRevenueChartData} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.5} />
                                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
@@ -793,9 +793,9 @@ const Dashboard: React.FC = () => {
                          <option value="all">الكل</option>
                      </select>
                  </div>
-                 <div className="w-full h-72 relative z-10">
+                 <div className="w-full h-72 relative z-10" style={{ minHeight: '288px' }}>
                      {isCarLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                         <ResponsiveContainer width="100%" height="100%">
+                         <ResponsiveContainer width="100%" height="100%" debounce={50}>
                              <BarChart 
                                layout="vertical"
                                data={carInspectionFrequencyData} 
@@ -838,9 +838,9 @@ const Dashboard: React.FC = () => {
                     مقارنة عدد السيارات (الشهر الحالي مقابل السابق)
                 </h3>
             </div>
-            <div className="w-full h-72">
+            <div className="w-full h-72 min-h-[288px]">
                 {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" debounce={50}>
                         <BarChart data={monthlyRequestsComparisonData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
                             <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />

@@ -18,6 +18,7 @@ import ReportSettingsPage from './settings/ReportSettings'; // Renamed to avoid 
 import DatabaseManagement from './settings/DatabaseManagement'; // Now acts as Maintenance
 import ApiSettings from './settings/ApiSettings';
 import WhatsAppSettings from './settings/WhatsAppSettings';
+import ReportsArchive from './settings/ReportsArchive';
 
 // Define the Sidebar Item Interface
 interface SidebarItem {
@@ -75,6 +76,7 @@ const Settings: React.FC = () => {
             title: 'التقارير',
             items: [
                 { id: 'report', label: 'إعدادات التقرير النهائي', icon: 'report', permission: 'manage_settings_general', component: ReportSettingsPage },
+                { id: 'reports_archive', label: 'أرشيف ملفات التقرير (Storage)', icon: 'folder-open', permission: 'manage_settings_general', component: ReportsArchive },
             ]
         },
         {

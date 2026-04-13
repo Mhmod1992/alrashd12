@@ -522,6 +522,84 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
     }, []); 
 
+    // Automated Reports Cleanup (Daily at 6:00 PM)
+    useEffect(() => {
+        if (!settings || !settings.autoCleanupReportsDays || settings.autoCleanupReportsDays <= 0) return;
+
+        const checkAndCleanup = async () => {
+            const now = new Date();
+            const currentHour = now.getHours();
+            const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+
+            // Check if it's 6 PM (18:00) or later, and hasn't run today
+            if (currentHour >= 18 && settings.lastCleanupDate !== todayStr) {
+                try {
+                    console.log('Starting automated reports cleanup (Scheduled 6:00 PM)...');
+                    
+                    // 1. Fetch all files from 'reports' bucket
+                    const { data: files, error: listError } = await supabase.storage
+                        .from('reports')
+                        .list('', { });
+
+                    if (listError) throw listError;
+
+                    if (!files || files.length === 0) {
+                        // Update last cleanup date even if no files to avoid re-running
+                        await updateSettings({ lastCleanupDate: todayStr });
+                        return;
+                    }
+
+                    // 2. Filter files older than threshold
+                    const thresholdDate = new Date();
+                    thresholdDate.setDate(now.getDate() - (settings.autoCleanupReportsDays || 30));
+                    
+                    const filesToDelete = files.filter(file => {
+                        if (file.name === '.emptyFolderPlaceholder') return false;
+                        if (!file.created_at) return false;
+                        const createdAt = new Date(file.created_at);
+                        return createdAt < thresholdDate;
+                    });
+
+                    if (filesToDelete.length > 0) {
+                        const pathsToDelete = filesToDelete.map(f => f.name);
+                        
+                        // Delete in batches of 100 to avoid URL length limits or timeouts
+                        for (let i = 0; i < pathsToDelete.length; i += 100) {
+                            const batch = pathsToDelete.slice(i, i + 100);
+                            const { error: deleteError } = await supabase.storage
+                                .from('reports')
+                                .remove(batch);
+                            if (deleteError) throw deleteError;
+                        }
+
+                        // 3. Add notification to the bell icon (Database synced)
+                        await supabase.from('notifications').insert({
+                            title: 'صيانة الأرشيف التلقائية',
+                            message: `تم تنظيف الأرشيف بنجاح وحذف ${filesToDelete.length} تقريراً قديماً (أقدم من ${settings.autoCleanupReportsDays} يوماً).`,
+                            type: 'general',
+                            is_read: false,
+                            created_at: new Date().toISOString()
+                        });
+                        
+                        console.log(`Automated cleanup completed: Deleted ${filesToDelete.length} files.`);
+                    }
+
+                    // 4. Update last cleanup date in settings
+                    await updateSettings({ lastCleanupDate: todayStr });
+
+                } catch (error) {
+                    console.error('Automated cleanup failed:', error);
+                }
+            }
+        };
+
+        // Check every 5 minutes to be efficient
+        const interval = setInterval(checkAndCleanup, 5 * 60 * 1000); 
+        checkAndCleanup(); // Also check on mount
+
+        return () => clearInterval(interval);
+    }, [settings, updateSettings]);
+
     // Session Inactivity Check
     useEffect(() => {
         if (!authUser) return;
