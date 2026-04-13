@@ -303,7 +303,8 @@ CREATE TABLE IF NOT EXISTS inspection_requests (
     ai_analysis TEXT,
     reservation_id UUID REFERENCES reservations(id),
     archived_by_name TEXT,
-    archived_at TIMESTAMPTZ
+    archived_at TIMESTAMPTZ,
+    report_storage_path TEXT -- Path to the archived report in Supabase Storage
 );
 
 -- Payroll Drafts Table
@@ -418,6 +419,37 @@ CREATE TABLE IF NOT EXISTS app_settings (
     settings_data JSONB,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- ===============================================================
+-- STORAGE BUCKETS & POLICIES (Report Archive)
+-- ===============================================================
+-- Note: Buckets are usually created via UI or API, but we define policies here.
+-- Buckets needed: 'reports', 'inspections', 'avatars'
+
+-- Policy for 'reports' bucket (Archive)
+-- 1. Allow authenticated users to upload reports
+-- 2. Allow authenticated users to read reports
+-- 3. Only admins can delete reports
+
+/* 
+-- SQL to run in Supabase to ensure buckets exist:
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('reports', 'reports', true);
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('inspections', 'inspections', true);
+*/
+
+-- RLS for Storage (Objects table)
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public Access to Reports" ON storage.objects
+    FOR SELECT USING (bucket_id = 'reports');
+
+CREATE POLICY "Authenticated users can upload reports" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'reports' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Only admins can delete reports" ON storage.objects
+    FOR DELETE USING (bucket_id = 'reports' AND (
+        SELECT role FROM public.employees WHERE id = auth.uid()
+    ) = 'general_manager');
 
 -- 3. Triggers
 CREATE TRIGGER update_inspection_requests_updated_at

@@ -192,7 +192,7 @@ const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> 
                     أحدث العمليات
                 </h4>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-2 min-h-[200px]">
                 {transactions.length > 0 ? (
                     <div className="divide-y dark:divide-slate-700/50">
                         {transactions.map((tx, idx) => (
@@ -254,8 +254,11 @@ const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(!localStorage.getItem('dashboard_main_stats_cache'));
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  const loadData = async () => {
+  const loadData = async (forceRefresh = false) => {
       setIsLoading(true);
+      if (forceRefresh) {
+          setIsCarLoading(true);
+      }
       try {
           const now = new Date();
           let start = new Date();
@@ -291,7 +294,7 @@ const Dashboard: React.FC = () => {
           let pastPulseStats: FinancialStats | null = null;
           let shouldFetchFullPulse = true;
 
-          if (cachedStr) {
+          if (cachedStr && !forceRefresh) {
               try {
                   const cached = JSON.parse(cachedStr);
                   const isExpired = Date.now() - cached.timestamp > CACHE_EXPIRY;
@@ -394,6 +397,10 @@ const Dashboard: React.FC = () => {
           localStorage.setItem('dashboard_month_stats_cache', JSON.stringify({ timestamp: Date.now(), data: currentMonthStatsData }));
           setLastRefreshed(new Date());
 
+          if (forceRefresh) {
+              await loadCarData();
+          }
+
       } catch (error) {
           console.error("Dashboard Load Error", error);
       } finally {
@@ -466,12 +473,12 @@ const Dashboard: React.FC = () => {
   const chartData = stats?.forecast?.history || [];
   
   const leaderboardData = useMemo(() => {
-      if (!stats) return [];
+      if (!stats || employees.length === 0) return [];
       const map = new Map<string, {name: string, revenue: number, count: number, role: string}>();
       stats.filteredRequests.forEach(req => {
           if (req.employee_id) {
               const emp = employees.find(e => e.id === req.employee_id);
-              const name = emp?.name || 'غير معروف';
+              const name = emp?.name || 'موظف غير معروف';
               const role = emp?.role === 'manager' ? 'مدير' : 'موظف';
               const current = map.get(req.employee_id) || { name, revenue: 0, count: 0, role };
               current.revenue += req.price;
@@ -656,7 +663,7 @@ const Dashboard: React.FC = () => {
             
             <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 self-end md:self-auto">
                  <PeriodToggle activePeriod={activePeriod} onChange={setActivePeriod} isLoading={isLoading} />
-                 <button onClick={loadData} disabled={isLoading} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors">
+                 <button onClick={() => loadData(true)} disabled={isLoading} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors">
                      <RefreshCwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                  </button>
             </div>
@@ -670,7 +677,7 @@ const Dashboard: React.FC = () => {
             <ExecutiveKpiCard 
                 title="صافي الربح" 
                 value={`${netProfit.toLocaleString()}`} 
-                trend={12} 
+                trend={stats && prevStats ? Math.round(((stats.netProfit - prevStats.netProfit) / (prevStats.netProfit || 1)) * 100) : undefined} 
                 icon={<DollarSignIcon />} 
                 bgClass="bg-emerald-100 dark:bg-emerald-900/30"
                 colorClass="text-emerald-600 dark:text-emerald-400"
@@ -679,7 +686,7 @@ const Dashboard: React.FC = () => {
             <ExecutiveKpiCard 
                 title="الدخل الكلي" 
                 value={`${totalRevenue.toLocaleString()}`} 
-                trend={5} 
+                trend={stats && prevStats ? Math.round(((stats.totalRevenue - prevStats.totalRevenue) / (prevStats.totalRevenue || 1)) * 100) : undefined} 
                 icon={<Icon name="sparkles" />} 
                 bgClass="bg-blue-100 dark:bg-blue-900/30"
                 colorClass="text-blue-600 dark:text-blue-400"
@@ -688,7 +695,7 @@ const Dashboard: React.FC = () => {
             <ExecutiveKpiCard 
                 title="متوسط الفاتورة" 
                 value={`${avgTicket}`} 
-                trend={-2} 
+                trend={stats && prevStats && prevStats.filteredRequests.length > 0 ? Math.round(((avgTicket - (prevStats.totalRevenue / prevStats.filteredRequests.length)) / (prevStats.totalRevenue / prevStats.filteredRequests.length || 1)) * 100) : undefined} 
                 icon={<BriefcaseIcon />} 
                 bgClass="bg-amber-100 dark:bg-amber-900/30"
                 colorClass="text-amber-600 dark:text-amber-400"
@@ -720,7 +727,7 @@ const Dashboard: React.FC = () => {
                  </div>
                  <div className="w-full h-64 relative z-10" style={{ minHeight: '256px' }}>
                      {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                         <ResponsiveContainer width="100%" height="100%" debounce={50}>
+                         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
                              <ComposedChart data={dailyRevenueChartData} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.5} />
                                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
@@ -795,7 +802,7 @@ const Dashboard: React.FC = () => {
                  </div>
                  <div className="w-full h-72 relative z-10" style={{ minHeight: '288px' }}>
                      {isCarLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                         <ResponsiveContainer width="100%" height="100%" debounce={50}>
+                         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
                              <BarChart 
                                layout="vertical"
                                data={carInspectionFrequencyData} 
@@ -840,7 +847,7 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="w-full h-72 min-h-[288px]">
                 {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                    <ResponsiveContainer width="100%" height="100%" debounce={50}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
                         <BarChart data={monthlyRequestsComparisonData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
                             <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />

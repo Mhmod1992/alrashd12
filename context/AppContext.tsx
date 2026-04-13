@@ -169,7 +169,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const {
         theme, toggleTheme, themeSetting, setThemeSetting,
         settingsPage, setSettingsPage, settings, setSettings, updateSettings,
-        globalSettings, setGlobalSettings, isSetupComplete, setIsSetupComplete
+        globalSettings, setGlobalSettings, isSettingsLoaded, setIsSettingsLoaded, isSetupComplete, setIsSetupComplete
     } = useThemeScope(authUser, setAuthUser, can);
     
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
@@ -418,6 +418,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                 if (mounted) {
                     setGlobalSettings(finalGlobalSettings);
+                    setIsSettingsLoaded(true);
                     
                     // Check LocalStorage for setup completion flag
                     const localSetupComplete = localStorage.getItem('app_setup_complete') === 'true';
@@ -525,7 +526,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Automated Reports Cleanup (Daily at 6:00 PM)
     useEffect(() => {
-        if (!settings) return;
+        if (!settings || !isSettingsLoaded) return;
 
         const checkAndCleanup = async () => {
             const now = new Date();
@@ -607,7 +608,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         checkAndCleanup(); // Also check on mount
 
         return () => clearInterval(interval);
-    }, [settings, updateSettings]);
+    }, [settings, isSettingsLoaded, updateSettings]);
 
     // Session Inactivity Check
     useEffect(() => {

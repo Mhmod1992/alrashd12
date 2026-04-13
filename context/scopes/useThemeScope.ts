@@ -20,6 +20,7 @@ export const useThemeScope = (
     const [globalSettings, setGlobalSettings] = useState<Settings>(mockSettings);
     const [settings, setSettings] = useState<Settings>(mockSettings);
     const [isSetupComplete, setIsSetupComplete] = useState(true);
+    const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
 
     useEffect(() => {
         const root = window.document.documentElement;
@@ -56,6 +57,10 @@ export const useThemeScope = (
     }, [globalSettings, authUser]);
 
     const updateSettings = useCallback(async (newSettings: Partial<Settings>) => {
+        if (!isSettingsLoaded) {
+            console.warn("Attempted to update settings before they were loaded. Update ignored to prevent data loss.");
+            return;
+        }
         setSettings((prev) => ({ ...prev, ...newSettings }));
         const personalUpdates: Partial<UserPreferences> = {};
         const globalUpdates: Partial<Settings> = {};
@@ -88,6 +93,8 @@ export const useThemeScope = (
         updateSettings,
         globalSettings,
         setGlobalSettings,
+        isSettingsLoaded,
+        setIsSettingsLoaded,
         isSetupComplete,
         setIsSetupComplete
     };
