@@ -301,7 +301,9 @@ CREATE TABLE IF NOT EXISTS inspection_requests (
     report_url TEXT,
     report_generated_at TIMESTAMPTZ,
     ai_analysis TEXT,
-    reservation_id UUID REFERENCES reservations(id)
+    reservation_id UUID REFERENCES reservations(id),
+    archived_by_name TEXT,
+    archived_at TIMESTAMPTZ
 );
 
 -- Payroll Drafts Table
@@ -365,6 +367,25 @@ CREATE TABLE IF NOT EXISTS notifications (
     user_id UUID,
     created_by_name TEXT
 );
+
+-- RLS for Notifications
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+-- Users can see their own notifications or general notifications (user_id is null)
+CREATE POLICY "Users can view their own or general notifications" ON notifications
+    FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL);
+
+-- Users can update their own notifications (e.g. mark as read)
+CREATE POLICY "Users can update their own notifications" ON notifications
+    FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL);
+
+-- System/Employees can insert notifications
+CREATE POLICY "Employees can insert notifications" ON notifications
+    FOR INSERT WITH CHECK (true);
+
+-- Users can delete their own notifications
+CREATE POLICY "Users can delete their own notifications" ON notifications
+    FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL);
 
 -- Internal Messages Table
 CREATE TABLE IF NOT EXISTS internal_messages (

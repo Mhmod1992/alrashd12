@@ -242,14 +242,32 @@ export const useDataScope = (
 
     const markAllNotificationsAsRead = useCallback(async () => {
         setAppNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        
+        // Update database: Mark all unread notifications as read
+        let query = supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+        
         if (authUser) {
-            const { error } = await supabase.from('notifications')
-                .update({ is_read: true })
-                .eq('user_id', authUser.id)
-                .eq('is_read', false);
-            if (error) console.error("Failed to mark all notifications as read", error);
+            query = query.or(`user_id.eq.${authUser.id},user_id.is.null`);
+        } else {
+            query = query.is('user_id', null);
         }
+
+        const { error } = await query;
+        if (error) console.error("Failed to mark all notifications as read", error);
     }, [authUser]);
+
+    const cleanupOldNotifications = useCallback(async () => {
+        // Delete notifications that are read and older than 7 days
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        const { error } = await supabase.from('notifications')
+            .delete()
+            .eq('is_read', true)
+            .lt('created_at', sevenDaysAgo.toISOString());
+            
+        if (error) console.error("Failed to cleanup old notifications", error);
+    }, []);
 
     const createActivityLog = useCallback((action: string, details: string, imageUrl?: string, link_id?: string, link_page?: Page): ActivityLog | null => {
         if (!authUser) return null;
@@ -412,6 +430,7 @@ export const useDataScope = (
         markNotificationAsRead,
         deleteNotification,
         markAllNotificationsAsRead,
+        cleanupOldNotifications,
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
         fetchRequestsCount,

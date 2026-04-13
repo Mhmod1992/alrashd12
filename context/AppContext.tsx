@@ -117,6 +117,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         markNotificationAsRead,
         deleteNotification,
         markAllNotificationsAsRead,
+        cleanupOldNotifications,
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
         fetchRequestsCount,
@@ -524,7 +525,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Automated Reports Cleanup (Daily at 6:00 PM)
     useEffect(() => {
-        if (!settings || !settings.autoCleanupReportsDays || settings.autoCleanupReportsDays <= 0) return;
+        if (!settings) return;
 
         const checkAndCleanup = async () => {
             const now = new Date();
@@ -534,6 +535,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Check if it's 6 PM (18:00) or later, and hasn't run today
             if (currentHour >= 18 && settings.lastCleanupDate !== todayStr) {
                 try {
+                    // 1. Cleanup old notifications (Read and > 7 days)
+                    await cleanupOldNotifications();
+
+                    if (!settings.autoCleanupReportsDays || settings.autoCleanupReportsDays <= 0) {
+                        await updateSettings({ lastCleanupDate: todayStr });
+                        return;
+                    }
+
                     console.log('Starting automated reports cleanup (Scheduled 6:00 PM)...');
                     
                     // 1. Fetch all files from 'reports' bucket
@@ -1220,7 +1229,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
                 localStorage.setItem('lastActiveTime', Date.now().toString());
                 
-                await sendSystemNotification({ title: 'تسجيل دخول', message: `قام ${employeeProfile.name} بتسجيل الدخول للنظام.`, type: 'login' });
+                await sendSystemNotification({ title: 'تسجيل دخول', message: `قام *${employeeProfile.name}* بتسجيل الدخول للنظام.`, type: 'login' });
             }
             return { success: true };
         } catch (e: any) {

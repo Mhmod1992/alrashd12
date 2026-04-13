@@ -89,6 +89,7 @@ const PaperArchive: React.FC = () => {
         carMakes, 
         carModels, 
         can, 
+        authUser,
         addNotification, 
         updateRequest, 
         uploadImage, 
@@ -582,11 +583,13 @@ const PaperArchive: React.FC = () => {
             
             await updateRequest({
                 id: selectedRequest.id,
-                attached_files: updatedFiles
+                attached_files: updatedFiles,
+                archived_by_name: authUser?.name || 'غير معروف',
+                archived_at: new Date().toISOString()
             });
 
-            setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles }) : null);
-            setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles } : r));
+            setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles, archived_by_name: authUser?.name || 'غير معروف', archived_at: new Date().toISOString() }) : null);
+            setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles, archived_by_name: authUser?.name || 'غير معروف', archived_at: new Date().toISOString() } : r));
 
             const savings = totalOriginalSize > 0 ? Math.round(((totalOriginalSize - totalOptimizedSize) / totalOriginalSize) * 100) : 0;
             
@@ -857,9 +860,16 @@ const PaperArchive: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-center">
                                                 {isArchived ? (
-                                                    <div className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2.5 py-1 rounded-md text-xs font-bold border border-green-100 dark:border-green-800">
-                                                        <CheckCircleIcon className="w-3.5 h-3.5" />
-                                                        <span>مؤرشف ({req.attached_files?.filter(f => f.type === 'internal_draft').length || 0})</span>
+                                                    <div className="flex flex-col items-center">
+                                                        <div className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2.5 py-1 rounded-md text-xs font-bold border border-green-100 dark:border-green-800">
+                                                            <CheckCircleIcon className="w-3.5 h-3.5" />
+                                                            <span>مؤرشف ({req.attached_files?.filter(f => f.type === 'internal_draft').length || 0})</span>
+                                                        </div>
+                                                        {req.archived_by_name && (
+                                                            <span className="text-[10px] text-slate-400 mt-1">
+                                                                بواسطة: {req.archived_by_name}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 text-slate-400 px-2.5 py-1 rounded-md text-xs font-bold border border-slate-200 dark:border-slate-700">
