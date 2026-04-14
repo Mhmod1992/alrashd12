@@ -429,8 +429,6 @@ export interface Settings {
   whatsappMode?: 'manual' | 'api';
   whatsappApiUrl?: string;
   whatsappApiKey?: string;
-  autoCleanupReportsDays?: number; // 0 means disabled
-  lastCleanupDate?: string; // YYYY-MM-DD
 }
 
 export interface UserPreferences {

@@ -40,8 +40,7 @@ const GeneralSettings: React.FC = () => {
             allowSignup: currentSettings.allowSignup,
             enableReviewPrompt: currentSettings.enableReviewPrompt,
             reviewLink: currentSettings.reviewLink,
-            reviewMessage: currentSettings.reviewMessage,
-            autoCleanupReportsDays: currentSettings.autoCleanupReportsDays
+            reviewMessage: currentSettings.reviewMessage
         });
         addNotification({ title: 'نجاح', message: 'تم حفظ الإعدادات بنجاح.', type: 'success' });
     } catch (error) {}
@@ -135,32 +134,6 @@ const GeneralSettings: React.FC = () => {
                   </div>
               )}
            </div>
-
-            {/* Auto Cleanup Settings */}
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
-               <div className="flex justify-between items-center mb-4 border-b border-slate-200 dark:border-slate-700 pb-4">
-                   <div>
-                       <span className="block text-sm font-bold text-slate-700 dark:text-slate-200">التنظيف الآلي للأرشيف (Storage)</span>
-                       <span className="text-xs text-slate-500 dark:text-slate-400">سيقوم النظام تلقائياً بحذف التقارير القديمة يومياً الساعة 6 مساءً لتوفير المساحة.</span>
-                   </div>
-                   <div className="flex items-center gap-3">
-                        <span className="text-xs font-medium text-slate-500">حذف بعد:</span>
-                        <select 
-                            value={currentSettings.autoCleanupReportsDays || 0} 
-                            onChange={(e) => setCurrentSettings(prev => ({...prev, autoCleanupReportsDays: parseInt(e.target.value)}))}
-                            className="p-2 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200"
-                        >
-                            <option value={0}>معطل</option>
-                            <option value={7}>7 أيام</option>
-                            <option value={15}>15 يوم</option>
-                            <option value={30}>30 يوم</option>
-                            <option value={60}>60 يوم</option>
-                            <option value={90}>90 يوم</option>
-                        </select>
-                   </div>
-               </div>
-               <p className="text-[10px] text-slate-400">ملاحظة: يتم التنظيف فقط عند وجود موظف يستخدم التطبيق في الوقت المحدد.</p>
-            </div>
 
           <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">شعار الورشة (Logo)</label>

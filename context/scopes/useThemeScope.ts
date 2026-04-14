@@ -75,11 +75,17 @@ export const useThemeScope = (
             if (!error) setAuthUser(prev => prev ? ({ ...prev, preferences: newPrefs }) : null);
         }
         if (Object.keys(globalUpdates).length > 0 && can('manage_settings_general')) {
-            const updatedGlobalSettings = { ...globalSettings, ...globalUpdates };
-            setGlobalSettings(updatedGlobalSettings);
-            await supabase.from('app_settings').upsert({ id: 1, settings_data: updatedGlobalSettings });
+            setGlobalSettings(prevGlobal => {
+                const updatedGlobalSettings = { ...prevGlobal, ...globalUpdates };
+                // Fire and forget the DB update to ensure it uses the EXACT same data
+                supabase.from('app_settings').upsert({ id: 1, settings_data: updatedGlobalSettings })
+                    .then(({ error }) => {
+                        if (error) console.error("Failed to save settings to DB:", error);
+                    });
+                return updatedGlobalSettings;
+            });
         }
-    }, [globalSettings, authUser, can, setAuthUser]);
+    }, [authUser, can, setAuthUser, isSettingsLoaded]);
 
     return {
         theme,
