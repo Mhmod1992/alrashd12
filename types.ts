@@ -218,6 +218,8 @@ export interface AttachedFile {
   name: string;
   type: string;
   data: string;
+  archived_by_name?: string;
+  archived_at?: string;
 }
 
 export interface ActivityLog {

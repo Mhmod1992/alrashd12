@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { FinancialStats, InspectionRequest, Expense, Revenue, PaymentType, RequestStatus } from '../types';
+import { FinancialStats, InspectionRequest, Expense, Revenue, PaymentType, RequestStatus, ActivityLog } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import LineChart from '../components/LineChart';
 import Icon from '../components/Icon';
@@ -220,8 +220,56 @@ const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> 
     );
 };
 
+const RecentActivity: React.FC<{ logs: ActivityLog[], isLoading: boolean }> = ({ logs, isLoading }) => {
+    const { setPage, setSelectedRequestId } = useAppContext();
+    if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
+
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-full flex flex-col">
+             <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
+                    <Icon name="history" className="w-4 h-4 text-blue-500" />
+                    النشاط الأخير
+                </h4>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                {logs.length > 0 ? (
+                    <div className="divide-y dark:divide-slate-700/50">
+                        {logs.map((log, idx) => (
+                            <div 
+                                key={log.id || idx} 
+                                className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-lg transition-colors flex flex-col gap-1 cursor-pointer"
+                                onClick={() => {
+                                    if (log.link_id) {
+                                        setSelectedRequestId(log.link_id);
+                                        if (log.link_page) setPage(log.link_page);
+                                        else setPage('fill-request');
+                                    }
+                                }}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">
+                                        {log.employeeName}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400">
+                                        {new Date(log.timestamp).toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'})}
+                                    </span>
+                                </div>
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{log.action}</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">{log.details}</p>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 text-xs py-10">لا يوجد نشاط مؤخراً.</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const Dashboard: React.FC = () => {
-  const { authUser, fetchServerFinancials, employees, cars, carMakes, carModels } = useAppContext();
+  const { authUser, fetchServerFinancials, employees, cars, carMakes, carModels, requests } = useAppContext();
   const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [stats, setStats] = useState<FinancialStats | null>(() => {
       const cached = localStorage.getItem('dashboard_main_stats_cache');
@@ -492,6 +540,23 @@ const Dashboard: React.FC = () => {
       }));
       return [...incomes, ...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
   }, [stats, employees]);
+
+  const activityLogs = useMemo(() => {
+      // Flatten activity logs from all requests
+      const allLogs: ActivityLog[] = [];
+      requests.forEach(req => {
+          if (req.activity_log && Array.isArray(req.activity_log)) {
+              req.activity_log.forEach(log => {
+                  allLogs.push({
+                      ...log,
+                      link_id: req.id // Ensure we have a link to the request
+                  });
+              });
+          }
+      });
+      // Sort by timestamp descending
+      return allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 20);
+  }, [requests]);
 
   const pieData = stats?.paymentDistribution || [];
 
@@ -861,9 +926,10 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Bottom Lists */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-80">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <EmployeeLeaderboard data={leaderboardData} isLoading={isLoading} />
             <RecentTransactions transactions={transactionFeed} isLoading={isLoading} />
+            <RecentActivity logs={activityLogs} isLoading={isLoading} />
         </div>
     </div>
   );

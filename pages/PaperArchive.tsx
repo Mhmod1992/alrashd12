@@ -95,7 +95,9 @@ const PaperArchive: React.FC = () => {
         deleteImage,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
-        fetchRequestByRequestNumber
+        fetchRequestByRequestNumber,
+        authUser,
+        createActivityLog
     } = useAppContext();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -573,20 +575,32 @@ const PaperArchive: React.FC = () => {
                 newAttachments.push({
                     name: customFileName + '.jpg',
                     type: type,
-                    data: publicUrl
+                    data: publicUrl,
+                    archived_by_name: authUser?.name || 'مجهول',
+                    archived_at: new Date().toISOString()
                 });
             }
 
             const existingFiles = selectedRequest.attached_files || [];
             const updatedFiles = [...existingFiles, ...newAttachments];
             
+            const newLog = createActivityLog(
+                'أرشفة ورقيات',
+                `تم رفع ${files.length} ملفات للأرشفة للطلب #${selectedRequest.request_number}`,
+                undefined,
+                selectedRequest.id,
+                'paper-archive'
+            );
+            const updatedLog = newLog ? [newLog, ...(selectedRequest.activity_log || [])] : (selectedRequest.activity_log || []);
+
             await updateRequest({
                 id: selectedRequest.id,
-                attached_files: updatedFiles
+                attached_files: updatedFiles,
+                activity_log: updatedLog
             });
 
-            setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles }) : null);
-            setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles } : r));
+            setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles, activity_log: updatedLog }) : null);
+            setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles, activity_log: updatedLog } : r));
 
             const savings = totalOriginalSize > 0 ? Math.round(((totalOriginalSize - totalOptimizedSize) / totalOriginalSize) * 100) : 0;
             
@@ -814,6 +828,7 @@ const PaperArchive: React.FC = () => {
                                     <th className="p-4 border-b dark:border-slate-700">رقم الطلب</th>
                                     <th className="p-4 border-b dark:border-slate-700">العميل</th>
                                     <th className="p-4 border-b dark:border-slate-700 text-center">الحالة</th>
+                                    <th className="p-4 border-b dark:border-slate-700 text-center">بواسطة</th>
                                     <th className="p-4 border-b dark:border-slate-700 text-center">الإجراءات</th>
                                 </tr>
                             </thead>
@@ -869,6 +884,11 @@ const PaperArchive: React.FC = () => {
                                                 )}
                                             </td>
                                             <td className="p-4 text-center">
+                                                <div className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                                                    {req.attached_files?.find(f => f.archived_by_name)?.archived_by_name || '-'}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center">
                                                 <Button 
                                                     size="sm" 
                                                     variant={isArchived ? "secondary" : "primary"}
@@ -884,7 +904,7 @@ const PaperArchive: React.FC = () => {
                                 })}
                                 {filteredRequests.length === 0 && !isLoading && (
                                     <tr>
-                                        <td colSpan={5} className="p-12 text-center">
+                                        <td colSpan={6} className="p-12 text-center">
                                             <div className="flex flex-col items-center justify-center text-slate-400">
                                                 <Icon name="folder-open" className="w-16 h-16 mb-4 opacity-10" />
                                                 <p className="text-slate-500 font-bold">لا توجد طلبات للعرض</p>
@@ -1034,9 +1054,15 @@ const PaperArchive: React.FC = () => {
                                                     <TrashIcon className="w-4 h-4" />
                                                 </button>
                                             </div>
-                                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] p-1 text-center truncate">
-                                                {file.name}
-                                                {file.type === 'internal_draft' && <span className="block text-[8px] text-yellow-300">(مسودة)</span>}
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-[10px] p-2 text-center">
+                                                <div className="truncate font-bold mb-1">{file.name}</div>
+                                                {file.type === 'internal_draft' && <span className="inline-block px-1 bg-yellow-500 text-black rounded text-[8px] font-bold mb-1">مسودة</span>}
+                                                {file.archived_by_name && (
+                                                    <div className="text-[9px] text-blue-200 border-t border-white/20 pt-1 mt-1">
+                                                        بواسطة: <span className="text-white">{file.archived_by_name}</span>
+                                                        {file.archived_at && <div className="text-slate-300">{new Date(file.archived_at).toLocaleString('ar-SA')}</div>}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
