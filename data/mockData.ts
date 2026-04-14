@@ -121,6 +121,8 @@ export const mockSettings: Settings = {
             findingValue: 'text-sm',
             noteText: 'text-sm',
             disclaimer: 'text-xs',
+            clientData: 'text-lg',
+            watermark: 'text-3xl',
         },
         pageBackgroundColor: '#ffffff',
         textColor: '#1e293b', 

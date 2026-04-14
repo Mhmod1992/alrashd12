@@ -53,6 +53,25 @@ const printSizeMap: Record<string, string> = {
 };
 const getPrintSize = (screenSize: string | undefined): string | undefined => screenSize ? (printSizeMap[screenSize] || screenSize) : undefined;
 
+const getCardWidthClass = (size: string | undefined, isPrint: boolean) => {
+    if (isPrint) {
+        switch (size) {
+            case 'x-small': return 'w-[15%]';
+            case 'small': return 'w-[19%]';
+            case 'medium': return 'w-[31%]';
+            case 'large': return 'w-[48%]';
+            default: return 'w-[19%]';
+        }
+    }
+    switch (size) {
+        case 'x-small': return 'w-[30%] sm:w-[20%] md:w-[15%] lg:w-[12%]';
+        case 'small': return 'w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%]';
+        case 'medium': return 'w-[48%] sm:w-[45%] md:w-[31%] lg:w-[30%]';
+        case 'large': return 'w-full sm:w-[48%] md:w-[48%] lg:w-[48%]';
+        default: return 'w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%]';
+    }
+};
+
 const generateWatermarkStyle = (text: string, settings: ReportSettings): React.CSSProperties => {
     const safeText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const opacity = settings.watermarkOpacity ?? 0.06;
@@ -132,7 +151,7 @@ const ReportHeader: React.FC<{ appName: string; logoUrl: string | null; settings
                         <div ref={qrCodeRef} className="flex justify-center items-center [&>canvas]:max-w-full [&>canvas]:max-h-full [&>svg]:max-w-full [&>svg]:max-h-full" />
                     </div>
                 )}
-                {logoUrl && <img src={logoUrl} alt="Workshop Logo" className={`target-logo w-auto object-contain`} style={{ height: `${settings.workshopLogoHeight ?? 90}px` }} />}
+                {logoUrl && <img src={logoUrl} alt="Workshop Logo" className={`target-logo w-auto object-contain`} referrerPolicy="no-referrer" style={{ height: `${settings.workshopLogoHeight ?? 90}px` }} />}
             </div>
         </header>
     );
@@ -182,6 +201,7 @@ const FindingItem: React.FC<{ finding: StructuredFinding; predefinedFinding?: Pr
                         src={predefinedFinding.reference_image}
                         alt={finding.findingName}
                         className="w-full h-full object-contain"
+                        referrerPolicy="no-referrer"
                         style={{ objectPosition: predefinedFinding?.reference_image_position || 'center' }}
                     />
                 ) : (
@@ -211,7 +231,7 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
         <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center overflow-hidden break-inside-avoid print:break-inside-avoid w-full min-w-0" style={{ borderColor: settings.borderColor, clipPath: 'inset(0)' }}>
             {note.image && (
                 <div className="relative w-full overflow-hidden flex-shrink-0 pt-[56.25%] bg-slate-50 print:bg-slate-50" style={{ borderBottom: `1px solid ${settings.noteImageBorderColor}`, clipPath: 'inset(0)' }}>
-                    <img src={note.image} alt="Note" className="absolute top-0 left-0 w-full h-full object-cover print:object-cover block" style={{ maxWidth: '100%', maxHeight: '100%', width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={note.image} alt="Note" className="absolute top-0 left-0 w-full h-full object-cover print:object-cover block" referrerPolicy="no-referrer" style={{ maxWidth: '100%', maxHeight: '100%', width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
             )}
             <div className={`flex-grow flex flex-col w-full ${isPrintView ? 'p-2' : 'p-3'}`}>
@@ -360,9 +380,9 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
                         <div className={`${isPrintView ? 'mb-2 space-y-2' : 'mb-6 space-y-4'}`}>
                             <InfoBlock title={reportDirection === 'ltr' ? "Client Details" : "بيانات العميل"} icon={<Icon name="employee" className="w-5 h-5" />} settings={reportSettings} contentClassName={isPrintView ? `grid ${reportSettings.showPriceOnReport ? 'grid-cols-3' : 'grid-cols-2'} gap-2 items-center` : `grid grid-cols-1 ${reportSettings.showPriceOnReport ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6 items-center`} isPrintView={isPrintView} direction={reportDirection}>
-                                <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Name:' : 'الاسم:'}</span><span className={`font-bold ${isPrintView ? getPrintSize(fontSizes.blockHeader) : fontSizes.blockHeader}`}>{client.name}</span></div>
-                                <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Phone:' : 'الجوال:'}</span><span className={`font-bold dir-ltr ${isPrintView ? getPrintSize(fontSizes.blockHeader) : fontSizes.blockHeader}`}>{client.phone}</span></div>
-                                {reportSettings.showPriceOnReport && <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Total:' : 'المبلغ:'}</span><span className={`font-bold ${isPrintView ? getPrintSize(fontSizes.blockHeader) : fontSizes.blockHeader}`}>{request.price} {reportDirection === 'ltr' ? 'SAR' : 'ريال'}</span></div>}
+                                <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Name:' : 'الاسم:'}</span><span className={`font-bold ${isPrintView ? getPrintSize(fontSizes.clientData || fontSizes.blockHeader) : (fontSizes.clientData || fontSizes.blockHeader)}`}>{client.name}</span></div>
+                                <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Phone:' : 'الجوال:'}</span><span className={`font-bold dir-ltr ${isPrintView ? getPrintSize(fontSizes.clientData || fontSizes.blockHeader) : (fontSizes.clientData || fontSizes.blockHeader)}`}>{client.phone}</span></div>
+                                {reportSettings.showPriceOnReport && <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Total:' : 'المبلغ:'}</span><span className={`font-bold ${isPrintView ? getPrintSize(fontSizes.clientData || fontSizes.blockHeader) : (fontSizes.clientData || fontSizes.blockHeader)}`}>{request.price} {reportDirection === 'ltr' ? 'SAR' : 'ريال'}</span></div>}
                             </InfoBlock>
 
                             <div className={isPrintView ? "grid grid-cols-3 gap-2" : "grid grid-cols-1 md:grid-cols-3 gap-4"}>
@@ -374,7 +394,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                                                 <p className={`font-semibold opacity-75 ${isPrintView ? getPrintSize(fontSizes.blockContent) : fontSizes.blockContent}`}>{`${carDetails.makeNameAr} ${carDetails.modelNameAr}`}</p>
                                                 <div className={`flex wrap items-center ${isPrintView ? 'gap-1 pt-1' : 'gap-3 pt-2'}`}><span className={`inline-block bg-slate-100 border border-slate-200 rounded font-bold ${isPrintView ? 'px-2 py-1 text-xs' : 'px-3 py-1 text-sm'}`} style={{ borderColor: reportSettings.borderColor }}>{reportDirection === 'ltr' ? 'Year' : 'سنة الصنع'} {carDetails.year}</span></div>
                                             </div>
-                                            {carMake?.logo_url && <div className={`target-car-logo flex-shrink-0 self-center ${isPrintView ? 'block' : 'hidden sm:block'} opacity-80 mix-blend-multiply`}><img src={carMake.logo_url} alt="Logo" className={`w-auto object-contain max-w-[200px]`} style={{ height: `${reportSettings.carLogoHeight ?? 60}px` }} /></div>}
+                                            {carMake?.logo_url && <div className={`target-car-logo flex-shrink-0 self-center ${isPrintView ? 'block' : 'hidden sm:block'} opacity-80 mix-blend-multiply`}><img src={carMake.logo_url} alt="Logo" className={`w-auto object-contain max-w-[200px]`} referrerPolicy="no-referrer" style={{ height: `${reportSettings.carLogoHeight ?? 60}px` }} /></div>}
                                             <div className={`flex-shrink-0 self-center ${reportDirection === 'ltr' ? 'border-l-4 mr-10 pl-6' : 'border-r-4 ml-10 pr-6'} ${isPrintView ? 'py-0' : 'py-2'}`} style={{ borderColor: reportSettings.borderColor }}>
                                                 {car.vin || (car.plate_number && car.plate_number.startsWith('شاصي')) ? <div className="text-center"><div className="text-xs opacity-70 mb-1">VIN</div><span className={`font-mono tracking-wider font-bold bg-slate-100 rounded ${isPrintView ? 'text-sm p-1' : 'text-lg p-2'}`}>{car.vin || car.plate_number?.replace('شاصي ', '')}</span></div> : car.plate_number ? <div className={`transform origin-center ${isPrintView ? 'scale-100 p-0' : 'scale-150 p-2'}`}><FormattedPlate plateNumber={car.plate_number} settings={settings} isPrintView={isPrintView} /></div> : <div className="text-center text-sm text-gray-400">No Plate</div>}
                                             </div>
@@ -422,12 +442,12 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         const watermarkStyle = generateWatermarkStyle(category.name, reportSettings);
 
                         if (allFindingsForCategory.length === 0 && textOnlyNotes.length === 0) {
-                            return <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}><div className={`text-center ${isPrintView ? 'py-2' : 'py-6'}`}><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMGI5ODEiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAgNkw5IDE3bC01LTUiLz48L3N2Zz4=" alt="No Issues" className="mx-auto" style={{ width: '40px', height: '40px', display: 'block' }} /><p className="mt-2 font-bold" style={{ color: '#475569' }}>{reportDirection === 'ltr' ? 'No Issues Found' : 'بدون ملاحظات'}</p></div></FindingCategorySection>;
+                            return <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}><div className={`text-center ${isPrintView ? 'py-2' : 'py-6'}`}><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMGI5ODEiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAgNkw5IDE3bC01LTUiLz48L3N2Zz4=" alt="No Issues" className="mx-auto" referrerPolicy="no-referrer" style={{ width: '40px', height: '40px', display: 'block' }} /><p className="mt-2 font-bold" style={{ color: '#475569' }}>{reportDirection === 'ltr' ? 'No Issues Found' : 'بدون ملاحظات'}</p></div></FindingCategorySection>;
                         }
 
                         return (
                             <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}>
-                                {sortedFindings.length > 0 && <div className={`flex flex-wrap justify-center ${isPrintView ? 'gap-1.5' : 'gap-4'}`}>{sortedFindings.map(({ finding, predefined }) => <div key={finding.findingId} className={`${isPrintView ? 'w-[19%]' : 'w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%]'}`}><FindingItem finding={finding} predefinedFinding={predefined} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} /></div>)}</div>}
+                                {sortedFindings.length > 0 && <div className={`flex flex-wrap justify-center ${isPrintView ? 'gap-1.5' : 'gap-4'}`}>{sortedFindings.map(({ finding, predefined }) => <div key={finding.findingId} className={getCardWidthClass(reportSettings.findingCardSize, !!isPrintView)}><FindingItem finding={finding} predefinedFinding={predefined} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} /></div>)}</div>}
                                 {textOnlyNotes.length > 0 && (
                                     <div data-setting-section="text-disclaimer" className={`w-full mt-2 rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', zIndex: 10, breakInside: 'auto', ...watermarkStyle }}>
                                         <div className="relative z-10"><h4 className={`font-bold border-b pb-1 mb-2 ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: reportSettings.primaryColor, borderColor: reportSettings.borderColor }}>{reportDirection === 'ltr' ? (allFindingsForCategory.length > 0 ? 'Technician Notes:' : 'Notes:') : (allFindingsForCategory.length > 0 ? 'ملاحظات الفني:' : 'ملاحظات:')}</h4><div className="space-y-1 p-0 m-0">{textOnlyNotes.map(note => {
@@ -501,7 +521,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         </div>
                         <div data-setting-section="branding-stamp" className="flex-shrink-0 text-center">
                             <p className="font-bold text-xs mb-1" style={{ color: reportSettings.textColor, opacity: 0.7 }}>{reportDirection === 'ltr' ? 'Stamp' : 'ختم الورشة'}</p>
-                            {reportSettings.workshopStampUrl ? <img src={reportSettings.workshopStampUrl} alt="Stamp" className={`${isPrintView ? 'w-16 h-16' : 'w-20 h-20'} print:w-16 print:h-16 object-contain mx-auto`} /> : <div className="w-20 h-20 border-2 border-dashed rounded-md flex items-center justify-center" style={{ borderColor: reportSettings.borderColor, opacity: 0.5 }}><span className="text-[10px]" style={{ color: reportSettings.textColor, opacity: 0.5 }}>{reportDirection === 'ltr' ? 'Stamp Here' : 'مكان الختم'}</span></div>}
+                            {reportSettings.workshopStampUrl ? <img src={reportSettings.workshopStampUrl} alt="Stamp" className={`${isPrintView ? 'w-16 h-16' : 'w-20 h-20'} print:w-16 print:h-16 object-contain mx-auto`} referrerPolicy="no-referrer" /> : <div className="w-20 h-20 border-2 border-dashed rounded-md flex items-center justify-center" style={{ borderColor: reportSettings.borderColor, opacity: 0.5 }}><span className="text-[10px]" style={{ color: reportSettings.textColor, opacity: 0.5 }}>{reportDirection === 'ltr' ? 'Stamp Here' : 'مكان الختم'}</span></div>}
                         </div>
                     </footer>
                     {reportSettings.showPageNumbers && <div className="page-footer-container"></div>}

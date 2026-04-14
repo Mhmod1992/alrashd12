@@ -71,10 +71,20 @@ const GeneralSettings: React.FC = () => {
                 <label htmlFor="googleMapsLink" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">⭐ رابط تقييم جوجل ماب</label>
                 <input type="text" id="googleMapsLink" value={currentSettings.googleMapsLink || ''} onChange={(e) => setCurrentSettings(prev => ({...prev, googleMapsLink: e.target.value}))} className={formInputClasses} placeholder="https://g.page/r/..." dir="ltr" />
               </div>
-          </div>
-          
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                <Icon name="settings" className="w-5 h-5" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">إعدادات النظام والوصول</h3>
+        </div>
+
+        <div className="space-y-5">
            {/* Allow Signup Toggle */}
-           <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
+           <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center hover:border-blue-200 dark:hover:border-blue-900/40 transition-colors">
               <div className="max-w-[80%]">
                   <span className="block text-sm font-bold text-slate-700 dark:text-slate-200">إنشاء حسابات جديدة</span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight block mt-0.5">السماح للمستخدمين الجدد بإنشاء حسابات من شاشة تسجيل الدخول.</span>
@@ -86,12 +96,12 @@ const GeneralSettings: React.FC = () => {
                       onChange={(e) => setCurrentSettings(prev => ({...prev, allowSignup: e.target.checked}))} 
                       className="sr-only peer" 
                   />
-                  <div className="w-10 h-5.5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
               </label>
            </div>
 
            {/* Review Prompt Settings */}
-           <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-4">
+           <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-4 hover:border-blue-200 dark:hover:border-blue-900/40 transition-colors">
               <div className="flex justify-between items-center">
                   <div className="max-w-[80%]">
                       <span className="block text-sm font-bold text-slate-700 dark:text-slate-200">تفعيل نافذة طلب التقييم</span>
@@ -104,7 +114,7 @@ const GeneralSettings: React.FC = () => {
                           onChange={(e) => setCurrentSettings(prev => ({...prev, enableReviewPrompt: e.target.checked}))} 
                           className="sr-only peer" 
                       />
-                      <div className="w-10 h-5.5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
                   </label>
               </div>
 
@@ -136,9 +146,17 @@ const GeneralSettings: React.FC = () => {
                   </div>
               )}
            </div>
+        </div>
+      </div>
 
-          <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">شعار الورشة (Logo)</label>
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                <Icon name="gallery" className="w-5 h-5" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">الوسائط والشعارات</h3>
+        </div>
+        <div className="space-y-5">
             <div className="flex flex-col sm:flex-row items-center gap-5">
               <div className="w-24 h-24 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-700 overflow-hidden relative shadow-sm">
                 {currentSettings.logoUrl ? <img src={currentSettings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain p-2" /> : <span className="text-[10px] text-slate-400">لا يوجد شعار</span>}

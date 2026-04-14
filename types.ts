@@ -339,6 +339,8 @@ export interface ReportFontSizes {
   findingValue: string;
   noteText: string;
   disclaimer: string;
+  clientData: string;
+  watermark: string;
 }
 
 export interface ReportSettings {

@@ -253,7 +253,8 @@ const ReportSettingsPage: React.FC = () => {
             general_notes: [
                 { id: '1', text: 'ملاحظة مميزة باللون الأحمر لتوضيح تأثير الشفافية.', authorName: 'فاحص 1', highlightColor: 'red' },
                 { id: '2', text: 'ملاحظة مميزة باللون الأصفر (تحذير).', authorName: 'فاحص 1', highlightColor: 'yellow' },
-                { id: '3', text: 'ملاحظة تجريبية عادية بدون تلوين.', authorName: 'فاحص 1' }
+                { id: '3', text: 'ملاحظة تجريبية عادية بدون تلوين.', authorName: 'فاحص 1' },
+                { id: '4', text: 'ملاحظة مرفقة بصورة للتجربة.', authorName: 'فاحص 1', image: 'https://picsum.photos/seed/note1/800/600' }
             ], 
             category_notes: {}, 
             report_stamps: [] 
@@ -263,7 +264,13 @@ const ReportSettingsPage: React.FC = () => {
         carMake: { name_ar: 'تويوتا', name_en: 'Toyota', logo_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Toyota.svg/1200px-Toyota.svg.png' },
         inspectionType: { name: 'فحص كامل', finding_category_ids: ['cat-1'] },
         categories: [{ id: 'cat-1', name: 'البودي والبدن' }],
-        predefined: [{ id: '1', name: 'الصدام الأمامي', options: ['سليم'], category_id: 'cat-1' }]
+        predefined: [{ 
+            id: '1', 
+            name: 'الصدام الأمامي', 
+            options: ['سليم'], 
+            category_id: 'cat-1',
+            reference_image: 'https://picsum.photos/seed/car1/400/300'
+        }]
     }), []);
 
     return (
@@ -536,6 +543,7 @@ const ReportSettingsPage: React.FC = () => {
                                         <ColorInput label="خط العناوين الرئيسية" value={reportSettings.sectionTitleFontColor} onChange={v => handleSettingChange('sectionTitleFontColor', v)} />
                                         <ColorInput label="خلفية أقسام الفحص" value={reportSettings.findingsHeaderBackgroundColor} onChange={v => handleSettingChange('findingsHeaderBackgroundColor', v)} />
                                         <ColorInput label="خط أقسام الفحص" value={reportSettings.findingsHeaderFontColor} onChange={v => handleSettingChange('findingsHeaderFontColor', v)} />
+                                        <ColorInput label="خلفية حاوية القسم" value={reportSettings.findingContainerBackgroundColor} onChange={v => handleSettingChange('findingContainerBackgroundColor', v)} />
                                         <ColorInput label="خلفية الصفحة العامة" value={reportSettings.pageBackgroundColor} onChange={v => handleSettingChange('pageBackgroundColor', v)} />
                                         <ColorInput label="لون النص الأساسي" value={reportSettings.textColor} onChange={v => handleSettingChange('textColor', v)} />
                                         <ColorInput label="لون الحدود والفواصل" value={reportSettings.borderColor} onChange={v => handleSettingChange('borderColor', v)} />
@@ -551,10 +559,20 @@ const ReportSettingsPage: React.FC = () => {
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                                         <FontSizeSelector label="عنوان الورشة" value={reportSettings.fontSizes.headerTitle} onChange={v => handleFontSizeChange('headerTitle', v)} options={HEADER_FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="العنوان الفرعي" value={reportSettings.fontSizes.headerSubtitle} onChange={v => handleFontSizeChange('headerSubtitle', v)} options={FONT_SIZE_OPTIONS} />
+                                        <FontSizeSelector label="بيانات العميل" value={reportSettings.fontSizes.clientData} onChange={v => handleFontSizeChange('clientData', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="اسم السيارة (EN)" value={reportSettings.fontSizes.carName} onChange={v => handleFontSizeChange('carName', v)} options={HEADER_FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="عناوين الأقسام" value={reportSettings.fontSizes.categoryTitle} onChange={v => handleFontSizeChange('categoryTitle', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="بنود الفحص" value={reportSettings.fontSizes.findingTitle} onChange={v => handleFontSizeChange('findingTitle', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="نصوص الملاحظات" value={reportSettings.fontSizes.noteText} onChange={v => handleFontSizeChange('noteText', v)} options={FONT_SIZE_OPTIONS} />
+                                        <div className="flex flex-col gap-1.5">
+                                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">حجم العلامة المائية</label>
+                                            <input 
+                                                type="number" 
+                                                value={reportSettings.watermarkSize} 
+                                                onChange={e => handleSettingChange('watermarkSize', parseInt(e.target.value))} 
+                                                className="w-full p-2 text-sm bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-center" 
+                                            />
+                                        </div>
                                     </div>
                                 </section>
                                 <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -567,7 +585,19 @@ const ReportSettingsPage: React.FC = () => {
                                         <h5 className="font-bold text-slate-800 dark:text-slate-200">العلامة المائية (الملاحظات)</h5>
                                         <div className="space-y-4">
                                             <div><div className="flex justify-between text-xs font-black text-slate-400 mb-2 uppercase"><span>الشفافية</span><span>{Math.round(reportSettings.watermarkOpacity * 100)}%</span></div><input type="range" min="0.01" max="0.3" step="0.01" value={reportSettings.watermarkOpacity} onChange={e => handleSettingChange('watermarkOpacity', parseFloat(e.target.value))} className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer" /></div>
-                                            <div className="flex gap-4"><div className="flex-1"><label className="block text-[10px] font-black text-slate-400 mb-1 uppercase">الدوران</label><input type="number" value={reportSettings.watermarkRotation} onChange={e => handleSettingChange('watermarkRotation', parseInt(e.target.value))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg text-xs text-center" /></div><div className="flex-1"><label className="block text-[10px] font-black text-slate-400 mb-1 uppercase">حجم الخط</label><input type="number" value={reportSettings.watermarkSize} onChange={e => handleSettingChange('watermarkSize', parseInt(e.target.value))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg text-xs text-center" /></div></div>
+                                            <div className="flex gap-4">
+                                                <div className="flex-1">
+                                                    <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase">الدوران</label>
+                                                    <input type="number" value={reportSettings.watermarkRotation} onChange={e => handleSettingChange('watermarkRotation', parseInt(e.target.value))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg text-xs text-center" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase">نمط النص</label>
+                                                    <select value={reportSettings.watermarkTextStyle} onChange={e => handleSettingChange('watermarkTextStyle', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg text-xs font-bold">
+                                                        <option value="filled">ممتلئ</option>
+                                                        <option value="outline">مفرغ</option>
+                                                    </select>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </section>
