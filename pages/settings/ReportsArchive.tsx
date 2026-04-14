@@ -42,7 +42,8 @@ const ReportsArchive: React.FC = () => {
                 .list('', {
                     limit: pageSize,
                     offset: page * pageSize,
-                    sortBy: { column: 'created_at', order: 'desc' }
+                    sortBy: { column: 'created_at', order: 'desc' },
+                    recursive: true
                 });
 
             if (error) {

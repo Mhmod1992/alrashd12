@@ -76,17 +76,7 @@ const Notification: React.FC<NotificationProps> = ({ notification, style }) => {
 
         <div className="flex-1 pt-0.5">
           {title && <h4 className={`text-sm sm:text-base font-bold mb-0.5 ${currentStyle.textColor}`}>{title}</h4>}
-          {message && (
-            <p className={`text-xs sm:text-sm leading-snug ${currentStyle.subTextColor}`}>
-              {message.split('*').map((part, i) => 
-                i % 2 === 1 ? (
-                  <strong key={i} className="font-extrabold text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-900/30 px-1 rounded mx-0.5">
-                    {part}
-                  </strong>
-                ) : part
-              )}
-            </p>
-          )}
+          {message && <p className={`text-xs sm:text-sm leading-snug ${currentStyle.subTextColor}`}>{message}</p>}
         </div>
       </div>
     </div>

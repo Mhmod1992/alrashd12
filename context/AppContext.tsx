@@ -117,7 +117,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         markNotificationAsRead,
         deleteNotification,
         markAllNotificationsAsRead,
-        cleanupOldNotifications,
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
         fetchRequestsCount,
@@ -169,7 +168,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const {
         theme, toggleTheme, themeSetting, setThemeSetting,
         settingsPage, setSettingsPage, settings, setSettings, updateSettings,
-        globalSettings, setGlobalSettings, isSettingsLoaded, setIsSettingsLoaded, isSetupComplete, setIsSetupComplete
+        globalSettings, setGlobalSettings, isSetupComplete, setIsSetupComplete
     } = useThemeScope(authUser, setAuthUser, can);
     
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
@@ -418,7 +417,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                 if (mounted) {
                     setGlobalSettings(finalGlobalSettings);
-                    setIsSettingsLoaded(true);
                     
                     // Check LocalStorage for setup completion flag
                     const localSetupComplete = localStorage.getItem('app_setup_complete') === 'true';
@@ -1144,7 +1142,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
                 localStorage.setItem('lastActiveTime', Date.now().toString());
                 
-                await sendSystemNotification({ title: 'تسجيل دخول', message: `قام *${employeeProfile.name}* بتسجيل الدخول للنظام.`, type: 'login' });
+                await sendSystemNotification({ title: 'تسجيل دخول', message: `قام ${employeeProfile.name} بتسجيل الدخول للنظام.`, type: 'login' });
             }
             return { success: true };
         } catch (e: any) {

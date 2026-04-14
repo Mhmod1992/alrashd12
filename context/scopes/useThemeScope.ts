@@ -20,7 +20,6 @@ export const useThemeScope = (
     const [globalSettings, setGlobalSettings] = useState<Settings>(mockSettings);
     const [settings, setSettings] = useState<Settings>(mockSettings);
     const [isSetupComplete, setIsSetupComplete] = useState(true);
-    const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
 
     useEffect(() => {
         const root = window.document.documentElement;
@@ -57,10 +56,6 @@ export const useThemeScope = (
     }, [globalSettings, authUser]);
 
     const updateSettings = useCallback(async (newSettings: Partial<Settings>) => {
-        if (!isSettingsLoaded) {
-            console.warn("Attempted to update settings before they were loaded. Update ignored to prevent data loss.");
-            return;
-        }
         setSettings((prev) => ({ ...prev, ...newSettings }));
         const personalUpdates: Partial<UserPreferences> = {};
         const globalUpdates: Partial<Settings> = {};
@@ -75,17 +70,11 @@ export const useThemeScope = (
             if (!error) setAuthUser(prev => prev ? ({ ...prev, preferences: newPrefs }) : null);
         }
         if (Object.keys(globalUpdates).length > 0 && can('manage_settings_general')) {
-            setGlobalSettings(prevGlobal => {
-                const updatedGlobalSettings = { ...prevGlobal, ...globalUpdates };
-                // Fire and forget the DB update to ensure it uses the EXACT same data
-                supabase.from('app_settings').upsert({ id: 1, settings_data: updatedGlobalSettings })
-                    .then(({ error }) => {
-                        if (error) console.error("Failed to save settings to DB:", error);
-                    });
-                return updatedGlobalSettings;
-            });
+            const updatedGlobalSettings = { ...globalSettings, ...globalUpdates };
+            setGlobalSettings(updatedGlobalSettings);
+            await supabase.from('app_settings').upsert({ id: 1, settings_data: updatedGlobalSettings });
         }
-    }, [authUser, can, setAuthUser, isSettingsLoaded]);
+    }, [globalSettings, authUser, can, setAuthUser]);
 
     return {
         theme,
@@ -99,8 +88,6 @@ export const useThemeScope = (
         updateSettings,
         globalSettings,
         setGlobalSettings,
-        isSettingsLoaded,
-        setIsSettingsLoaded,
         isSetupComplete,
         setIsSetupComplete
     };

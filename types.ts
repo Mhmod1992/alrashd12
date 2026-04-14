@@ -293,8 +293,6 @@ export interface InspectionRequest {
   report_generated_at?: string;
   ai_analysis?: string;
   reservation_id?: string;
-  archived_by_name?: string;
-  archived_at?: string;
 }
 
 export interface PlateCharacterMap {

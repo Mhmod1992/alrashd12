@@ -326,26 +326,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                                                 </span>
                                             </div>
                                             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">
-                                                {(() => {
-                                                    // Enhanced logic to catch names even in old notifications without asterisks
-                                                    let msg = notification.message;
-                                                    
-                                                    // If it's a login notification and doesn't have asterisks, try to wrap the name
-                                                    if (notification.type === 'login' && !msg.includes('*')) {
-                                                        const match = msg.match(/قام (.*?) بتسجيل/);
-                                                        if (match && match[1]) {
-                                                            msg = msg.replace(match[1], `*${match[1]}*`);
-                                                        }
-                                                    }
-
-                                                    return msg.split('*').map((part, i) => 
-                                                        i % 2 === 1 ? (
-                                                            <strong key={i} className="font-extrabold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 px-1 rounded mx-0.5">
-                                                                {part}
-                                                            </strong>
-                                                        ) : part
-                                                    );
-                                                })()}
+                                                {notification.message}
                                             </p>
                                             {notification.created_by_name && (
                                                 <p className="text-[10px] text-slate-400 mt-1">بواسطة: {notification.created_by_name}</p>

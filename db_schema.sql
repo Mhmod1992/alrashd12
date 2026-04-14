@@ -301,10 +301,7 @@ CREATE TABLE IF NOT EXISTS inspection_requests (
     report_url TEXT,
     report_generated_at TIMESTAMPTZ,
     ai_analysis TEXT,
-    reservation_id UUID REFERENCES reservations(id),
-    archived_by_name TEXT,
-    archived_at TIMESTAMPTZ,
-    report_storage_path TEXT -- Path to the archived report in Supabase Storage
+    reservation_id UUID REFERENCES reservations(id)
 );
 
 -- Payroll Drafts Table
@@ -369,25 +366,6 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_by_name TEXT
 );
 
--- RLS for Notifications
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-
--- Users can see their own notifications or general notifications (user_id is null)
-CREATE POLICY "Users can view their own or general notifications" ON notifications
-    FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL);
-
--- Users can update their own notifications (e.g. mark as read)
-CREATE POLICY "Users can update their own notifications" ON notifications
-    FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL);
-
--- System/Employees can insert notifications
-CREATE POLICY "Employees can insert notifications" ON notifications
-    FOR INSERT WITH CHECK (true);
-
--- Users can delete their own notifications
-CREATE POLICY "Users can delete their own notifications" ON notifications
-    FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL);
-
 -- Internal Messages Table
 CREATE TABLE IF NOT EXISTS internal_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -419,37 +397,6 @@ CREATE TABLE IF NOT EXISTS app_settings (
     settings_data JSONB,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
-
--- ===============================================================
--- STORAGE BUCKETS & POLICIES (Report Archive)
--- ===============================================================
--- Note: Buckets are usually created via UI or API, but we define policies here.
--- Buckets needed: 'reports', 'inspections', 'avatars'
-
--- Policy for 'reports' bucket (Archive)
--- 1. Allow authenticated users to upload reports
--- 2. Allow authenticated users to read reports
--- 3. Only admins can delete reports
-
-/* 
--- SQL to run in Supabase to ensure buckets exist:
--- INSERT INTO storage.buckets (id, name, public) VALUES ('reports', 'reports', true);
--- INSERT INTO storage.buckets (id, name, public) VALUES ('inspections', 'inspections', true);
-*/
-
--- RLS for Storage (Objects table)
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Public Access to Reports" ON storage.objects
-    FOR SELECT USING (bucket_id = 'reports');
-
-CREATE POLICY "Authenticated users can upload reports" ON storage.objects
-    FOR INSERT WITH CHECK (bucket_id = 'reports' AND auth.role() = 'authenticated');
-
-CREATE POLICY "Only admins can delete reports" ON storage.objects
-    FOR DELETE USING (bucket_id = 'reports' AND (
-        SELECT role FROM public.employees WHERE id = auth.uid()
-    ) = 'general_manager');
 
 -- 3. Triggers
 CREATE TRIGGER update_inspection_requests_updated_at
