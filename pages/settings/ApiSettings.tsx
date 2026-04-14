@@ -43,45 +43,44 @@ const ApiSettings: React.FC = () => {
     const formInputClasses = "mt-1 block w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
 
     return (
-        <div className="animate-fade-in space-y-8">
-            <div>
-                <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">إعدادات Gemini API</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
+        <div className="animate-fade-in space-y-4 max-w-2xl">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1">إعدادات Gemini API</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                     يتطلب استخدام الميزات الذكية في التطبيق، مثل التعرف على لوحات السيارات بالكاميرا، وجود مفتاح Gemini API.
-                    قم بلصق مفتاحك هنا ليتم حفظه بشكل مركزي لجميع الموظفين.
                 </p>
+            </div>
 
-                <div className="p-6 border rounded-lg dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                    <h4 className="font-semibold text-lg mb-2 text-slate-800 dark:text-slate-200">المفتاح الحالي</h4>
-                    <p className="font-mono text-sm p-3 bg-white dark:bg-slate-700 rounded-md shadow-sm text-slate-600 dark:text-slate-300">
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">المفتاح الحالي</h4>
+                    <span className="font-mono text-[10px] px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300">
                         {maskApiKey(settings.geminiApiKey)}
-                    </p>
+                    </span>
+                </div>
 
-                    <div className="mt-6">
-                        <label htmlFor="apiKey" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                            إدخال مفتاح جديد (لصق)
-                        </label>
-                        <div className="mt-1 flex items-center gap-2">
-                             <input
-                                id="apiKey"
-                                type="password"
-                                value={apiKey}
-                                onChange={(e) => setApiKey(e.target.value)}
-                                className={formInputClasses}
-                                placeholder="AIza..."
-                            />
-                            <Button onClick={handleSave} disabled={isSaving || !apiKey.trim()}>
-                                {isSaving ? 'جاري الحفظ...' : 'حفظ'}
-                            </Button>
-                        </div>
+                <div className="space-y-2">
+                    <label htmlFor="apiKey" className="block text-[11px] font-bold text-slate-500">
+                        إدخال مفتاح جديد
+                    </label>
+                    <div className="flex items-center gap-2">
+                         <input
+                            id="apiKey"
+                            type="password"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                            placeholder="AIza..."
+                        />
+                        <Button onClick={handleSave} size="sm" disabled={isSaving || !apiKey.trim()} className="rounded-xl px-6">
+                            {isSaving ? 'جاري...' : 'حفظ'}
+                        </Button>
                     </div>
                 </div>
 
-                <div className="mt-6 text-sm text-slate-500 dark:text-slate-500">
-                    <p>
-                        سيتم حفظ المفتاح في قاعدة البيانات وسيتم استخدامه من قبل جميع الموظفين.
-                    </p>
-                </div>
+                <p className="mt-4 text-[10px] text-slate-400 italic">
+                    سيتم حفظ المفتاح في قاعدة البيانات وسيتم استخدامه من قبل جميع الموظفين.
+                </p>
             </div>
         </div>
     );

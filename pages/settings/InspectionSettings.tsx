@@ -321,10 +321,10 @@ const InspectionSettingsTab: React.FC = () => {
         <div className="space-y-6 animate-fade-in pb-10">
             
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
                 <div>
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">إعدادات الفحص</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">إدارة باقات الفحص والتبويبات والبنود المشمولة</p>
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">إعدادات الفحص</h2>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">إدارة باقات الفحص والتبويبات والبنود المشمولة</p>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     <input 
@@ -337,7 +337,7 @@ const InspectionSettingsTab: React.FC = () => {
                     <Button 
                         size="sm" 
                         variant="secondary" 
-                        className="flex-1 sm:flex-none" 
+                        className="flex-1 sm:flex-none rounded-xl" 
                         onClick={() => document.getElementById('import-inspection')?.click()}
                         disabled={isImporting || isExporting}
                         leftIcon={isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
@@ -347,7 +347,7 @@ const InspectionSettingsTab: React.FC = () => {
                     <Button 
                         size="sm" 
                         variant="secondary" 
-                        className="flex-1 sm:flex-none" 
+                        className="flex-1 sm:flex-none rounded-xl" 
                         onClick={handleExportInspectionSettings}
                         disabled={isImporting || isExporting}
                         leftIcon={isExporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
@@ -358,20 +358,20 @@ const InspectionSettingsTab: React.FC = () => {
             </div>
 
             {/* Tab Navigation (Sticky) */}
-            <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-t-xl sticky top-0 z-30 shadow-sm">
+            <div className="flex p-1 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl sticky top-0 z-30 shadow-sm border border-slate-200 dark:border-slate-800">
                 <button
                     onClick={() => setActiveTab('packages')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all border-b-2 ${activeTab === 'packages' ? activeTabClasses : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold transition-all rounded-xl ${activeTab === 'packages' ? activeTabClasses : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
                 >
-                    <Icon name="document-report" className="w-5 h-5" />
-                    <span>أنواع الفحص (الباقات)</span>
+                    <Icon name="document-report" className="w-4 h-4" />
+                    <span>باقات الفحص</span>
                 </button>
                 <button
                     onClick={() => setActiveTab('findings')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all border-b-2 ${activeTab === 'findings' ? activeTabClasses : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold transition-all rounded-xl ${activeTab === 'findings' ? activeTabClasses : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
                 >
-                    <Icon name="findings" className="w-5 h-5" />
-                    <span>إدارة بنود الفحص</span>
+                    <Icon name="findings" className="w-4 h-4" />
+                    <span>بنود الفحص</span>
                 </button>
             </div>
 
@@ -381,59 +381,58 @@ const InspectionSettingsTab: React.FC = () => {
                 {/* TAB 1: PACKAGES */}
                 {activeTab === 'packages' && (
                     <section className="animate-fade-in p-1">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex justify-between items-center mb-4">
                             <div>
-                                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">باقات الفحص</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">قم بإنشاء وتعديل أنواع الفحوصات والأسعار وربطها بالأقسام.</p>
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">باقات الفحص</h3>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">قم بإنشاء وتعديل أنواع الفحوصات والأسعار.</p>
                             </div>
-                            <Button onClick={handleAddType} leftIcon={<Icon name="add" className="w-5 h-5"/>}>
+                            <Button onClick={handleAddType} size="sm" leftIcon={<Icon name="add" className="w-4 h-4"/>} className="rounded-xl">
                                 إضافة باقة
                             </Button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             {inspectionTypes.map(type => (
-                            <div key={type.id} className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300 ${expandedTypeId === type.id ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-md'}`}>
+                            <div key={type.id} className={`bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all duration-300 ${expandedTypeId === type.id ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-md'}`}>
                                 <div 
-                                    className="p-4 cursor-pointer"
+                                    className="p-3 cursor-pointer"
                                     onClick={() => setExpandedTypeId(prevId => prevId === type.id ? null : type.id)}
                                 >
-                                    <div className="flex justify-between items-start">
+                                    <div className="flex justify-between items-center">
                                         <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
-                                                <Icon name="document-report" className="w-6 h-6" />
+                                            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                                    <Icon name="document-report" className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{type.name}</p>
+                                                <p className="text-xs font-bold text-green-600 dark:text-green-400">{type.price} ريال</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-lg text-gray-800 dark:text-gray-200">{type.name}</p>
-                                            <p className="text-sm font-semibold text-green-600 dark:text-green-400">{type.price} ريال</p>
-                                        </div>
-                                        </div>
-                                        <Icon name="chevron-down" className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${expandedTypeId === type.id ? 'rotate-180' : ''}`} />
+                                        <Icon name="chevron-down" className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${expandedTypeId === type.id ? 'rotate-180' : ''}`} />
                                     </div>
                                 </div>
                                 
                                 {expandedTypeId === type.id && (
-                                    <div className="px-4 pb-4 pt-0 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700 animate-fade-in">
+                                    <div className="px-3 pb-3 pt-0 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 animate-fade-in">
                                         <div className="my-3">
-                                            <h4 className="font-semibold text-xs text-gray-500 uppercase tracking-wider mb-2">التبويبات المشمولة (بالترتيب)</h4>
-                                            <div className="flex flex-col gap-1">
+                                            <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-2">التبويبات المشمولة</h4>
+                                            <div className="flex flex-wrap gap-1.5">
                                                 {type.finding_category_ids.length > 0 ? (
                                                     (type.fill_tab_order_ids || type.finding_category_ids).map((catId, index) => {
                                                         const category = customFindingCategories.find(c => c.id === catId);
                                                         return category ? (
-                                                            <div key={`${catId}-${index}`} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                                                <span className="text-gray-400 text-xs font-mono w-4">{index + 1}.</span>
-                                                                <span>{category.name}</span>
+                                                            <div key={`${catId}-${index}`} className="bg-white dark:bg-slate-700 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                                                                {category.name}
                                                             </div>
                                                         ) : null;
                                                     })
                                                 ) : (
-                                                    <span className="text-xs text-gray-400 italic">لا توجد تبويبات</span>
+                                                    <span className="text-[10px] text-slate-400 italic">لا توجد تبويبات</span>
                                                 )}
                                             </div>
                                         </div>
-                                        <div className="flex justify-end gap-2 mt-4 pt-3 border-t dark:border-gray-600">
-                                            <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); handleEditType(type); }} leftIcon={<Icon name="edit" className="w-4 h-4"/>}>تعديل</Button>
-                                            <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); deleteInspectionType(type.id); }} leftIcon={<Icon name="delete" className="w-4 h-4"/>}>حذف</Button>
+                                        <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                                            <button onClick={(e) => { e.stopPropagation(); handleEditType(type); }} className="text-[11px] font-bold text-blue-600 hover:underline">تعديل</button>
+                                            <button onClick={(e) => { e.stopPropagation(); deleteInspectionType(type.id); }} className="text-[11px] font-bold text-red-500 hover:underline">حذف</button>
                                         </div>
                                     </div>
                                 )}
@@ -447,123 +446,114 @@ const InspectionSettingsTab: React.FC = () => {
                 {activeTab === 'findings' && (
                     <section className="animate-fade-in flex flex-col">
                         {/* Header Area */}
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4 px-1 pt-1">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3 px-1 pt-1">
                             {!selectedCategoryId && (
                                 <div>
-                                    <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">إدارة البنود والمعايير</h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">إضافة وحذف البنود والصور والمجموعات الخاصة بكل قسم.</p>
+                                    <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">إدارة البنود والمعايير</h3>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">إضافة وحذف البنود والصور والمجموعات الخاصة بكل قسم.</p>
                                 </div>
                             )}
                             <div className={`${selectedCategoryId ? 'hidden lg:block' : ''}`}>
-                                <Button onClick={handleAddCategory} variant="secondary" leftIcon={<Icon name="add" className="w-5 h-5"/>}>
+                                <Button onClick={handleAddCategory} variant="secondary" size="sm" leftIcon={<Icon name="add" className="w-4 h-4"/>} className="rounded-xl">
                                     إضافة تبويب جديد
                                 </Button>
                             </div>
                         </div>
 
-                        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
+                        <div className="flex flex-col lg:flex-row gap-4 items-start">
                             {/* Categories Sidebar - STICKY */}
-                            <div className={`lg:w-1/4 flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden sticky top-20 max-h-[calc(100vh-100px)] lg:h-[calc(100vh-100px)] ${selectedCategoryId ? 'hidden lg:flex' : 'flex w-full'}`}>
-                                <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-b dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-200 flex-shrink-0">
+                            <div className={`lg:w-1/4 flex-shrink-0 flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden sticky top-16 max-h-[calc(100vh-120px)] lg:h-[calc(100vh-120px)] ${selectedCategoryId ? 'hidden lg:flex' : 'flex w-full'}`}>
+                                <div className="p-3 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800 font-bold text-xs text-slate-500 uppercase tracking-wider flex-shrink-0">
                                     التبويبات ({customFindingCategories.length})
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                                     {customFindingCategories.map(cat => (
                                         <div 
                                             key={cat.id} 
-                                            className={`group flex justify-between items-center p-3 rounded-lg cursor-pointer transition-all ${
+                                            className={`group flex justify-between items-center p-2.5 rounded-xl cursor-pointer transition-all ${
                                                 selectedCategoryId === cat.id 
                                                 ? 'bg-blue-600 text-white shadow-md' 
-                                                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+                                                : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
                                             }`}
                                             onClick={() => setSelectedCategoryId(cat.id)}
                                         >
-                                            <span className="font-medium truncate">{cat.name}</span>
+                                            <span className="text-sm font-bold truncate">{cat.name}</span>
                                             <div className="flex items-center">
                                                 <div className={`flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${selectedCategoryId === cat.id ? 'opacity-100' : ''}`}>
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleEditCategory(cat); }}
-                                                        className={`p-1.5 rounded hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`}
-                                                        title="تعديل التبويب"
+                                                        className={`p-1.5 rounded-lg hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-white' : 'text-slate-400 hover:text-blue-600'}`}
+                                                        title="تعديل"
                                                     >
-                                                        <Icon name="edit" className="w-4 h-4" />
+                                                        <Icon name="edit" className="w-3.5 h-3.5" />
                                                     </button>
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
-                                                        className={`p-1.5 rounded hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-red-200 hover:text-white' : 'text-red-500'}`}
-                                                        title="حذف التبويب"
+                                                        className={`p-1.5 rounded-lg hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-red-200 hover:text-white' : 'text-slate-400 hover:text-red-500'}`}
+                                                        title="حذف"
                                                     >
-                                                        <Icon name="delete" className="w-4 h-4" />
+                                                        <Icon name="delete" className="w-3.5 h-3.5" />
                                                     </button>
                                                 </div>
-                                                <Icon name="chevron-right" className={`w-4 h-4 rtl:rotate-180 transform ${selectedCategoryId === cat.id ? 'text-white' : 'text-gray-400 opacity-0 group-hover:opacity-100'} lg:hidden ms-2`} />
+                                                <Icon name="chevron-right" className={`w-3.5 h-3.5 rtl:rotate-180 transform ${selectedCategoryId === cat.id ? 'text-white' : 'text-slate-400 opacity-0 group-hover:opacity-100'} lg:hidden ms-2`} />
                                             </div>
                                         </div>
                                     ))}
-                                    {customFindingCategories.length === 0 && (
-                                        <div className="text-center py-8 text-gray-400 text-sm">
-                                            لا توجد تبويبات.
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
-                            {/* Findings Grid Area - Extended Downwards (No internal scroll) */}
-                            <div className={`lg:w-3/4 flex-1 flex-col bg-gray-50 dark:bg-gray-800/30 rounded-xl overflow-hidden h-auto ${selectedCategoryId ? 'flex' : 'hidden lg:flex'}`}>
+                            {/* Findings Grid Area */}
+                            <div className={`lg:w-3/4 flex-1 flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden h-auto ${selectedCategoryId ? 'flex' : 'hidden lg:flex'}`}>
                                 {selectedCategoryId ? (
                                     <>
-                                        <div className="p-4 border-b dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 flex flex-col sm:flex-row justify-between items-center gap-4 sticky top-0 z-20 backdrop-blur-md">
+                                        <div className="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col sm:flex-row justify-between items-center gap-3 sticky top-0 z-20 backdrop-blur-md">
                                             <div className="flex items-center w-full sm:w-auto">
-                                                {/* Back Button (Mobile Only) */}
                                                 <button 
                                                     onClick={() => setSelectedCategoryId(null)}
-                                                    className="lg:hidden p-2 -mr-2 ml-2 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors"
+                                                    className="lg:hidden p-2 -mr-2 ml-2 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
                                                 >
-                                                    <ArrowLeftIcon className="w-5 h-5 transform scale-x-[-1]" />
+                                                    <ArrowLeftIcon className="w-4 h-4 transform scale-x-[-1]" />
                                                 </button>
                                                 
-                                                <h4 className="text-lg font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                                                    <Icon name="findings" className="w-5 h-5 text-blue-500" />
+                                                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                                    <Icon name="findings" className="w-4 h-4 text-blue-500" />
                                                     <span className="truncate max-w-[150px] sm:max-w-none">{selectedCategoryName}</span>
-                                                    <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs py-0.5 px-2 rounded-full">{filteredFindings.length}</span>
+                                                    <span className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] py-0.5 px-2 rounded-full font-bold">{filteredFindings.length}</span>
                                                 </h4>
                                             </div>
                                             <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                                                {/* View Mode Toggle */}
-                                                <div className="flex items-center bg-white dark:bg-slate-700 rounded-lg border dark:border-slate-600 p-1 flex-shrink-0">
+                                                <div className="flex items-center bg-white dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 p-0.5 flex-shrink-0">
                                                     <button
                                                         onClick={() => setViewMode('groups')}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'groups' ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
+                                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'groups' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-600'}`}
                                                     >
                                                         المجموعات
                                                     </button>
                                                     <button
                                                         onClick={() => setViewMode('flat')}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'flat' ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
-                                                        title="عرض الترتيب كما يظهر في التقرير"
+                                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'flat' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-600'}`}
                                                     >
                                                         ترتيب التقرير
                                                     </button>
                                                 </div>
-                                                <Button onClick={handleAddFinding} leftIcon={<Icon name="add" className="w-4 h-4"/>} size="sm" className="whitespace-nowrap flex-shrink-0">
+                                                <Button onClick={handleAddFinding} leftIcon={<Icon name="add" className="w-3.5 h-3.5"/>} size="sm" className="rounded-xl text-[11px] whitespace-nowrap flex-shrink-0">
                                                     إضافة بند
                                                 </Button>
                                             </div>
                                         </div>
 
-                                        <div className="p-2 sm:p-4 pb-24">
+                                        <div className="p-3 sm:p-4 pb-20">
                                             {filteredFindings.length > 0 ? (
-                                                <div className="space-y-6">
-                                                    {/* VIEW MODE: GROUPS */}
+                                                <div className="space-y-5">
                                                     {viewMode === 'groups' && groupedFindings.map(([groupName, findings]) => (
                                                         <div key={groupName} className="relative">
-                                                            <h5 className="sticky top-16 z-10 bg-gray-50/95 dark:bg-slate-900/90 backdrop-blur-sm py-2 mb-3 font-bold text-slate-600 dark:text-slate-300 border-b dark:border-slate-600 flex items-center gap-2">
-                                                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                                            <h5 className="sticky top-14 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm py-2 mb-3 font-bold text-xs text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                                                                 {groupName}
-                                                                <span className="text-xs font-normal text-slate-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full border dark:border-slate-700">{findings.length}</span>
+                                                                <span className="text-[10px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-100 dark:border-slate-800">{findings.length}</span>
                                                             </h5>
                                                             
-                                                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+                                                            <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-6 gap-2">
                                                                 {findings.map(finding => (
                                                                     <FindingCardItem 
                                                                         key={finding.id} 
@@ -578,56 +568,38 @@ const InspectionSettingsTab: React.FC = () => {
                                                         </div>
                                                     ))}
 
-                                                    {/* VIEW MODE: FLAT (REPORT ORDER) */}
                                                     {viewMode === 'flat' && (
-                                                        <div>
-                                                            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800 mb-4 flex gap-2 items-start">
-                                                                <Icon name="document-report" className="w-5 h-5 text-blue-600 mt-0.5" />
-                                                                <p className="text-xs text-blue-800 dark:text-blue-200">
-                                                                    هذا العرض يوضح الترتيب الفعلي للبطاقات في التقرير النهائي. استخدم الأسهم أو اكتب الرقم للترتيب.
-                                                                </p>
-                                                            </div>
-                                                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
-                                                                {filteredFindings.map((finding, index) => (
-                                                                    <div key={finding.id} className="relative group">
-                                                                        <div className="absolute top-1 right-1 z-10 bg-slate-800 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full opacity-80 shadow-sm border border-slate-600">
-                                                                            {index + 1}
-                                                                        </div>
-                                                                        <div className={`absolute top-1 left-1 z-10 text-[8px] px-1 py-0.5 rounded opacity-80 shadow-sm ${
-                                                                            finding.report_position === 'right' ? 'bg-green-100 text-green-700' :
-                                                                            finding.report_position === 'left' ? 'bg-red-100 text-red-700' :
-                                                                            'bg-gray-100 text-gray-700'
-                                                                        }`}>
-                                                                            {finding.report_position === 'right' ? 'يمين' :
-                                                                            finding.report_position === 'left' ? 'يسار' : 'وسط'}
-                                                                        </div>
-                                                                        <FindingCardItem 
-                                                                            finding={finding} 
-                                                                            onEdit={handleEditFinding} 
-                                                                            onDelete={handleDeleteFinding}
-                                                                            onMove={handleMoveFinding}
-                                                                            onOrderChange={handleManualOrderChange}
-                                                                        />
+                                                        <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                                                            {filteredFindings.map((finding, index) => (
+                                                                <div key={finding.id} className="relative group">
+                                                                    <div className="absolute top-1 right-1 z-10 bg-slate-800 text-white text-[8px] font-bold w-4 h-4 flex items-center justify-center rounded-lg opacity-90 shadow-sm border border-slate-600">
+                                                                        {index + 1}
                                                                     </div>
-                                                                ))}
-                                                            </div>
+                                                                    <FindingCardItem 
+                                                                        finding={finding} 
+                                                                        onEdit={handleEditFinding} 
+                                                                        onDelete={handleDeleteFinding}
+                                                                        onMove={handleMoveFinding}
+                                                                        onOrderChange={handleManualOrderChange}
+                                                                    />
+                                                                </div>
+                                                            ))}
                                                         </div>
                                                     )}
                                                 </div>
                                             ) : (
-                                                <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                                                    <Icon name="findings" className="w-12 h-12 mb-2 opacity-50" />
-                                                    <p>لا توجد بنود فحص في هذا التبويب.</p>
-                                                    <button onClick={handleAddFinding} className="mt-2 text-blue-600 hover:underline text-sm font-semibold">إضافة أول بند</button>
+                                                <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                                                    <Icon name="findings" className="w-10 h-10 mb-2 opacity-30" />
+                                                    <p className="text-xs font-bold">لا توجد بنود فحص.</p>
+                                                    <button onClick={handleAddFinding} className="mt-2 text-blue-600 hover:underline text-[11px] font-bold">إضافة أول بند</button>
                                                 </div>
                                             )}
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                                        <Icon name="chevron-right" className="w-12 h-12 mb-4 opacity-30" />
-                                        <p className="text-lg">اختر تبويبًا من القائمة الجانبية</p>
-                                        <p className="text-sm">لإدارة البنود والصور الخاصة به</p>
+                                    <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                                        <Icon name="chevron-right" className="w-10 h-10 mb-4 opacity-20" />
+                                        <p className="text-sm font-bold">اختر تبويبًا من القائمة الجانبية</p>
                                     </div>
                                 )}
                             </div>

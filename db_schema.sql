@@ -447,6 +447,38 @@ BEGIN
     END LOOP;
 END $$;
 
+-- Specific Policies for Notifications Table
+-- 1. تفعيل نظام حماية الأسطر (RLS) لجدول التنبيهات
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+-- 2. حذف أي سياسات سابقة لتجنب التكرار أو التعارض
+DROP POLICY IF EXISTS "Allow all for authenticated users" ON notifications;
+DROP POLICY IF EXISTS "Users can view their own or general notifications" ON notifications;
+DROP POLICY IF EXISTS "Users can update their own notifications" ON notifications;
+DROP POLICY IF EXISTS "Employees can insert notifications" ON notifications;
+DROP POLICY IF EXISTS "Users can delete their own notifications" ON notifications;
+
+-- 3. سياسة القراءة (SELECT):
+-- تسمح للمستخدم برؤية التنبيهات الخاصة به فقط (حسب ID الخاص به) 
+-- أو التنبيهات العامة التي يرسلها النظام للجميع (التي يكون فيها user_id فارغاً)
+CREATE POLICY "Users can view their own or general notifications" ON notifications
+    FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL);
+
+-- 4. سياسة التحديث (UPDATE):
+-- تسمح للمستخدم بتغيير حالة التنبيه الخاص به فقط (مثل تحويله إلى "تمت القراءة")
+CREATE POLICY "Users can update their own notifications" ON notifications
+    FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL);
+
+-- 5. سياسة الإضافة (INSERT):
+-- تسمح للنظام والموظفين بإضافة تنبيهات جديدة
+CREATE POLICY "Employees can insert notifications" ON notifications
+    FOR INSERT WITH CHECK (true);
+
+-- 6. سياسة الحذف (DELETE):
+-- تسمح للمستخدم بحذف تنبيهاته الخاصة فقط من قائمته
+CREATE POLICY "Users can delete their own notifications" ON notifications
+    FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL);
+
 -- 5. Initial Data
 INSERT INTO app_settings (id, settings_data) 
 VALUES (1, '{"appName": "Car Inspection App", "setupCompleted": false}'::jsonb)

@@ -463,7 +463,7 @@ const DatabaseManagement: React.FC = () => {
     };
 
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-4 animate-fade-in max-w-5xl">
             <input 
                 type="file" 
                 accept=".json" 
@@ -471,137 +471,136 @@ const DatabaseManagement: React.FC = () => {
                 onChange={handleFileChange} 
                 className="hidden" 
             />
-            <div className="border-t dark:border-slate-700 pt-8">
-                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">استخدام البيانات</h3>
-                <div className="grid grid-cols-1 gap-8 mt-4">
-                    {/* Database Usage Card */}
-                    <div className="p-6 border rounded-xl dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col items-center shadow-sm">
-                        <h4 className="font-bold text-lg text-slate-700 dark:text-slate-200 mb-6">سعة النظام المستهلكة</h4>
-                        <CircularProgress percentage={dbUsagePercentage} />
-                        <div className="w-full max-w-md mt-6 space-y-4">
-                             <div>
-                                <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">السعة الإجمالية المخصصة (MB)</label>
-                                <div className="flex gap-2">
-                                    <input type="number" value={capacityInput} onChange={e => setCapacityInput(Number(e.target.value))} className={formInputClasses} />
-                                    <Button onClick={handleSaveCapacity}>حفظ</Button>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Database Usage Card */}
+                <div className="lg:col-span-1 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 w-full">استخدام البيانات</h4>
+                    <CircularProgress percentage={dbUsagePercentage} size={120} strokeWidth={10} />
+                    <div className="w-full mt-4 space-y-3">
+                         <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1">السعة الإجمالية (MB)</label>
+                            <div className="flex gap-2">
+                                <input type="number" value={capacityInput} onChange={e => setCapacityInput(Number(e.target.value))} className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none" />
+                                <Button onClick={handleSaveCapacity} size="sm" className="rounded-xl px-4">حفظ</Button>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5 text-[9px] text-center">
+                            <div className="bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border border-slate-100 dark:border-slate-700">
+                                <span className="block text-slate-400 mb-0.5">المستخدم</span>
+                                <span className="font-bold text-slate-700 dark:text-white">{formatBytes(currentDbUsage)}</span>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border border-slate-100 dark:border-slate-700">
+                                <span className="block text-slate-400 mb-0.5">المتبقي</span>
+                                <span className="font-bold text-slate-700 dark:text-white">{formatBytes(remainingDbBytes)}</span>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border border-slate-100 dark:border-slate-700">
+                                <span className="block text-slate-400 mb-0.5">الإجمالي</span>
+                                <span className="font-bold text-slate-700 dark:text-white">{formatBytes(totalDbCapacityBytes)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Archive & Cleanup Section */}
+                <div className="lg:col-span-2 space-y-4">
+                    <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">أرشيف الطلبات والتنظيف</h3>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1.5">نوع الفلترة</label>
+                                 <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-100 dark:border-slate-700">
+                                    <label className={`flex-1 text-center text-[10px] py-1 rounded-lg cursor-pointer transition-all ${filterType === 'month' ? 'bg-white dark:bg-slate-700 shadow-sm font-bold text-blue-600' : 'text-slate-500'}`}>
+                                        <input type="radio" name="filterType" value="month" checked={filterType === 'month'} onChange={() => setFilterType('month')} className="sr-only"/>
+                                        بالشهر
+                                    </label>
+                                    <label className={`flex-1 text-center text-[10px] py-1 rounded-lg cursor-pointer transition-all ${filterType === 'range' ? 'bg-white dark:bg-slate-700 shadow-sm font-bold text-blue-600' : 'text-slate-500'}`}>
+                                        <input type="radio" name="filterType" value="range" checked={filterType === 'range'} onChange={() => setFilterType('range')} className="sr-only"/>
+                                        نطاق زمني
+                                    </label>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-2 text-xs text-center">
-                                <div className="bg-slate-100 dark:bg-slate-700 p-2 rounded">
-                                    <span className="block text-slate-500">المستخدم</span>
-                                    <span className="font-bold text-slate-800 dark:text-white">{formatBytes(currentDbUsage)}</span>
+                            {filterType === 'month' ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                     <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1.5">السنة</label>
+                                        <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none">
+                                            {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
+                                        </select>
+                                    </div>
+                                     <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1.5">الشهر</label>
+                                        <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))} className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none">
+                                            {months.map(month => <option key={month.value} value={month.value}>{month.name}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                                <div className="bg-slate-100 dark:bg-slate-700 p-2 rounded">
-                                    <span className="block text-slate-500">المتبقي</span>
-                                    <span className="font-bold text-slate-800 dark:text-white">{formatBytes(remainingDbBytes)}</span>
+                            ) : (
+                                 <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1.5">من</label>
+                                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1.5">إلى</label>
+                                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none" />
+                                    </div>
                                 </div>
-                                <div className="bg-slate-100 dark:bg-slate-700 p-2 rounded">
-                                    <span className="block text-slate-500">الإجمالي</span>
-                                    <span className="font-bold text-slate-800 dark:text-white">{formatBytes(totalDbCapacityBytes)}</span>
-                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <div className="text-[10px] text-slate-500 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-100 dark:border-slate-700">
+                                <span className="font-bold text-slate-800 dark:text-white">{filteredRequests.length}</span> طلب مطابق &bull; 
+                                <span className="font-bold text-blue-600 mx-1">{selectedRequestIds.size}</span> محدد
+                            </div>
+                            <div className="flex gap-2">
+                                <Button onClick={() => triggerImport('requests')} variant="secondary" size="sm" disabled={!!isImporting || !!isExporting} className="rounded-xl text-[10px]"><Icon name="upload" className="w-3.5 h-3.5"/>استيراد</Button>
+                                <Button onClick={handleExportSelected} variant="secondary" size="sm" disabled={selectedRequestIds.size === 0 || !!isExporting} className="rounded-xl text-[10px]"><Icon name="download" className="w-3.5 h-3.5"/>تصدير</Button>
+                                <Button onClick={handleDeleteSelected} variant="danger" size="sm" disabled={selectedRequestIds.size === 0 || !!isImporting} className="rounded-xl text-[10px]"><Icon name="delete" className="w-3.5 h-3.5"/>حذف</Button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="border-t dark:border-slate-700 pt-8">
-                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">أرشيف الطلبات والتنظيف</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">يمكنك هنا تصدير أو حذف الطلبات القديمة لتوفير مساحة.</p>
-                
-                <div className="mt-4 p-4 border rounded-xl dark:border-slate-700 bg-white dark:bg-slate-800">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1">نوع الفلترة</label>
-                             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
-                                <label className={`flex-1 text-center text-sm px-2 py-1.5 rounded-md cursor-pointer transition-colors ${filterType === 'month' ? 'bg-white dark:bg-slate-600 shadow font-bold text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300'}`}>
-                                    <input type="radio" name="filterType" value="month" checked={filterType === 'month'} onChange={() => setFilterType('month')} className="sr-only"/>
-                                    بالشهر والسنة
-                                </label>
-                                <label className={`flex-1 text-center text-sm px-2 py-1.5 rounded-md cursor-pointer transition-colors ${filterType === 'range' ? 'bg-white dark:bg-slate-600 shadow font-bold text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300'}`}>
-                                    <input type="radio" name="filterType" value="range" checked={filterType === 'range'} onChange={() => setFilterType('range')} className="sr-only"/>
-                                    نطاق زمني
-                                </label>
-                            </div>
-                        </div>
-                        {filterType === 'month' ? (
-                            <div className="grid grid-cols-2 gap-2">
-                                 <div>
-                                    <label className="block text-sm font-medium mb-1">السنة</label>
-                                    <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className={formInputClasses}>
-                                        {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
-                                    </select>
-                                </div>
-                                 <div>
-                                    <label className="block text-sm font-medium mb-1">الشهر</label>
-                                    <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))} className={formInputClasses}>
-                                        {months.map(month => <option key={month.value} value={month.value}>{month.name}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                        ) : (
-                             <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">من تاريخ</label>
-                                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={formInputClasses} />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">إلى تاريخ</label>
-                                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={formInputClasses} />
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="mt-4 p-4 border rounded-xl dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <div className="text-sm text-gray-600 dark:text-gray-300 bg-slate-50 dark:bg-slate-700/50 px-4 py-2 rounded-lg">
-                        <span className="font-bold text-slate-800 dark:text-white">{filteredRequests.length}</span> طلب مطابق &bull; 
-                        <span className="font-bold text-blue-600 dark:text-blue-400 mx-1">{selectedRequestIds.size}</span> محدد &bull;
-                        <span className="text-xs text-slate-500 mx-1">({formatBytes(totalSelectedSize)})</span>
-                    </div>
-                    <div className="flex gap-2">
-                        <Button onClick={() => triggerImport('requests')} variant="secondary" disabled={!!isImporting || !!isExporting} leftIcon={<Icon name="upload" className="w-4 h-4"/>}>استيراد طلبات</Button>
-                        <Button onClick={handleExportSelected} variant="secondary" disabled={selectedRequestIds.size === 0 || !!isExporting} leftIcon={<Icon name="download" className="w-4 h-4"/>}>تصدير المحدد</Button>
-                        <Button onClick={handleDeleteSelected} variant="danger" disabled={selectedRequestIds.size === 0 || !!isImporting} leftIcon={<Icon name="delete" className="w-4 h-4"/>}>حذف المحدد</Button>
-                    </div>
-                </div>
-
-                <div className="mt-4 overflow-hidden border rounded-xl dark:border-slate-700 bg-white dark:bg-slate-800">
-                     <table className="w-full text-sm text-right">
-                        <thead className="text-xs text-gray-500 bg-gray-50 dark:bg-slate-900/50 dark:text-gray-400 border-b dark:border-slate-700">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                 <div className="overflow-x-auto">
+                     <table className="w-full text-[11px] text-right">
+                        <thead className="text-[10px] text-slate-400 bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
                             <tr>
                                 <th className="px-4 py-3 w-10">
                                     <input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} className="rounded cursor-pointer" />
                                 </th>
-                                <th className="px-6 py-3">رقم الطلب</th>
-                                <th className="px-6 py-3">العميل</th>
-                                <th className="px-6 py-3">السيارة</th>
-                                <th className="px-6 py-3">التاريخ</th>
-                                <th className="px-6 py-3">الحجم</th>
+                                <th className="px-4 py-3 font-bold uppercase tracking-wider">رقم الطلب</th>
+                                <th className="px-4 py-3 font-bold uppercase tracking-wider">العميل</th>
+                                <th className="px-4 py-3 font-bold uppercase tracking-wider">السيارة</th>
+                                <th className="px-4 py-3 font-bold uppercase tracking-wider">التاريخ</th>
+                                <th className="px-4 py-3 font-bold uppercase tracking-wider">الحجم</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y dark:divide-slate-700">
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                             {filteredRequests.map(request => (
-                                <tr key={request.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                    <td className="px-4 py-3">
+                                <tr key={request.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                    <td className="px-4 py-2.5">
                                         <input type="checkbox" checked={selectedRequestIds.has(request.id)} onChange={() => handleSelectOne(request.id)} className="rounded cursor-pointer" />
                                     </td>
-                                    <td className="px-6 py-3 font-medium text-gray-900 dark:text-white">#{request.request_number}</td>
-                                    <td className="px-6 py-3">{getClientName(request.client_id)}</td>
-                                    <td className="px-6 py-3">{getCarInfo(request.car_id)}</td>
-                                    <td className="px-6 py-3 font-mono text-xs">{new Date(request.created_at).toLocaleDateString('ar-SA')}</td>
-                                    <td className="px-6 py-3 text-xs text-slate-500 font-mono">{formatBytes(new Blob([JSON.stringify(request)]).size)}</td>
+                                    <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-white">#{request.request_number}</td>
+                                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{getClientName(request.client_id)}</td>
+                                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{getCarInfo(request.car_id)}</td>
+                                    <td className="px-4 py-2.5 font-mono text-[10px] text-slate-500">{new Date(request.created_at).toLocaleDateString('ar-SA')}</td>
+                                    <td className="px-4 py-2.5 text-[10px] text-slate-400 font-mono">{formatBytes(new Blob([JSON.stringify(request)]).size)}</td>
                                 </tr>
                             ))}
                         </tbody>
                      </table>
-                     {filteredRequests.length === 0 && (
-                         <div className="text-center p-12 text-gray-400 dark:text-gray-500 text-sm">
-                            لا توجد طلبات تطابق معايير البحث المحددة.
-                         </div>
-                     )}
-                </div>
+                 </div>
+                 {filteredRequests.length === 0 && (
+                     <div className="text-center p-12 text-slate-400 dark:text-slate-500 text-xs italic">
+                        لا توجد طلبات تطابق معايير البحث المحددة.
+                     </div>
+                 )}
             </div>
 
             {/* Danger Zone */}

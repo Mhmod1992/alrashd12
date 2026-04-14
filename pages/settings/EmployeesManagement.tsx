@@ -253,89 +253,96 @@ const EmployeesManagement: React.FC = () => {
         <div className="animate-fade-in space-y-4">
 
             {/* Header / Filter Bar */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <div className="flex p-1 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
-                        <button onClick={() => setActiveTab('active')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'active' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600' : 'text-slate-500'}`}>نشط</button>
-                        <button onClick={() => setActiveTab('inactive')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-700' : 'text-slate-500'}`}>معطل</button>
+            <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3 items-center justify-between">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                        <button onClick={() => setActiveTab('active')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'active' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}>نشط</button>
+                        <button onClick={() => setActiveTab('inactive')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'inactive' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-700 dark:text-slate-200' : 'text-slate-500'}`}>معطل</button>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <div className="relative flex-grow">
-                        <SearchIcon className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400" />
-                        <input type="text" placeholder="بحث..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pr-8 py-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg outline-none text-xs" />
+                    <div className="relative flex-grow sm:w-64">
+                        <SearchIcon className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
+                        <input type="text" placeholder="بحث عن موظف..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pr-9 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-xs focus:ring-2 focus:ring-blue-500/20 transition-all" />
                     </div>
-                    <Button onClick={handleAdd} size="sm" className="px-4 py-2"><Icon name="add" className="w-4 h-4" /><span className="hidden sm:inline ms-1">جديد</span></Button>
+                    <Button onClick={handleAdd} size="sm" className="rounded-xl px-4"><Icon name="add" className="w-4 h-4" /><span className="hidden sm:inline ms-1">إضافة</span></Button>
                 </div>
             </div>
 
             {/* Content: Cards on Mobile, Table on Desktop */}
             {isMobile ? (
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 gap-3">
                     {filteredEmployees.length > 0 ? filteredEmployees.map(emp => (
-                        <div key={emp.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-3">
+                        <div key={emp.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
                             <div className="flex justify-between items-start">
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${emp.is_active ? 'bg-blue-600' : 'bg-slate-400'}`}>{emp.name.charAt(0)}</div>
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-lg shadow-inner ${emp.is_active ? 'bg-gradient-to-br from-blue-500 to-blue-600' : 'bg-slate-400'}`}>{emp.name.charAt(0)}</div>
                                     <div>
-                                        <h4 className="font-bold text-sm dark:text-white">{emp.name}</h4>
-                                        <p className="text-[10px] text-slate-500 truncate max-w-[150px]">{emp.email}</p>
-                                        <p className="text-[10px] text-green-600 font-bold mt-1">الراتب: {emp.salary?.toLocaleString() || 0} ريال</p>
+                                        <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">{emp.name}</h4>
+                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                            <RoleBadge role={emp.role} />
+                                            <StatusBadge active={emp.is_active} />
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="flex flex-col items-end gap-1">
-                                    <RoleBadge role={emp.role} />
-                                    <StatusBadge active={emp.is_active} />
+                                <div className="text-left">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">الراتب</p>
+                                    <p className="text-xs font-bold text-green-600">{emp.salary?.toLocaleString() || 0} ريال</p>
                                 </div>
                             </div>
-                            <div className="flex justify-end gap-2 pt-2 border-t dark:border-slate-700">
-                                <button onClick={() => handleOpenFinancials(emp)} className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs bg-green-50 text-green-600 rounded-lg"><DollarSignIcon className="w-4 h-4" />مالية</button>
-                                <button onClick={() => handleEdit(emp)} className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs bg-blue-50 text-blue-600 rounded-lg"><EditIcon className="w-4 h-4" />تعديل</button>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                <button onClick={() => handleOpenFinancials(emp)} className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-xl transition-colors hover:bg-green-100"><DollarSignIcon className="w-3.5 h-3.5" />مالية</button>
+                                <button onClick={() => handleEdit(emp)} className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl transition-colors hover:bg-blue-100"><EditIcon className="w-3.5 h-3.5" />تعديل</button>
                                 {emp.is_active ? (
-                                    <button onClick={() => handleToggleStatus(emp, false)} className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs bg-red-50 text-red-600 rounded-lg"><UserXIcon className="w-4 h-4" />تعطيل</button>
+                                    <button onClick={() => handleToggleStatus(emp, false)} className="col-span-2 flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl transition-colors hover:bg-red-100"><UserXIcon className="w-3.5 h-3.5" />تعطيل الحساب</button>
                                 ) : (
                                     <>
-                                        <button onClick={() => handleToggleStatus(emp, true)} className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs bg-green-50 text-green-600 rounded-lg"><CheckCircleIcon className="w-4 h-4" />تنشيط</button>
-                                        <button onClick={() => handleDelete(emp)} className="flex-none flex items-center justify-center gap-1.5 py-2 px-3 text-xs bg-gray-100 text-gray-600 rounded-lg" title="حذف نهائي"><TrashIcon className="w-4 h-4" /></button>
+                                        <button onClick={() => handleToggleStatus(emp, true)} className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl transition-colors hover:bg-emerald-100"><CheckCircleIcon className="w-3.5 h-3.5" />تنشيط</button>
+                                        <button onClick={() => handleDelete(emp)} className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl transition-colors hover:bg-slate-200" title="حذف نهائي"><TrashIcon className="w-3.5 h-3.5" /></button>
                                     </>
                                 )}
                             </div>
                         </div>
-                    )) : <div className="py-20 text-center text-slate-400">لا توجد بيانات.</div>}
+                    )) : <div className="py-20 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">لا توجد بيانات موظفين.</div>}
                 </div>
             ) : (
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
                     <table className="w-full text-right text-sm">
-                        <thead className="bg-slate-50 dark:bg-slate-800/50 border-b dark:border-slate-700">
+                        <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                             <tr>
-                                <th className="px-4 py-3 font-bold">الموظف</th>
-                                <th className="px-4 py-3 font-bold">الدور</th>
-                                <th className="px-4 py-3 font-bold">الراتب الأساسي</th>
-                                <th className="px-4 py-3 font-bold">الحالة</th>
-                                <th className="px-4 py-3 font-bold text-left">إجراءات</th>
+                                <th className="px-5 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">الموظف</th>
+                                <th className="px-5 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">الدور</th>
+                                <th className="px-5 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">الراتب</th>
+                                <th className="px-5 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">الحالة</th>
+                                <th className="px-5 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider text-left">إجراءات</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                             {filteredEmployees.map(emp => (
-                                <tr key={emp.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors group">
-                                    <td className="px-4 py-3">
-                                        <div className="font-bold">{emp.name}</div>
-                                        <div className="text-xs text-slate-500 font-mono">{emp.email}</div>
+                                <tr key={emp.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                                    <td className="px-5 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-sm shadow-sm ${emp.is_active ? 'bg-blue-600' : 'bg-slate-400'}`}>{emp.name.charAt(0)}</div>
+                                            <div>
+                                                <div className="font-bold text-slate-800 dark:text-slate-100">{emp.name}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono">{emp.email}</div>
+                                            </div>
+                                        </div>
                                     </td>
-                                    <td className="px-4 py-3"><RoleBadge role={emp.role} /></td>
-                                    <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-300">{emp.salary?.toLocaleString() || 0} ريال</td>
-                                    <td className="px-4 py-3"><StatusBadge active={emp.is_active} /></td>
-                                    <td className="px-4 py-3 text-left">
+                                    <td className="px-5 py-4"><RoleBadge role={emp.role} /></td>
+                                    <td className="px-5 py-4 font-bold text-slate-700 dark:text-slate-300">{emp.salary?.toLocaleString() || 0} ريال</td>
+                                    <td className="px-5 py-4"><StatusBadge active={emp.is_active} /></td>
+                                    <td className="px-5 py-4 text-left">
                                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => handleOpenFinancials(emp)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-md" title="الملف المالي"><DollarSignIcon className="w-4 h-4" /></button>
-                                            <button onClick={() => handleEdit(emp)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md" title="تعديل"><EditIcon className="w-4 h-4" /></button>
+                                            <button onClick={() => handleOpenFinancials(emp)} className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-xl transition-colors" title="الملف المالي"><DollarSignIcon className="w-4 h-4" /></button>
+                                            <button onClick={() => handleEdit(emp)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-colors" title="تعديل"><EditIcon className="w-4 h-4" /></button>
                                             {emp.is_active ? (
-                                                <button onClick={() => handleToggleStatus(emp, false)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md" title="تعطيل"><UserXIcon className="w-4 h-4" /></button>
+                                                <button onClick={() => handleToggleStatus(emp, false)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-colors" title="تعطيل"><UserXIcon className="w-4 h-4" /></button>
                                             ) : (
                                                 <>
-                                                    <button onClick={() => handleToggleStatus(emp, true)} className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-md" title="تنشيط"><CheckCircleIcon className="w-4 h-4" /></button>
-                                                    <button onClick={() => handleDelete(emp)} className="p-1.5 text-slate-400 hover:text-gray-800 hover:bg-gray-200 rounded-md" title="حذف نهائي"><TrashIcon className="w-4 h-4" /></button>
+                                                    <button onClick={() => handleToggleStatus(emp, true)} className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-xl transition-colors" title="تنشيط"><CheckCircleIcon className="w-4 h-4" /></button>
+                                                    <button onClick={() => handleDelete(emp)} className="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors" title="حذف نهائي"><TrashIcon className="w-4 h-4" /></button>
                                                 </>
                                             )}
                                         </div>

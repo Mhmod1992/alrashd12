@@ -29,23 +29,23 @@ const TechnicalSettings: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full space-y-6">
+        <div className="flex flex-col h-full space-y-5">
             {/* Tab Navigation */}
-            <div className="flex flex-wrap gap-3 p-1 bg-slate-100/50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex flex-wrap gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${getTabClass(activeTab === tab.id)}`}
+                        className={`flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${getTabClass(activeTab === tab.id)}`}
                     >
                         <Icon name={tab.icon} className="w-4 h-4" />
-                        {tab.label}
+                        <span className="whitespace-nowrap">{tab.label}</span>
                     </button>
                 ))}
             </div>
 
             {/* Tab Content */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden animate-fade-in">
                 {activeTab === 'inspection' && <InspectionSettings />}
                 {activeTab === 'cars' && <CarsManagement />}
                 {activeTab === 'draft' && <DraftSettings />}

@@ -129,92 +129,96 @@ const Settings: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-slate-100 dark:bg-slate-900">
+        <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950">
             {/* Custom Settings Header */}
-            <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
-                <div className="flex items-center gap-4">
+            <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
+                <div className="flex items-center gap-3 sm:gap-4">
                     <button 
-                        onClick={() => setPage('requests')} 
-                        className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-all"
+                        onClick={() => {
+                            if (settingsPage) {
+                                setSettingsPage(null as any);
+                            } else {
+                                setPage('requests');
+                            }
+                        }} 
+                        className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-all"
                     >
                          <Icon name="back" className="w-5 h-5 transform scale-x-[-1] transition-transform group-hover:-translate-x-1" />
-                         <span className="font-bold text-sm">العودة للطلبات</span>
+                         <span className="font-bold text-xs sm:text-sm hidden xs:inline">
+                             {settingsPage ? 'العودة للقائمة' : 'العودة للطلبات'}
+                         </span>
                     </button>
-                    <div className="h-6 w-px bg-slate-300 dark:bg-slate-600 mx-2"></div>
-                    <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                        <Icon name="settings" className="w-6 h-6 text-slate-400" />
-                        الإعدادات
+                    <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1 sm:mx-2"></div>
+                    <h1 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <Icon name="settings" className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400" />
+                        {settingsPage ? activeTitle : 'الإعدادات'}
                     </h1>
                 </div>
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 overflow-hidden p-4 sm:p-6">
-                <div className="container mx-auto h-full flex flex-col md:flex-row gap-6 animate-fade-in">
+            <div className="flex-1 overflow-hidden">
+                <div className="container mx-auto h-full flex flex-col animate-fade-in">
                     
-                    {/* --- SIDEBAR (Desktop) --- */}
-                    <aside className="hidden md:flex flex-col w-64 flex-shrink-0 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden h-full">
-                        <div className="p-4 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">القائمة</span>
-                        </div>
-                        
-                        <nav className="flex-1 overflow-y-auto py-2 custom-scrollbar">
-                            {visibleGroups.map((group, groupIdx) => (
-                                <div key={groupIdx} className="mb-2">
-                                    <h3 className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                        {group.title}
-                                    </h3>
-                                    <div className="space-y-0.5">
-                                        {group.items.map(item => (
-                                            <button
-                                                key={item.id}
-                                                onClick={() => setSettingsPage(item.id)}
-                                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold transition-all duration-200 ${getSidebarItemClass(settingsPage === item.id)}`}
-                                            >
-                                                <Icon name={item.icon} className={`w-5 h-5 ${settingsPage === item.id ? 'opacity-100' : 'opacity-70'}`} />
-                                                <span>{item.label}</span>
-                                            </button>
-                                        ))}
+                    {/* --- SETTINGS GRID MENU (Shown when no page is selected) --- */}
+                    {!settingsPage ? (
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-8 custom-scrollbar">
+                            <div className="max-w-6xl mx-auto">
+                                {visibleGroups.map((group, groupIdx) => (
+                                    <div key={groupIdx} className="mb-10">
+                                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 px-2">
+                                            {group.title}
+                                        </h3>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                            {group.items.map(item => (
+                                                <button
+                                                    key={item.id}
+                                                    onClick={() => setSettingsPage(item.id)}
+                                                    className="group flex flex-col items-center justify-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-blue-500/50 dark:hover:border-blue-400/50 hover:-translate-y-1 active:scale-95 transition-all duration-300"
+                                                >
+                                                    <div className="w-14 h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors">
+                                                        <Icon name={item.icon} className="w-8 h-8" />
+                                                    </div>
+                                                    <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">
+                                                        {item.label}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        /* --- CONTENT AREA (Shown when a page is selected) --- */
+                        <main className="flex-1 bg-white dark:bg-slate-900 flex flex-col overflow-hidden h-full">
+                            {/* Content Header */}
+                            <div className="flex p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 items-center justify-between flex-shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                        <Icon name={allVisibleItems.find(i => i.id === settingsPage)?.icon || 'settings'} className="w-6 h-6" />
+                                    </div>
+                                    <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                                        {activeTitle}
+                                    </h2>
                                 </div>
-                            ))}
-                        </nav>
-                    </aside>
-
-                    {/* --- MOBILE NAV (Horizontal Scroll) --- */}
-                    <div className="md:hidden flex-shrink-0 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-x-auto no-scrollbar p-1">
-                        <div className="flex gap-2">
-                            {allVisibleItems.map(item => (
-                                <button
-                                    key={item.id}
-                                    onClick={() => setSettingsPage(item.id)}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${
-                                        settingsPage === item.id 
-                                        ? 'bg-blue-600 text-white shadow-md' 
-                                        : 'bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                                    }`}
+                                <button 
+                                    onClick={() => setSettingsPage(null as any)}
+                                    className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
+                                    title="العودة للقائمة"
                                 >
-                                    <Icon name={item.icon} className="w-4 h-4" />
-                                    {item.label}
+                                    <Icon name="close" className="w-6 h-6" />
                                 </button>
-                            ))}
-                        </div>
-                    </div>
+                            </div>
 
-                    {/* --- CONTENT AREA --- */}
-                    <main className="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden h-full">
-                        {/* Content Header */}
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/50 flex-shrink-0">
-                            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 animate-fade-in">
-                                {activeTitle}
-                            </h2>
-                        </div>
-
-                        {/* Content Body */}
-                        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                            <ActiveComponent />
-                        </div>
-                    </main>
+                            {/* Content Body */}
+                            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar bg-slate-50/50 dark:bg-slate-950/50">
+                                <div className="max-w-5xl mx-auto">
+                                    <ActiveComponent />
+                                </div>
+                            </div>
+                        </main>
+                    )}
                 </div>
             </div>
         </div>

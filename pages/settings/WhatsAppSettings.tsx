@@ -106,118 +106,123 @@ const WhatsAppSettings: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 max-w-4xl">
-            <div>
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">إعدادات المراسلة (WhatsApp)</h2>
-                <p className="text-slate-600 dark:text-slate-400">
+        <div className="space-y-4 max-w-4xl animate-fade-in">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-1">إعدادات المراسلة (WhatsApp)</h2>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     قم بضبط طريقة إرسال رسائل الواتساب للعملاء (التقارير، الفواتير، الإشعارات).
                 </p>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">طريقة الإرسال</h3>
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">طريقة الإرسال</h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                     <div 
                         onClick={() => handleModeChange('manual')}
-                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                        className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
                             settings.whatsappMode === 'manual' || !settings.whatsappMode
                                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                                : 'border-slate-200 dark:border-slate-700 hover:border-blue-300'
+                                : 'border-slate-100 dark:border-slate-800 hover:border-blue-300'
                         }`}
                     >
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className={`p-2 rounded-lg ${settings.whatsappMode === 'manual' || !settings.whatsappMode ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
-                                <Icon name="employee" className="w-5 h-5" />
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className={`p-1.5 rounded-lg ${settings.whatsappMode === 'manual' || !settings.whatsappMode ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                                <Icon name="employee" className="w-4 h-4" />
                             </div>
-                            <h4 className="font-bold text-slate-800 dark:text-white">الوضع اليدوي (WhatsApp Web)</h4>
+                            <h4 className="font-bold text-sm text-slate-800 dark:text-white">الوضع اليدوي</h4>
                         </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
                             يفتح نافذة جديدة في المتصفح لتأكيد الإرسال يدوياً. (آمن وموثوق دائماً)
                         </p>
                     </div>
 
                     <div 
                         onClick={() => handleModeChange('api')}
-                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                        className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
                             settings.whatsappMode === 'api' 
                                 ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                                : 'border-slate-200 dark:border-slate-700 hover:border-green-300'
+                                : 'border-slate-100 dark:border-slate-800 hover:border-green-300'
                         }`}
                     >
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className={`p-2 rounded-lg ${settings.whatsappMode === 'api' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
-                                <Icon name="sparkles" className="w-5 h-5" />
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className={`p-1.5 rounded-lg ${settings.whatsappMode === 'api' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+                                <Icon name="sparkles" className="w-4 h-4" />
                             </div>
-                            <h4 className="font-bold text-slate-800 dark:text-white">الوضع التلقائي (Local API)</h4>
+                            <h4 className="font-bold text-sm text-slate-800 dark:text-white">الوضع التلقائي</h4>
                         </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
                             يرسل الرسائل بصمت في الخلفية عبر سيرفرك المحلي دون مغادرة البرنامج.
                         </p>
                     </div>
                 </div>
 
                 {settings.whatsappMode === 'api' && (
-                    <div className="mt-6 p-5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 animate-fade-in">
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
-                            رابط الخادم المحلي (Ngrok URL)
-                        </label>
-                        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                            <div className="relative flex-1">
-                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
-                                    <Icon name="whatsapp" className="w-5 h-5" />
+                    <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-800 animate-fade-in">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                                    رابط الخادم المحلي (Ngrok URL)
+                                </label>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                                            <Icon name="whatsapp" className="w-4 h-4" />
+                                        </div>
+                                        <input
+                                            type="url"
+                                            value={settings.whatsappApiUrl || ''}
+                                            onChange={handleUrlChange}
+                                            placeholder="https://xyz.ngrok-free.app"
+                                            className="w-full pl-3 pr-9 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 dark:text-white dir-ltr text-left"
+                                        />
+                                    </div>
+                                    <Button 
+                                        onClick={testConnection} 
+                                        disabled={isTesting || !settings.whatsappApiUrl}
+                                        variant="secondary"
+                                        size="sm"
+                                        className="whitespace-nowrap rounded-xl text-[10px]"
+                                    >
+                                        {isTesting ? 'جاري...' : 'فحص'}
+                                    </Button>
                                 </div>
-                                <input
-                                    type="url"
-                                    value={settings.whatsappApiUrl || ''}
-                                    onChange={handleUrlChange}
-                                    placeholder="https://xyz.ngrok-free.app"
-                                    className="w-full pl-4 pr-10 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 dark:text-white dir-ltr text-left"
-                                />
                             </div>
-                            <Button 
-                                onClick={testConnection} 
-                                disabled={isTesting || !settings.whatsappApiUrl}
-                                variant="secondary"
-                                className="whitespace-nowrap"
-                            >
-                                {isTesting ? 'جاري الفحص...' : 'فحص الاتصال'}
-                            </Button>
+
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                                    مفتاح المصادقة (API Key)
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                                        <Icon name="lock" className="w-4 h-4" />
+                                    </div>
+                                    <input
+                                        type="password"
+                                        value={settings.whatsappApiKey || ''}
+                                        onChange={handleApiKeyChange}
+                                        placeholder="ws_..."
+                                        className="w-full pl-3 pr-9 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 dark:text-white dir-ltr text-left"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
-                            مفتاح المصادقة (API Key)
-                        </label>
-                        <div className="relative">
-                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
-                                <Icon name="lock" className="w-5 h-5" />
-                            </div>
-                            <input
-                                type="password"
-                                value={settings.whatsappApiKey || ''}
-                                onChange={handleApiKeyChange}
-                                placeholder="ws_..."
-                                className="w-full pl-4 pr-10 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 dark:text-white dir-ltr text-left"
-                            />
-                        </div>
-
-                        <p className="text-xs text-slate-500 mt-3">
+                        <p className="text-[10px] text-slate-400 mt-3 italic">
                             ملاحظة: إذا تعذر الاتصال بهذا الرابط، سيقوم النظام تلقائياً بالتحول للوضع اليدوي كخطة بديلة.
                         </p>
 
-                        <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                            <Button 
+                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                            <button 
                                 onClick={() => setShowTestMessage(!showTestMessage)} 
-                                variant="secondary"
-                                size="sm"
-                                className="text-xs"
+                                className="text-[11px] font-bold text-blue-600 hover:underline"
                             >
                                 {showTestMessage ? 'إخفاء تجربة الإرسال' : 'تجربة إرسال رسالة حقيقية'}
-                            </Button>
+                            </button>
 
                             {showTestMessage && (
-                                <div className="mt-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-slide-up">
-                                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-2">
+                                <div className="mt-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-slide-up">
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-1.5">
                                         رقم الهاتف للتجربة (مثال: 05xxxxxxx)
                                     </label>
                                     <div className="flex gap-2">
@@ -226,15 +231,16 @@ const WhatsAppSettings: React.FC = () => {
                                             value={testPhone}
                                             onChange={(e) => setTestPhone(e.target.value)}
                                             placeholder="05xxxxxxxx"
-                                            className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
+                                            className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs focus:ring-2 focus:ring-green-500"
                                         />
                                         <Button 
                                             onClick={sendTestMessage} 
                                             disabled={isSendingTest || !testPhone}
                                             variant="whatsapp"
                                             size="sm"
+                                            className="rounded-lg text-[10px]"
                                         >
-                                            {isSendingTest ? 'جاري الإرسال...' : 'إرسال تجربة'}
+                                            {isSendingTest ? 'جاري...' : 'إرسال تجربة'}
                                         </Button>
                                     </div>
                                 </div>
