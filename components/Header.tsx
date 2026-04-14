@@ -326,7 +326,40 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                                                 </span>
                                             </div>
                                             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">
-                                                {notification.message}
+                                                {(() => {
+                                                    const message = notification.message;
+                                                    // 1. Handle explicit bolding with stars
+                                                    const parts = message.split(/(\*\*.*?\*\*)/);
+                                                    if (parts.length > 1) {
+                                                        return parts.map((part, i) => {
+                                                            if (part.startsWith('**') && part.endsWith('**')) {
+                                                                const content = part.slice(2, -2);
+                                                                return <strong key={i} className="text-slate-700 dark:text-slate-200 font-bold">{content}</strong>;
+                                                            }
+                                                            return part;
+                                                        });
+                                                    }
+
+                                                    // 2. Fallback for login notifications without stars
+                                                    if (notification.type === 'login') {
+                                                        const loginRegex = /(قام\s+)(.*?)(\s+بتسجيل)/;
+                                                        const match = message.match(loginRegex);
+                                                        if (match) {
+                                                            const name = match[2];
+                                                            const before = message.substring(0, match.index! + match[1].length);
+                                                            const after = message.substring(match.index! + match[1].length + name.length);
+                                                            return (
+                                                                <>
+                                                                    {before}
+                                                                    <strong className="text-slate-700 dark:text-slate-200 font-bold">{name}</strong>
+                                                                    {after}
+                                                                </>
+                                                            );
+                                                        }
+                                                    }
+                                                    
+                                                    return message;
+                                                })()}
                                             </p>
                                             {notification.created_by_name && (
                                                 <p className="text-[10px] text-slate-400 mt-1">بواسطة: {notification.created_by_name}</p>

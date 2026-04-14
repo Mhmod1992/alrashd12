@@ -41,11 +41,12 @@ export const useActionsScope = (
         link?: Page;
         link_id?: string;
         user_id?: string | null;
+        created_by_name?: string;
     }) => {
         try {
             const { error } = await supabase.from('notifications').insert({
                 ...notification,
-                created_by_name: authUser?.name || 'النظام',
+                created_by_name: notification.created_by_name || authUser?.name || 'النظام',
                 is_read: false
             });
             if (error) throw error;
@@ -92,7 +93,12 @@ export const useActionsScope = (
         });
         if (authUser) {
             setSystemLogs(prev => [{ id: uuidv4(), timestamp: new Date().toISOString(), employeeId: authUser.id, employeeName: authUser.name, action: 'حذف طلب', details: `تم حذف الطلب رقم #${reqNum}` }, ...prev]);
-            sendSystemNotification({ title: 'حذف طلب', message: `قام ${authUser.name} بحذف الطلب رقم #${reqNum}`, type: 'delete_request' });
+            sendSystemNotification({ 
+                title: 'حذف طلب', 
+                message: `قام **${authUser.name}** بحذف الطلب رقم #${reqNum}`, 
+                type: 'delete_request',
+                created_by_name: authUser.name
+            });
         }
     }, [requests, authUser, sendSystemNotification, setRequests, setSearchedRequests, setSystemLogs]);
 

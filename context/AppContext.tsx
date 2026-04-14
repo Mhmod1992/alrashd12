@@ -1142,7 +1142,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
                 localStorage.setItem('lastActiveTime', Date.now().toString());
                 
-                await sendSystemNotification({ title: 'تسجيل دخول', message: `قام ${employeeProfile.name} بتسجيل الدخول للنظام.`, type: 'login' });
+                await sendSystemNotification({ 
+                    title: 'تسجيل دخول', 
+                    message: `قام **${employeeProfile.name}** بتسجيل الدخول للنظام.`, 
+                    type: 'login',
+                    created_by_name: employeeProfile.name
+                });
             }
             return { success: true };
         } catch (e: any) {

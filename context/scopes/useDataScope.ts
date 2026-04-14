@@ -61,6 +61,10 @@ export const useDataScope = (
     const fetchRequests = useCallback(async () => {
         setIsRefreshing(true);
         try {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
+
             // Added 'attached_files' to the select list
             const [
                 { data: reqs, error: reqError }, { data: mks }, { data: types },
@@ -82,9 +86,30 @@ export const useDataScope = (
                 supabase.from('cars').select('*').limit(100),
                 supabase.from('employees').select('*'),
                 supabase.from('technicians').select('*'),
-                supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(50),
+                supabase.from('notifications')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(50),
                 supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(50),
             ]);
+
+            // Cleanup old notifications (older than 30 days)
+            // Only run cleanup once per day for admins/managers
+            if (authUser && (authUser.role === 'general_manager' || authUser.role === 'manager')) {
+                const lastCleanup = localStorage.getItem('last_notif_cleanup');
+                const today = new Date().toDateString();
+                if (lastCleanup !== today) {
+                    supabase.from('notifications')
+                        .delete()
+                        .lt('created_at', thirtyDaysAgoStr)
+                        .then(({ error }) => {
+                            if (!error) {
+                                localStorage.setItem('last_notif_cleanup', today);
+                                console.log('Old notifications cleaned up');
+                            }
+                        });
+                }
+            }
 
             if (reqError) throw reqError;
 
@@ -226,10 +251,9 @@ export const useDataScope = (
         const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
         if (error) {
             console.error("Failed to mark notification as read", error);
-            // Revert local state on error
-            setAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: false } : n));
+            fetchRequests();
         }
-    }, []);
+    }, [fetchRequests]);
 
     const deleteNotification = useCallback(async (id: string) => {
         setAppNotifications(prev => prev.filter(n => n.id !== id));
@@ -245,11 +269,13 @@ export const useDataScope = (
         if (authUser) {
             const { error } = await supabase.from('notifications')
                 .update({ is_read: true })
-                .eq('user_id', authUser.id)
-                .eq('is_read', false);
-            if (error) console.error("Failed to mark all notifications as read", error);
+                .eq('is_read', false); // Mark all unread as read
+            if (error) {
+                console.error("Failed to mark all notifications as read", error);
+                fetchRequests();
+            }
         }
-    }, [authUser]);
+    }, [authUser, fetchRequests]);
 
     const createActivityLog = useCallback((action: string, details: string, imageUrl?: string, link_id?: string, link_page?: Page): ActivityLog | null => {
         if (!authUser) return null;
