@@ -5,7 +5,7 @@ import {
     InspectionRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Employee,
     Notification, AppNotification, Expense, Revenue, ActivityLog,
-    InternalMessage, Technician, Reservation, RequestStatus, Page
+    InternalMessage, Technician, Reservation, RequestStatus, Page, WhatsAppMessage
 } from '../../types';
 import { REQUESTS_PAGE_SIZE } from '../constants';
 import { uuidv4 } from '../../lib/utils'; // You might need to adjust this import path if utils is elsewhere
@@ -44,6 +44,8 @@ export const useDataScope = (
 
     const [systemLogs, setSystemLogs] = useState<ActivityLog[]>([]);
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+    const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
+    const [unreadWhatsAppCount, setUnreadWhatsAppCount] = useState(0);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const triggerHighlight = useCallback((requestId: string) => {
@@ -66,12 +68,7 @@ export const useDataScope = (
             const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
 
             // Added 'attached_files' to the select list
-            const [
-                { data: reqs, error: reqError }, { data: mks }, { data: types },
-                { data: brks }, { data: cats }, { data: finds }, { data: exps },
-                { data: clts }, { data: crs }, { data: emps }, { data: techs }, { data: notifs },
-                { data: res }
-            ] = await Promise.all([
+            const results = await Promise.all([
                 supabase.from('inspection_requests')
                     .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps')
                     .order('created_at', { ascending: false })
@@ -91,7 +88,19 @@ export const useDataScope = (
                     .order('created_at', { ascending: false })
                     .limit(50),
                 supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(50),
+                supabase.from('whatsapp_messages').select('*').order('created_at', { ascending: false }).limit(50),
             ]);
+
+            const [
+                { data: reqs, error: reqError }, { data: mks }, { data: types },
+                { data: brks }, { data: cats }, { data: finds }, { data: exps },
+                { data: clts }, { data: crs }, { data: emps }, { data: techs }, { data: notifs },
+                { data: res },
+                { data: waMsgs, error: waError }
+            ] = results;
+
+            if (waError) console.error("WA Error:", waError);
+            console.log("WA Msgs:", waMsgs?.length);
 
             // Cleanup old notifications (older than 30 days)
             // Only run cleanup once per day for admins/managers
@@ -132,6 +141,8 @@ export const useDataScope = (
             setTechnicians(techs || []);
             setAppNotifications(notifs as AppNotification[] || []);
             setReservations(res || []);
+            setWhatsappMessages(waMsgs || []);
+            setUnreadWhatsAppCount((waMsgs || []).filter((m: any) => !m.is_read && (m.direction === 'incoming' || !m.direction)).length);
 
             // --- PROACTIVE LOADING FOR INITIAL BATCH ---
             const missingCarIds = Array.from(new Set(requestsData.map(r => r.car_id)))
@@ -428,6 +439,8 @@ export const useDataScope = (
         reservations, setReservations,
         systemLogs, setSystemLogs,
         unreadMessagesCount, setUnreadMessagesCount,
+        whatsappMessages, setWhatsappMessages,
+        unreadWhatsAppCount, setUnreadWhatsAppCount,
         isRefreshing, setIsRefreshing,
         fetchRequests,
         fetchCarModelsByMake,

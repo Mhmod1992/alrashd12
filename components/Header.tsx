@@ -11,6 +11,7 @@ import BellIcon from './icons/BellIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import WifiOffIcon from './icons/WifiOffIcon';
 import MailIcon from './icons/MailIcon';
+import WhatsappIcon from './icons/WhatsappIcon';
 import CheckCircleIcon from './icons/CheckCircleIcon';
 import CheckCheckIcon from './icons/CheckCheckIcon';
 import FileTextIcon from './icons/FileTextIcon';
@@ -30,7 +31,8 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
     appNotifications, markNotificationAsRead, deleteNotification, markAllNotificationsAsRead, 
     setPage, setSelectedRequestId, fetchAndUpdateSingleRequest, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
     unreadMessagesCount, setIsMailboxOpen, searchRequestByNumber, clearSearchedRequests, searchedRequests,
-    searchQuery, setSearchQuery, can
+    searchQuery, setSearchQuery, can,
+    unreadWhatsAppCount
   } = useAppContext();
 
   const design = settings.design || 'aero';
@@ -241,6 +243,22 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                 )}
                 {unreadMessagesCount > 0 && (
                     <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-800"></span>
+                )}
+            </button>
+        </div>
+
+        <div className="relative">
+            <button 
+                onClick={() => setPage('whatsapp-inbox')} 
+                className={`p-2 rounded-full transition-all focus:outline-none ${unreadWhatsAppCount > 0 ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30' : 'text-slate-500 hover:text-emerald-600 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-slate-700'}`}
+                title="رسائل الواتساب"
+            >
+                <WhatsappIcon className="h-6 w-6" />
+                {unreadWhatsAppCount > 0 && (
+                    <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-800 animate-ping"></span>
+                )}
+                {unreadWhatsAppCount > 0 && (
+                    <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-800"></span>
                 )}
             </button>
         </div>

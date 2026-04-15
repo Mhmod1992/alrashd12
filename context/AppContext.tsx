@@ -8,7 +8,7 @@ import {
     Broker, CustomFindingCategory, PredefinedFinding, Settings, Employee,
     SettingsPage, Notification, ConfirmModalState, Permission, Note, Page, AppNotification,
     Expense, Revenue, RequestStatus, ActivityLog, PERMISSIONS, UserPreferences, InternalMessage, Technician,
-    FinancialStats, ArchiveResult, PaymentType, PayrollDraft, PayrollItem, Reservation
+    FinancialStats, ArchiveResult, PaymentType, PayrollDraft, PayrollItem, Reservation, WhatsAppMessage
 } from '../types';
 import { mockSettings } from '../data/mockData';
 import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile } from '../lib/utils';
@@ -55,6 +55,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const channelRef = useRef<RealtimeChannel | null>(null);
     const notificationsChannelRef = useRef<RealtimeChannel | null>(null);
     const messagesChannelRef = useRef<RealtimeChannel | null>(null);
+    const whatsappChannelRef = useRef<RealtimeChannel | null>(null);
 
     const [selectedRequestId, setSelectedRequestId] = useLocalStorage<string | null>('selectedRequestId', null);
     const [selectedClientId, setSelectedClientId] = useLocalStorage<string | null>('selectedClientId', null);
@@ -107,6 +108,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         reservations, setReservations,
         systemLogs, setSystemLogs,
         unreadMessagesCount, setUnreadMessagesCount,
+        whatsappMessages, setWhatsappMessages,
+        unreadWhatsAppCount, setUnreadWhatsAppCount,
         isRefreshing, setIsRefreshing,
         fetchRequests,
         fetchCarModelsByMake,
@@ -138,13 +141,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addEmployee, updateEmployee: originalUpdateEmployee, adminChangePassword, deleteEmployee,
         addExpense, updateExpense, deleteExpense,
         addRevenue, deleteRevenue,
-        sendInternalMessage, markMessageAsRead,
+        sendInternalMessage, markMessageAsRead, markWhatsAppAsRead, deleteWhatsAppMessages,
         addTechnician, updateTechnician, deleteTechnician,
         addReservation, updateReservationStatus, updateReservation, deleteReservation, sendSystemNotification
     } = useActionsScope(
         requests, setRequests, setSearchedRequests, setClients, setCars, setCarMakes, setCarModels,
         setBrokers, employees, setEmployees, setTechnicians, setExpenses, setInspectionTypes,
         setCustomFindingCategories, setPredefinedFindings, setReservations, setUnreadMessagesCount,
+        setWhatsappMessages, setUnreadWhatsAppCount,
         setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchRequests
     );
 
@@ -339,17 +343,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             )
             .subscribe();
         messagesChannelRef.current = msgChannel;
+        
+        const waChannel = supabase.channel('whatsapp-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'whatsapp_messages' },
+                (payload) => {
+                    const newMessage = payload.new as WhatsAppMessage;
+                    setWhatsappMessages(prev => {
+                        const exists = prev.some(m => m.id === newMessage.id);
+                        if (exists) return prev;
+                        return [newMessage, ...prev];
+                    });
+                    
+                    if (newMessage.direction === 'incoming' || !newMessage.direction) {
+                        setUnreadWhatsAppCount(prev => prev + 1);
+                        addNotification({ 
+                            title: 'رسالة واتساب جديدة', 
+                            message: `رسالة من ${newMessage.name || newMessage.phone}: ${newMessage.message}`, 
+                            type: 'info' 
+                        });
+                    }
+                }
+            )
+            .subscribe((status) => {
+                console.log('WhatsApp Realtime Status:', status);
+            });
+        whatsappChannelRef.current = waChannel;
 
-    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId]);
+    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount]);
 
     const retryConnection = useCallback(() => {
         const cleanup = async () => {
             if (channelRef.current) await supabase.removeChannel(channelRef.current);
             if (notificationsChannelRef.current) await supabase.removeChannel(notificationsChannelRef.current);
             if (messagesChannelRef.current) await supabase.removeChannel(messagesChannelRef.current);
+            if (whatsappChannelRef.current) await supabase.removeChannel(whatsappChannelRef.current);
             channelRef.current = null;
             notificationsChannelRef.current = null;
             messagesChannelRef.current = null;
+            whatsappChannelRef.current = null;
         };
         cleanup().then(() => setupRealtimeSubscription());
     }, [setupRealtimeSubscription]);
@@ -575,9 +606,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (channelRef.current) await supabase.removeChannel(channelRef.current);
                 if (notificationsChannelRef.current) await supabase.removeChannel(notificationsChannelRef.current);
                 if (messagesChannelRef.current) await supabase.removeChannel(messagesChannelRef.current);
+                if (whatsappChannelRef.current) await supabase.removeChannel(whatsappChannelRef.current);
                 channelRef.current = null;
                 notificationsChannelRef.current = null;
                 messagesChannelRef.current = null;
+                whatsappChannelRef.current = null;
             };
             cleanup();
             setRealtimeStatus('disconnected');
@@ -1616,6 +1649,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const sendWhatsAppMessage = useCallback(async (phone: string, text: string, clientName?: string): Promise<boolean> => {
         const mode = settings.whatsappMode || 'manual';
         const apiUrl = settings.whatsappApiUrl;
+        let success = false;
 
         if (mode === 'api' && apiUrl) {
             try {
@@ -1635,7 +1669,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     } else {
                         addNotification({ title: 'نجاح', message: 'تم إرسال رسالة الواتساب عبر الخادم بنجاح', type: 'success' });
                     }
-                    return true;
+                    success = true;
                 } else {
                     console.error('WhatsApp API Error:', await response.text());
                     addNotification({ title: 'فشل الإرسال التلقائي', message: 'تعذر الإرسال عبر الخادم، سيتم فتح الواتساب اليدوي', type: 'warning' });
@@ -1646,12 +1680,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
         }
 
-        // Fallback to manual mode
-        const formattedPhone = phone.replace(/\D/g, '');
-        const encodedText = encodeURIComponent(text);
-        window.open(`https://wa.me/${formattedPhone}?text=${encodedText}`, '_blank');
-        return true;
-    }, [settings.whatsappMode, settings.whatsappApiUrl, addNotification, showWhatsAppSuccessModal]);
+        if (!success) {
+            // Fallback to manual mode
+            const formattedPhone = phone.replace(/\D/g, '');
+            const encodedText = encodeURIComponent(text);
+            window.open(`https://wa.me/${formattedPhone}?text=${encodedText}`, '_blank');
+            success = true;
+        }
+
+        // Save to database regardless of mode (so it shows in history)
+        try {
+            const { data, error } = await supabase.from('whatsapp_messages').insert({
+                phone,
+                message: text,
+                name: clientName || null,
+                direction: 'outgoing',
+                is_read: true,
+                created_at: new Date().toISOString()
+            }).select().single();
+
+            if (!error && data) {
+                setWhatsappMessages(prev => [data as WhatsAppMessage, ...prev]);
+            }
+        } catch (e) {
+            console.error("Failed to save outgoing WhatsApp message to DB:", e);
+        }
+
+        return success;
+    }, [settings.whatsappMode, settings.whatsappApiUrl, settings.whatsappApiKey, addNotification, showWhatsAppSuccessModal, setWhatsappMessages]);
 
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
@@ -1676,6 +1732,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         searchCars, searchClientsPage, fetchClientRequests, fetchClientRequestsFiltered, getClientFinancialSummary, fetchRequestsByCarId, fetchRequestByRequestNumber, fetchRequestByRequestNumberForAuth, fetchRequestsByDateRange, fetchRequestsCount,
         checkCarHistory,
         unreadMessagesCount, fetchInboxMessages, fetchSentMessages, sendInternalMessage, markMessageAsRead,
+        whatsappMessages, unreadWhatsAppCount, markWhatsAppAsRead, deleteWhatsAppMessages, sendWhatsAppMessage,
         isFocusMode, setIsFocusMode, hasUnsavedChanges, setHasUnsavedChanges, isMailboxOpen, setIsMailboxOpen,
         searchCarMakes, searchCarModels, searchArchive, expandedArchiveCarId, setExpandedArchiveCarId, addTechnician, updateTechnician, deleteTechnician,
         deferredPrompt, installPwa,

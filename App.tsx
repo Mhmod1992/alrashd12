@@ -3,6 +3,7 @@ import React, { Suspense, lazy } from 'react';
 import { AppProvider, useAppContext } from './context/AppContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import WhatsAppTicker from './components/WhatsAppTicker';
 import NotificationContainer from './components/NotificationContainer';
 import ConfirmModal from './components/ConfirmModal';
 import NewRequestSuccessModal from './components/NewRequestSuccessModal';
@@ -18,7 +19,7 @@ import RefreshCwIcon from './components/icons/RefreshCwIcon'; // Import Refresh 
 import LogOutIcon from './components/icons/LogOutIcon'; // Import LogOut Icon
 import WifiOffIcon from './components/icons/WifiOffIcon'; // Import WifiOff Icon
 import IncomingRequestNotifier from './components/IncomingRequestNotifier'; // Import the new notifier
-import { WhatsAppMessagesTest } from './components/WhatsAppMessagesTest'; // Import the test component
+const WhatsAppInbox = lazy(() => import('./pages/WhatsAppInbox'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Requests = lazy(() => import('./pages/Requests'));
 const Clients = lazy(() => import('./pages/Clients'));
@@ -230,8 +231,8 @@ const AppContent: React.FC = () => {
         return <Employees />;
       case 'reservations':
         return <Reservations />;
-      case 'whatsapp-test':
-        return <WhatsAppMessagesTest />;
+      case 'whatsapp-inbox':
+        return <WhatsAppInbox />;
       default:
         return <Dashboard />; // Revert to Dashboard as default
     }
@@ -268,6 +269,7 @@ const AppContent: React.FC = () => {
         {!isFocusMode && <Sidebar isSidebarOpen={isSidebarOpen} setSidebarOpen={setSidebarOpen} />}
         <div className="flex-1 flex flex-col overflow-hidden">
           {!isFocusMode && <Header toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />}
+          {!isFocusMode && <WhatsAppTicker />}
           <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-slate-100/80 dark:bg-slate-900/80 ${isFocusMode ? '' : 'p-4 sm:p-6'}`}>
             <Suspense fallback={<PageLoader />}>
               {mainContent()}
@@ -366,6 +368,23 @@ const PrintStyles = () => (
       @keyframes scroll-dynamic {
         0% { transform: translateX(0); }
         100% { transform: translateX(var(--scroll-dist, 50%)); }
+      }
+      @keyframes marquee {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(100%); }
+      }
+      .animate-marquee {
+        display: flex;
+        animation: marquee 30s linear infinite;
+        width: max-content;
+      }
+      /* In RTL, we want to move from right to left, which is positive translateX in some contexts, but CSS is LTR based */
+      [dir="rtl"] .animate-marquee {
+        animation: marquee-rtl 30s linear infinite;
+      }
+      @keyframes marquee-rtl {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(50%); }
       }
       @media print {
         @page {

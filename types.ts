@@ -1,6 +1,6 @@
 
 
-export type Page = 'dashboard' | 'requests' | 'waiting-requests' | 'clients' | 'settings' | 'fill-request' | 'print-report' | 'financials' | 'request-draft' | 'profile' | 'brokers' | 'expenses' | 'revenues' | 'mailbox' | 'archive' | 'paper-archive' | 'employees' | 'reservations' | 'whatsapp-test';
+export type Page = 'dashboard' | 'requests' | 'waiting-requests' | 'clients' | 'settings' | 'fill-request' | 'print-report' | 'financials' | 'request-draft' | 'profile' | 'brokers' | 'expenses' | 'revenues' | 'mailbox' | 'archive' | 'paper-archive' | 'employees' | 'reservations' | 'whatsapp-inbox';
 
 export enum RequestStatus {
   IN_PROGRESS = 'قيد التنفيذ',
@@ -62,6 +62,7 @@ export const PERMISSIONS = {
   manage_appearance: 'إدارة المظهر',
   manage_api_keys: 'إدارة مفاتيح الربط (API Keys)',
   manage_reservations: 'إدارة الحجوزات الواردة',
+  delete_whatsapp_messages: 'مسح رسائل الواتساب',
   view_requests_list: 'عرض صفحة إدارة الطلبات',
   view_settings: 'عرض صفحة الإعدادات',
 } as const;
@@ -544,6 +545,17 @@ export interface FinancialStats {
   filteredRequests: InspectionRequest[];
   filteredExpenses: Expense[];
   filteredRevenues: Revenue[];
+}
+
+export interface WhatsAppMessage {
+  id: number;
+  whatsapp_id: string;
+  phone: string;
+  name: string;
+  message: string;
+  direction: 'incoming' | 'outgoing';
+  created_at: string;
+  is_read?: boolean;
 }
 
 export interface ArchiveResult {

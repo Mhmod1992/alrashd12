@@ -45,10 +45,10 @@ const QuickActions: React.FC = () => {
             action: () => setPage('requests') 
         },
         { 
-            label: 'تجربة واتساب', 
+            label: 'صندوق الواتساب', 
             icon: <Icon name="whatsapp" className="w-5 h-5" />, 
             color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300', 
-            action: () => setPage('whatsapp-test') 
+            action: () => setPage('whatsapp-inbox') 
         },
     ];
 

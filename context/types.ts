@@ -4,7 +4,7 @@ import {
     Broker, CustomFindingCategory, PredefinedFinding, Settings, Employee,
     SettingsPage, Notification, ConfirmModalState, Permission, Page, AppNotification,
     Expense, Revenue, ActivityLog, InternalMessage, Technician,
-    FinancialStats, ArchiveResult, PayrollDraft, Reservation
+    FinancialStats, ArchiveResult, PayrollDraft, Reservation, WhatsAppMessage
 } from '../types';
 
 export interface CarHistoryResult {
@@ -187,6 +187,10 @@ export interface AppContextType {
     realtimeStatus: 'connected' | 'connecting' | 'disconnected';
     retryConnection: () => void;
     refreshSessionAndReload: () => void;
+    whatsappMessages: WhatsAppMessage[];
+    unreadWhatsAppCount: number;
+    markWhatsAppAsRead: (id: number) => Promise<void>;
+    deleteWhatsAppMessages: (olderThanDays?: number) => Promise<void>;
     unreadMessagesCount: number;
     fetchInboxMessages: () => Promise<InternalMessage[]>;
     fetchSentMessages: () => Promise<InternalMessage[]>;

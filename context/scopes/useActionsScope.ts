@@ -5,7 +5,7 @@ import {
     InspectionRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Expense, Revenue,
     InternalMessage, Technician, Reservation, ActivityLog, Employee,
-    AppNotification, Notification, PaymentType, Page
+    AppNotification, Notification, PaymentType, Page, WhatsAppMessage
 } from '../../types';
 
 export const useActionsScope = (
@@ -26,6 +26,8 @@ export const useActionsScope = (
     setPredefinedFindings: React.Dispatch<React.SetStateAction<PredefinedFinding[]>>,
     setReservations: React.Dispatch<React.SetStateAction<Reservation[]>>,
     setUnreadMessagesCount: React.Dispatch<React.SetStateAction<number>>,
+    setWhatsappMessages: React.Dispatch<React.SetStateAction<WhatsAppMessage[]>>,
+    setUnreadWhatsAppCount: React.Dispatch<React.SetStateAction<number>>,
     setSystemLogs: React.Dispatch<React.SetStateAction<ActivityLog[]>>,
     authUser: Employee | null,
     setAuthUser: React.Dispatch<React.SetStateAction<Employee | null>>,
@@ -473,6 +475,50 @@ export const useActionsScope = (
         setUnreadMessagesCount(prev => Math.max(0, prev - 1));
     }, [setUnreadMessagesCount]);
 
+    const markWhatsAppAsRead = useCallback(async (id: number) => {
+        const { error } = await supabase.from('whatsapp_messages').update({ is_read: true }).eq('id', id);
+        if (error) throw error;
+        setWhatsappMessages(prev => prev.map(m => m.id === id ? { ...m, is_read: true } : m));
+        setUnreadWhatsAppCount(prev => Math.max(0, prev - 1));
+    }, [setWhatsappMessages, setUnreadWhatsAppCount]);
+
+    const deleteWhatsAppMessages = useCallback(async (olderThanDays?: number) => {
+        try {
+            let query = supabase.from('whatsapp_messages').delete();
+            
+            if (olderThanDays) {
+                const date = new Date();
+                date.setDate(date.getDate() - olderThanDays);
+                query = query.lt('created_at', date.toISOString());
+            } else {
+                // Supabase requires at least one filter for delete
+                query = query.not('id', 'is', null);
+            }
+            
+            const { error } = await query;
+            if (error) throw error;
+
+            if (olderThanDays) {
+                const date = new Date();
+                date.setDate(date.getDate() - olderThanDays);
+                setWhatsappMessages(prev => prev.filter(m => new Date(m.created_at) >= date));
+                // Recalculate unread count
+                setUnreadWhatsAppCount(prev => {
+                    // We can't easily know how many unread were deleted without filtering the current state
+                    return 0; // We'll let the caller or a separate effect handle it, or we can just recalculate it here.
+                });
+            } else {
+                setWhatsappMessages([]);
+                setUnreadWhatsAppCount(0);
+            }
+            addNotification({ title: 'نجاح', message: 'تم مسح الرسائل بنجاح', type: 'success' });
+        } catch (error) {
+            console.error('Error deleting WhatsApp messages:', error);
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء مسح الرسائل', type: 'error' });
+            throw error;
+        }
+    }, [setWhatsappMessages, setUnreadWhatsAppCount, addNotification]);
+
 
     // --- TECHNICIANS ---
     const addTechnician = useCallback(async (tech: Omit<Technician, 'id'>): Promise<Technician> => {
@@ -535,7 +581,7 @@ export const useActionsScope = (
         addEmployee, updateEmployee, adminChangePassword, deleteEmployee,
         addExpense, updateExpense, deleteExpense,
         addRevenue, deleteRevenue,
-        sendInternalMessage, markMessageAsRead,
+        sendInternalMessage, markMessageAsRead, markWhatsAppAsRead, deleteWhatsAppMessages,
         addTechnician, updateTechnician, deleteTechnician,
         addReservation, updateReservationStatus, updateReservation, deleteReservation,
         sendSystemNotification, createActivityLog

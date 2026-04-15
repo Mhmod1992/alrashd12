@@ -4,6 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import HomeIcon from './icons/HomeIcon';
 import FileTextIcon from './icons/FileTextIcon';
 import UsersIcon from './icons/UsersIcon';
+import WhatsappIcon from './icons/WhatsappIcon';
 import SettingsIcon from './icons/SettingsIcon';
 import { Page } from '../types';
 import DollarSignIcon from './icons/DollarSignIcon';
@@ -68,6 +69,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
     if (can('manage_clients') && authUser?.role !== 'receptionist') {
       operationsItems.push({ id: 'clients', label: 'إدارة العملاء', icon: UsersIcon });
     }
+
+    operationsItems.push({ id: 'whatsapp-inbox', label: 'صندوق الواتساب', icon: WhatsappIcon });
 
     // Group 2: Financials (المالية)
     const financialItems = [];
