@@ -30,7 +30,7 @@ const defaultPermissionsByRole: Record<Role, Permission[]> = {
         'view_activity_log', 'view_archive', 'manage_notes', 'manage_findings', 'change_request_status', 'mark_request_complete', 'manage_brokers',
         'view_login_notifications', 'manage_appearance', 'edit_request_price', 'export_data', 'send_internal_messages', 'process_payment',
         'view_waiting_requests', 'view_car_history_on_create', 'view_requests_list', 'view_settings',
-        'manage_paper_archive', 'manage_revenues', 'manage_expenses'
+        'manage_paper_archive', 'manage_revenues', 'manage_expenses', 'delete_whatsapp_messages'
     ],
     // Employee/Technician: No Dashboard, No Financials, No Archive by default.
     employee: ['create_requests', 'fill_requests', 'view_request_info', 'manage_notes', 'manage_findings', 'send_internal_messages', 'mark_request_complete', 'view_requests_list'],
@@ -43,7 +43,7 @@ const categorizedPermissions: Record<string, Permission[]> = {
     'المالية والتقارير': ['view_financials', 'manage_revenues', 'manage_expenses'],
     'الإدارة والإعدادات': ['manage_employees', 'manage_brokers', 'view_settings'],
     'إجراءات الطلبات والعمليات': ['create_requests', 'fill_requests', 'update_requests_data', 'change_request_status', 'mark_request_complete', 'delete_requests', 'print_request', 'view_request_info', 'view_car_history_on_create', 'manage_notes', 'manage_findings', 'view_activity_log'],
-    'إجراءات أخرى وإعدادات تفصيلية': ['send_internal_messages', 'view_login_notifications', 'export_data', 'edit_request_price', 'process_payment', 'delete_expenses', 'manage_settings_general', 'manage_settings_technical', 'manage_appearance', 'manage_api_keys']
+    'إجراءات أخرى وإعدادات تفصيلية': ['send_internal_messages', 'view_login_notifications', 'export_data', 'edit_request_price', 'process_payment', 'delete_expenses', 'delete_whatsapp_messages', 'manage_settings_general', 'manage_settings_technical', 'manage_appearance', 'manage_api_keys']
 };
 
 const EmployeesManagement: React.FC = () => {

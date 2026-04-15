@@ -59,14 +59,14 @@ const Settings: React.FC = () => {
         {
             title: 'الموارد البشرية',
             items: [
-                { id: 'employees', label: 'الموظفين (مستخدمين)', icon: 'user-circle', permission: 'manage_employees', component: EmployeesManagement },
-                { id: 'technicians', label: 'الفنيين (عمالة)', icon: 'briefcase', permission: 'manage_technicians', component: TechniciansManagement },
+                { id: 'employees', label: 'الموظفين (مستخدمين)', icon: 'users', permission: 'manage_employees', component: EmployeesManagement },
+                { id: 'technicians', label: 'الفنيين (عمالة)', icon: 'employee', permission: 'manage_technicians', component: TechniciansManagement },
             ]
         },
         {
             title: 'الفحص والعمليات',
             items: [
-                { id: 'request', label: 'باقات وبنود الفحص', icon: 'clipboard-list', permission: 'manage_settings_technical', component: InspectionSettings },
+                { id: 'request', label: 'باقات وبنود الفحص', icon: 'clipboard-check', permission: 'manage_settings_technical', component: InspectionSettings },
                 { id: 'cars', label: 'قاعدة بيانات السيارات', icon: 'cars', permission: 'manage_settings_technical', component: CarsManagement },
                 { id: 'draft', label: 'إعدادات المسودة اليدوية', icon: 'edit', permission: 'manage_settings_technical', component: DraftSettings },
                 { id: 'plate', label: 'تصميم اللوحة', icon: 'scan-plate', permission: 'manage_settings_technical', component: PlateSettings },
@@ -75,20 +75,20 @@ const Settings: React.FC = () => {
         {
             title: 'التقارير',
             items: [
-                { id: 'report', label: 'إعدادات التقرير النهائي', icon: 'report', permission: 'manage_settings_general', component: ReportSettingsPage },
-                { id: 'reports_archive', label: 'أرشيف ملفات التقرير (Storage)', icon: 'folder-open', permission: 'manage_settings_general', component: ReportsArchive },
+                { id: 'report', label: 'إعدادات التقرير النهائي', icon: 'bar-chart', permission: 'manage_settings_general', component: ReportSettingsPage },
+                { id: 'reports_archive', label: 'أرشيف ملفات التقرير (Storage)', icon: 'archive', permission: 'manage_settings_general', component: ReportsArchive },
             ]
         },
         {
             title: 'الصيانة والنظام',
             items: [
-                { id: 'database', label: 'حالة النظام والصيانة', icon: 'refresh-cw', permission: 'manage_settings_general', component: DatabaseManagement } as any, 
+                { id: 'database', label: 'حالة النظام والصيانة', icon: 'database', permission: 'manage_settings_general', component: DatabaseManagement } as any, 
             ]
         },
         {
             title: 'إعدادات متقدمة',
             items: [
-                { id: 'whatsapp', label: 'إعدادات المراسلة (WhatsApp)', icon: 'message-circle', permission: 'manage_settings_general', component: WhatsAppSettings },
+                { id: 'whatsapp', label: 'إعدادات المراسلة (WhatsApp)', icon: 'whatsapp', permission: 'manage_settings_general', component: WhatsAppSettings },
                 { id: 'api', label: 'ربط الخدمات (API)', icon: 'sparkles', permission: 'manage_api_keys', component: ApiSettings },
             ]
         }
@@ -176,10 +176,14 @@ const Settings: React.FC = () => {
                                                     onClick={() => setSettingsPage(item.id)}
                                                     className="group flex flex-col items-center justify-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-blue-500/50 dark:hover:border-blue-400/50 hover:-translate-y-1 active:scale-95 transition-all duration-300"
                                                 >
-                                                    <div className="w-14 h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors">
+                                                    <div className={`w-14 h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center transition-colors ${
+                                                        item.id === 'whatsapp' 
+                                                        ? 'text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20' 
+                                                        : 'text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20'
+                                                    }`}>
                                                         <Icon name={item.icon} className="w-8 h-8" />
                                                     </div>
-                                                    <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">
+                                                    <span className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white text-center leading-tight transition-colors">
                                                         {item.label}
                                                     </span>
                                                 </button>
@@ -195,7 +199,11 @@ const Settings: React.FC = () => {
                             {/* Content Header */}
                             <div className="flex p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 items-center justify-between flex-shrink-0">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                        settingsPage === 'whatsapp'
+                                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                                        : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                                    }`}>
                                         <Icon name={allVisibleItems.find(i => i.id === settingsPage)?.icon || 'settings'} className="w-6 h-6" />
                                     </div>
                                     <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">

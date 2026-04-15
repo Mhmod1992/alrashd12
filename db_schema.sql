@@ -388,6 +388,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_messages (
   name TEXT,
   message TEXT NOT NULL,
   direction TEXT,
+  is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
@@ -509,7 +510,7 @@ ON CONFLICT (id) DO NOTHING;
 --         'process_payment', 'manage_clients', 'manage_employees', 
 --         'manage_brokers', 'manage_technicians', 'manage_settings_general', 
 --         'manage_settings_technical', 'manage_appearance', 'manage_api_keys', 
---         'manage_reservations', 'view_requests_list', 'view_settings'
+--         'manage_reservations', 'delete_whatsapp_messages', 'view_requests_list', 'view_settings'
 --     ], 
 --     true
 -- )

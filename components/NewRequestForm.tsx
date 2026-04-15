@@ -1502,10 +1502,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     </div>
                 )}
 
-                <ReservationReviewCard 
-                    data={reservationFillData} 
-                    onManualFill={handleManualFill} 
-                />
+                {!isReservationMode && (
+                    <ReservationReviewCard 
+                        data={reservationFillData} 
+                        onManualFill={handleManualFill} 
+                    />
+                )}
 
                 <div className={isMobile && currentStep !== 1 ? 'hidden' : 'block animate-fade-in'}>
                     {(isReservationMode ? showClientFields : true) && (
@@ -1659,7 +1661,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     </div>
                 )}
 
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-slate-900 border-t dark:border-slate-700 md:static md:bg-transparent md:border-t-0 md:p-0 md:mt-6 z-20">
+                {/* Bottom Spacer for Mobile Sticky Footer */}
+                {isMobile && <div className="h-24" />}
+
+                <div className="sticky bottom-0 left-0 right-0 p-4 bg-white dark:bg-slate-900 border-t dark:border-slate-700 md:static md:bg-transparent md:border-t-0 md:p-0 md:mt-6 z-20">
                     <div className="flex justify-between gap-4 max-w-4xl mx-auto md:max-w-none md:justify-end">
                         {isMobile ? (
                             <>

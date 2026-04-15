@@ -2,38 +2,10 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import WhatsappIcon from '../components/icons/WhatsappIcon';
-import { timeAgo } from '../lib/utils';
+import { timeAgo, parseWhatsAppMessage } from '../lib/utils';
 import SearchIcon from '../components/icons/SearchIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import Modal from '../components/Modal';
-
-const parseWhatsAppMessage = (rawMessage: string) => {
-  if (!rawMessage) return { cleanMessage: '', source: null, replyTo: null };
-
-  let cleanMessage = rawMessage;
-  let source = null;
-  let replyTo = null;
-
-  const sourceRegex = /📌\s*\[المصدر:\s*(.*?)\]/;
-  const sourceMatch = rawMessage.match(sourceRegex);
-  if (sourceMatch) {
-    source = sourceMatch[1].trim();
-    cleanMessage = cleanMessage.replace(sourceMatch[0], '');
-  }
-
-  const replyRegex = /💬\s*\[رداً\s*على:\s*(.*?)\]/;
-  const replyMatch = rawMessage.match(replyRegex);
-  if (replyMatch) {
-    replyTo = replyMatch[1].trim();
-    cleanMessage = cleanMessage.replace(replyMatch[0], '');
-  }
-
-  return {
-    cleanMessage: cleanMessage.trim(),
-    source: source?.replace(/"/g, ''),
-    replyTo
-  };
-};
 
 const WhatsAppInbox: React.FC = () => {
   const { whatsappMessages, markWhatsAppAsRead, fetchRequests, realtimeStatus, sendWhatsAppMessage, authUser, deleteWhatsAppMessages, can } = useAppContext();
@@ -149,7 +121,7 @@ const WhatsAppInbox: React.FC = () => {
               className="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-700 border-none rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 transition-all"
             />
           </div>
-          {(authUser?.role === 'admin' || can('delete_whatsapp_messages')) && (
+          {(authUser?.role === 'general_manager' || can('delete_whatsapp_messages')) && (
             <button
               onClick={() => setIsDeleteModalOpen(true)}
               className="p-2 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 rounded-xl transition-colors"

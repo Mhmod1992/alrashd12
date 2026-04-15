@@ -12,9 +12,15 @@ interface ModalProps {
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
   hideCloseButton?: boolean;
+  noPadding?: boolean;
+  fullHeight?: boolean;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer, size = '2xl', hideCloseButton = false }) => {
+const Modal: React.FC<ModalProps> = ({ 
+    isOpen, onClose, title, children, footer, 
+    size = '2xl', hideCloseButton = false, 
+    noPadding = false, fullHeight = false 
+}) => {
   const { settings } = useAppContext();
   const design = settings.design || 'aero';
   
@@ -50,7 +56,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer,
       return 'bg-white dark:bg-slate-800 shadow-xl';
   }
   
-  const modalBaseClasses = `w-full ${sizeClasses[size]} transform transition-all my-8 animate-slide-in-down rounded-lg`;
+  const modalBaseClasses = `w-full ${sizeClasses[size]} transform transition-all ${fullHeight ? 'h-[90vh] my-4' : 'my-8'} animate-slide-in-down rounded-lg flex flex-col`;
   const modalDesignClasses = getModalDesignClasses();
     
   const headerFooterDesignClasses = design === 'glass'
@@ -59,13 +65,13 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer,
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-2 sm:p-4"
     >
       <div 
         className={`${modalBaseClasses} ${modalDesignClasses}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`flex items-center justify-between p-4 border-b dark:border-slate-700 sticky top-0 rounded-t-lg z-10 ${headerFooterDesignClasses}`}>
+        <div className={`flex items-center justify-between p-4 border-b dark:border-slate-700 sticky top-0 rounded-t-lg z-10 shrink-0 ${headerFooterDesignClasses}`}>
           <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200">{title}</h3>
           {!hideCloseButton && (
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
@@ -75,11 +81,11 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer,
             </button>
           )}
         </div>
-        <div className="p-6 max-h-[80vh] overflow-y-auto">
+        <div className={`${noPadding ? 'p-0' : 'p-6'} ${fullHeight ? 'flex-1' : 'max-h-[80vh]'} overflow-y-auto`}>
           {children}
         </div>
         {footer && (
-          <div className={`flex items-center justify-end p-4 border-t dark:border-slate-700 gap-3 sticky bottom-0 rounded-b-lg ${headerFooterDesignClasses}`}>
+          <div className={`flex items-center justify-end p-4 border-t dark:border-slate-700 gap-3 sticky bottom-0 rounded-b-lg shrink-0 ${headerFooterDesignClasses}`}>
             {footer}
           </div>
         )}

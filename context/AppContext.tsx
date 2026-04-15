@@ -11,7 +11,7 @@ import {
     FinancialStats, ArchiveResult, PaymentType, PayrollDraft, PayrollItem, Reservation, WhatsAppMessage
 } from '../types';
 import { mockSettings } from '../data/mockData';
-import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile } from '../lib/utils';
+import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile, arabicToEnglishNumerals } from '../lib/utils';
 import { AppContextType, CarHistoryResult } from './types';
 import { useNavigationScope } from './scopes/useNavigationScope';
 import { useThemeScope } from './scopes/useThemeScope';
@@ -1535,35 +1535,78 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     const parseReservationText = useCallback(async (text: string): Promise<Partial<Reservation>> => {
+        // Clean text from source tags like [المصدر: ...]
+        const cleanText = text.replace(/\[المصدر:.*?\]/g, '').replace(/\[رداً على:.*?\]/g, '').trim();
+        
+        // Try traditional format first
         const extract = (key: string) => {
             const regex = new RegExp(`\\*${key}:\\*\\s*([^\\n\\r]+)`);
             const match = text.match(regex);
             return match ? match[1].trim() : '';
         };
 
-        const client_name = extract('اسم العميل');
-        const client_phone = extract('رقم الهاتف');
+        let client_name = extract('اسم العميل');
+        let client_phone = extract('رقم الهاتف');
+        let car_details = '';
+        let price: number | undefined = undefined;
+        let notes = '';
 
-        const make = extract('الشركة');
-        const model = extract('الموديل');
-        const year = extract('سنة الصنع');
+        // Check for the new format with 📌
+        if (text.includes('📌')) {
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+            
+            // Find the line with 📌
+            const carLineIndex = lines.findIndex(l => l.includes('📌'));
+            if (carLineIndex !== -1) {
+                car_details = lines[carLineIndex].replace('📌', '').trim();
+                
+                // Usually the lines following are price and notes
+                for (let i = carLineIndex + 1; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line.includes('[المصدر:')) continue;
+                    
+                    // Convert Arabic numerals to English
+                    const engLine = arabicToEnglishNumerals(line);
+                    // Check if it's a price (just numbers)
+                    const numericMatch = engLine.match(/^(\d+(\.\d+)?)$/);
+                    
+                    if (numericMatch && price === undefined) {
+                        price = Number(numericMatch[1]);
+                    }
+                }
+            }
 
-        const parts = [make, model, year].filter(p => p);
-        const car_details = parts.length > 0 ? parts.join(' - ') : '';
-
-        const plate_text = extract('رقم اللوحة');
-        const service_type = extract('نوع الخدمة');
-        const priceStr = extract('السعر');
-        const price = priceStr ? Number(priceStr.replace(/[^0-9.]/g, '')) : undefined;
+            // Search for a phone number in the entire text
+            // Matches common formats like 05xxxxxxxx or +966xxxxxxxx
+            const phoneRegex = /(?:\+?966|0)?5\d{8}\b/;
+            const phoneMatch = text.match(phoneRegex);
+            if (phoneMatch) {
+                client_phone = phoneMatch[0];
+            }
+            
+            // The user requested NOT to fill notes automatically for this format
+            notes = '';
+        } else {
+            // Traditional format
+            const make = extract('الشركة');
+            const model = extract('الموديل');
+            const year = extract('سنة الصنع');
+            const parts = [make, model, year].filter(p => p);
+            car_details = parts.length > 0 ? parts.join(' - ') : '';
+            
+            const priceStr = extract('السعر');
+            if (priceStr) {
+                price = Number(arabicToEnglishNumerals(priceStr).replace(/[^0-9.]/g, ''));
+            }
+            notes = cleanText;
+        }
 
         return {
-            client_name,
-            client_phone,
+            client_name: client_name || undefined,
+            client_phone: client_phone || undefined,
             car_details,
-            plate_text,
-            service_type,
             price,
-            notes: text
+            notes: notes.trim()
         };
     }, []);
 
@@ -1748,8 +1791,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchAllPaperArchiveRequests,
         fetchRequests,
         isCreatingRequest,
-        setIsCreatingRequest,
-        sendWhatsAppMessage
+        setIsCreatingRequest
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -45,10 +45,15 @@ import CalendarCheckIcon from './icons/CalendarCheckIcon';
 import UploadIcon from './icons/UploadIcon';
 import ChevronUpIcon from './icons/ChevronUpIcon';
 import FolderOpenIcon from './icons/FolderOpenIcon';
+import UsersIcon from './icons/UsersIcon';
+import ClipboardCheckIcon from './icons/ClipboardCheckIcon';
+import BarChartIcon from './icons/BarChartIcon';
+import ShieldCheckIcon from './icons/ShieldCheckIcon';
+import DatabaseIcon from './icons/DatabaseIcon';
 
 
 interface IconProps {
-  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'chevron-left' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan';
+  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'chevron-left' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan' | 'users' | 'clipboard-check' | 'bar-chart' | 'shield-check' | 'database';
   className?: string;
 }
 
@@ -146,6 +151,16 @@ const Icon: React.FC<IconProps> = ({ name, className }) => {
         return <UploadIcon className={className} />;
     case 'folder-open':
         return <FolderOpenIcon className={className} />;
+    case 'users':
+        return <UsersIcon className={className} />;
+    case 'clipboard-check':
+        return <ClipboardCheckIcon className={className} />;
+    case 'bar-chart':
+        return <BarChartIcon className={className} />;
+    case 'shield-check':
+        return <ShieldCheckIcon className={className} />;
+    case 'database':
+        return <DatabaseIcon className={className} />;
     default:
       return null;
   }

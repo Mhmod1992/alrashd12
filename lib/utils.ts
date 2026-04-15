@@ -191,3 +191,41 @@ export const base64ToFile = (base64String: string, filename: string): File => {
     }
     return new File([u8arr], filename, { type: mime });
 };
+
+export const arabicToEnglishNumerals = (str: string): string => {
+    if (!str) return '';
+    const arabicNumerals = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
+    let result = str;
+    for (let i = 0; i < 10; i++) {
+        result = result.replace(arabicNumerals[i], i.toString());
+    }
+    return result;
+};
+
+export const parseWhatsAppMessage = (rawMessage: string) => {
+    if (!rawMessage) return { cleanMessage: '', source: null, replyTo: null };
+  
+    let cleanMessage = rawMessage;
+    let source = null;
+    let replyTo = null;
+  
+    const sourceRegex = /📌\s*\[المصدر:\s*(.*?)\]/;
+    const sourceMatch = rawMessage.match(sourceRegex);
+    if (sourceMatch) {
+      source = sourceMatch[1].trim();
+      cleanMessage = cleanMessage.replace(sourceMatch[0], '');
+    }
+  
+    const replyRegex = /💬\s*\[رداً\s*على:\s*(.*?)\]/;
+    const replyMatch = rawMessage.match(replyRegex);
+    if (replyMatch) {
+      replyTo = replyMatch[1].trim();
+      cleanMessage = cleanMessage.replace(replyMatch[0], '');
+    }
+  
+    return {
+      cleanMessage: cleanMessage.trim(),
+      source: source?.replace(/"/g, ''),
+      replyTo
+    };
+};
