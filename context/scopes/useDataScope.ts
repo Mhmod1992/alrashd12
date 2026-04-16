@@ -312,13 +312,18 @@ export const useDataScope = (
         return data;
     }, [ensureEntitiesLoaded]);
 
-    const fetchRequestsByDateRange = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
+    const fetchRequestsByDateRange = useCallback(async (startDate: string, endDate: string, paymentType?: PaymentType): Promise<InspectionRequest[]> => {
         // Added 'attached_files' to select list
-        const { data, error } = await supabase.from('inspection_requests')
+        let query = supabase.from('inspection_requests')
             .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps')
             .gte('created_at', startDate)
-            .lte('created_at', endDate)
-            .order('created_at', { ascending: false });
+            .lte('created_at', endDate);
+        
+        if (paymentType) {
+            query = query.eq('payment_type', paymentType);
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false });
         if (error) {
             addNotification({ title: 'خطأ', message: 'فشل تحميل الطلبات حسب التاريخ.', type: 'error' });
             return [];
@@ -327,7 +332,7 @@ export const useDataScope = (
         return data || [];
     }, [addNotification, ensureEntitiesLoaded]);
 
-    const fetchRequestsCount = useCallback(async (startDate?: string, endDate?: string): Promise<number> => {
+    const fetchRequestsCount = useCallback(async (startDate?: string, endDate?: string, paymentType?: PaymentType): Promise<number> => {
         let query = supabase.from('inspection_requests').select('*', { count: 'exact', head: true });
         
         if (startDate) {
@@ -335,6 +340,9 @@ export const useDataScope = (
         }
         if (endDate) {
             query = query.lte('created_at', endDate);
+        }
+        if (paymentType) {
+            query = query.eq('payment_type', paymentType);
         }
 
         const { count, error } = await query;

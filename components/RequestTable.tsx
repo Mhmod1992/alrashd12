@@ -47,6 +47,9 @@ interface RequestTableProps {
   searchTokens?: string[];
   highlightedRequestId?: string | null;
   triggerHighlight?: (id: string) => void;
+  paymentFilter?: PaymentType | 'الكل';
+  setPaymentFilter?: (filter: PaymentType | 'الكل') => void;
+  availablePaymentTypes?: PaymentType[];
 }
 
 const HighlightText: React.FC<{ text: string | number | undefined | null, tokens?: string[] }> = ({ text, tokens }) => {
@@ -119,12 +122,20 @@ const RequestTable: React.FC<RequestTableProps> = ({
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
   title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
   onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh,
-  isLoading, onLoadMore, hasMore, isLoadingMore, searchTokens, highlightedRequestId, triggerHighlight
+  isLoading, onLoadMore, hasMore, isLoadingMore, searchTokens, highlightedRequestId, triggerHighlight,
+  paymentFilter: externalPaymentFilter,
+  setPaymentFilter: externalSetPaymentFilter,
+  availablePaymentTypes: externalAvailablePaymentTypes
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
     deleteRequest, addNotification, can, updateRequest, createActivityLog
   } = useAppContext();
+
+  const [internalPaymentFilter, setInternalPaymentFilter] = useState<PaymentType | 'الكل'>('الكل');
+
+  const paymentFilter = externalPaymentFilter !== undefined ? externalPaymentFilter : internalPaymentFilter;
+  const setPaymentFilter = externalSetPaymentFilter !== undefined ? externalSetPaymentFilter : setInternalPaymentFilter;
   const design = settings.design || 'aero';
   const isWaitingTable = title === 'طلبات بانتظار الدفع';
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -210,15 +221,14 @@ const RequestTable: React.FC<RequestTableProps> = ({
     return Array.from(expanded).filter(t => t.trim().length > 0).sort((a, b) => b.length - a.length);
   }, [searchTokens, carMakes, carModels, settings?.plateCharacters]);
 
-  const [paymentFilter, setPaymentFilter] = useState<PaymentType | 'الكل'>('الكل');
-
   const availablePaymentTypes = useMemo(() => {
+      if (externalAvailablePaymentTypes) return externalAvailablePaymentTypes;
       const types = new Set<PaymentType>();
       requests.forEach(req => {
           if (req.payment_type) types.add(req.payment_type);
       });
       return Array.from(types);
-  }, [requests]);
+  }, [requests, externalAvailablePaymentTypes]);
 
   const displayedRequests = useMemo(() => {
       return requests.filter(req => {

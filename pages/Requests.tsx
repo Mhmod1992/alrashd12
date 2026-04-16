@@ -73,6 +73,7 @@ const Requests: React.FC = () => {
     const [waitingSearchTerm, setWaitingSearchTerm] = useSessionStorage('requests_waiting_search', '');
     const [statusFilter, setStatusFilter] = useSessionStorage<RequestStatus | 'الكل' | 'active'>('requests_status_filter', 'الكل');
     const [employeeFilter, setEmployeeFilter] = useSessionStorage<string>('requests_employee_filter', 'الكل');
+    const [paymentFilter, setPaymentFilter] = useSessionStorage<PaymentType | 'الكل'>('requests_payment_filter', 'الكل');
 
     // Date Filter State
     const [dateFilter, setDateFilter] = useSessionStorage<'today' | 'all' | 'yesterday' | 'month' | 'range'>('requests_date_filter', 'today');
@@ -373,12 +374,13 @@ const Requests: React.FC = () => {
                 end = e.toISOString();
             }
 
-            const count = await fetchRequestsCount(start, end);
+            const pType = paymentFilter === 'الكل' ? undefined : paymentFilter;
+            const count = await fetchRequestsCount(start, end, pType);
             setDbTotalCount(count);
         };
 
         fetchCount();
-    }, [dateFilter, rangeStartDate, rangeEndDate, fetchRequestsCount, requests.length]);
+    }, [dateFilter, rangeStartDate, rangeEndDate, paymentFilter, fetchRequestsCount, requests.length]);
 
     const [isSearching, setIsSearching] = useState(false);
 
@@ -387,6 +389,7 @@ const Requests: React.FC = () => {
         setComprehensiveQuery('');
         setStatusFilter('الكل');
         setEmployeeFilter('الكل');
+        setPaymentFilter('الكل');
         setRangeStartDate('');
         setRangeEndDate('');
         setDateFilter('today'); 
@@ -500,15 +503,17 @@ const Requests: React.FC = () => {
     }, [executeSearch, setRequestNumberQuery, setComprehensiveQuery, setDateFilter]);
 
     // --- SERVER SIDE DATE FETCHING LOGIC ---
-    const executeDateFetch = useCallback(async (start: string, end: string) => {
-        setIsFetchingDateRange(true);
-        setServerFetchedData(null);
+    const executeDateFetch = useCallback(async (start: string, end: string, paymentType?: PaymentType, isSilent = false) => {
+        if (!isSilent) {
+            setIsFetchingDateRange(true);
+            setServerFetchedData(null);
+        }
         clearSearchedRequests();
         setRequestNumberQuery('');
         setComprehensiveQuery('');
 
         try {
-            const data = await fetchRequestsByDateRange(start, end);
+            const data = await fetchRequestsByDateRange(start, end, paymentType);
             setServerFetchedData(data);
         } catch (error) {
             console.error("Date fetch failed", error);
@@ -518,7 +523,12 @@ const Requests: React.FC = () => {
         }
     }, [fetchRequestsByDateRange, clearSearchedRequests, addNotification]);
 
+    const lastDateFilter = useRef(dateFilter);
+
     useEffect(() => {
+        const isDateChanged = lastDateFilter.current !== dateFilter;
+        lastDateFilter.current = dateFilter;
+
         // Custom Date Logic: Day starts at 4 AM
         const now = new Date();
         const currentHour = now.getHours();
@@ -531,16 +541,23 @@ const Requests: React.FC = () => {
         let start = new Date(now);
         let end = new Date(now);
 
-        if (dateFilter === 'all') {
+        // Case: No date filter AND no payment filter -> use local paginated data
+        if (dateFilter === 'all' && paymentFilter === 'الكل') {
             setServerFetchedData(null); 
             return;
         }
 
+        // Case: Custom range is handled by handleApplyCustomRange
         if (dateFilter === 'range') {
             return;
         }
 
-        if (dateFilter === 'today') {
+        if (dateFilter === 'all' && paymentFilter !== 'الكل') {
+            // Fetch ALL history for this payment type
+            start = new Date('2000-01-01');
+            end = new Date();
+            end.setFullYear(end.getFullYear() + 1); // Way into the future
+        } else if (dateFilter === 'today') {
             start.setHours(0, 0, 0, 0);
             end.setHours(23, 59, 59, 999);
         } else if (dateFilter === 'yesterday') {
@@ -553,9 +570,10 @@ const Requests: React.FC = () => {
             end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
         }
 
-        executeDateFetch(start.toISOString(), end.toISOString());
+        const pType = paymentFilter === 'الكل' ? undefined : paymentFilter;
+        executeDateFetch(start.toISOString(), end.toISOString(), pType, !isDateChanged);
 
-    }, [dateFilter]); // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dateFilter, paymentFilter]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
     const handleApplyCustomRange = () => {
         if (!rangeStartDate || !rangeEndDate) return;
@@ -563,7 +581,8 @@ const Requests: React.FC = () => {
         start.setHours(0, 0, 0, 0);
         const end = new Date(rangeEndDate);
         end.setHours(23, 59, 59, 999);
-        executeDateFetch(start.toISOString(), end.toISOString());
+        setPaymentFilter('الكل');
+        executeDateFetch(start.toISOString(), end.toISOString(), undefined);
     };
 
     const handleOpenUpdateModal = (request: InspectionRequest) => {
@@ -728,7 +747,7 @@ const Requests: React.FC = () => {
             return;
         }
         setDisplayLimit(10);
-    }, [dateFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm]);
+    }, [dateFilter, paymentFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm]);
 
     const { dataToDisplay, waitingPaymentRequests, carsWithHistory } = useMemo(() => {
         let sourceData: InspectionRequest[];
@@ -860,7 +879,10 @@ const Requests: React.FC = () => {
 
     const DateFilterButton: React.FC<{ filter: 'all' | 'today' | 'yesterday' | 'month' | 'range'; label: string }> = ({ filter, label }) => (
         <button
-            onClick={() => setDateFilter(filter)}
+            onClick={() => {
+                setDateFilter(filter);
+                setPaymentFilter('الكل');
+            }}
             className={`flex-1 md:flex-1 min-w-[80px] md:min-w-0 text-center font-bold py-2 px-3 rounded-lg transition-all duration-200 text-xs sm:text-sm whitespace-nowrap ${dateFilter === filter ? activeFilterClasses : inactiveFilterClasses}`}
         >
             {label}
@@ -873,11 +895,8 @@ const Requests: React.FC = () => {
     }, [paymentRequest, employees]);
 
     const paginatedDataToDisplay = useMemo(() => {
-        if (dateFilter === 'today') {
-            return dataToDisplay;
-        }
         return dataToDisplay.slice(0, displayLimit);
-    }, [dataToDisplay, displayLimit, dateFilter]);
+    }, [dataToDisplay, displayLimit]);
 
     const handleLoadMore = useCallback(() => {
         if (displayLimit < dataToDisplay.length && !isPaginatingLocal) {
@@ -1326,7 +1345,7 @@ const Requests: React.FC = () => {
                 </div>
             )}
 
-            {!isFetchingDateRange && (
+            {(serverFetchedData || !isFetchingDateRange) && (
                 <>
                     <RequestTable
                         requests={paginatedDataToDisplay}
@@ -1347,13 +1366,16 @@ const Requests: React.FC = () => {
                         carsWithHistory={combinedCarsWithHistory}
                         onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
                         onRefresh={fetchRequests}
-                        isLoading={isSearching}
+                        isLoading={isSearching || isFetchingDateRange}
                         onLoadMore={handleLoadMore}
-                        hasMore={dateFilter !== 'today' && (isLoadMoreVisible || displayLimit < dataToDisplay.length)}
+                        hasMore={(isLoadMoreVisible || displayLimit < dataToDisplay.length)}
                         isLoadingMore={isLoadingMore || isPaginatingLocal}
                         searchTokens={searchedRequests ? (requestNumberQuery || comprehensiveQuery).toLowerCase().split(/\s+/).filter(t => t.length > 0) : undefined}
                         highlightedRequestId={selectedRequestId}
                         triggerHighlight={triggerHighlight}
+                        paymentFilter={paymentFilter}
+                        setPaymentFilter={setPaymentFilter}
+                        availablePaymentTypes={[PaymentType.Cash, PaymentType.Card, PaymentType.Transfer, PaymentType.Unpaid, PaymentType.Split]}
                     />
                 </>
             )}
