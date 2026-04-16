@@ -148,7 +148,7 @@ const EmployeeLeaderboard: React.FC<{ data: { name: string; revenue: number; rol
     const maxRevenue = Math.max(...data.map(d => d.revenue), 1);
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-full flex flex-col">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-[400px] flex flex-col">
             <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
                 <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
                     <UsersIcon className="w-4 h-4 text-blue-500" />
@@ -185,7 +185,7 @@ const RecentTransactions: React.FC<{ transactions: any[], isLoading: boolean }> 
     if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-full flex flex-col">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-[400px] flex flex-col">
              <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
                 <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
                     <DollarSignIcon className="w-4 h-4 text-emerald-500" />
@@ -225,7 +225,7 @@ const RecentActivity: React.FC<{ logs: ActivityLog[], isLoading: boolean }> = ({
     if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-full flex flex-col">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-[400px] flex flex-col">
              <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
                 <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
                     <Icon name="history" className="w-4 h-4 text-blue-500" />
@@ -269,7 +269,7 @@ const RecentActivity: React.FC<{ logs: ActivityLog[], isLoading: boolean }> = ({
 };
 
 const Dashboard: React.FC = () => {
-  const { authUser, fetchServerFinancials, employees, cars, carMakes, carModels, requests } = useAppContext();
+  const { authUser, fetchServerFinancials, employees, cars, carMakes, carModels, requests, reservations, systemLogs } = useAppContext();
   const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [stats, setStats] = useState<FinancialStats | null>(() => {
       const cached = localStorage.getItem('dashboard_main_stats_cache');
@@ -542,21 +542,45 @@ const Dashboard: React.FC = () => {
   }, [stats, employees]);
 
   const activityLogs = useMemo(() => {
-      // Flatten activity logs from all requests
       const allLogs: ActivityLog[] = [];
+      
+      // Add application-level events from requests
       requests.forEach(req => {
-          if (req.activity_log && Array.isArray(req.activity_log)) {
-              req.activity_log.forEach(log => {
-                  allLogs.push({
-                      ...log,
-                      link_id: req.id // Ensure we have a link to the request
-                  });
-              });
-          }
+          const employee = employees.find(e => e.id === req.employee_id);
+          allLogs.push({
+              id: `create-${req.id}`,
+              timestamp: req.created_at || new Date().toISOString(),
+              employeeId: req.employee_id || '',
+              employeeName: employee?.name || 'النظام',
+              action: 'إنشاء طلب',
+              details: `تم إنشاء طلب جديد رقم #${req.request_number}`,
+              link_id: req.id
+          });
       });
+
+      // Add reservations (bookings)
+      reservations.forEach(res => {
+          allLogs.push({
+              id: `res-${res.id}`,
+              timestamp: res.created_at || new Date().toISOString(),
+              employeeId: '',
+              employeeName: res.client_name || 'عميل',
+              action: 'حجز جديد',
+              details: `تم إنشاء حجز جديد للعميل ${res.client_name}`,
+              link_id: res.id
+          });
+      });
+
+      // Add systemLogs (which contains deletes, transfers, etc. from the current session)
+      if (systemLogs && Array.isArray(systemLogs)) {
+          systemLogs.forEach(log => {
+              allLogs.push(log);
+          });
+      }
+
       // Sort by timestamp descending
       return allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 20);
-  }, [requests]);
+  }, [requests, reservations, systemLogs]);
 
   const pieData = stats?.paymentDistribution || [];
 
@@ -699,6 +723,38 @@ const Dashboard: React.FC = () => {
       return data;
   }, [monthStats, prevMonthStats]);
 
+  const monthlyRevenueComparisonData = useMemo(() => {
+      if (!monthStats || !prevMonthStats) return [];
+      
+      const data: any[] = [];
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      
+      for (let i = 1; i <= daysInCurrentMonth; i++) {
+          data.push({
+              day: i,
+              current: 0,
+              previous: 0
+          });
+      }
+
+      monthStats.filteredRequests.forEach(req => {
+          const day = new Date(req.created_at).getDate();
+          const dayData = data.find(d => d.day === day);
+          if (dayData) dayData.current += req.price;
+      });
+
+      prevMonthStats.filteredRequests.forEach(req => {
+          const day = new Date(req.created_at).getDate();
+          const dayData = data.find(d => d.day === day);
+          if (dayData) dayData.previous += req.price;
+      });
+
+      return data;
+  }, [monthStats, prevMonthStats]);
+
   // Date Formatting for Welcome
   const today = new Date();
   const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -779,63 +835,43 @@ const Dashboard: React.FC = () => {
                  <div className="flex justify-between items-center mb-4 relative z-10">
                      <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
                          <Icon name="history" className="w-4 h-4 text-blue-500" />
-                         تدفق الإيرادات اليومي
+                         مقارنة الإيرادات (الشهر الحالي مقابل السابق)
                      </h3>
                      <span className="text-[10px] text-slate-400">{lastRefreshed.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                  </div>
-                 <div className="w-full h-64 relative z-10">
-                     {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                         <ResponsiveContainer width="100%" height="100%">
-                             <ComposedChart data={dailyRevenueChartData} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
-                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.5} />
-                                 <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                                 <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
-                                 <RechartsTooltip 
-                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
-                                     formatter={(value: number, name: string) => [`${value.toLocaleString()} ريال`, name]}
-                                 />
-                                 <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
-                                 
-                                 {/* Highlight Today */}
-                                 <ReferenceLine 
-                                    x="اليوم"
-                                    stroke="#94a3b8" 
-                                    strokeDasharray="3 3"
-                                 />
-
-                                 {/* Layer 2: Background Shadow (Past Month) */}
-                                 <Area 
-                                    type="monotone" 
-                                    dataKey="lastMonth" 
-                                    name="الشهر الماضي" 
-                                    fill="#f1f5f9" 
-                                    stroke="#cbd5e1" 
-                                    strokeWidth={2}
-                                    strokeDasharray="4 4"
-                                    animationDuration={1500}
-                                 />
-
-                                 {/* Layer 1: Actual Revenue (Bars) */}
-                                 <Bar 
-                                    dataKey="actual" 
-                                    name="الواقع" 
-                                    fill="#3b82f6" 
-                                    radius={[4, 4, 0, 0]} 
-                                    barSize={20}
-                                    animationDuration={1500}
-                                 />
-
-                                 {/* Layer 3: Forecast Revenue (Bars) */}
-                                 <Bar 
-                                    dataKey="forecast" 
-                                    name="توقعات الأداء" 
-                                    fill="#93c5fd" 
-                                    radius={[4, 4, 0, 0]} 
-                                    barSize={20}
-                                    animationDuration={1500}
-                                 />
-                             </ComposedChart>
-                         </ResponsiveContainer>
+                 <div className="w-full h-64 relative z-10 overflow-x-auto pb-2 custom-scrollbar">
+                     {isLoading ? <Skeleton className="min-w-[700px] w-full h-full rounded-lg" /> : (
+                         <div className="min-w-[700px] w-full h-full">
+                             <ResponsiveContainer width="100%" height="100%">
+                                 <BarChart data={monthlyRevenueComparisonData} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
+                                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.5} />
+                                     <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} label={{ value: 'يوم', position: 'insideBottomRight', offset: -5, fontSize: 10 }} />
+                                     <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                                     <RechartsTooltip 
+                                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
+                                         formatter={(value: number, name: string) => [`${value.toLocaleString()} ريال`, name]}
+                                         labelFormatter={(label) => `يوم ${label}`}
+                                     />
+                                     <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
+                                     
+                                     <Bar 
+                                        dataKey="current" 
+                                        name="الشهر الحالي" 
+                                        fill="#3b82f6" 
+                                        radius={[4, 4, 0, 0]} 
+                                        animationDuration={1500}
+                                     />
+ 
+                                     <Bar 
+                                        dataKey="previous" 
+                                        name="الشهر الماضي" 
+                                        fill="#cbd5e1" 
+                                        radius={[4, 4, 0, 0]} 
+                                        animationDuration={1500}
+                                     />
+                                 </BarChart>
+                             </ResponsiveContainer>
+                         </div>
                      )}
                  </div>
              </div>
@@ -860,36 +896,41 @@ const Dashboard: React.FC = () => {
                  </div>
                  <div className="w-full h-72 relative z-10">
                      {isCarLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                         <ResponsiveContainer width="100%" height="100%">
-                             <BarChart 
-                               layout="vertical"
-                               data={carInspectionFrequencyData} 
-                               margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                             >
-                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#e2e8f0" opacity={0.5} />
-                                 <XAxis type="number" hide />
-                                 <YAxis 
-                                    dataKey="make" 
-                                    type="category"
-                                    hide
-                                  />
-                                 <RechartsTooltip 
-                                     cursor={{fill: 'rgba(59, 130, 246, 0.05)'}}
-                                     contentStyle={{ 
-                                       borderRadius: '12px', 
-                                       border: 'none', 
-                                       boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                                       backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                       padding: '8px 12px'
-                                     }}
-                                     formatter={(value: number) => [`${value} سيارة`, 'إجمالي الفحوصات']}
-                                 />
-                                 <Bar dataKey="count" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={24}>
-                                     <LabelList dataKey="make" position="center" fill="#ffffff" fontSize={11} fontWeight="bold" />
-                                     <LabelList dataKey="count" position="insideRight" fill="#ffffff" fontSize={11} fontWeight="bold" dx={-10} />
-                                 </Bar>
-                             </BarChart>
-                         </ResponsiveContainer>
+                         <div className="w-full h-full overflow-y-auto pr-2" dir="rtl">
+                             <div className="flex flex-col gap-3 pb-2">
+                                 {(() => {
+                                     const maxCount = Math.max(...carInspectionFrequencyData.map(d => d.count), 1);
+                                     return carInspectionFrequencyData.map((item, index) => {
+                                         const percentage = (item.count / maxCount) * 100;
+                                         return (
+                                             <div key={index} className="relative w-full min-h-[44px] bg-slate-50 rounded-lg overflow-hidden flex items-center group border border-slate-100">
+                                                 {/* Background Bar */}
+                                                 <div 
+                                                     className="absolute left-0 top-0 bottom-0 bg-blue-100/80 transition-all duration-500 ease-out group-hover:bg-blue-200/80"
+                                                     style={{ width: `${percentage}%` }}
+                                                 ></div>
+                                                 
+                                                 {/* Content */}
+                                                 <div className="relative z-10 flex justify-between items-center w-full px-4 py-2 gap-3">
+                                                     {/* Count (Right) */}
+                                                     <div className="font-bold text-blue-700 w-12 text-right shrink-0">
+                                                         {item.count}
+                                                     </div>
+                                                     
+                                                     {/* Make (Center) */}
+                                                     <div className="flex-1 text-center text-slate-700 font-medium leading-relaxed break-words">
+                                                         {item.make}
+                                                     </div>
+                                                     
+                                                     {/* Spacer (Left) to ensure perfect centering */}
+                                                     <div className="w-12 shrink-0"></div>
+                                                 </div>
+                                             </div>
+                                         );
+                                     });
+                                 })()}
+                             </div>
+                         </div>
                      )}
                  </div>
              </div>
@@ -903,24 +944,26 @@ const Dashboard: React.FC = () => {
                     مقارنة عدد السيارات (الشهر الحالي مقابل السابق)
                 </h3>
             </div>
-            <div className="w-full h-72">
-                {isLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={monthlyRequestsComparisonData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
-                            <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                            <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                            <RechartsTooltip 
-                                cursor={{fill: 'rgba(148, 163, 184, 0.1)'}}
-                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                formatter={(value: number, name: string) => [`${value} سيارة`, name]}
-                                labelFormatter={(label) => `يوم ${label}`}
-                            />
-                            <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
-                            <Bar dataKey="current" name="الشهر الحالي" fill="#10b981" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="previous" name="الشهر الماضي" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
+            <div className="w-full h-72 overflow-x-auto pb-2 custom-scrollbar">
+                {isLoading ? <Skeleton className="min-w-[700px] w-full h-full rounded-lg" /> : (
+                    <div className="min-w-[700px] w-full h-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={monthlyRequestsComparisonData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
+                                <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                                <RechartsTooltip 
+                                    cursor={{fill: 'rgba(148, 163, 184, 0.1)'}}
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    formatter={(value: number, name: string) => [`${value} سيارة`, name]}
+                                    labelFormatter={(label) => `يوم ${label}`}
+                                />
+                                <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
+                                <Bar dataKey="current" name="الشهر الحالي" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="previous" name="الشهر الماضي" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 )}
             </div>
         </div>

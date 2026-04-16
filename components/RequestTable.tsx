@@ -721,7 +721,12 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                 </td>
                                 {!isWaitingTable &&
                                     <td className="px-6 py-4">
-                                        <div className="text-slate-700 dark:text-slate-300">{new Date(request.created_at).toLocaleDateString('en-GB')}</div>
+                                        <div className="text-slate-700 dark:text-slate-300">
+                                            {new Date(request.created_at).toLocaleDateString('en-GB')}
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
+                                            {new Date(request.created_at).toLocaleDateString('ar-SA', { weekday: 'long' })}
+                                        </div>
                                         <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                                             {new Date(request.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                         </div>

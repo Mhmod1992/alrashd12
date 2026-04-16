@@ -400,70 +400,145 @@ const Financials: React.FC = () => {
                 );
             case 'transfers':
                 const transfers = stats.filteredRequests.filter(r => r.payment_type === PaymentType.Transfer);
+                const transferRevenues = stats.filteredRevenues.filter(r => r.payment_method === PaymentType.Transfer);
                 return (
-                    <div>
-                        <ModalHeaderSummary title="إجمالي التحويلات" amount={stats.transferTotal.toLocaleString('en-US')} colorClass="text-amber-600" />
-                        <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
-                            <table className="w-full text-sm text-right">
-                                <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">رقم الطلب</th><th className="px-4 py-3 border-b dark:border-slate-600">العميل</th><th className="px-4 py-3 border-b dark:border-slate-600">ملاحظة التحويل</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
-                                <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
-                                    {transfers.map(req => (
-                                        <tr key={req.id}>
-                                            <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 font-numeric">#{req.request_number}</td>
-                                            <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-200">{getClientName(req.client_id)}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{req.payment_note || '-'}</td>
-                                            <td className="px-4 py-3 font-bold text-amber-600 font-numeric">{req.price.toLocaleString('en-US')}</td>
-                                        </tr>
-                                    ))}
-                                    {transfers.length === 0 && <tr><td colSpan={4} className="text-center py-6 text-slate-400">لا توجد تحويلات</td></tr>}
-                                </tbody>
-                            </table>
+                    <div className="space-y-6">
+                        <div>
+                            <ModalHeaderSummary title="إجمالي التحويلات" amount={stats.transferTotal.toLocaleString('en-US')} colorClass="text-amber-600" />
+                            <h4 className="text-sm font-bold text-slate-500 mb-3 px-1 uppercase tracking-wider">طلبات الفحص (تحويل)</h4>
+                            <div className="overflow-x-auto border rounded-lg dark:border-slate-700 mb-6">
+                                <table className="w-full text-sm text-right">
+                                    <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">رقم الطلب</th><th className="px-4 py-3 border-b dark:border-slate-600">العميل</th><th className="px-4 py-3 border-b dark:border-slate-600">ملاحظة التحويل</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
+                                    <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
+                                        {transfers.map(req => (
+                                            <tr key={req.id}>
+                                                <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 font-numeric">#{req.request_number}</td>
+                                                <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-200">{getClientName(req.client_id)}</td>
+                                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{req.payment_note || '-'}</td>
+                                                <td className="px-4 py-3 font-bold text-amber-600 font-numeric">{req.price.toLocaleString('en-US')}</td>
+                                            </tr>
+                                        ))}
+                                        {transfers.length === 0 && <tr><td colSpan={4} className="text-center py-6 text-slate-400">لا توجد تحويلات في الطلبات</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {transferRevenues.length > 0 && (
+                                <>
+                                    <h4 className="text-sm font-bold text-slate-500 mb-3 px-1 uppercase tracking-wider">إيرادات أخرى (تحويل)</h4>
+                                    <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
+                                        <table className="w-full text-sm text-right">
+                                            <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th><th className="px-4 py-3 border-b dark:border-slate-600">الفئة</th><th className="px-4 py-3 border-b dark:border-slate-600">الوصف</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
+                                            <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
+                                                {transferRevenues.map(rev => (
+                                                    <tr key={rev.id}>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300 font-numeric">{new Date(rev.date).toLocaleDateString('en-GB')}</td>
+                                                        <td className="px-4 py-3"><span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs font-bold text-green-700 dark:text-green-200">{rev.category}</span></td>
+                                                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{rev.description}</td>
+                                                        <td className="px-4 py-3 font-bold text-green-600 font-numeric">{rev.amount.toLocaleString('en-US')}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 );
             case 'card':
                 const cards = stats.filteredRequests.filter(r => r.payment_type === PaymentType.Card || (r.payment_type === PaymentType.Split && r.split_payment_details?.card));
+                const cardRevenues = stats.filteredRevenues.filter(r => r.payment_method === PaymentType.Card);
                 return (
-                    <div>
-                        <ModalHeaderSummary title="إجمالي الشبكة" amount={stats.cardTotal.toLocaleString('en-US')} colorClass="text-blue-600" />
-                        <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
-                            <table className="w-full text-sm text-right">
-                                <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">رقم الطلب</th><th className="px-4 py-3 border-b dark:border-slate-600">العميل</th><th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
-                                <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
-                                    {cards.map(req => (
-                                        <tr key={req.id}>
-                                            <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 font-numeric">#{req.request_number}</td>
-                                            <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{getClientName(req.client_id)}</td>
-                                            <td className="px-4 py-3 text-slate-500 font-numeric">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
-                                            <td className="px-4 py-3 font-bold text-blue-600 font-numeric">{(req.payment_type === PaymentType.Split ? req.split_payment_details?.card : req.price)?.toLocaleString('en-US')}</td>
-                                        </tr>
-                                    ))}
-                                    {cards.length === 0 && <tr><td colSpan={4} className="text-center py-6 text-slate-400">لا توجد عمليات شبكة</td></tr>}
-                                </tbody>
-                            </table>
+                    <div className="space-y-6">
+                        <div>
+                            <ModalHeaderSummary title="إجمالي الشبكة" amount={stats.cardTotal.toLocaleString('en-US')} colorClass="text-blue-600" />
+                            <h4 className="text-sm font-bold text-slate-500 mb-3 px-1 uppercase tracking-wider">طلبات الفحص (شبكة)</h4>
+                            <div className="overflow-x-auto border rounded-lg dark:border-slate-700 mb-6">
+                                <table className="w-full text-sm text-right">
+                                    <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">رقم الطلب</th><th className="px-4 py-3 border-b dark:border-slate-600">العميل</th><th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
+                                    <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
+                                        {cards.map(req => (
+                                            <tr key={req.id}>
+                                                <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 font-numeric">#{req.request_number}</td>
+                                                <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{getClientName(req.client_id)}</td>
+                                                <td className="px-4 py-3 text-slate-500 font-numeric">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
+                                                <td className="px-4 py-3 font-bold text-blue-600 font-numeric">{(req.payment_type === PaymentType.Split ? req.split_payment_details?.card : req.price)?.toLocaleString('en-US')}</td>
+                                            </tr>
+                                        ))}
+                                        {cards.length === 0 && <tr><td colSpan={4} className="text-center py-6 text-slate-400">لا توجد عمليات شبكة في الطلبات</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {cardRevenues.length > 0 && (
+                                <>
+                                    <h4 className="text-sm font-bold text-slate-500 mb-3 px-1 uppercase tracking-wider">إيرادات أخرى (شبكة)</h4>
+                                    <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
+                                        <table className="w-full text-sm text-right">
+                                            <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th><th className="px-4 py-3 border-b dark:border-slate-600">الفئة</th><th className="px-4 py-3 border-b dark:border-slate-600">الوصف</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
+                                            <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
+                                                {cardRevenues.map(rev => (
+                                                    <tr key={rev.id}>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300 font-numeric">{new Date(rev.date).toLocaleDateString('en-GB')}</td>
+                                                        <td className="px-4 py-3"><span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs font-bold text-green-700 dark:text-green-200">{rev.category}</span></td>
+                                                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{rev.description}</td>
+                                                        <td className="px-4 py-3 font-bold text-green-600 font-numeric">{rev.amount.toLocaleString('en-US')}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 );
             case 'cash':
                 const cashReqs = stats.filteredRequests.filter(r => r.payment_type === PaymentType.Cash || (r.payment_type === PaymentType.Split && r.split_payment_details?.cash));
+                const cashRevenues = stats.filteredRevenues.filter(r => r.payment_method === PaymentType.Cash);
                 return (
-                    <div>
-                        <ModalHeaderSummary title="إجمالي النقد (المقبوض)" amount={stats.cashTotal.toLocaleString('en-US')} colorClass="text-emerald-600" />
-                        <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
-                            <table className="w-full text-sm text-right">
-                                <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">رقم الطلب</th><th className="px-4 py-3 border-b dark:border-slate-600">العميل</th><th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
-                                <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
-                                    {cashReqs.map(req => (
-                                        <tr key={req.id}>
-                                            <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 font-numeric">#{req.request_number}</td>
-                                            <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{getClientName(req.client_id)}</td>
-                                            <td className="px-4 py-3 text-slate-500 font-numeric">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
-                                            <td className="px-4 py-3 font-bold text-emerald-600 font-numeric">{(req.payment_type === PaymentType.Split ? req.split_payment_details?.cash : req.price)?.toLocaleString('en-US')}</td>
-                                        </tr>
-                                    ))}
-                                    {cashReqs.length === 0 && <tr><td colSpan={4} className="text-center py-6 text-slate-400">لا توجد عمليات نقدية</td></tr>}
-                                </tbody>
-                            </table>
+                    <div className="space-y-6">
+                        <div>
+                            <ModalHeaderSummary title="إجمالي النقد (المقبوض)" amount={stats.cashTotal.toLocaleString('en-US')} colorClass="text-emerald-600" />
+                            <h4 className="text-sm font-bold text-slate-500 mb-3 px-1 uppercase tracking-wider">طلبات الفحص (نقدي)</h4>
+                            <div className="overflow-x-auto border rounded-lg dark:border-slate-700 mb-6">
+                                <table className="w-full text-sm text-right">
+                                    <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">رقم الطلب</th><th className="px-4 py-3 border-b dark:border-slate-600">العميل</th><th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
+                                    <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
+                                        {cashReqs.map(req => (
+                                            <tr key={req.id}>
+                                                <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 font-numeric">#{req.request_number}</td>
+                                                <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{getClientName(req.client_id)}</td>
+                                                <td className="px-4 py-3 text-slate-500 font-numeric">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
+                                                <td className="px-4 py-3 font-bold text-emerald-600 font-numeric">{(req.payment_type === PaymentType.Split ? req.split_payment_details?.cash : req.price)?.toLocaleString('en-US')}</td>
+                                            </tr>
+                                        ))}
+                                        {cashReqs.length === 0 && <tr><td colSpan={4} className="text-center py-6 text-slate-400">لا توجد عمليات نقدية في الطلبات</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {cashRevenues.length > 0 && (
+                                <>
+                                    <h4 className="text-sm font-bold text-slate-500 mb-3 px-1 uppercase tracking-wider">إيرادات أخرى (نقدي)</h4>
+                                    <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
+                                        <table className="w-full text-sm text-right">
+                                            <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase"><tr><th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th><th className="px-4 py-3 border-b dark:border-slate-600">الفئة</th><th className="px-4 py-3 border-b dark:border-slate-600">الوصف</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr></thead>
+                                            <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
+                                                {cashRevenues.map(rev => (
+                                                    <tr key={rev.id}>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300 font-numeric">{new Date(rev.date).toLocaleDateString('en-GB')}</td>
+                                                        <td className="px-4 py-3"><span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs font-bold text-green-700 dark:text-green-200">{rev.category}</span></td>
+                                                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{rev.description}</td>
+                                                        <td className="px-4 py-3 font-bold text-green-600 font-numeric">{rev.amount.toLocaleString('en-US')}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 );

@@ -28,15 +28,29 @@ import { Skeleton } from '../components/Skeleton';
 import { uuidv4, timeAgo } from '../lib/utils';
 
 const StatBlock: React.FC<{ title: string; count: number; icon: React.ReactElement<{ className?: string }>; color: string; }> = ({ title, count, icon, color }) => (
-    <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm flex items-center gap-4 border-l-4" style={{ borderColor: color }}>
-        <div className="p-3 rounded-full bg-slate-100 dark:bg-slate-700/50" style={{ color }}>
-            {/* Clone element to merge classes instead of overwriting */}
-            {React.cloneElement(icon, { className: `w-6 h-6 ${icon.props.className || ''}` })}
+    <div 
+        className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 border border-slate-100 dark:border-slate-700 relative overflow-hidden group transition-all hover:shadow-md"
+    >
+        {/* Subtle background tint */}
+        <div 
+            className="absolute inset-0 opacity-[0.03] dark:opacity-[0.07] pointer-events-none" 
+            style={{ backgroundColor: color }}
+        />
+        
+        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 flex-shrink-0" style={{ color }}>
+            {React.cloneElement(icon, { className: `w-5 h-5 sm:w-6 sm:h-6 ${icon.props.className || ''}` })}
         </div>
-        <div>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
-            <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{count}</p>
+        
+        <div className="text-center sm:text-right">
+            <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">{title}</p>
+            <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 font-numeric">{count}</p>
         </div>
+
+        {/* Decorative accent line */}
+        <div 
+            className="absolute bottom-0 right-0 h-1 w-1/3 rounded-tl-full opacity-50"
+            style={{ backgroundColor: color }}
+        />
     </div>
 );
 
@@ -847,7 +861,7 @@ const Requests: React.FC = () => {
     const DateFilterButton: React.FC<{ filter: 'all' | 'today' | 'yesterday' | 'month' | 'range'; label: string }> = ({ filter, label }) => (
         <button
             onClick={() => setDateFilter(filter)}
-            className={`flex-1 text-center font-semibold py-2 px-3 rounded-lg transition-all duration-200 text-sm ${dateFilter === filter ? activeFilterClasses : inactiveFilterClasses}`}
+            className={`flex-1 md:flex-1 min-w-[80px] md:min-w-0 text-center font-bold py-2 px-3 rounded-lg transition-all duration-200 text-xs sm:text-sm whitespace-nowrap ${dateFilter === filter ? activeFilterClasses : inactiveFilterClasses}`}
         >
             {label}
         </button>
@@ -1128,12 +1142,14 @@ const Requests: React.FC = () => {
 
                 <div className={`${searchedRequests === null ? 'border-t border-slate-200 dark:border-slate-700 pt-4' : ''} space-y-4`}>
                     {searchedRequests === null && (
-                        <div className="flex items-center bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner w-full">
-                            <DateFilterButton filter="today" label="اليوم" />
-                            <DateFilterButton filter="yesterday" label="أمس" />
-                            <DateFilterButton filter="month" label="هذا الشهر" />
-                            <DateFilterButton filter="range" label="نطاق محدد" />
-                            <DateFilterButton filter="all" label="الكل" />
+                        <div className="bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner w-full overflow-x-auto no-scrollbar">
+                            <div className="flex items-center min-w-max md:min-w-0 md:w-full gap-1">
+                                <DateFilterButton filter="today" label="اليوم" />
+                                <DateFilterButton filter="yesterday" label="أمس" />
+                                <DateFilterButton filter="month" label="هذا الشهر" />
+                                <DateFilterButton filter="range" label="نطاق محدد" />
+                                <DateFilterButton filter="all" label="الكل" />
+                            </div>
                         </div>
                     )}
 
@@ -1251,7 +1267,7 @@ const Requests: React.FC = () => {
                                     </span>
                                 </div>
                                 <button
-                                    onClick={clearSearchedRequests}
+                                    onClick={clearFilters}
                                     className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 border-2 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-full hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/40 dark:hover:text-red-400 dark:hover:border-red-800 transition-all shadow-md group"
                                     title="مسح نتائج البحث"
                                 >
