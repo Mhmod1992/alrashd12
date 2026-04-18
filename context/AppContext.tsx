@@ -123,8 +123,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
         fetchRequestsCount,
+        fetchClientsCount,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
+        fetchClientsWithDebtIds,
         searchReservations
     } = useDataScope(authUser);
 
@@ -172,7 +174,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const {
         theme, toggleTheme, themeSetting, setThemeSetting,
         settingsPage, setSettingsPage, settings, setSettings, updateSettings,
-        globalSettings, setGlobalSettings, isSetupComplete, setIsSetupComplete
+        globalSettings, setGlobalSettings, isSetupComplete, setIsSetupComplete,
+        isSettingsLoaded, setIsSettingsLoaded, isInitializedFromCache
     } = useThemeScope(authUser, setAuthUser, can);
     
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
@@ -456,6 +459,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                     setIsSetupComplete(isComplete);
                     setSettings(finalGlobalSettings);
+
+                    // Cache branding for immediate load next time
+                    localStorage.setItem('app_branding_cache', JSON.stringify({
+                        appName: finalGlobalSettings.appName,
+                        logoUrl: finalGlobalSettings.logoUrl
+                    }));
+                    setIsSettingsLoaded(true);
 
                     // Sync to localStorage if DB confirms it
                     if (dbSetupComplete && !localSetupComplete) {
@@ -1016,12 +1026,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [];
     }, [ensureEntitiesLoaded]);
 
-    const fetchClientRequestsFiltered = useCallback(async (clientId: string, startDate?: string, endDate?: string, onlyUnpaid?: boolean): Promise<InspectionRequest[]> => {
+    const fetchClientRequestsFiltered = useCallback(async (clientId: string, startDate?: string, endDate?: string, onlyUnpaid?: boolean, limit?: number): Promise<InspectionRequest[]> => {
         let query = supabase.from('inspection_requests').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
         if (startDate) query = query.gte('created_at', startDate);
         if (endDate) query = query.lte('created_at', endDate);
         if (onlyUnpaid) query = query.or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT} `);
-        if (!startDate && !endDate && !onlyUnpaid) query = query.limit(100);
+        
+        if (limit) {
+            query = query.limit(limit);
+        } else if (!startDate && !endDate && !onlyUnpaid) {
+            query = query.limit(100);
+        }
 
         const { data, error } = await query;
         if (error) {
@@ -1037,19 +1052,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const getClientFinancialSummary = useCallback(async (clientId: string) => {
         try {
-            const { data, error } = await supabase
+            // Fetch all unpaid/pending requests for Aged Debt calculation
+            const { data: unpaid, error: unpaidError } = await supabase
                 .from('inspection_requests')
-                .select('id, request_number, price, status, payment_type, created_at, car_id')
+                .select('*')
                 .eq('client_id', clientId)
-                .or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT} `)
+                .or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT}`)
                 .neq('status', 'cancelled')
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            return data || [];
+            if (unpaidError) throw unpaidError;
+
+            // Fetch total paid amount and total revenue
+            // Since we don't have a reliable server-side sum() without RPC, 
+            // and usually clients have manageable number of requests, we fetch prices.
+            // For extreme cases, we might need an RPC later.
+            const { data: allPrices, error: priceError } = await supabase
+                .from('inspection_requests')
+                .select('price, payment_type, status')
+                .eq('client_id', clientId)
+                .neq('status', 'cancelled');
+
+            if (priceError) throw priceError;
+
+            const totalRevenue = (allPrices || []).reduce((acc, curr) => acc + (curr.price || 0), 0);
+            const totalPaid = (allPrices || [])
+                .filter(req => req.payment_type !== PaymentType.Unpaid && req.status !== RequestStatus.WAITING_PAYMENT)
+                .reduce((acc, curr) => acc + (curr.price || 0), 0);
+
+            // Get last visit separately to ensure we have it even if it's paid
+            const { data: lastReq } = await supabase
+                .from('inspection_requests')
+                .select('*')
+                .eq('client_id', clientId)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            return {
+                unpaidRequests: unpaid || [],
+                totalRevenue,
+                totalPaid,
+                lastRequest: (lastReq && lastReq.length > 0) ? lastReq[0] : null
+            };
         } catch (e) {
             console.error("Failed to fetch client financial summary", e);
-            return [];
+            return {
+                unpaidRequests: [],
+                totalRevenue: 0,
+                totalPaid: 0,
+                lastRequest: null
+            };
         }
     }, []);
 
@@ -1075,9 +1127,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return data || [];
     }, []);
 
-    const searchClientsPage = useCallback(async (pageNumber: number, pageSize: number, query?: string) => {
+    const searchClientsPage = useCallback(async (pageNumber: number, pageSize: number, query?: string, onlyIds?: string[]) => {
         let queryBuilder = supabase.from('clients').select('*, inspection_requests(count)', { count: 'exact' });
         if (query) queryBuilder = queryBuilder.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
+        if (onlyIds) queryBuilder = queryBuilder.in('id', onlyIds);
         const { data, count } = await queryBuilder.range((pageNumber - 1) * pageSize, pageNumber * pageSize - 1);
         return { data: data || [], count: count || 0 };
     }, []);
@@ -1772,7 +1825,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         currentDbUsage, currentStorageUsage, newRequestSuccessState, showNewRequestSuccessModal, hideNewRequestSuccessModal,
         whatsappSuccessModal, showWhatsAppSuccessModal, hideWhatsAppSuccessModal,
         shouldPrintDraft, setShouldPrintDraft, fetchFinancialsData, createActivityLog, systemLogs, searchClients,
-        searchCars, searchClientsPage, fetchClientRequests, fetchClientRequestsFiltered, getClientFinancialSummary, fetchRequestsByCarId, fetchRequestByRequestNumber, fetchRequestByRequestNumberForAuth, fetchRequestsByDateRange, fetchRequestsCount,
+        searchCars, searchClientsPage, fetchClientRequests, fetchClientRequestsFiltered, getClientFinancialSummary, fetchRequestsByCarId, fetchRequestByRequestNumber, fetchRequestByRequestNumberForAuth, fetchRequestsByDateRange, fetchRequestsCount, fetchClientsCount,
         checkCarHistory,
         unreadMessagesCount, fetchInboxMessages, fetchSentMessages, sendInternalMessage, markMessageAsRead,
         whatsappMessages, unreadWhatsAppCount, markWhatsAppAsRead, deleteWhatsAppMessages, sendWhatsAppMessage,
@@ -1789,9 +1842,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         lastRemoteDeleteId, setLastRemoteDeleteId,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
+        fetchClientsWithDebtIds,
         fetchRequests,
         isCreatingRequest,
-        setIsCreatingRequest
+        setIsCreatingRequest,
+        isSettingsLoaded,
+        setIsSettingsLoaded,
+        isInitializedFromCache
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

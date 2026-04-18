@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Icon from '../components/Icon';
 import UserCircleIcon from '../components/icons/UserCircleIcon';
+import CustomDatePicker from '../components/CustomDatePicker';
 import BriefcaseIcon from '../components/icons/BriefcaseIcon';
 import TrendingUpIcon from '../components/icons/TrendingUpIcon';
 import { Employee, Technician, InspectionRequest, PayrollItem, PayrollDraft, Expense } from '../types';
@@ -627,20 +628,22 @@ const PerformanceView: React.FC = () => {
                     <div className="flex flex-col md:flex-row gap-4 items-end animate-fade-in">
                         <div className="w-full md:w-auto">
                             <label className="block text-xs font-bold text-slate-500 mb-1">من تاريخ</label>
-                            <input 
-                                type="date" 
+                            <CustomDatePicker 
                                 value={startDate} 
-                                onChange={e => setStartDate(e.target.value)} 
+                                onChange={setStartDate} 
                                 className="bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="من تاريخ"
+                                maxDate={endDate ? new Date(endDate) : undefined}
                             />
                         </div>
                         <div className="w-full md:w-auto">
                             <label className="block text-xs font-bold text-slate-500 mb-1">إلى تاريخ</label>
-                            <input 
-                                type="date" 
+                            <CustomDatePicker 
                                 value={endDate} 
-                                onChange={e => setEndDate(e.target.value)} 
+                                onChange={setEndDate} 
                                 className="bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="إلى تاريخ"
+                                minDate={startDate ? new Date(startDate) : undefined}
                             />
                         </div>
                     </div>

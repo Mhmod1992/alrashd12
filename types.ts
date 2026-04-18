@@ -116,7 +116,28 @@ export interface Client {
   name: string;
   phone: string;
   is_vip?: boolean;
+  is_system_default?: boolean;
   inspection_requests?: [{ count: number }];
+  loyalty_points?: number;
+  total_spent?: number;
+  email?: string;
+  address?: string;
+  created_at?: string;
+  notes?: string;
+}
+
+export interface AgedDebt {
+    current: number; // < 15 days
+    late: number;    // 15-45 days
+    critical: number; // > 45 days
+    total: number;
+}
+
+export enum LoyaltyTier {
+    BRONZE = 'BRONZE',
+    SILVER = 'SILVER',
+    GOLD = 'GOLD',
+    PLATINUM = 'PLATINUM'
 }
 
 export interface CarMake {

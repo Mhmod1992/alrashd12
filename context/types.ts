@@ -4,7 +4,7 @@ import {
     Broker, CustomFindingCategory, PredefinedFinding, Settings, Employee,
     SettingsPage, Notification, ConfirmModalState, Permission, Page, AppNotification,
     Expense, Revenue, ActivityLog, InternalMessage, Technician,
-    FinancialStats, ArchiveResult, PayrollDraft, Reservation, WhatsAppMessage
+    FinancialStats, ArchiveResult, PayrollDraft, Reservation, WhatsAppMessage, PaymentType
 } from '../types';
 
 export interface CarHistoryResult {
@@ -170,18 +170,25 @@ export interface AppContextType {
     searchCars: (query: string) => Promise<Car[]>;
     searchCarMakes: (query: string) => Promise<CarMake[]>;
     searchCarModels: (makeId: string, query: string) => Promise<CarModel[]>;
-    searchClientsPage: (page: number, pageSize: number, query?: string) => Promise<{ data: Client[], count: number }>;
+    searchClientsPage: (page: number, pageSize: number, query?: string, onlyIds?: string[]) => Promise<{ data: Client[], count: number }>;
     fetchClientRequests: (clientId: string) => Promise<InspectionRequest[]>;
-    fetchClientRequestsFiltered: (clientId: string, startDate?: string, endDate?: string, onlyUnpaid?: boolean) => Promise<InspectionRequest[]>;
-    getClientFinancialSummary: (clientId: string) => Promise<any[]>;
+    fetchClientRequestsFiltered: (clientId: string, startDate?: string, endDate?: string, onlyUnpaid?: boolean, limit?: number) => Promise<InspectionRequest[]>;
+    getClientFinancialSummary: (clientId: string) => Promise<{
+        unpaidRequests: InspectionRequest[];
+        totalRevenue: number;
+        totalPaid: number;
+        lastRequest: InspectionRequest | null;
+    }>;
     fetchRequestsByCarId: (carId: string) => Promise<InspectionRequest[]>;
     fetchRequests: () => Promise<void>;
     fetchRequestByRequestNumber: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestByRequestNumberForAuth: (reqNum: number) => Promise<InspectionRequest | null>;
-    fetchRequestsByDateRange: (startDate: string, endDate: string) => Promise<InspectionRequest[]>;
-    fetchRequestsCount: (startDate?: string, endDate?: string) => Promise<number>;
+    fetchRequestsByDateRange: (startDate: string, endDate: string, paymentType?: PaymentType) => Promise<InspectionRequest[]>;
+    fetchRequestsCount: (startDate?: string, endDate?: string, paymentType?: PaymentType) => Promise<number>;
+    fetchClientsCount: () => Promise<number>;
     fetchPaperArchiveRequests: (startDate: string, endDate: string) => Promise<InspectionRequest[]>;
     fetchAllPaperArchiveRequests: () => Promise<InspectionRequest[]>;
+    fetchClientsWithDebtIds: () => Promise<string[]>;
     checkCarHistory: (plateNumber: string | null, vin: string | null) => Promise<CarHistoryResult | null>;
     isOnline: boolean;
     realtimeStatus: 'connected' | 'connecting' | 'disconnected';
@@ -237,4 +244,7 @@ export interface AppContextType {
     // --- Remote Deletion Event ---
     lastRemoteDeleteId: string | null;
     setLastRemoteDeleteId: (id: string | null) => void;
+    isSettingsLoaded: boolean;
+    setIsSettingsLoaded: (loaded: boolean) => void;
+    isInitializedFromCache: boolean;
 }

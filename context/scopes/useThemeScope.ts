@@ -1,10 +1,24 @@
 // FIX: Import React to make types like React.Dispatch available.
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { Settings, SettingsPage, Employee, Permission, UserPreferences } from '../../types';
 import { mockSettings } from '../../data/mockData';
 import { supabase } from '../../lib/supabaseClient';
 import { PERSONAL_SETTING_KEYS } from '../constants';
+
+const CACHED_SETTINGS_KEY = 'app_branding_cache';
+
+const getInitialSettings = (): Settings => {
+    try {
+        const cached = localStorage.getItem(CACHED_SETTINGS_KEY);
+        if (cached) {
+            return { ...mockSettings, ...JSON.parse(cached) };
+        }
+    } catch (e) {
+        console.warn("Failed to parse cached settings", e);
+    }
+    return mockSettings;
+};
 
 export const useThemeScope = (
     authUser: Employee | null,
@@ -17,9 +31,12 @@ export const useThemeScope = (
 
     // Settings
     const [settingsPage, setSettingsPage] = useLocalStorage<SettingsPage>('currentSettingsPage', 'general');
-    const [globalSettings, setGlobalSettings] = useState<Settings>(mockSettings);
-    const [settings, setSettings] = useState<Settings>(mockSettings);
+    const initialSettings = useMemo(() => getInitialSettings(), []);
+    const [globalSettings, setGlobalSettings] = useState<Settings>(initialSettings);
+    const [settings, setSettings] = useState<Settings>(initialSettings);
     const [isSetupComplete, setIsSetupComplete] = useState(true);
+    const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
+    const isInitializedFromCache = useMemo(() => !!localStorage.getItem(CACHED_SETTINGS_KEY), []);
 
     useEffect(() => {
         const root = window.document.documentElement;
@@ -72,6 +89,15 @@ export const useThemeScope = (
         if (Object.keys(globalUpdates).length > 0 && can('manage_settings_general')) {
             const updatedGlobalSettings = { ...globalSettings, ...globalUpdates };
             setGlobalSettings(updatedGlobalSettings);
+            
+            // Sync cache if branding changed
+            if ('appName' in globalUpdates || 'logoUrl' in globalUpdates) {
+                localStorage.setItem(CACHED_SETTINGS_KEY, JSON.stringify({
+                    appName: updatedGlobalSettings.appName,
+                    logoUrl: updatedGlobalSettings.logoUrl
+                }));
+            }
+            
             await supabase.from('app_settings').upsert({ id: 1, settings_data: updatedGlobalSettings });
         }
     }, [globalSettings, authUser, can, setAuthUser]);
@@ -89,6 +115,9 @@ export const useThemeScope = (
         globalSettings,
         setGlobalSettings,
         isSetupComplete,
-        setIsSetupComplete
+        setIsSetupComplete,
+        isSettingsLoaded,
+        setIsSettingsLoaded,
+        isInitializedFromCache
     };
 };

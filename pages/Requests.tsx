@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import useSessionStorage from '../hooks/useSessionStorage';
 import { useAppContext } from '../context/AppContext';
 import { supabase } from '../lib/supabaseClient';
-import { InspectionRequest, RequestStatus, Car, PaymentType, Reservation } from '../types';
+import { InspectionRequest, RequestStatus, Car, PaymentType, Reservation, Employee } from '../types';
 import Button from '../components/Button';
 import PlusIcon from '../components/icons/PlusIcon';
 import SearchIcon from '../components/icons/SearchIcon';
@@ -13,6 +13,7 @@ import ExportRequestsModal from '../components/ExportRequestsModal';
 import ImportRequestsModal from '../components/ImportRequestsModal';
 import NewRequestForm from '../components/NewRequestForm';
 import RequestTable from '../components/RequestTable';
+import CustomDatePicker from '../components/CustomDatePicker';
 import FileTextIcon from '../components/icons/FileTextIcon';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
@@ -22,6 +23,7 @@ import HistoryIcon from '../components/icons/HistoryIcon';
 import CreditCardIcon from '../components/icons/CreditCardIcon';
 import WhatsappIcon from '../components/icons/WhatsappIcon';
 import DollarSignIcon from '../components/icons/DollarSignIcon';
+import AlertTriangleIcon from '../components/icons/AlertTriangleIcon';
 import Icon from '../components/Icon';
 import InAppScannerModal from '../components/InAppScannerModal';
 import { Skeleton } from '../components/Skeleton';
@@ -74,6 +76,8 @@ const Requests: React.FC = () => {
     const [statusFilter, setStatusFilter] = useSessionStorage<RequestStatus | 'الكل' | 'active'>('requests_status_filter', 'الكل');
     const [employeeFilter, setEmployeeFilter] = useSessionStorage<string>('requests_employee_filter', 'الكل');
     const [paymentFilter, setPaymentFilter] = useSessionStorage<PaymentType | 'الكل'>('requests_payment_filter', 'الكل');
+
+    const isSearchActive = (requestNumberQuery.trim().length > 0 || comprehensiveQuery.trim().length > 0);
 
     // Date Filter State
     const [dateFilter, setDateFilter] = useSessionStorage<'today' | 'all' | 'yesterday' | 'month' | 'range'>('requests_date_filter', 'today');
@@ -266,6 +270,12 @@ const Requests: React.FC = () => {
             updateReservationStatus(prefilledReservation.id, 'converted');
             setPrefilledReservation(null);
         }
+
+        // Event-Based Reset: If a new request is created while in another date filter, force reset to today so it appears in the table immediately
+        if (dateFilter !== 'today') {
+            setDateFilter('today');
+            setPaymentFilter('الكل');
+        }
     };
 
     // --- REAL-TIME SYNC FOR FILTERED DATA ---
@@ -411,6 +421,32 @@ const Requests: React.FC = () => {
             window.history.replaceState(window.history.state, '', newUrl);
         }
     }, [setRequestNumberQuery, setComprehensiveQuery, setStatusFilter, setEmployeeFilter, setRangeStartDate, setRangeEndDate, setDateFilter, clearSearchedRequests]);
+
+    // --- Sticky Filter Trap (Auto-Reset on Inactivity) ---
+    useEffect(() => {
+        if (dateFilter === 'today' || isSearchActive) return;
+
+        let inactivityTimer: number;
+
+        const handleActivity = () => {
+            window.clearTimeout(inactivityTimer);
+            inactivityTimer = window.setTimeout(() => {
+                setDateFilter('today');
+                setPaymentFilter('الكل');
+            }, 5 * 60 * 1000); // 5 minutes of inactivity
+        };
+
+        const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+        
+        events.forEach(event => document.addEventListener(event, handleActivity));
+        handleActivity(); // Start timer immediately
+
+        return () => {
+            window.clearTimeout(inactivityTimer);
+            events.forEach(event => document.removeEventListener(event, handleActivity));
+        };
+    }, [dateFilter, isSearchActive, setDateFilter, setPaymentFilter]);
+
 
     // --- SEARCH EXECUTION ---
     const executeSearch = useCallback((orderIdTerm?: string, generalTerm?: string) => {
@@ -889,6 +925,36 @@ const Requests: React.FC = () => {
         </button>
     );
 
+    const sortedEmployeesForFilter = useMemo(() => {
+        if (!employees || employees.length === 0) return { activeEmps: [], inactiveEmps: [] };
+        
+        // Use all available requests in context to establish recent activity heuristics
+        const employeeCounts: Record<string, number> = {};
+        requests.forEach(req => {
+            if (req.employee_id) {
+                employeeCounts[req.employee_id] = (employeeCounts[req.employee_id] || 0) + 1;
+            }
+        });
+
+        // Separate active and inactive
+        const activeEmps = employees.filter(emp => emp.is_active !== false);
+        const inactiveEmps = employees.filter(emp => emp.is_active === false);
+
+        // Sort descending by count
+        const sortByCountDesc = (a: Employee, b: Employee) => {
+            const countA = employeeCounts[a.id] || 0;
+            const countB = employeeCounts[b.id] || 0;
+            if (countB !== countA) return countB - countA;
+            return a.name.localeCompare(b.name, 'ar');
+        };
+
+        // Create new arrays before sorting to avoid mutating state directly
+        const sortedActive = [...activeEmps].sort(sortByCountDesc);
+        const sortedInactive = [...inactiveEmps].sort(sortByCountDesc);
+
+        return { activeEmps: sortedActive, inactiveEmps: sortedInactive };
+    }, [employees, requests]);
+
     const creatorEmployee = useMemo(() => {
         if (!paymentRequest || !employees) return null;
         return employees.find(e => e.id === paymentRequest.employee_id);
@@ -965,181 +1031,183 @@ const Requests: React.FC = () => {
             </div>
 
             {/* The Hybrid Hub: Reservations Accordion */}
-            <div className="mb-6">
-                <button
-                    onClick={() => setIsReservationsAccordionOpen(!isReservationsAccordionOpen)}
-                    className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 shadow-sm border ${
-                        isReservationsAccordionOpen 
-                        ? 'bg-blue-600 text-white border-blue-500' 
-                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-blue-400'
-                    }`}
-                >
-                    <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${isReservationsAccordionOpen ? 'bg-white/20' : 'bg-blue-50 dark:bg-blue-900/30'}`}>
-                            <Icon name="calendar-check" className={`w-5 h-5 ${isReservationsAccordionOpen ? 'text-white' : 'text-blue-600'}`} />
-                        </div>
-                        <span className="font-bold text-lg">حجوزات اليوم الواردة</span>
-                        {todayNewReservationsCount > 0 && (
-                            <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-bounce">
-                                {todayNewReservationsCount}
-                            </span>
-                        )}
-                    </div>
-                    <Icon 
-                        name="chevron-down" 
-                        className={`w-6 h-6 transition-transform duration-300 ${isReservationsAccordionOpen ? 'rotate-180' : ''}`} 
-                    />
-                </button>
-
-                {isReservationsAccordionOpen && (
-                    <div className="mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in-down">
-                        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row gap-4 items-center justify-between bg-slate-50/50 dark:bg-slate-900/20">
-                            <div className="flex items-center bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg shadow-inner w-full md:w-auto">
-                                <button
-                                    onClick={() => setReservationMiniFilter('today')}
-                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'today' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
-                                >
-                                    اليوم
-                                </button>
-                                <button
-                                    onClick={() => setReservationMiniFilter('yesterday')}
-                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'yesterday' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
-                                >
-                                    أمس
-                                </button>
-                                <button
-                                    onClick={() => setReservationMiniFilter('all')}
-                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'all' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
-                                >
-                                    الكل
-                                </button>
+            {!isSearchActive && (
+                <div className="mb-6 animate-fade-in">
+                    <button
+                        onClick={() => setIsReservationsAccordionOpen(!isReservationsAccordionOpen)}
+                        className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 shadow-sm border ${
+                            isReservationsAccordionOpen 
+                            ? 'bg-blue-600 text-white border-blue-500' 
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-blue-400'
+                        }`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${isReservationsAccordionOpen ? 'bg-white/20' : 'bg-blue-50 dark:bg-blue-900/30'}`}>
+                                <Icon name="calendar-check" className={`w-5 h-5 ${isReservationsAccordionOpen ? 'text-white' : 'text-blue-600'}`} />
                             </div>
-
-                            <div className="relative w-full md:w-64">
-                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                    <SearchIcon className="h-4 w-4 text-slate-400" />
+                            <span className="font-bold text-lg">حجوزات اليوم الواردة</span>
+                            {todayNewReservationsCount > 0 && (
+                                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-bounce">
+                                    {todayNewReservationsCount}
                                 </span>
-                                <input
-                                    type="text"
-                                    placeholder="بحث ذكي (رقم، عميل، سيارة، هاتف)..."
-                                    value={reservationMiniSearchTerm}
-                                    onChange={(e) => setReservationMiniSearchTerm(e.target.value)}
-                                    className="block w-full p-2 pl-9 border border-slate-200 dark:border-slate-600 rounded-lg text-xs bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500"
-                                />
-                                {isSearchingReservations && (
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                        <RefreshCwIcon className="w-3 h-3 animate-spin text-blue-500" />
-                                    </div>
-                                )}
-                            </div>
+                            )}
                         </div>
+                        <Icon 
+                            name="chevron-down" 
+                            className={`w-6 h-6 transition-transform duration-300 ${isReservationsAccordionOpen ? 'rotate-180' : ''}`} 
+                        />
+                    </button>
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-right text-sm">
-                                <thead className="bg-slate-50 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-wider">
-                                    <tr>
-                                        <th className="p-3">رقم الحجز</th>
-                                        <th className="p-3">السيارة</th>
-                                        <th className="p-3">العميل</th>
-                                        <th className="p-3">الملاحظات</th>
-                                        <th className="p-3">الحالة</th>
-                                        <th className="p-3 text-center">الإجراء</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                    {filteredMiniReservations.map(res => {
-                                        const isWhatsApp = res.source_text?.toLowerCase().includes('whatsapp') || res.source_text?.includes('واتساب');
-                                        
-                                        return (
-                                            <tr key={res.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors">
-                                                <td className="p-3 font-mono text-xs">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-blue-600 dark:text-blue-400 font-bold">
-                                                            {res.reservation_number ? `#RSV-${String(res.reservation_number).padStart(4, '0')}` : '---'}
-                                                        </span>
-                                                        {isWhatsApp && (
-                                                            <div className="bg-green-100 dark:bg-green-900/30 p-1 rounded-full" title="حجز واتساب">
-                                                                <WhatsappIcon className="w-3 h-3 text-green-600 dark:text-green-400" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="p-3">
-                                                    <div className="font-medium text-slate-700 dark:text-slate-300">
-                                                        {(() => {
-                                                            const make = carMakes.find(m => m.id === res.car_make_id);
-                                                            const model = carModels.find(m => m.id === res.car_model_id);
-                                                            if (make && model) {
-                                                                return `${make.name_en} ${model.name_en}`;
-                                                            }
-                                                            return res.car_details;
-                                                        })()}
-                                                    </div>
-                                                    <div className="text-[10px] text-slate-400 font-mono">{res.plate_text}</div>
-                                                </td>
-                                                <td className="p-3">
-                                                    <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name}</div>
-                                                    <div className="text-[10px] text-slate-500 font-mono">{res.client_phone}</div>
-                                                </td>
-                                                <td className="p-3 max-w-[150px]">
-                                                    {res.notes ? (
-                                                        <div 
-                                                            className="relative overflow-hidden cursor-pointer hover:text-blue-500 transition-colors"
-                                                            onClick={() => setSelectedNote(res.notes || null)}
-                                                        >
-                                                            <div className={`${res.notes.length > 25 ? 'animate-marquee whitespace-nowrap' : ''} text-xs text-slate-600 dark:text-slate-400`}>
-                                                                {res.notes}
-                                                            </div>
+                    {isReservationsAccordionOpen && (
+                        <div className="mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in-down">
+                            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row gap-4 items-center justify-between bg-slate-50/50 dark:bg-slate-900/20">
+                                <div className="flex items-center bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg shadow-inner w-full md:w-auto">
+                                    <button
+                                        onClick={() => setReservationMiniFilter('today')}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'today' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
+                                    >
+                                        اليوم
+                                    </button>
+                                    <button
+                                        onClick={() => setReservationMiniFilter('yesterday')}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'yesterday' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
+                                    >
+                                        أمس
+                                    </button>
+                                    <button
+                                        onClick={() => setReservationMiniFilter('all')}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${reservationMiniFilter === 'all' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500'}`}
+                                    >
+                                        الكل
+                                    </button>
+                                </div>
+
+                                <div className="relative w-full md:w-64">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <SearchIcon className="h-4 w-4 text-slate-400" />
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="بحث ذكي (رقم، عميل، سيارة، هاتف)..."
+                                        value={reservationMiniSearchTerm}
+                                        onChange={(e) => setReservationMiniSearchTerm(e.target.value)}
+                                        className="block w-full p-2 pl-9 border border-slate-200 dark:border-slate-600 rounded-lg text-xs bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    {isSearchingReservations && (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                            <RefreshCwIcon className="w-3 h-3 animate-spin text-blue-500" />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-right text-sm">
+                                    <thead className="bg-slate-50 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-wider">
+                                        <tr>
+                                            <th className="p-3">رقم الحجز</th>
+                                            <th className="p-3">السيارة</th>
+                                            <th className="p-3">العميل</th>
+                                            <th className="p-3">الملاحظات</th>
+                                            <th className="p-3">الحالة</th>
+                                            <th className="p-3 text-center">الإجراء</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                        {filteredMiniReservations.map(res => {
+                                            const isWhatsApp = res.source_text?.toLowerCase().includes('whatsapp') || res.source_text?.includes('واتساب');
+                                            
+                                            return (
+                                                <tr key={res.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors">
+                                                    <td className="p-3 font-mono text-xs">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-blue-600 dark:text-blue-400 font-bold">
+                                                                {res.reservation_number ? `#RSV-${String(res.reservation_number).padStart(4, '0')}` : '---'}
+                                                            </span>
+                                                            {isWhatsApp && (
+                                                                <div className="bg-green-100 dark:bg-green-900/30 p-1 rounded-full" title="حجز واتساب">
+                                                                    <WhatsappIcon className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    ) : (
-                                                        <span className="text-slate-300 dark:text-slate-600 text-xs">-</span>
-                                                    )}
-                                                </td>
-                                                <td className="p-3">
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                        res.status === 'new' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
-                                                        res.status === 'confirmed' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
-                                                        res.status === 'converted' ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400' :
-                                                        'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                                                    }`}>
-                                                        {res.status === 'new' ? 'جديد' : 
-                                                         res.status === 'confirmed' ? 'مؤكد' : 
-                                                         res.status === 'converted' ? 'تم التحويل' : 'ملغي'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-3 text-center">
-                                                    <button
-                                                        onClick={() => handleConvertReservation(res)}
-                                                        disabled={res.status === 'converted'}
-                                                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                                                            res.status === 'converted' 
-                                                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
-                                                            : 'bg-green-500 hover:bg-green-600 text-white'
-                                                        }`}
-                                                    >
-                                                        <Icon name="refresh-cw" className="w-3 h-3" />
-                                                        <span>تحويل</span>
-                                                    </button>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <div className="font-medium text-slate-700 dark:text-slate-300">
+                                                            {(() => {
+                                                                const make = carMakes.find(m => m.id === res.car_make_id);
+                                                                const model = carModels.find(m => m.id === res.car_model_id);
+                                                                if (make && model) {
+                                                                    return `${make.name_en} ${model.name_en}`;
+                                                                }
+                                                                return res.car_details;
+                                                            })()}
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-400 font-mono">{res.plate_text}</div>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <div className="font-bold text-slate-800 dark:text-slate-200">{res.client_name}</div>
+                                                        <div className="text-[10px] text-slate-500 font-mono">{res.client_phone}</div>
+                                                    </td>
+                                                    <td className="p-3 max-w-[150px]">
+                                                        {res.notes ? (
+                                                            <div 
+                                                                className="relative overflow-hidden cursor-pointer hover:text-blue-500 transition-colors"
+                                                                onClick={() => setSelectedNote(res.notes || null)}
+                                                            >
+                                                                <div className={`${res.notes.length > 25 ? 'animate-marquee whitespace-nowrap' : ''} text-xs text-slate-600 dark:text-slate-400`}>
+                                                                    {res.notes}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-300 dark:text-slate-600 text-xs">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                            res.status === 'new' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                                                            res.status === 'confirmed' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
+                                                            res.status === 'converted' ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400' :
+                                                            'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                        }`}>
+                                                            {res.status === 'new' ? 'جديد' : 
+                                                             res.status === 'confirmed' ? 'مؤكد' : 
+                                                             res.status === 'converted' ? 'تم التحويل' : 'ملغي'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3 text-center">
+                                                        <button
+                                                            onClick={() => handleConvertReservation(res)}
+                                                            disabled={res.status === 'converted'}
+                                                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                                                                res.status === 'converted' 
+                                                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                                                                : 'bg-green-500 hover:bg-green-600 text-white'
+                                                            }`}
+                                                        >
+                                                            <Icon name="refresh-cw" className="w-3 h-3" />
+                                                            <span>تحويل</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {filteredMiniReservations.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="p-8 text-center text-slate-400 italic text-xs">
+                                                    {isSearchingReservations ? 'جاري البحث...' : 'لا توجد حجوزات تطابق البحث'}
                                                 </td>
                                             </tr>
-                                        );
-                                    })}
-                                    {filteredMiniReservations.length === 0 && (
-                                        <tr>
-                                            <td colSpan={6} className="p-8 text-center text-slate-400 italic text-xs">
-                                                {isSearchingReservations ? 'جاري البحث...' : 'لا توجد حجوزات تطابق البحث'}
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
+            )}
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4 mb-6 space-y-4 animate-slide-in-down">
-                {searchedRequests === null && (
+                {!isSearchActive && (
                     <>
                         {showStats ? (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
@@ -1159,8 +1227,24 @@ const Requests: React.FC = () => {
                     </>
                 )}
 
-                <div className={`${searchedRequests === null ? 'border-t border-slate-200 dark:border-slate-700 pt-4' : ''} space-y-4`}>
-                    {searchedRequests === null && (
+                <div className={`${!isSearchActive ? 'border-t border-slate-200 dark:border-slate-700 pt-4' : ''} space-y-4`}>
+                    {!isSearchActive && dateFilter !== 'today' && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-400 p-3 rounded-lg flex items-center justify-between shadow-sm animate-fade-in text-sm font-semibold flex-col sm:flex-row gap-3">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangleIcon className="w-5 h-5 flex-shrink-0" />
+                                <span>تنبيه: أنت الآن تعرض طلبات ({
+                                    dateFilter === 'yesterday' ? 'أمس' : 
+                                    dateFilter === 'month' ? 'هذا الشهر' : 
+                                    dateFilter === 'range' ? 'نطاق محدد' : 'الكل'
+                                }). تأكد من العودة إلى طلبات اليوم لاستقبال العمل الجديد.</span>
+                            </div>
+                            <Button size="sm" variant="secondary" className="border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/40 w-full sm:w-auto shrink-0" onClick={() => { setDateFilter('today'); setPaymentFilter('الكل'); }}>
+                                العودة لطلبات اليوم
+                            </Button>
+                        </div>
+                    )}
+
+                    {!isSearchActive && (
                         <div className="bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner w-full overflow-x-auto no-scrollbar">
                             <div className="flex items-center min-w-max md:min-w-0 md:w-full gap-1">
                                 <DateFilterButton filter="today" label="اليوم" />
@@ -1172,15 +1256,27 @@ const Requests: React.FC = () => {
                         </div>
                     )}
 
-                    {searchedRequests === null && dateFilter === 'range' && (
+                    {!isSearchActive && dateFilter === 'range' && (
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end pt-2 animate-fade-in">
                             <div>
                                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">من تاريخ</label>
-                                <input type="date" value={rangeStartDate} onChange={e => setRangeStartDate(e.target.value)} className={formInputClasses.replace('p-3 pl-10', 'p-2.5')} />
+                                <CustomDatePicker 
+                                    value={rangeStartDate} 
+                                    onChange={setRangeStartDate} 
+                                    className={formInputClasses.replace('p-3 pl-10', 'p-2.5')} 
+                                    placeholder="من تاريخ"
+                                    maxDate={rangeEndDate ? new Date(rangeEndDate) : undefined}
+                                />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">إلى تاريخ</label>
-                                <input type="date" value={rangeEndDate} onChange={e => setRangeEndDate(e.target.value)} className={formInputClasses.replace('p-3 pl-10', 'p-2.5')} />
+                                <CustomDatePicker 
+                                    value={rangeEndDate} 
+                                    onChange={setRangeEndDate} 
+                                    className={formInputClasses.replace('p-3 pl-10', 'p-2.5')} 
+                                    placeholder="إلى تاريخ"
+                                    minDate={rangeStartDate ? new Date(rangeStartDate) : undefined}
+                                />
                             </div>
                             <div className="md:col-span-2">
                                 <Button onClick={handleApplyCustomRange} disabled={isFetchingDateRange || !rangeStartDate || !rangeEndDate}>
@@ -1191,7 +1287,7 @@ const Requests: React.FC = () => {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                        <div className={`relative ${searchedRequests === null ? 'md:col-span-2' : 'md:col-span-4'} flex items-center gap-2`}>
+                        <div className={`relative ${!isSearchActive ? 'md:col-span-2' : 'md:col-span-4'} flex items-center gap-2`}>
                             <div className="relative flex-grow">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                                     <SearchIcon className="h-5 w-5 text-slate-400" />
@@ -1225,7 +1321,7 @@ const Requests: React.FC = () => {
                             </Button>
                         </div>
                         
-                        {searchedRequests === null && (
+                        {!isSearchActive && (
                             <>
                                 <div className="relative">
                                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -1253,7 +1349,24 @@ const Requests: React.FC = () => {
                                         className={`${searchInputClasses} appearance-none`}
                                     >
                                         <option value="الكل">فلترة حسب الموظف (الكل)</option>
-                                        {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                                        
+                                        {sortedEmployeesForFilter.activeEmps.length > 0 && (
+                                            <optgroup label="الموظفين النشطين">
+                                                {sortedEmployeesForFilter.activeEmps.map(emp => (
+                                                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                                ))}
+                                            </optgroup>
+                                        )}
+                                        
+                                        {sortedEmployeesForFilter.inactiveEmps.length > 0 && (
+                                            <optgroup label="الموظفين غير النشطين">
+                                                {sortedEmployeesForFilter.inactiveEmps.map(emp => (
+                                                    <option key={emp.id} value={emp.id}>
+                                                        {emp.name} (غير نشط)
+                                                    </option>
+                                                ))}
+                                            </optgroup>
+                                        )}
                                     </select>
                                 </div>
                                 {isAnyFilterActive && (
@@ -1267,7 +1380,7 @@ const Requests: React.FC = () => {
                     </div>
 
                     {/* Search Active Status Banner */}
-                    {searchedRequests !== null && (
+                    {isSearchActive && (
                         <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 p-3 rounded-xl animate-fade-in shadow-sm">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 animate-pulse">
@@ -1282,7 +1395,7 @@ const Requests: React.FC = () => {
                                 <div className="flex flex-col items-center justify-center px-4 border-r-2 border-blue-200 dark:border-blue-800">
                                     <span className="text-[10px] font-bold text-blue-500/80 dark:text-blue-400/80 uppercase tracking-tighter">إجمالي النتائج</span>
                                     <span className="text-2xl font-black text-blue-700 dark:text-blue-300 leading-tight">
-                                        {searchedRequests.length}
+                                        {searchedRequests ? searchedRequests.length : '...'}
                                     </span>
                                 </div>
                                 <button

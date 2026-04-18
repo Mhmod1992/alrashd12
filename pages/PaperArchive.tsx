@@ -18,6 +18,7 @@ import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import { formatBytes } from '../lib/utils';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
+import CustomDatePicker from '../components/CustomDatePicker';
 import InAppScannerModal from '../components/InAppScannerModal';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
@@ -752,11 +753,23 @@ const PaperArchive: React.FC = () => {
                 <div className="mb-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap gap-4 items-end animate-fade-in">
                     <div>
                         <label className="block text-xs font-bold text-slate-500 mb-1">من تاريخ</label>
-                        <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:border-slate-600 text-sm" />
+                        <CustomDatePicker 
+                            value={customStartDate} 
+                            onChange={setCustomStartDate} 
+                            className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:border-slate-600 text-sm w-full"
+                            placeholder="من تاريخ"
+                            maxDate={customEndDate ? new Date(customEndDate) : undefined}
+                        />
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-500 mb-1">إلى تاريخ</label>
-                        <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:border-slate-600 text-sm" />
+                        <CustomDatePicker 
+                            value={customEndDate} 
+                            onChange={setCustomEndDate} 
+                            className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:border-slate-600 text-sm w-full"
+                            placeholder="إلى تاريخ"
+                            minDate={customStartDate ? new Date(customStartDate) : undefined}
+                        />
                     </div>
                     <Button onClick={loadData} disabled={isLoading || !customStartDate || !customEndDate} size="sm">تطبيق</Button>
                 </div>

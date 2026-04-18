@@ -4,6 +4,7 @@ import { InspectionRequest, CarMake, CarModel, InspectionType, CustomFindingCate
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
 import Modal from '../../components/Modal';
+import CustomDatePicker from '../../components/CustomDatePicker';
 import { formatBytes, uuidv4 } from '../../lib/utils';
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
 import DownloadIcon from '../../components/icons/DownloadIcon';
@@ -538,13 +539,25 @@ const DatabaseManagement: React.FC = () => {
                                 </div>
                             ) : (
                                  <div className="grid grid-cols-2 gap-2">
-                                    <div>
+                                    <div className="w-full">
                                         <label className="block text-[10px] font-bold text-slate-500 mb-1.5">من</label>
-                                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none" />
+                                        <CustomDatePicker 
+                                            value={startDate} 
+                                            onChange={setStartDate} 
+                                            className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none" 
+                                            placeholder="من تاريخ"
+                                            maxDate={endDate ? new Date(endDate) : undefined}
+                                        />
                                     </div>
-                                    <div>
+                                    <div className="w-full">
                                         <label className="block text-[10px] font-bold text-slate-500 mb-1.5">إلى</label>
-                                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none" />
+                                        <CustomDatePicker 
+                                            value={endDate} 
+                                            onChange={setEndDate} 
+                                            className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none" 
+                                            placeholder="إلى تاريخ"
+                                            minDate={startDate ? new Date(startDate) : undefined}
+                                        />
                                     </div>
                                 </div>
                             )}

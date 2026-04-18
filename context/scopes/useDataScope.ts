@@ -5,7 +5,7 @@ import {
     InspectionRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Employee,
     Notification, AppNotification, Expense, Revenue, ActivityLog,
-    InternalMessage, Technician, Reservation, RequestStatus, Page, WhatsAppMessage
+    InternalMessage, Technician, Reservation, RequestStatus, Page, WhatsAppMessage, PaymentType
 } from '../../types';
 import { REQUESTS_PAGE_SIZE } from '../constants';
 import { uuidv4 } from '../../lib/utils'; // You might need to adjust this import path if utils is elsewhere
@@ -355,6 +355,17 @@ export const useDataScope = (
         return count || 0;
     }, []);
 
+    const fetchClientsCount = useCallback(async (): Promise<number> => {
+        const { count, error } = await supabase.from('clients').select('*', { count: 'exact', head: true });
+        
+        if (error) {
+            console.error("Error fetching clients count:", error);
+            return 0;
+        }
+        
+        return count || 0;
+    }, []);
+
     const fetchPaperArchiveRequests = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
         // Fetches ALL requests in a date range for archiving purposes
         const { data, error } = await supabase.from('inspection_requests')
@@ -420,6 +431,20 @@ export const useDataScope = (
         return requestsData;
     }, [addNotification, ensureEntitiesLoaded]);
 
+    const fetchClientsWithDebtIds = useCallback(async (): Promise<string[]> => {
+        try {
+            const { data, error } = await supabase
+                .from('inspection_requests')
+                .select('client_id')
+                .eq('payment_type', PaymentType.Unpaid);
+            if (error) throw error;
+            return Array.from(new Set((data || []).map(r => r.client_id)));
+        } catch (error) {
+            console.error("Error fetching debt client IDs:", error);
+            return [];
+        }
+    }, []);
+
     return {
         requests, setRequests,
         requestsOffset, setRequestsOffset,
@@ -462,8 +487,10 @@ export const useDataScope = (
         fetchRequestByRequestNumber,
         fetchRequestsByDateRange,
         fetchRequestsCount,
+        fetchClientsCount,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
+        fetchClientsWithDebtIds,
         searchReservations
     };
 };

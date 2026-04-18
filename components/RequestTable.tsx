@@ -18,6 +18,7 @@ import WhatsappIcon from './icons/WhatsappIcon';
 import Modal from './Modal';
 import SearchIcon from './icons/SearchIcon';
 import UserCheckIcon from './icons/UserCheckIcon';
+import ClientHistoryModal from './ClientHistoryModal';
 
 interface RequestTableProps {
   requests: InspectionRequest[];
@@ -133,6 +134,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
   } = useAppContext();
 
   const [internalPaymentFilter, setInternalPaymentFilter] = useState<PaymentType | 'الكل'>('الكل');
+  const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
 
   const paymentFilter = externalPaymentFilter !== undefined ? externalPaymentFilter : internalPaymentFilter;
   const setPaymentFilter = externalSetPaymentFilter !== undefined ? externalSetPaymentFilter : setInternalPaymentFilter;
@@ -582,7 +584,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                 <thead className="text-xs text-slate-700 uppercase bg-slate-50/90 dark:bg-slate-800/90 dark:text-slate-400 sticky top-0 backdrop-blur-md z-20 shadow-sm">
                     <tr>
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">رقم الطلب</th>
-                        <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">العميل</th>
+                        <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700 min-w-[180px]">العميل</th>
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700 sticky right-0 bg-slate-50/95 dark:bg-slate-800/95 md:static md:bg-transparent z-10 shadow-sm md:shadow-none backdrop-blur-md">السيارة</th>
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">نوع الفحص</th>
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">الحالة</th>
@@ -661,13 +663,25 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                         className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors group/client"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(clientInfo.phone)}`;
-                                            window.open(url, '_blank');
+                                            if (client && !client.is_system_default) {
+                                                setSelectedClientForHistory(client);
+                                            } else {
+                                                const searchKey = client?.is_system_default ? 'عميل عام' : clientInfo.phone;
+                                                const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(searchKey)}`;
+                                                window.open(url, '_blank');
+                                            }
                                         }}
-                                        title="اضغط لعرض سجل طلبات العميل"
+                                        title={client?.is_system_default ? "عرض كل طلبات العميل العام" : "اضغط لعرض سجل طلبات العميل"}
                                     >
-                                        <HighlightText text={clientInfo.name} tokens={expandedSearchTokens} />
-                                        {hasHistory && (
+                                        {client?.is_system_default ? (
+                                            <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-black">
+                                                <span>✨</span>
+                                                <span>عميل عام</span>
+                                            </span>
+                                        ) : (
+                                            <HighlightText text={clientInfo.name} tokens={expandedSearchTokens} />
+                                        )}
+                                        {hasHistory && !client?.is_system_default && (
                                             <span 
                                                 className="inline-flex items-center justify-center p-1 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 opacity-80 group-hover/client:opacity-100 transition-opacity"
                                                 title="عميل سابق (لديه طلبات أخرى)"
@@ -676,9 +690,11 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                        <HighlightText text={clientInfo.phone} tokens={expandedSearchTokens} />
-                                    </div>
+                                    {!client?.is_system_default && (
+                                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                            <HighlightText text={clientInfo.phone} tokens={expandedSearchTokens} />
+                                        </div>
+                                    )}
                                     {creator && (
                                         <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
                                             بواسطة: {creator.name}
@@ -886,6 +902,12 @@ const RequestTable: React.FC<RequestTableProps> = ({
             </div>
         </div>
       )}
+
+      <ClientHistoryModal 
+        isOpen={!!selectedClientForHistory} 
+        client={selectedClientForHistory} 
+        onClose={() => setSelectedClientForHistory(null)} 
+      />
     </div>
   );
 };

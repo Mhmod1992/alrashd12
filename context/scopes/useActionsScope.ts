@@ -190,17 +190,57 @@ export const useActionsScope = (
 
     const addClient = useCallback(async (client: Client): Promise<Client> => {
         const { inspection_requests, ...insertData } = client;
-        const { data, error } = await supabase.from('clients').insert(insertData).select().single();
+
+        // If this client is being set as the system default, unset any others first
+        if (insertData.is_system_default) {
+            const { error: unsetError } = await supabase
+                .from('clients')
+                .update({ is_system_default: false } as any)
+                .eq('is_system_default', true);
+            
+            if (unsetError) console.error("Failed to unset previous system default client:", unsetError);
+        }
+
+        const { data, error } = await supabase.from('clients').insert(insertData as any).select().single();
         if (error) throw error;
-        setClients(prev => [...prev, data as Client]);
-        return data as Client;
+        
+        const newClient = data as Client;
+        setClients(prev => {
+            let newClients = [...prev, newClient];
+            if (insertData.is_system_default) {
+                // Also update local state for others to be false
+                newClients = newClients.map(c => c.id !== newClient.id ? { ...c, is_system_default: false } : c);
+            }
+            return newClients;
+        });
+        return newClient;
     }, [setClients]);
 
     const updateClient = useCallback(async (client: Client) => {
         const { inspection_requests, ...updateData } = client;
-        const { error } = await supabase.from('clients').update(updateData).eq('id', client.id);
+
+        // If this client is being set as the system default, unset any others first
+        if (updateData.is_system_default) {
+            const { error: unsetError } = await supabase
+                .from('clients')
+                .update({ is_system_default: false } as any)
+                .neq('id', client.id)
+                .eq('is_system_default', true);
+            
+            if (unsetError) console.error("Failed to unset previous system default client:", unsetError);
+        }
+
+        const { error } = await supabase.from('clients').update(updateData as any).eq('id', client.id);
         if (error) throw error;
-        setClients(prev => prev.map(c => c.id === client.id ? client : c));
+        
+        setClients(prev => {
+            let newClients = prev.map(c => c.id === client.id ? client : c);
+            if (updateData.is_system_default) {
+                // Also update local state for others to be false
+                newClients = newClients.map(c => c.id !== client.id ? { ...c, is_system_default: false } : c);
+            }
+            return newClients;
+        });
     }, [setClients]);
 
     const deleteClient = useCallback(async (id: string) => {

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAppContext } from '../context/AppContext';
 import Modal from './Modal';
 import Button from './Button';
+import CustomDatePicker from './CustomDatePicker';
 import Icon from './Icon';
 import RefreshCwIcon from './icons/RefreshCwIcon';
 import DownloadIcon from './icons/DownloadIcon';
@@ -258,11 +259,23 @@ const ExportRequestsModal: React.FC<ExportRequestsModalProps> = ({ isOpen, onClo
                     <div className="grid grid-cols-2 gap-4 animate-fade-in">
                         <div>
                             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">من تاريخ</label>
-                            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={selectClasses} />
+                            <CustomDatePicker 
+                                value={startDate} 
+                                onChange={setStartDate} 
+                                className={selectClasses} 
+                                placeholder="من تاريخ"
+                                maxDate={endDate ? new Date(endDate) : undefined}
+                            />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">إلى تاريخ</label>
-                            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={selectClasses} />
+                            <CustomDatePicker 
+                                value={endDate} 
+                                onChange={setEndDate} 
+                                className={selectClasses} 
+                                placeholder="إلى تاريخ"
+                                minDate={startDate ? new Date(startDate) : undefined}
+                            />
                         </div>
                     </div>
                 )}

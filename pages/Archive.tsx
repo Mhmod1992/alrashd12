@@ -4,6 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import Button from '../components/Button';
 import Icon from '../components/Icon';
 import SearchIcon from '../components/icons/SearchIcon';
+import CustomDatePicker from '../components/CustomDatePicker';
 import ArchiveIcon from '../components/icons/ArchiveIcon';
 import { SkeletonTable } from '../components/Skeleton';
 import { InspectionRequest, ArchiveResult } from '../types';
@@ -127,11 +128,23 @@ const Archive: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">من تاريخ</label>
-                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={formInputClasses} />
+                        <CustomDatePicker 
+                            value={startDate} 
+                            onChange={setStartDate} 
+                            className={formInputClasses} 
+                            placeholder="من تاريخ"
+                            maxDate={endDate ? new Date(endDate) : undefined}
+                        />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">إلى تاريخ</label>
-                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={formInputClasses} />
+                        <CustomDatePicker 
+                            value={endDate} 
+                            onChange={setEndDate} 
+                            className={formInputClasses} 
+                            placeholder="إلى تاريخ"
+                            minDate={startDate ? new Date(startDate) : undefined}
+                        />
                     </div>
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">بحث (رقم طلب، لوحة، شاصي)</label>

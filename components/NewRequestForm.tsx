@@ -16,6 +16,7 @@ import StepCar from './new-request/StepCar';
 import StepDetails from './new-request/StepDetails';
 import StepBroker from './new-request/StepBroker';
 import ClientWelcomeCard from './new-request/ClientWelcomeCard';
+import ClientHistoryModal from './ClientHistoryModal';
 
 interface NewRequestFormProps {
     clients: Client[];
@@ -153,9 +154,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
     // Debt Logic & Existing Client Info
     const [unpaidDebtAlert, setUnpaidDebtAlert] = useState<any[] | null>(null);
-    const [existingClientSummary, setExistingClientSummary] = useState<{ count: number; lastVisit: string; name: string; isVip?: boolean } | null>(null);
+    const [existingClientSummary, setExistingClientSummary] = useState<{ count: number; lastVisit: string; name: string; isVip?: boolean; clientObj?: Client } | null>(null);
     const [isWelcomeCardVisible, setIsWelcomeCardVisible] = useState(false);
     const [isCheckingDebt, setIsCheckingDebt] = useState(false);
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const debtDebounceRef = useRef<number | null>(null);
 
     // State for keyboard navigation
@@ -690,15 +692,16 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         count: history.length,
                         lastVisit: history.length > 0 ? history[0].created_at : '',
                         name: exactClient.name,
-                        isVip: exactClient.is_vip
+                        isVip: exactClient.is_vip,
+                        clientObj: exactClient
                     });
                     
                     setIsWelcomeCardVisible(true); // Show Floating Card
 
                     // Filter Debts
                     const debts = history.filter(r => 
-                         r.status === RequestStatus.WAITING_PAYMENT || 
-                         (r.payment_type === PaymentType.Unpaid && r.status !== RequestStatus.COMPLETE)
+                         r.status !== RequestStatus.CANCELLED && 
+                         (r.payment_type === PaymentType.Unpaid || r.status === RequestStatus.WAITING_PAYMENT)
                     );
 
                     if (debts.length > 0) {
@@ -1455,6 +1458,33 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         }, 100);
     }, [addNotification, fetchCarModelsByMake]);
 
+    const handleMagicFill = useCallback(() => {
+        const defaultClient = initialClients.find(c => c.is_system_default);
+        if (defaultClient) {
+            setClientName(defaultClient.name);
+            setClientPhone(defaultClient.phone);
+            addNotification({
+                title: 'تعبئة سريعة',
+                message: `تم اختيار العميل العام: ${defaultClient.name}`,
+                type: 'success'
+            });
+            // Auto scroll to car section if name/phone are set
+            if (!isMobile) {
+                setTimeout(() => {
+                    carSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    if (useChassisNumber) chassisInputRef.current?.focus();
+                    else plateCharInputRef.current?.focus();
+                }, 300);
+            }
+        } else {
+            addNotification({
+                title: 'تنبيه',
+                message: 'لم يتم تعيين عميل عام في النظام بعد. يمكنك تعيينه من صفحة العملاء.',
+                type: 'info'
+            });
+        }
+    }, [initialClients, addNotification, isMobile, useChassisNumber]);
+
     return (
         <>
             {isMobile && (
@@ -1536,6 +1566,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             getInputClass={getInputClass}
                             existingClientSummary={existingClientSummary}
                             isReservationMode={isReservationMode}
+                            onMagicFill={handleMagicFill}
+                            hasDefaultClient={initialClients.some(c => c.is_system_default)}
                         />
                     )}
                 </div>
@@ -1713,6 +1745,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     visitCount={existingClientSummary.count}
                     lastVisit={existingClientSummary.lastVisit}
                     isVip={existingClientSummary.isVip}
+                    unpaidRequestsCount={unpaidDebtAlert?.length || 0}
+                    totalDebt={unpaidDebtAlert?.reduce((sum, req) => sum + (Number(req.price) || 0), 0) || 0}
                     onClose={() => {
                         setIsWelcomeCardVisible(false);
                         if (!isMobile && carSectionRef.current) {
@@ -1727,11 +1761,17 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         }
                     }}
                     onViewHistory={() => {
-                        const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(clientPhone)}`;
-                        window.open(url, '_blank');
+                        setIsWelcomeCardVisible(false);
+                        setIsHistoryModalOpen(true);
                     }}
                 />
             )}
+
+            <ClientHistoryModal 
+                isOpen={isHistoryModalOpen} 
+                client={existingClientSummary?.clientObj || null} 
+                onClose={() => setIsHistoryModalOpen(false)} 
+            />
 
             <CameraScannerModal
                 isOpen={isScannerOpen}

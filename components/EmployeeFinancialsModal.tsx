@@ -4,6 +4,7 @@ import Modal from './Modal';
 import { Employee, Technician, Expense } from '../types';
 import { useAppContext } from '../context/AppContext';
 import Button from './Button';
+import CustomDatePicker from './CustomDatePicker';
 import Icon from './Icon';
 import RefreshCwIcon from './icons/RefreshCwIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -157,7 +158,11 @@ const EmployeeFinancialsModal: React.FC<EmployeeFinancialsModalProps> = ({
                     <form onSubmit={handleAddEntry} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
                         <div>
                             <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">التاريخ</label>
-                            <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="w-full p-2.5 text-sm bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                            <CustomDatePicker 
+                                value={entryDate} 
+                                onChange={setEntryDate} 
+                                className="w-full p-2.5 text-sm bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" 
+                            />
                         </div>
                         <div>
                             <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">النوع</label>

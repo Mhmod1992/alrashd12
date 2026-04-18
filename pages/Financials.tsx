@@ -14,6 +14,8 @@ import Button from '../components/Button';
 import LineChart from '../components/LineChart';
 import CreditCardIcon from '../components/icons/CreditCardIcon';
 import Modal from '../components/Modal';
+import CustomDatePicker from '../components/CustomDatePicker';
+import { motion } from 'motion/react';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import TrendingUpIcon from '../components/icons/TrendingUpIcon';
 
@@ -610,39 +612,70 @@ const Financials: React.FC = () => {
                     </div>
 
                     {/* Filters Section */}
-                    <div className="flex flex-col md:flex-row gap-4 mb-4">
-                        {/* Date Filters */}
-                        <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex overflow-x-auto flex-nowrap gap-2 items-center flex-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                            <FilterIcon className="w-5 h-5 text-slate-400 ml-2 flex-shrink-0" />
-                            <button onClick={() => setFilterType('today')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'today' ? activeFilterClass : inactiveFilterClass}`}>اليوم</button>
-                            <button onClick={() => setFilterType('yesterday')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'yesterday' ? activeFilterClass : inactiveFilterClass}`}>أمس</button>
-                            <button onClick={() => setFilterType('month')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'month' ? activeFilterClass : inactiveFilterClass}`}>هذا الشهر</button>
-                            <button onClick={() => setFilterType('last_month')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'last_month' ? activeFilterClass : inactiveFilterClass}`}>الشهر الماضي</button>
-                            <button onClick={() => setFilterType('range')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'range' ? activeFilterClass : inactiveFilterClass}`}>نطاق مخصص</button>
-                            {filterType === 'range' && (
-                                <div className="flex items-center gap-2 mr-auto animate-fade-in bg-slate-100 dark:bg-slate-900 p-1.5 rounded-xl border dark:border-slate-700 flex-shrink-0">
-                                    <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border dark:border-slate-700 text-xs font-bold" />
-                                    <span className="text-slate-400 font-bold">-</span>
-                                    <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border dark:border-slate-700 text-xs font-bold" />
-                                </div>
-                            )}
+                    <div className="space-y-4 mb-6">
+                        <div className="flex flex-col md:flex-row gap-4">
+                            {/* Date Filters */}
+                            <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex overflow-x-auto flex-nowrap gap-2 items-center flex-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                                <FilterIcon className="w-5 h-5 text-slate-400 ml-2 flex-shrink-0" />
+                                <button onClick={() => setFilterType('today')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'today' ? activeFilterClass : inactiveFilterClass}`}>اليوم</button>
+                                <button onClick={() => setFilterType('yesterday')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'yesterday' ? activeFilterClass : inactiveFilterClass}`}>أمس</button>
+                                <button onClick={() => setFilterType('month')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'month' ? activeFilterClass : inactiveFilterClass}`}>هذا الشهر</button>
+                                <button onClick={() => setFilterType('last_month')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'last_month' ? activeFilterClass : inactiveFilterClass}`}>الشهر الماضي</button>
+                                <button onClick={() => setFilterType('range')} className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === 'range' ? activeFilterClass : inactiveFilterClass}`}>نطاق مخصص</button>
+                            </div>
+
+                            {/* Calculation Mode Toggle */}
+                            <div className="bg-white dark:bg-slate-800 p-1.5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                                <button
+                                    onClick={() => setCalculationMode('all')}
+                                    className={`flex-1 px-4 py-2 rounded-xl text-sm font-bold transition-all ${calculationMode === 'all' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                                >
+                                    الكل
+                                </button>
+                                <button
+                                    onClick={() => setCalculationMode('completed')}
+                                    className={`flex-1 px-4 py-2 rounded-xl text-sm font-bold transition-all ${calculationMode === 'completed' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                                >
+                                    المكتملة فقط
+                                </button>
+                            </div>
                         </div>
 
-                        {/* Calculation Mode Toggle */}
-                        <div className="bg-white dark:bg-slate-800 p-1.5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                            <button
-                                onClick={() => setCalculationMode('all')}
-                                className={`flex-1 px-4 py-2 rounded-xl text-sm font-bold transition-all ${calculationMode === 'all' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                        {/* Custom Range Inputs - Moved outside to prevent clipping */}
+                        {filterType === 'range' && (
+                            <motion.div 
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                className="flex flex-col sm:flex-row items-center gap-4 animate-fade-in bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm"
                             >
-                                الكل
-                            </button>
-                            <button
-                                onClick={() => setCalculationMode('completed')}
-                                className={`flex-1 px-4 py-2 rounded-xl text-sm font-bold transition-all ${calculationMode === 'completed' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                            >
-                                المكتملة فقط
-                            </button>
-                        </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                    <div className="w-full sm:w-40">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 mr-1">من تاريخ</label>
+                                        <CustomDatePicker 
+                                            value={customStartDate} 
+                                            onChange={setCustomStartDate} 
+                                            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold w-full" 
+                                            placeholder="من تاريخ"
+                                            maxDate={customEndDate ? new Date(customEndDate) : undefined}
+                                        />
+                                    </div>
+                                    <span className="text-slate-400 font-bold mt-5">-</span>
+                                    <div className="w-full sm:w-40">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 mr-1">إلى تاريخ</label>
+                                        <CustomDatePicker 
+                                            value={customEndDate} 
+                                            onChange={setCustomEndDate} 
+                                            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold w-full" 
+                                            placeholder="إلى تاريخ"
+                                            minDate={customStartDate ? new Date(customStartDate) : undefined}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="sm:mr-auto mt-2 sm:mt-5">
+                                    <Button onClick={loadData} size="sm" className="px-6 py-2 shadow-lg shadow-blue-500/20">تطبيق النطاق</Button>
+                                </div>
+                            </motion.div>
+                        )}
                     </div>
                 </div>
 

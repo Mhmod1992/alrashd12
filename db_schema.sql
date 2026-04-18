@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS clients (
     name TEXT NOT NULL,
     phone TEXT NOT NULL,
     is_vip BOOLEAN DEFAULT false,
+    is_system_default BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 

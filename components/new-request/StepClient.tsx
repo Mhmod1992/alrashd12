@@ -31,6 +31,8 @@ interface StepClientProps {
     getInputClass: (name: string) => string;
     existingClientSummary?: { count: number; lastVisit: string; name: string } | null;
     isReservationMode?: boolean;
+    onMagicFill?: () => void;
+    hasDefaultClient?: boolean;
 }
 
 const StepClient: React.FC<StepClientProps> = (props) => {
@@ -43,9 +45,22 @@ const StepClient: React.FC<StepClientProps> = (props) => {
 
     return (
         <fieldset className="bg-white dark:bg-slate-800/50 p-4 sm:p-6 rounded-lg shadow-sm">
-            <legend className="text-lg font-semibold mb-4 text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
-                بيانات العميل
+            <legend className="text-lg font-semibold mb-4 text-slate-700 dark:text-slate-200 flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                    <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+                    بيانات العميل
+                </div>
+                {props.onMagicFill && props.hasDefaultClient && (
+                    <button
+                        type="button"
+                        onClick={props.onMagicFill}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-black rounded-xl border border-indigo-100 transition-all group active:scale-95 shadow-sm"
+                        title="تعبئة بيانات العميل العام تلقائياً"
+                    >
+                        <span className="group-hover:rotate-12 transition-transform">✨</span>
+                        <span>عميل عام</span>
+                    </button>
+                )}
             </legend>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative">

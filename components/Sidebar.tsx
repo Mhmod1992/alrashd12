@@ -24,7 +24,11 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
-  const { page, setPage, can, settings, setSettingsPage, authUser, logout, deferredPrompt, installPwa, clearSearchedRequests } = useAppContext();
+  const { 
+    page, setPage, can, settings, setSettingsPage, authUser, logout, 
+    deferredPrompt, installPwa, clearSearchedRequests, 
+    isSettingsLoaded, isInitializedFromCache 
+  } = useAppContext();
   const design = settings.design || 'aero';
 
   const handleNavigation = (view: Page) => {
@@ -168,14 +172,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
         <aside className={`${baseClasses} ${isSidebarOpen ? openClasses : closedClasses} ${designClasses.sidebar}`}>
             {/* Header with Continuous Animation Loop */}
             <div className={`flex items-center justify-center h-20 flex-shrink-0 ${designClasses.header}`}>
-                <div className="flex items-center">
+                <div className={`flex items-center transition-opacity duration-500 ease-out ${isSettingsLoaded || isInitializedFromCache ? 'opacity-100' : 'opacity-0'}`}>
                     {/* Logo - Always Visible */}
                     <div className="flex-shrink-0 z-10 bg-white dark:bg-slate-900 rounded-full">
                         {settings.logoUrl ? (
                             <img src={settings.logoUrl} alt="Logo" className="h-10 w-auto object-contain" />
                         ) : (
-                            <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold text-xl shadow-lg`}>
-                                A
+                            <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center text-slate-400 font-bold text-xl shadow-inner`}>
+                                {/* Show A only if loaded and confirmed no logo, otherwise it's just a placeholder block */}
+                                {(isSettingsLoaded || isInitializedFromCache) ? 'A' : ''}
                             </div>
                         )}
                     </div>
@@ -184,9 +189,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
                     <div className="animate-reveal-loop">
                         <div>
                             <h1 className={`text-xl font-bold ${designClasses.logo} tracking-tight leading-none whitespace-nowrap`}>
-                                {settings.appName || 'Aero'}
+                                {(isSettingsLoaded || isInitializedFromCache) ? (settings.appName || 'Aero') : ''}
                             </h1>
-                            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold block">Edition</span>
+                            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold block transition-opacity duration-500">
+                                {(isSettingsLoaded || isInitializedFromCache) ? 'Edition' : ''}
+                            </span>
                         </div>
                     </div>
                 </div>

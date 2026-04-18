@@ -5,6 +5,7 @@ import { Expense } from '../types';
 import Button from '../components/Button';
 import Icon from '../components/Icon';
 import Modal from '../components/Modal';
+import CustomDatePicker from '../components/CustomDatePicker';
 import SearchIcon from '../components/icons/SearchIcon';
 import CreditCardIcon from '../components/icons/CreditCardIcon';
 import FilterIcon from '../components/icons/FilterIcon';
@@ -390,9 +391,9 @@ const Expenses: React.FC = () => {
                         
                         {dateFilter === 'custom' && (
                             <div className="flex items-center gap-2 mt-3 animate-fade-in p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-100 dark:border-slate-600">
-                                <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs w-full" />
+                                <CustomDatePicker value={customStartDate} onChange={setCustomStartDate} className="p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs w-full" placeholder="من تاريخ" maxDate={customEndDate ? new Date(customEndDate) : undefined} />
                                 <span className="text-slate-400">-</span>
-                                <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs w-full" />
+                                <CustomDatePicker value={customEndDate} onChange={setCustomEndDate} className="p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs w-full" placeholder="إلى تاريخ" minDate={customStartDate ? new Date(customStartDate) : undefined} />
                                 <Button size="sm" onClick={loadData}>تطبيق</Button>
                             </div>
                         )}
@@ -571,7 +572,11 @@ const Expenses: React.FC = () => {
                         {isEditing && (
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">التاريخ</label>
-                                <input type="date" value={currentExpense.date ? currentExpense.date.split('T')[0] : ''} onChange={e => setCurrentExpense(p => ({...p, date: e.target.value}))} className={formInputClasses} />
+                                <CustomDatePicker 
+                                    value={currentExpense.date ? currentExpense.date.split('T')[0] : ''} 
+                                    onChange={val => setCurrentExpense(p => ({...p, date: val}))} 
+                                    className={formInputClasses} 
+                                />
                             </div>
                         )}
 
