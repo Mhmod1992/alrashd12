@@ -14,6 +14,7 @@ const WhatsAppInbox: React.FC = () => {
   const [isChecking, setIsChecking] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'incoming' | 'outgoing'>('all');
 
   const checkConnection = async () => {
     setIsChecking(true);
@@ -49,11 +50,15 @@ const WhatsAppInbox: React.FC = () => {
     }
   };
 
-  const filteredMessages = whatsappMessages.filter(m => 
-    m.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.phone.includes(searchQuery) ||
-    (m.name && m.name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredMessages = whatsappMessages.filter(m => {
+    const matchesSearch = m.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.phone.includes(searchQuery) ||
+      (m.name && m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    if (activeTab === 'all') return matchesSearch;
+    const direction = m.direction || 'incoming';
+    return matchesSearch && direction === activeTab;
+  });
 
   const groupedMessages = useMemo(() => {
     const groups: { [key: string]: typeof whatsappMessages } = {
@@ -111,6 +116,28 @@ const WhatsAppInbox: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          {/* Tabs Navigation */}
+          <div className="flex bg-slate-100 dark:bg-slate-700/50 p-1 rounded-xl">
+            <button 
+              onClick={() => setActiveTab('all')}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            >
+              الكل
+            </button>
+            <button 
+              onClick={() => setActiveTab('incoming')}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'incoming' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            >
+              الوارد
+            </button>
+            <button 
+              onClick={() => setActiveTab('outgoing')}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'outgoing' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            >
+              الصادر
+            </button>
+          </div>
+
           <div className="relative flex-1 sm:w-64">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
@@ -152,7 +179,7 @@ const WhatsAppInbox: React.FC = () => {
                   return (
                   <div 
                     key={msg.id} 
-                    className={`group relative bg-white dark:bg-slate-800 p-4 rounded-2xl border transition-all hover:shadow-md ${!msg.is_read && msg.direction === 'incoming' ? 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-100 dark:border-slate-700/50'}`}
+                    className={`group relative bg-white dark:bg-slate-800 p-4 rounded-2xl border transition-all hover:shadow-md ${!msg.is_read && (msg.direction === 'incoming' || !msg.direction) ? 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-100 dark:border-slate-700/50'}`}
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex items-center gap-2 flex-wrap">
