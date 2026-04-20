@@ -14,7 +14,7 @@ const WhatsAppInbox: React.FC = () => {
   const [isChecking, setIsChecking] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'incoming' | 'outgoing'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'incoming' | 'outgoing'>('incoming');
 
   const checkConnection = async () => {
     setIsChecking(true);

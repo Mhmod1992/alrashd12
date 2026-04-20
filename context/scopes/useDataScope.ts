@@ -46,6 +46,7 @@ export const useDataScope = (
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
     const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
     const [unreadWhatsAppCount, setUnreadWhatsAppCount] = useState(0);
+    const [latestWhatsAppMessage, setLatestWhatsAppMessage] = useState<WhatsAppMessage | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const triggerHighlight = useCallback((requestId: string) => {
@@ -355,8 +356,17 @@ export const useDataScope = (
         return count || 0;
     }, []);
 
-    const fetchClientsCount = useCallback(async (): Promise<number> => {
-        const { count, error } = await supabase.from('clients').select('*', { count: 'exact', head: true });
+    const fetchClientsCount = useCallback(async (startDate?: string, endDate?: string): Promise<number> => {
+        let query = supabase.from('clients').select('*', { count: 'exact', head: true });
+        
+        if (startDate) {
+            query = query.gte('created_at', startDate);
+        }
+        if (endDate) {
+            query = query.lte('created_at', endDate);
+        }
+
+        const { count, error } = await query;
         
         if (error) {
             console.error("Error fetching clients count:", error);
@@ -474,6 +484,7 @@ export const useDataScope = (
         unreadMessagesCount, setUnreadMessagesCount,
         whatsappMessages, setWhatsappMessages,
         unreadWhatsAppCount, setUnreadWhatsAppCount,
+        latestWhatsAppMessage, setLatestWhatsAppMessage,
         isRefreshing, setIsRefreshing,
         fetchRequests,
         fetchCarModelsByMake,

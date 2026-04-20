@@ -17,6 +17,9 @@ import DollarSignIcon from '../components/icons/DollarSignIcon';
 import WhatsappIcon from '../components/icons/WhatsappIcon';
 import { uuidv4 } from '../lib/utils';
 import { Skeleton, SkeletonTable } from '../components/Skeleton';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import TrendingUpIcon from '../components/icons/TrendingUpIcon';
+import HistoryIcon from '../components/icons/HistoryIcon';
 
 const Clients: React.FC = () => {
     const { 
@@ -65,6 +68,15 @@ const Clients: React.FC = () => {
     // New filter state for Clients List
     const [debtFilter, setDebtFilter] = useState(false);
     const [debtClientIds, setDebtClientIds] = useState<Set<string>>(new Set());
+
+    const [growthData, setGrowthData] = useState<{
+        total: number;
+        today: number;
+        week: number;
+        month: number;
+        dailyTrend: { date: string; count: number }[];
+    }>({ total: 0, today: 0, week: 0, month: 0, dailyTrend: [] });
+    const [isLoadingGrowth, setIsLoadingGrowth] = useState(false);
 
     const formInputClasses = "mt-1 block w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
     const searchInputClasses = "block w-full p-3 pl-10 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
@@ -121,10 +133,51 @@ const Clients: React.FC = () => {
         loadClients(1, searchTerm, false, debtFilter);
     }, [debtFilter]);
 
+    const loadGrowthAnalytics = async () => {
+        setIsLoadingGrowth(true);
+        try {
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+            const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+            const [total, today, week, month] = await Promise.all([
+                fetchClientsCount(),
+                fetchClientsCount(startOfToday),
+                fetchClientsCount(startOfWeek),
+                fetchClientsCount(startOfMonth)
+            ]);
+
+            // Faster trend calculation using parallel queries
+            const trendPromises = [];
+            const dates = [];
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+                dates.push(date.toLocaleDateString('ar-SA', { day: 'numeric', month: 'short' }));
+                const s = new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString();
+                const e = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59).toISOString();
+                trendPromises.push(fetchClientsCount(s, e));
+            }
+
+            const trendCounts = await Promise.all(trendPromises);
+            const trend = trendCounts.map((count, index) => ({
+                date: dates[index],
+                count: count
+            }));
+
+            setGrowthData({ total, today, week, month, dailyTrend: trend });
+        } catch (error) {
+            console.error("Failed to load growth analytics:", error);
+        } finally {
+            setIsLoadingGrowth(false);
+        }
+    };
+
     useEffect(() => {
         // Initial load
         loadClients(1, '', false, false);
         loadDebtStatus();
+        loadGrowthAnalytics();
         fetchClientsCount().then(res => setTotalClientsAmount(res)).catch(console.error);
     }, []);
 
@@ -472,15 +525,101 @@ const Clients: React.FC = () => {
     };
 
     return (
-        <div className="container mx-auto max-w-7xl h-full">
-            <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-120px)] pt-4">
+        <div className="container mx-auto max-w-7xl h-full px-2 sm:px-6">
+            {/* Growth Analytics Header - Made more compact for mobile */}
+            <div className="pt-4 pb-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4">
+                    {/* Total Clients Card */}
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-white/20 dark:border-slate-700 shadow-lg relative overflow-hidden"
+                    >
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-2xl -z-10 rounded-full translate-x-1/2 -translate-y-1/2"></div>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 mb-0.5 sm:mb-1 font-sans">إجمالي العملاء</p>
+                                <h2 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-white font-numeric">
+                                    {isLoadingGrowth ? '...' : growthData.total.toLocaleString()}
+                                </h2>
+                            </div>
+                            <div className="p-1.5 sm:p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl">
+                                <UsersIcon className="w-4 h-4 sm:w-6 sm:h-6" />
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* New Today Card */}
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.1 }}
+                        className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-emerald-100/50 dark:border-emerald-900/30 shadow-lg relative overflow-hidden"
+                    >
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-2xl -z-10 rounded-full translate-x-1/2 -translate-y-1/2"></div>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-[10px] sm:text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-0.5 sm:mb-1 font-sans">سجلوا اليوم</p>
+                                <div className="flex items-center gap-1 sm:gap-2">
+                                    <h2 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-white font-numeric">
+                                        {isLoadingGrowth ? '...' : growthData.today}
+                                    </h2>
+                                    {growthData.today > 0 && <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>}
+                                </div>
+                            </div>
+                            <div className="p-1.5 sm:p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded-xl">
+                                <TrendingUpIcon className="w-4 h-4 sm:w-6 sm:h-6" />
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* Growth Chart/Trend Card - Hidden on very small screens, 3rd column on md+ */}
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="hidden md:flex bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-4 rounded-3xl border border-white/20 dark:border-slate-700 shadow-lg flex-col"
+                    >
+                        <div className="flex justify-between items-center mb-2 px-1">
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 font-sans">تطور الأسبوع</p>
+                            <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full text-slate-500 font-bold">+{growthData.week}</span>
+                        </div>
+                        <div className="h-12 w-full">
+                            {isLoadingGrowth ? (
+                                <div className="h-full w-full bg-slate-50 dark:bg-slate-900/50 rounded-xl animate-pulse" />
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={growthData.dailyTrend}>
+                                        <defs>
+                                            <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <Area 
+                                            type="monotone" 
+                                            dataKey="count" 
+                                            stroke="#10b981" 
+                                            fillOpacity={1} 
+                                            fill="url(#colorCount)" 
+                                            strokeWidth={2}
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+                    </motion.div>
+                </div>
+            </div>
+
+            {/* Layout Fix: Use flex-1 with min-h-0 to prevent squashing and ensure container takes available space */}
+            <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-full min-h-0 pb-4">
                 {/* Stage 1: Left List (Client Navigator) */}
-                <div className={`md:w-80 lg:w-96 flex flex-col gap-4 h-full ${selectedClientId ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="flex flex-col gap-4 p-5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-700 shadow-xl overflow-hidden h-full">
+                <div className={`md:w-80 lg:w-96 flex flex-col gap-4 min-h-0 ${selectedClientId ? 'hidden md:flex' : 'flex-1 md:flex-none md:h-full'}`}>
+                    <div className="flex flex-col gap-4 p-4 sm:p-5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-700 shadow-xl overflow-hidden h-full">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
                                 <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 font-sans">العملاء</h3>
-                                {totalClientsAmount > 0 && <span className="bg-slate-100 dark:bg-slate-700 text-slate-500 font-mono text-xs px-2 py-0.5 rounded-full">{totalClientsAmount}</span>}
                             </div>
                             <Button onClick={handleAddClient} size="sm" className="rounded-full px-4" leftIcon={<Icon name="add"/>}>جديد</Button>
                         </div>

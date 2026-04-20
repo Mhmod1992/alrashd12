@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useAppContext } from '../context/AppContext';
 import SunIcon from './icons/SunIcon';
 import MoonIcon from './icons/MoonIcon';
@@ -32,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
     setPage, setSelectedRequestId, fetchAndUpdateSingleRequest, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
     unreadMessagesCount, setIsMailboxOpen, searchRequestByNumber, clearSearchedRequests, searchedRequests,
     searchQuery, setSearchQuery, can,
-    unreadWhatsAppCount
+    unreadWhatsAppCount, latestWhatsAppMessage, setLatestWhatsAppMessage
   } = useAppContext();
 
   const design = settings.design || 'aero';
@@ -169,6 +170,15 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
 
   const isSearchActive = searchQuery.length > 0 || searchedRequests !== null;
 
+  useEffect(() => {
+    if (latestWhatsAppMessage) {
+      const timer = setTimeout(() => {
+        setLatestWhatsAppMessage(null);
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [latestWhatsAppMessage, setLatestWhatsAppMessage]);
+
   return (
     <header className={`relative flex items-center justify-between h-20 px-6 gap-6 z-40 ${headerClasses}`}>
       
@@ -261,6 +271,50 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                     <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-800"></span>
                 )}
             </button>
+
+            <AnimatePresence>
+                {latestWhatsAppMessage && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20, scale: 0.9, x: '-50%' }}
+                        animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+                        exit={{ opacity: 0, y: -10, scale: 0.9, x: '-50%' }}
+                        className="absolute top-full left-1/2 mt-3 w-64 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-emerald-100 dark:border-emerald-900/50 shadow-2xl rounded-2xl p-4 z-50 cursor-pointer group pointer-events-auto origin-top"
+                        style={{ left: '50%' }}
+                        onClick={() => {
+                            setPage('whatsapp-inbox');
+                            setLatestWhatsAppMessage(null);
+                        }}
+                    >
+                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white/95 dark:bg-slate-800/95 border-t border-l border-emerald-100 dark:border-emerald-900/50 rotate-45"></div>
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setLatestWhatsAppMessage(null);
+                            }}
+                            className="absolute top-2 left-2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                        >
+                            <XIcon className="w-3 h-3" />
+                        </button>
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-200/50 dark:border-emerald-800/50 shadow-sm">
+                                {(latestWhatsAppMessage.name || 'ع').charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0 text-right">
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate mb-1">
+                                    {latestWhatsAppMessage.name || latestWhatsAppMessage.phone}
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                                    {latestWhatsAppMessage.message}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="mt-2.5 flex items-center justify-end gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                            <span>الآن على واتساب</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
 
         <div className="relative" ref={notificationsRef}>

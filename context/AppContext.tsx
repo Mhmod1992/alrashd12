@@ -110,6 +110,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         unreadMessagesCount, setUnreadMessagesCount,
         whatsappMessages, setWhatsappMessages,
         unreadWhatsAppCount, setUnreadWhatsAppCount,
+        latestWhatsAppMessage, setLatestWhatsAppMessage,
         isRefreshing, setIsRefreshing,
         fetchRequests,
         fetchCarModelsByMake,
@@ -359,11 +360,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     
                     if (newMessage.direction === 'incoming' || !newMessage.direction) {
                         setUnreadWhatsAppCount(prev => prev + 1);
-                        addNotification({ 
-                            title: 'رسالة واتساب جديدة', 
-                            message: `رسالة من ${newMessage.name || newMessage.phone}: ${newMessage.message}`, 
-                            type: 'info' 
-                        });
+                        
+                        // Smart Suppression: Don't show popups/bubbles if user is actively typing
+                        const activeEl = document.activeElement;
+                        const isTyping = activeEl && (
+                            activeEl.tagName === 'INPUT' || 
+                            activeEl.tagName === 'TEXTAREA' || 
+                            (activeEl as HTMLElement).isContentEditable
+                        );
+
+                        if (!isTyping) {
+                            setLatestWhatsAppMessage(newMessage);
+                            addNotification({ 
+                                title: 'رسالة واتساب جديدة', 
+                                message: `رسالة من ${newMessage.name || newMessage.phone}: ${newMessage.message}`, 
+                                type: 'info' 
+                            });
+                        }
                     }
                 }
             )
@@ -1828,7 +1841,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         searchCars, searchClientsPage, fetchClientRequests, fetchClientRequestsFiltered, getClientFinancialSummary, fetchRequestsByCarId, fetchRequestByRequestNumber, fetchRequestByRequestNumberForAuth, fetchRequestsByDateRange, fetchRequestsCount, fetchClientsCount,
         checkCarHistory,
         unreadMessagesCount, fetchInboxMessages, fetchSentMessages, sendInternalMessage, markMessageAsRead,
-        whatsappMessages, unreadWhatsAppCount, markWhatsAppAsRead, deleteWhatsAppMessages, sendWhatsAppMessage,
+        whatsappMessages, unreadWhatsAppCount, latestWhatsAppMessage, setLatestWhatsAppMessage, markWhatsAppAsRead, deleteWhatsAppMessages, sendWhatsAppMessage,
         isFocusMode, setIsFocusMode, hasUnsavedChanges, setHasUnsavedChanges, isMailboxOpen, setIsMailboxOpen,
         searchCarMakes, searchCarModels, searchArchive, expandedArchiveCarId, setExpandedArchiveCarId, addTechnician, updateTechnician, deleteTechnician,
         deferredPrompt, installPwa,

@@ -185,7 +185,7 @@ export interface AppContextType {
     fetchRequestByRequestNumberForAuth: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestsByDateRange: (startDate: string, endDate: string, paymentType?: PaymentType) => Promise<InspectionRequest[]>;
     fetchRequestsCount: (startDate?: string, endDate?: string, paymentType?: PaymentType) => Promise<number>;
-    fetchClientsCount: () => Promise<number>;
+    fetchClientsCount: (startDate?: string, endDate?: string) => Promise<number>;
     fetchPaperArchiveRequests: (startDate: string, endDate: string) => Promise<InspectionRequest[]>;
     fetchAllPaperArchiveRequests: () => Promise<InspectionRequest[]>;
     fetchClientsWithDebtIds: () => Promise<string[]>;
@@ -228,6 +228,8 @@ export interface AppContextType {
     isSessionError: boolean;
     incomingRequest: InspectionRequest | null;
     setIncomingRequest: React.Dispatch<React.SetStateAction<InspectionRequest | null>>;
+    latestWhatsAppMessage: WhatsAppMessage | null;
+    setLatestWhatsAppMessage: React.Dispatch<React.SetStateAction<WhatsAppMessage | null>>;
     // --- Reservations ---
     reservations: Reservation[];
     fetchReservations: () => Promise<void>;
