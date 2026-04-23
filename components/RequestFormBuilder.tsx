@@ -649,6 +649,12 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
                 carSnapshot = { make_ar: make.name_ar, make_en: make.name_en, model_ar: model.name_ar, model_en: model.name_en, year: carYear };
             }
 
+            const finalPaymentType = isReceptionist ? PaymentType.Unpaid : (paymentType as PaymentType);
+            let finalPaymentNote = undefined;
+            if (isEditMode || finalPaymentType === PaymentType.Transfer || finalPaymentType === PaymentType.Unpaid) {
+                finalPaymentNote = paymentNote.trim() ? paymentNote.trim() : undefined;
+            }
+
             // 3. Request Data Construction
             const reqData = {
                 client_id: clientId,
@@ -656,9 +662,9 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
                 car_snapshot: carSnapshot,
                 inspection_type_id: inspectionTypeId,
                 price: Number(inspectionPrice),
-                payment_type: isReceptionist ? PaymentType.Unpaid : (paymentType as PaymentType),
+                payment_type: finalPaymentType,
                 status: isReceptionist ? RequestStatus.WAITING_PAYMENT : RequestStatus.NEW,
-                payment_note: (paymentType === PaymentType.Transfer || paymentType === PaymentType.Unpaid) ? paymentNote : undefined,
+                payment_note: finalPaymentNote,
                 split_payment_details: paymentType === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
                 broker: (useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : undefined,
                 employee_id: authUser?.id || '',
@@ -1030,6 +1036,13 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
                                         <div className="mt-2 p-2 bg-slate-100 dark:bg-slate-800 rounded text-sm grid grid-cols-2 gap-2">
                                             <input type="number" placeholder="نقدي" value={splitCashAmount} onChange={e => { const v = Number(e.target.value); setSplitCashAmount(v); setSplitCardAmount(Number(inspectionPrice) - v); }} className="p-1 border rounded" />
                                             <input type="number" placeholder="بطاقة" value={splitCardAmount} readOnly className="p-1 border rounded bg-gray-200" />
+                                        </div>
+                                    )}
+
+                                    {(isEditMode || paymentType === PaymentType.Transfer || paymentType === PaymentType.Unpaid) && (
+                                        <div className="mt-2 text-sm">
+                                            <label className="block font-medium mb-1 line-clamp-1">ملاحظة الدفع / الطلب</label>
+                                            <input type="text" value={paymentNote} onChange={e => setPaymentNote(e.target.value)} className={getInputClass('paymentNote')} placeholder="اختياري" />
                                         </div>
                                     )}
                                 </div>

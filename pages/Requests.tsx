@@ -299,6 +299,7 @@ const Requests: React.FC = () => {
                 freshItem.status !== localItem.status || 
                 freshItem.updated_at !== localItem.updated_at ||
                 JSON.stringify(freshItem.report_stamps) !== JSON.stringify(localItem.report_stamps) ||
+                JSON.stringify(freshItem.broker) !== JSON.stringify(localItem.broker) ||
                 freshItem.payment_type !== localItem.payment_type ||
                 freshItem.price !== localItem.price
             )) {

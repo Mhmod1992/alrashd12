@@ -111,6 +111,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         whatsappMessages, setWhatsappMessages,
         unreadWhatsAppCount, setUnreadWhatsAppCount,
         latestWhatsAppMessage, setLatestWhatsAppMessage,
+        financialReport, setFinancialReport,
         isRefreshing, setIsRefreshing,
         fetchRequests,
         fetchCarModelsByMake,
@@ -726,7 +727,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (isLoadingMore || !hasMoreRequests) return;
         setIsLoadingMore(true);
         const { data: nextBatch, error } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, report_stamps')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, report_stamps, attached_files, payment_note, split_payment_details')
             .order('created_at', { ascending: false })
             .range(requestsOffset, requestsOffset + REQUESTS_PAGE_SIZE - 1);
         if (!error && nextBatch) {
@@ -1373,7 +1374,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 make:make_id (name_ar, name_en),
                 model:model_id (name_ar, name_en)
             )
-        `).gte('created_at', startDate).lte('created_at', endDate);
+        `).gte('created_at', startDate).lte('created_at', endDate).order('created_at', { ascending: false });
         if (includeCompletedOnly) query = query.eq('status', RequestStatus.COMPLETE);
         else query = query.neq('status', 'cancelled');
         const { data: requests, error: reqError } = await query;
@@ -1398,8 +1399,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (expError) throw expError;
         const { data: revenuesData, error: revError } = await supabase.from('other_revenues').select('*').gte('date', startDate).lte('date', endDate);
         if (revError) throw revError;
-        const exps = expenses as Expense[];
-        const revs: Revenue[] = (revenuesData || []).map((r: any) => ({ id: r.id, date: r.date, category: r.category, description: r.description, amount: r.amount, payment_method: r.payment_method, employeeId: r.employee_id, employeeName: r.employee_name }));
+        const exps = (expenses as Expense[]).filter(e => e.date >= startDate && e.date <= endDate);
+        const revs: Revenue[] = (revenuesData || []).map((r: any) => ({ 
+            id: r.id, 
+            date: r.date, 
+            category: r.category, 
+            description: r.description, 
+            amount: r.amount, 
+            payment_method: r.payment_method, 
+            employeeId: r.employee_id, 
+            employeeName: r.employee_name 
+        }));
         const totalRequestsRevenue = reqs.reduce((sum, r) => sum + r.price, 0);
         let cashTotal = 0, cardTotal = 0, transferTotal = 0, unpaidTotal = 0;
         const brokerSummaryMap: Record<string, { name: string, amount: number, count: number }> = {};
@@ -1430,7 +1440,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             totalExpenses = filteredGeneralExpenses.reduce((sum, e) => sum + e.amount, 0),
             totalAdvances = advancesEntries.reduce((sum, e) => sum + e.amount, 0),
             totalCommissions = reqs.reduce((sum, r) => sum + (r.broker?.commission || 0), 0),
-            netProfit = actualCashFlow - totalExpenses - totalCommissions;
+            netProfit = actualCashFlow - totalExpenses - totalCommissions - totalAdvances;
         const dailyMap: Record<string, any> = {};
         const addToDaily = (dateStr: string, key: string, value: number) => {
             if (!dailyMap[dateStr]) dailyMap[dateStr] = { date: dateStr, cars: 0, revenue: 0, cash: 0, card: 0, transfer: 0, unpaid: 0, expenses: 0, commission: 0 };
@@ -1469,6 +1479,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return {
             totalRevenue,
             totalOtherRevenue,
+            grandTotal: totalRevenue,
             actualCashFlow,
             cashTotal,
             cardTotal,
@@ -1486,7 +1497,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             forecast: { history: historyForChart, data: forecastData, trend: trendDirection },
             filteredRequests: reqs,
             filteredExpenses: filteredGeneralExpenses,
-            filteredRevenues: revs
+            filteredRevenues: revs,
+            filteredAdvances: advancesEntries
         };
     }, [brokers, ensureEntitiesLoaded]);
 
@@ -1834,6 +1846,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteNotification,
         removeNotification, appNotifications, markNotificationAsRead, markAllNotificationsAsRead, confirmModalState,
         showConfirmModal, hideConfirmModal, isLoading, isRefreshing, isSetupComplete, startSetupProcess, can,
+        financialReport, setFinancialReport,
         findOrCreateCarMake, findOrCreateCarModel, initialRequestModalState, setInitialRequestModalState,
         currentDbUsage, currentStorageUsage, newRequestSuccessState, showNewRequestSuccessModal, hideNewRequestSuccessModal,
         whatsappSuccessModal, showWhatsAppSuccessModal, hideWhatsAppSuccessModal,

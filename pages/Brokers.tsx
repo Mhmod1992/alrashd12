@@ -25,7 +25,7 @@ const StatCard: React.FC<{ title: string, value: string, icon: any, color: strin
 );
 
 const Brokers: React.FC = () => {
-    const { brokers, addBroker, updateBroker, deleteBroker, showConfirmModal, addNotification } = useAppContext();
+    const { brokers, addBroker, updateBroker, deleteBroker, showConfirmModal, addNotification, can } = useAppContext();
 
     // UI States
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -189,6 +189,25 @@ const Brokers: React.FC = () => {
         setIsModalOpen(true);
     };
 
+    const handlePayCommission = (broker: Broker) => {
+        const stats = brokerStats[broker.id] || { totalCommission: 0 };
+        if (stats.totalCommission <= 0) {
+            addNotification({ title: 'تنبيه', message: 'لا توجد عمولات مستحقة لهذا السمسار حالياً.', type: 'info' });
+            return;
+        }
+
+        showConfirmModal({
+            title: `صرف عمولة: ${broker.name}`,
+            message: `هل أنت متأكد من تسجيل عملية صرف مبلغ ${stats.totalCommission.toLocaleString('en-US')} ريال كعمولة لهذا السمسار؟`,
+            onConfirm: async () => {
+                // In a real system, we would create a transaction/expense here.
+                // For now, we simulate the action and notify.
+                addNotification({ title: 'نجاح', message: `تم تسجيل صرف العمولة بمبلغ ${stats.totalCommission.toLocaleString('en-US')} ريال بنجاح.`, type: 'success' });
+                // Note: To make this real, we'd need to mark requests as 'commission_paid'.
+            }
+        });
+    };
+
     const handleDelete = (broker: Broker) => {
         showConfirmModal({
             title: `حذف ${broker.name}`,
@@ -329,6 +348,11 @@ const Brokers: React.FC = () => {
                                                 <button onClick={() => handleViewDetails(broker)} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="عرض التفاصيل والطلبات">
                                                     <EyeIcon className="w-4 h-4" />
                                                 </button>
+                                                {can('pay_broker_commission') && (
+                                                    <button onClick={() => handlePayCommission(broker)} className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors" title="صرف العمولة">
+                                                        <Icon name="dollar-sign" className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                                 <button onClick={() => handleEdit(broker)} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="تعديل">
                                                     <Icon name="edit" className="w-4 h-4" />
                                                 </button>

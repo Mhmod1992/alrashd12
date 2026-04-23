@@ -38,12 +38,16 @@ const FinancialsTable: React.FC<{
 }> = ({ requests, clients, cars, carMakes, carModels }) => {
 
   const getClientName = (clientId: string) => clients.find(c => c.id === clientId)?.name || 'غير معروف';
-  const getCarInfo = (carId: string) => {
-    const car = cars.find(c => c.id === carId);
+  const getCarInfo = (request: InspectionRequest) => {
+    if (request.car_snapshot) {
+      const { make_en, model_en, year } = request.car_snapshot;
+      return `${make_en || ''} ${model_en || ''} ${year}`;
+    }
+    const car = cars.find(c => c.id === request.car_id);
     if (!car) return 'سيارة غير معروفة';
-    const make = carMakes.find(m => m.id === car.make_id)?.name_ar;
-    const model = carModels.find(m => m.id === car.model_id)?.name_ar;
-    return `${make || ''} ${model || ''} (${car.year})`;
+    const make = carMakes.find(m => m.id === car.make_id)?.name_en;
+    const model = carModels.find(m => m.id === car.model_id)?.name_en;
+    return `${make || ''} ${model || ''} ${car.year}`;
   };
 
   const totals = useMemo(() => {
@@ -55,30 +59,30 @@ const FinancialsTable: React.FC<{
   }, [requests]);
 
   return (
-    <div className="overflow-x-auto custom-scrollbar">
-      <table className="w-full text-sm text-right">
-        <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-700/50 dark:text-slate-400 border-b border-slate-200 dark:border-slate-600">
+    <div className="overflow-x-auto custom-scrollbar print:overflow-visible">
+      <table className="w-full text-[13px] text-right print:text-[10px]">
+        <thead className="text-[11px] text-slate-500 uppercase bg-slate-50 dark:bg-slate-700/50 dark:text-slate-400 border-b border-slate-200 dark:border-slate-600 print:text-black print:bg-slate-100 print:border-slate-900">
           {/* TOTALS ROW - MOVED TO TOP */}
            {requests.length > 0 && (
-            <tr className="bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-200 border-b-2 border-blue-100 dark:border-blue-800">
-                <td colSpan={4} className="px-4 py-3 text-center font-black text-sm">مجموع النتائج الحالية</td>
-                <td className="px-4 py-3 font-black text-sm font-numeric">{totals.price.toLocaleString('en-US')}</td>
+            <tr className="bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-200 border-b-2 border-blue-100 dark:border-blue-800 print:bg-slate-50 print:text-black print:border-slate-300">
+                <td colSpan={4} className="px-3 py-2 text-center font-black text-[12px]">مجموع النتائج الحالية</td>
+                <td className="px-3 py-2 font-black text-[12px] font-numeric">{totals.price.toLocaleString('en-US')}</td>
                 <td></td>
                 <td></td>
-                <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400 font-numeric">{totals.commission.toLocaleString('en-US')}</td>
-                <td className="px-4 py-3 font-black text-emerald-600 dark:text-emerald-400 text-sm font-numeric">{totals.net.toLocaleString('en-US')}</td>
+                <td className="px-3 py-2 font-bold text-rose-600 dark:text-rose-400 font-numeric">{totals.commission.toLocaleString('en-US')}</td>
+                <td className="px-3 py-2 font-black text-emerald-600 dark:text-emerald-400 text-[12px] font-numeric">{totals.net.toLocaleString('en-US')}</td>
             </tr>
           )}
           <tr>
-            <th className="px-4 py-4 font-bold">#</th>
-            <th className="px-4 py-4 font-bold">العميل</th>
-            <th className="px-4 py-4 font-bold">السيارة</th>
-            <th className="px-4 py-4 font-bold">التاريخ</th>
-            <th className="px-4 py-4 font-bold">المبلغ</th>
-            <th className="px-4 py-4 font-bold">طريقة الدفع</th>
-            <th className="px-4 py-4 font-bold">بيان الدفع / التحويل</th>
-            <th className="px-4 py-4 font-bold">العمولة</th>
-            <th className="px-4 py-4 font-bold">صافي الدخل</th>
+            <th className="px-3 py-3 font-bold">#</th>
+            <th className="px-3 py-3 font-bold">العميل</th>
+            <th className="px-3 py-3 font-bold">السيارة</th>
+            <th className="px-3 py-3 font-bold">التاريخ</th>
+            <th className="px-3 py-3 font-bold">المبلغ</th>
+            <th className="px-3 py-3 font-bold">طريقة الدفع</th>
+            <th className="px-3 py-3 font-bold">بيان الدفع / التحويل</th>
+            <th className="px-3 py-3 font-bold">العمولة</th>
+            <th className="px-3 py-3 font-bold">صافي الدخل</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -86,26 +90,26 @@ const FinancialsTable: React.FC<{
             const commission = request.broker?.commission || 0;
             const netIncome = request.price - commission;
             return (
-              <tr key={request.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                <td className="px-4 py-4">
-                  <span className="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-xs font-mono text-slate-500 dark:text-slate-400 shadow-sm border border-slate-200 dark:border-slate-600 font-numeric">
+              <tr key={request.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors print:border-b print:border-slate-200">
+                <td className="px-3 py-2.5">
+                  <span className="bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 dark:text-slate-400 shadow-sm border border-slate-200 dark:border-slate-600 font-numeric print:border-none print:bg-transparent print:text-black print:p-0">
                     #{request.request_number}
                   </span>
                 </td>
-                <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200">{getClientName(request.client_id)}</td>
-                <td className="px-4 py-4 text-xs text-slate-600 dark:text-slate-300">{getCarInfo(request.car_id)}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-[10px] font-mono text-slate-500 font-numeric">{new Date(request.created_at).toLocaleDateString('en-GB')}</td>
-                <td className="px-4 py-4 font-black font-numeric">{request.price.toLocaleString('en-US')}</td>
-                <td className="px-4 py-4"><PaymentMethodBadge request={request} /></td>
-                <td className="px-4 py-4 text-[11px] text-slate-500 dark:text-slate-400">
+                <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-slate-200">{getClientName(request.client_id)}</td>
+                <td className="px-3 py-2.5 text-[11px] text-slate-600 dark:text-slate-300">{getCarInfo(request)}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-[10px] font-mono text-slate-500 font-numeric">{new Date(request.created_at).toLocaleDateString('en-GB')}</td>
+                <td className="px-3 py-2.5 font-black font-numeric">{request.price.toLocaleString('en-US')}</td>
+                <td className="px-3 py-2.5"><PaymentMethodBadge request={request} /></td>
+                <td className="px-3 py-2.5 text-[10px] text-slate-500 dark:text-slate-400 print:text-black">
                   {request.payment_note ? (
-                      <span className="block max-w-[150px] truncate bg-yellow-50 dark:bg-yellow-900/20 px-2 py-0.5 rounded text-yellow-800 dark:text-yellow-200 border border-yellow-100 dark:border-yellow-800" title={request.payment_note}>
+                      <span className="block max-w-[150px] truncate bg-yellow-50 dark:bg-yellow-900/20 px-2 py-0.5 rounded text-yellow-800 dark:text-yellow-200 border border-yellow-100 dark:border-yellow-800 print:bg-transparent print:border-none print:max-w-none print:whitespace-normal" title={request.payment_note}>
                           {request.payment_note}
                       </span>
                   ) : '-'}
                 </td>
-                <td className="px-4 py-4 text-rose-600 dark:text-rose-400 font-bold font-numeric">{commission > 0 ? commission.toLocaleString('en-US') : '-'}</td>
-                <td className="px-4 py-4 font-bold text-emerald-600 dark:text-emerald-400 font-numeric">{netIncome.toLocaleString('en-US')}</td>
+                <td className="px-3 py-2.5 text-rose-600 dark:text-rose-400 font-bold font-numeric">{commission > 0 ? commission.toLocaleString('en-US') : '-'}</td>
+                <td className="px-3 py-2.5 font-bold text-emerald-600 dark:text-emerald-400 font-numeric">{netIncome.toLocaleString('en-US')}</td>
               </tr>
             );
           })}

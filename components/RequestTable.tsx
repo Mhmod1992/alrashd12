@@ -15,9 +15,14 @@ import AlertTriangleIcon from './icons/AlertTriangleIcon';
 import HistoryIcon from './icons/HistoryIcon';
 import DollarSignIcon from './icons/DollarSignIcon';
 import WhatsappIcon from './icons/WhatsappIcon';
+import InfoIcon from './icons/InfoIcon';
 import Modal from './Modal';
 import SearchIcon from './icons/SearchIcon';
 import UserCheckIcon from './icons/UserCheckIcon';
+import ChevronDownIcon from './icons/ChevronDownIcon';
+import XIcon from './icons/XIcon';
+import UserXIcon from './icons/UserXIcon';
+import UserCircleIcon from './icons/UserCircleIcon';
 import ClientHistoryModal from './ClientHistoryModal';
 
 interface RequestTableProps {
@@ -126,12 +131,69 @@ const RequestTable: React.FC<RequestTableProps> = ({
   isLoading, onLoadMore, hasMore, isLoadingMore, searchTokens, highlightedRequestId, triggerHighlight,
   paymentFilter: externalPaymentFilter,
   setPaymentFilter: externalSetPaymentFilter,
-  availablePaymentTypes: externalAvailablePaymentTypes
+  availablePaymentTypes: externalAvailablePaymentTypes,
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
-    deleteRequest, addNotification, can, updateRequest, createActivityLog
+    deleteRequest, addNotification, can, updateRequest, createActivityLog,
+    brokers
   } = useAppContext();
+
+  const [activeBrokerMenuId, setActiveBrokerMenuId] = useState<string | null>(null);
+  const brokerMenuRef = useRef<HTMLDivElement>(null);
+  const [brokerSearchTerm, setBrokerSearchTerm] = useState('');
+  const [manualCommission, setManualCommission] = useState<number | ''>('');
+  const [tempSelectedBrokerId, setTempSelectedBrokerId] = useState<string | null>(null);
+
+  // Close broker menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (brokerMenuRef.current && !brokerMenuRef.current.contains(event.target as Node)) {
+        setActiveBrokerMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (activeBrokerMenuId) {
+      setBrokerSearchTerm('');
+      setManualCommission('');
+      setTempSelectedBrokerId(null);
+    }
+  }, [activeBrokerMenuId]);
+
+  const filteredBrokersForMenu = useMemo(() => {
+    if (!brokerSearchTerm.trim()) return brokers.filter(b => b.is_active);
+    const term = brokerSearchTerm.toLowerCase();
+    return brokers.filter(b => 
+      b.is_active && (b.name.toLowerCase().includes(term) || (b.phone && b.phone.includes(term)))
+    );
+  }, [brokers, brokerSearchTerm]);
+
+  const handleQuickAssignBroker = async (request: InspectionRequest, brokerId: string | null, commission?: number) => {
+    try {
+        const selectedBroker = brokers.find(b => b.id === brokerId);
+        const updatedRequest = {
+            ...request,
+            broker: brokerId ? {
+                id: brokerId,
+                commission: commission ?? (selectedBroker?.default_commission || 0)
+            } : null
+        };
+        
+        await updateRequest(updatedRequest);
+        addNotification({ 
+            title: 'نجاح', 
+            message: brokerId ? `تم ربط السمسار ${selectedBroker?.name} بنجاح` : 'تم إزالة السمسار بنجاح', 
+            type: 'success' 
+        });
+        setActiveBrokerMenuId(null);
+    } catch (error) {
+        addNotification({ title: 'خطأ', message: 'فشل تحديث بيانات السمسار', type: 'error' });
+    }
+  };
 
   const [internalPaymentFilter, setInternalPaymentFilter] = useState<PaymentType | 'الكل'>('الكل');
   const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
@@ -760,10 +822,151 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                 }
                                 {!isWaitingTable &&
                                      <td className="px-6 py-4">
-                                        <div className="flex items-center gap-1 font-bold text-slate-800 dark:text-slate-200">
-                                            {request.price.toLocaleString('en-US')} 
-                                            <span className="text-xs font-normal text-slate-500">ريال</span>
-                                            {priceSuffix}
+                                        <div className="relative">
+                                            <div 
+                                                className={`flex items-center gap-1 font-bold text-slate-800 dark:text-slate-200 ${can('add_broker_commission') ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50' : 'cursor-default'} p-1.5 rounded-lg transition-colors group/price`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!can('add_broker_commission')) return;
+                                                    setActiveBrokerMenuId(activeBrokerMenuId === request.id ? null : request.id);
+                                                }}
+                                                title={can('add_broker_commission') ? "اضغط لتعيين سمسار سريع" : ""}
+                                            >
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-1">
+                                                        {request.price.toLocaleString('en-US')} 
+                                                        <span className="text-xs font-normal text-slate-500">ريال</span>
+                                                        {priceSuffix}
+                                                    </div>
+                                                    {request.broker?.id && (
+                                                        <div className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-black mt-0.5">
+                                                            <UserCheckIcon className="w-2.5 h-2.5" />
+                                                            <span>{brokers.find(b => b.id === request.broker?.id)?.name || 'سمسار'}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="opacity-0 group-hover/price:opacity-100 transition-opacity ml-1">
+                                                    <ChevronDownIcon className="w-3 h-3 text-slate-400" />
+                                                </div>
+                                                
+                                                {request.payment_note && (
+                                                    <div className="relative group/tooltip flex items-center justify-center cursor-help mx-1">
+                                                        <InfoIcon className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors" />
+                                                        <div className="absolute bottom-full right-1/2 translate-x-[50%] mb-2 w-max max-w-[200px] p-2 bg-slate-900 text-white font-normal text-xs rounded shadow-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-50 pointer-events-none whitespace-pre-wrap text-center leading-relaxed">
+                                                            {request.payment_note}
+                                                            <div className="absolute top-full right-1/2 translate-x-[50%] border-[5px] border-transparent border-t-slate-900"></div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Quick Broker Menu */}
+                                            <AnimatePresence>
+                                                {activeBrokerMenuId === request.id && (
+                                                    <motion.div
+                                                        ref={brokerMenuRef}
+                                                        initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                                        className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 z-[100] overflow-hidden"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <div className="p-3 border-b border-slate-50 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
+                                                            <span className="text-xs font-black text-slate-500">إدارة السمسار</span>
+                                                            <button 
+                                                                onClick={() => setActiveBrokerMenuId(null)}
+                                                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                                            >
+                                                                <XIcon className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                        <div className="p-2 space-y-2">
+                                                            {!tempSelectedBrokerId ? (
+                                                                <>
+                                                                    <div className="relative mb-2">
+                                                                        <SearchIcon className="absolute right-2 top-2 w-3.5 h-3.5 text-slate-400" />
+                                                                        <input 
+                                                                            type="text"
+                                                                            placeholder="ابحث باسم أو هاتف السمسار..."
+                                                                            value={brokerSearchTerm}
+                                                                            onChange={(e) => setBrokerSearchTerm(e.target.value)}
+                                                                            className="w-full pr-7 pl-3 py-1.5 text-xs border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 focus:ring-2 focus:ring-blue-500 transition-all"
+                                                                            autoFocus
+                                                                        />
+                                                                    </div>
+                                                                    <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
+                                                                        {request.broker?.id && (
+                                                                            <button
+                                                                                onClick={() => handleQuickAssignBroker(request, null)}
+                                                                                className="w-full text-right px-3 py-2 text-[11px] font-bold rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all flex items-center gap-2"
+                                                                            >
+                                                                                <UserXIcon className="w-3.5 h-3.5" />
+                                                                                إزالة السمسار
+                                                                            </button>
+                                                                        )}
+                                                                        {filteredBrokersForMenu.map(broker => (
+                                                                            <button
+                                                                                key={broker.id}
+                                                                                onClick={() => {
+                                                                                    setTempSelectedBrokerId(broker.id);
+                                                                                    setManualCommission(broker.default_commission || '');
+                                                                                }}
+                                                                                className="w-full text-right px-3 py-2 text-[11px] font-bold rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all flex items-center justify-between gap-2"
+                                                                            >
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <UserCircleIcon className="w-3.5 h-3.5 opacity-50" />
+                                                                                    <span>{broker.name}</span>
+                                                                                </div>
+                                                                                {request.broker?.id === broker.id && <CheckCircleIcon className="w-3.5 h-3.5 text-blue-500" />}
+                                                                            </button>
+                                                                        ))}
+                                                                        {filteredBrokersForMenu.length === 0 && (
+                                                                            <div className="p-4 text-center text-[10px] text-slate-400">لا توجد نتائج</div>
+                                                                        )}
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <motion.div 
+                                                                    initial={{ opacity: 0, x: 20 }}
+                                                                    animate={{ opacity: 1, x: 0 }}
+                                                                    className="space-y-3 p-1"
+                                                                >
+                                                                    <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1">
+                                                                        <UserCheckIcon className="w-3.5 h-3.5" />
+                                                                        {brokers.find(b => b.id === tempSelectedBrokerId)?.name}
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-[10px] text-slate-500 mb-1">حدد العمولة يدوياً (ريال)</label>
+                                                                        <input 
+                                                                            type="number"
+                                                                            value={manualCommission}
+                                                                            onChange={(e) => setManualCommission(e.target.value === '' ? '' : Number(e.target.value))}
+                                                                            className="w-full p-2 text-xs border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500"
+                                                                            placeholder="0"
+                                                                            autoFocus
+                                                                        />
+                                                                    </div>
+                                                                    <div className="flex gap-2">
+                                                                        <button 
+                                                                            onClick={() => handleQuickAssignBroker(request, tempSelectedBrokerId, manualCommission === '' ? 0 : manualCommission)}
+                                                                            className="flex-1 bg-blue-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                                                                        >
+                                                                            تأكيد الربط
+                                                                        </button>
+                                                                        <button 
+                                                                            onClick={() => setTempSelectedBrokerId(null)}
+                                                                            className="px-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold py-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                                                                        >
+                                                                            رجوع
+                                                                        </button>
+                                                                    </div>
+                                                                </motion.div>
+                                                            )}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
                                         </div>
                                     </td>
                                 }

@@ -58,6 +58,7 @@ interface StepDetailsProps {
     getInputClass: (name: string) => string;
     onInspectionTypeFocus?: () => void;
     isReservationMode?: boolean;
+    isEditMode?: boolean;
     inspectionTypeSearchTerm?: string;
     handleTypeChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
     isTypeDropdownOpen?: boolean;
@@ -190,16 +191,17 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                                 <option key={pt} value={pt}>{pt}</option>
                             ))}
                         </select>
-                        {(props.paymentType === PaymentType.Transfer || props.paymentType === PaymentType.Unpaid) && (
+                        {(props.isEditMode || props.paymentType === PaymentType.Transfer || props.paymentType === PaymentType.Unpaid) && (
                             <div className="mt-2 animate-fade-in">
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                    ملاحظة للطلب
+                                    ملاحظة الدفع / الطلب
                                 </label>
                                 <input
                                     type="text"
                                     value={props.paymentNote}
                                     onChange={(e) => props.setPaymentNote(e.target.value)}
                                     className={formInputClasses}
+                                    placeholder="اختياري: مثال رقم الحوالة أو أي ملاحظة"
                                 />
                             </div>
                         )}

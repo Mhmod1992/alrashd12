@@ -5,7 +5,8 @@ import {
     InspectionRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Employee,
     Notification, AppNotification, Expense, Revenue, ActivityLog,
-    InternalMessage, Technician, Reservation, RequestStatus, Page, WhatsAppMessage, PaymentType
+    InternalMessage, Technician, Reservation, RequestStatus, Page, WhatsAppMessage, PaymentType,
+    FinancialStats
 } from '../../types';
 import { REQUESTS_PAGE_SIZE } from '../constants';
 import { uuidv4 } from '../../lib/utils'; // You might need to adjust this import path if utils is elsewhere
@@ -47,6 +48,7 @@ export const useDataScope = (
     const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
     const [unreadWhatsAppCount, setUnreadWhatsAppCount] = useState(0);
     const [latestWhatsAppMessage, setLatestWhatsAppMessage] = useState<WhatsAppMessage | null>(null);
+    const [financialReport, setFinancialReport] = useState<FinancialStats | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const triggerHighlight = useCallback((requestId: string) => {
@@ -71,7 +73,7 @@ export const useDataScope = (
             // Added 'attached_files' to the select list
             const results = await Promise.all([
                 supabase.from('inspection_requests')
-                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps')
+                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps, payment_note, split_payment_details')
                     .order('created_at', { ascending: false })
                     .limit(REQUESTS_PAGE_SIZE),
                 supabase.from('car_makes').select('*'),
@@ -316,7 +318,7 @@ export const useDataScope = (
     const fetchRequestsByDateRange = useCallback(async (startDate: string, endDate: string, paymentType?: PaymentType): Promise<InspectionRequest[]> => {
         // Added 'attached_files' to select list
         let query = supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps, payment_note, split_payment_details')
             .gte('created_at', startDate)
             .lte('created_at', endDate);
         
@@ -379,7 +381,7 @@ export const useDataScope = (
     const fetchPaperArchiveRequests = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
         // Fetches ALL requests in a date range for archiving purposes
         const { data, error } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details')
             .gte('created_at', startDate)
             .lte('created_at', endDate)
             .order('created_at', { ascending: false });
@@ -424,7 +426,7 @@ export const useDataScope = (
     const fetchAllPaperArchiveRequests = useCallback(async (): Promise<InspectionRequest[]> => {
         // Fetches ALL requests up to a limit for archiving purposes
         const { data, error } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details')
             .order('created_at', { ascending: false })
             .limit(500);
 
@@ -485,6 +487,7 @@ export const useDataScope = (
         whatsappMessages, setWhatsappMessages,
         unreadWhatsAppCount, setUnreadWhatsAppCount,
         latestWhatsAppMessage, setLatestWhatsAppMessage,
+        financialReport, setFinancialReport,
         isRefreshing, setIsRefreshing,
         fetchRequests,
         fetchCarModelsByMake,

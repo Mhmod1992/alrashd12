@@ -17,6 +17,7 @@ import StepDetails from './new-request/StepDetails';
 import StepBroker from './new-request/StepBroker';
 import ClientWelcomeCard from './new-request/ClientWelcomeCard';
 import ClientHistoryModal from './ClientHistoryModal';
+import CarHistoryModal from './CarHistoryModal';
 
 interface NewRequestFormProps {
     clients: Client[];
@@ -158,6 +159,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [isWelcomeCardVisible, setIsWelcomeCardVisible] = useState(false);
     const [isCheckingDebt, setIsCheckingDebt] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [isCarHistoryModalOpen, setIsCarHistoryModalOpen] = useState(false);
     const debtDebounceRef = useRef<number | null>(null);
 
     // State for keyboard navigation
@@ -1279,9 +1281,14 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             const newStatus = isReceptionistMode ? RequestStatus.WAITING_PAYMENT : (isEditMode && initialData ? initialData.status : RequestStatus.NEW);
             const finalPaymentType = isReceptionistMode ? PaymentType.Unpaid : paymentType;
 
-            const paymentNoteValue = (initialReservationData || isFromReservation) 
-                ? `[WA-RES] ${paymentNote.trim()}`.trim() 
-                : ((paymentType === PaymentType.Transfer || paymentType === PaymentType.Unpaid) && paymentNote.trim() ? paymentNote.trim() : undefined);
+            let paymentNoteValue = undefined;
+            if (initialReservationData || isFromReservation) {
+                paymentNoteValue = `[WA-RES] ${paymentNote.trim()}`.trim();
+            } else {
+                if (isEditMode || finalPaymentType === PaymentType.Transfer || finalPaymentType === PaymentType.Unpaid) {
+                    paymentNoteValue = paymentNote.trim() ? paymentNote.trim() : undefined;
+                }
+            }
 
             const splitPaymentDetails = paymentType === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined;
             const brokerValue = (!isReceptionistMode && useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : null;
@@ -1395,10 +1402,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
     const handleViewCarHistory = () => {
         if (!foundHistory) return;
-        const searchTerm = foundHistory.car.plate_number || foundHistory.car.vin || '';
-        if (!searchTerm) return;
-        const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(searchTerm)}`;
-        window.open(url, '_blank');
+        setIsCarHistoryModalOpen(true);
     };
 
     const getStepTitle = (step: number) => {
@@ -1676,10 +1680,11 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         typeDropdownRef={typeDropdownRef}
                         typeListRef={typeListRef}
                         handleKeyDown={handleKeyDown}
+                        isEditMode={isEditMode}
                     />
                 </div>
 
-                {!isReceptionistMode && !isReservationMode && (
+                {!isReceptionistMode && !isReservationMode && can('add_broker_commission') && (
                     <div className={isMobile && currentStep !== 4 ? 'hidden' : 'block animate-fade-in'}>
                         <StepBroker 
                             useBroker={useBroker}
@@ -1747,19 +1752,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     isVip={existingClientSummary.isVip}
                     unpaidRequestsCount={unpaidDebtAlert?.length || 0}
                     totalDebt={unpaidDebtAlert?.reduce((sum, req) => sum + (Number(req.price) || 0), 0) || 0}
-                    onClose={() => {
-                        setIsWelcomeCardVisible(false);
-                        if (!isMobile && carSectionRef.current) {
-                            carSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            setTimeout(() => {
-                                if (useChassisNumber) {
-                                    chassisInputRef.current?.focus();
-                                } else {
-                                    plateCharInputRef.current?.focus();
-                                }
-                            }, 300);
-                        }
-                    }}
+                    onClose={() => setIsWelcomeCardVisible(false)}
                     onViewHistory={() => {
                         setIsWelcomeCardVisible(false);
                         setIsHistoryModalOpen(true);
@@ -1771,6 +1764,13 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 isOpen={isHistoryModalOpen} 
                 client={existingClientSummary?.clientObj || null} 
                 onClose={() => setIsHistoryModalOpen(false)} 
+            />
+
+            <CarHistoryModal 
+                isOpen={isCarHistoryModalOpen}
+                car={foundHistory?.car || null}
+                requests={foundHistory?.previousRequests || []}
+                onClose={() => setIsCarHistoryModalOpen(false)}
             />
 
             <CameraScannerModal

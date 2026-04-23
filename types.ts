@@ -63,6 +63,8 @@ export const PERMISSIONS = {
   manage_api_keys: 'إدارة مفاتيح الربط (API Keys)',
   manage_reservations: 'إدارة الحجوزات الواردة',
   delete_whatsapp_messages: 'مسح رسائل الواتساب',
+  pay_broker_commission: 'صرف عمولات السماسرة',
+  add_broker_commission: 'إضافة عمولة سمسار للطلب',
   view_requests_list: 'عرض صفحة إدارة الطلبات',
   view_settings: 'عرض صفحة الإعدادات',
 } as const;
@@ -553,6 +555,7 @@ export interface FinancialStats {
   totalAdvances: number;
   totalCommissions: number;
   netProfit: number;
+  grandTotal: number;
   ledgerData: any[];
   daily: Record<string, any>;
   dailyRevenueChart: { label: string; value: number }[];
@@ -566,6 +569,7 @@ export interface FinancialStats {
   filteredRequests: InspectionRequest[];
   filteredExpenses: Expense[];
   filteredRevenues: Revenue[];
+  filteredAdvances: Expense[];
 }
 
 export interface WhatsAppMessage {

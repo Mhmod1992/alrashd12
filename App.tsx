@@ -388,17 +388,67 @@ const PrintStyles = () => (
       }
       @media print {
         @page {
-          margin: 10mm; /* Standard margin to allow browser header/footer (page numbers) */
+          margin: 10mm;
           size: A4;
         }
 
-        body {
-          margin: 0;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
+        /* Essential Reset for Printing */
+        html, body, #root {
+          height: auto !important;
+          overflow: visible !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: white !important;
+          color: black !important;
+          visibility: visible !important;
         }
 
-        /* Ensure the report wrapper fits nicely */
+        /* Unset layout constraints */
+        .flex-col.h-screen, 
+        .flex-1.overflow-hidden,
+        .flex-1.overflow-y-auto,
+        main.overflow-y-auto {
+          height: auto !important;
+          overflow: visible !important;
+          display: block !important;
+          position: static !important;
+        }
+
+        /* Essential: Ensure visibility of the content */
+        * {
+          visibility: visible !important;
+        }
+
+        /* Hide specific elements */
+        .no-print, 
+        .sidebar, 
+        aside,
+        header, 
+        [role="banner"],
+        .print\\:hidden,
+        #background-container,
+        .fixed.inset-0 {
+            display: none !important;
+        }
+
+        /* Reset padding for the main area */
+        main {
+          padding: 0 !important;
+          margin: 0 !important;
+          background: white !important;
+        }
+
+        /* Force colors */
+        .dark {
+          background-color: white !important;
+          color: black !important;
+        }
+        
+        .dark * {
+          color: black !important;
+          border-color: #e2e8f0 !important;
+        }
+
         .report-wrapper {
           width: 100% !important;
           max-width: none !important;
@@ -406,28 +456,11 @@ const PrintStyles = () => (
           padding: 0 !important;
           box-shadow: none !important;
           overflow: visible !important;
-          min-height: auto !important;
         }
         
-        /* Hide scrollbars */
-        ::-webkit-scrollbar {
-            display: none;
-        }
-        
-        /* Force browsers to render background colors and box shadows */
         * {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
-        }
-
-        /* Tailwind CSS class overrides for printing */
-        .border-dashed {
-          border-style: dashed !important;
-        }
-        
-        /* Hide elements marked with no-print class */
-        .no-print {
-            display: none !important;
         }
       }
     `}

@@ -149,6 +149,8 @@ export interface AppContextType {
     hideConfirmModal: () => void;
     isLoading: boolean;
     isRefreshing: boolean;
+    financialReport: FinancialStats | null;
+    setFinancialReport: React.Dispatch<React.SetStateAction<FinancialStats | null>>;
     isSetupComplete: boolean;
     startSetupProcess: () => void;
     can: (permission: Permission) => boolean;

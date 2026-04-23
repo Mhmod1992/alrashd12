@@ -226,8 +226,8 @@ CREATE TABLE IF NOT EXISTS reservations (
     service_type TEXT,
     notes TEXT,
     status TEXT DEFAULT 'new',
-    car_make_id UUID,
-    car_model_id UUID,
+    car_make_id UUID REFERENCES car_makes(id),
+    car_model_id UUID REFERENCES car_models(id),
     car_year INTEGER,
     price NUMERIC DEFAULT 0,
     payment_type TEXT,
@@ -319,8 +319,8 @@ CREATE TABLE IF NOT EXISTS payroll_drafts (
 CREATE TABLE IF NOT EXISTS activity_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     timestamp TIMESTAMPTZ DEFAULT now(),
-    employee_id UUID,
-    employee_name TEXT,
+    "employeeId" UUID REFERENCES employees(id),
+    "employeeName" TEXT,
     action TEXT,
     details TEXT,
     image_url TEXT,
@@ -335,13 +335,13 @@ CREATE TABLE IF NOT EXISTS expenses (
     category TEXT NOT NULL,
     description TEXT,
     amount NUMERIC NOT NULL,
-    employee_id UUID REFERENCES employees(id),
-    employee_name TEXT,
+    "employeeId" UUID REFERENCES employees(id),
+    "employeeName" TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Revenues Table
-CREATE TABLE IF NOT EXISTS revenues (
+CREATE TABLE IF NOT EXISTS other_revenues (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     date TIMESTAMPTZ NOT NULL,
     category TEXT NOT NULL,
@@ -363,15 +363,15 @@ CREATE TABLE IF NOT EXISTS notifications (
     link TEXT,
     link_id TEXT,
     type TEXT,
-    user_id UUID,
+    user_id UUID REFERENCES employees(id),
     created_by_name TEXT
 );
 
 -- Internal Messages Table
 CREATE TABLE IF NOT EXISTS internal_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sender_id UUID NOT NULL,
-    receiver_id UUID NOT NULL,
+    sender_id UUID NOT NULL REFERENCES employees(id),
+    receiver_id UUID NOT NULL REFERENCES employees(id),
     sender_name TEXT,
     receiver_name TEXT,
     subject TEXT,
@@ -431,7 +431,7 @@ ALTER TABLE reservations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payroll_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE revenues ENABLE ROW LEVEL SECURITY;
+ALTER TABLE other_revenues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE internal_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages ENABLE ROW LEVEL SECURITY;
