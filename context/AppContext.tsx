@@ -744,7 +744,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const clearSearchedRequests = useCallback(() => setSearchedRequests(null), [setSearchedRequests]);
 
     const searchRequestByNumber = useCallback(async (queryRaw: string | number, exactOnly: boolean = false) => {
-        const query = String(queryRaw).trim();
+        // Normalize numerals to English immediately
+        const query = arabicToEnglishNumerals(String(queryRaw).trim());
+        
         if (!query) {
             clearSearchedRequests();
             return;
@@ -777,6 +779,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const car = cars.find(c => c.id === r.car_id);
                 const make = carMakes.find(m => m.id === car?.make_id);
                 const model = carModels.find(m => m.id === car?.model_id);
+
+                // For plate searching, compare without spaces
+                const plateNormalized = car?.plate_number?.replace(/\s/g, '').toLowerCase();
+                const plateEnNormalized = car?.plate_number_en?.replace(/\s/g, '').toLowerCase();
+                const queryNormalized = query.replace(/\s/g, '').toLowerCase();
+
+                if (plateNormalized && plateNormalized.includes(queryNormalized)) return true;
+                if (plateEnNormalized && plateEnNormalized.includes(queryNormalized)) return true;
 
                 // Create a comprehensive string block for this request
                 const searchableBlock = [
@@ -846,50 +856,75 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                  clientIds = foundClients?.map(c => c.id) || [];
             } else {
                  // Search by Name or Phone (mixed) - using tokens for smarter search
+                 // Only search name if tokens are significant (2+ chars) to avoid single-letter junk results
                  let clientQuery = supabase.from('clients').select('id');
                  
-                 // For clients, we want to match if ANY token matches name or phone
-                 // This allows finding "محمود البري" when searching "محمود"
-                 const clientOrConditions = searchTokens.flatMap(token => [
-                     `name.ilike.%${token}%`,
-                     `phone.ilike.%${token}%`
-                 ]);
+                 const significantTokens = searchTokens.filter(t => t.length >= 2);
+                 const clientOrConditions: string[] = [];
+                 
+                 if (significantTokens.length > 0) {
+                     significantTokens.forEach(token => {
+                        clientOrConditions.push(`name.ilike.%${token}%`);
+                        clientOrConditions.push(`phone.ilike.%${token}%`);
+                     });
+                 } else if (searchTokens.length > 0) {
+                     // Fallback to searching the whole query if only short tokens exist, but as a single string
+                     clientOrConditions.push(`name.ilike.%${query}%`);
+                     clientOrConditions.push(`phone.ilike.%${query}%`);
+                 }
                  
                  if (clientOrConditions.length > 0) {
                      clientQuery = clientQuery.or(clientOrConditions.join(','));
+                     const { data: foundClients } = await clientQuery.limit(50);
+                     clientIds = foundClients?.map(c => c.id) || [];
                  }
-
-                 const { data: foundClients } = await clientQuery.limit(50);
-                 clientIds = foundClients?.map(c => c.id) || [];
             }
 
             // 3. Search Cars (Plate, VIN, Year)
             const cleanQuery = query.replace(/\s/g, '');
-            const letters = query.replace(/[0-9\s]/g, '');
-            const numbers = query.replace(/[^0-9]/g, '');
+            // For plate search, we want to be extremely flexible with spaces.
+            // If the user typed " د ب ع 1234 ", we should search for "دبع1234" and variants.
             
             const variations = new Set<string>();
             variations.add(query.trim());
             variations.add(cleanQuery);
             
+            // Extract letters and numbers to create even more variants
+            const letters = query.replace(/[0-9\s]/g, '');
+            const numbers = query.replace(/[^0-9]/g, '');
+            
             if (letters && numbers) {
+                // If input was "A B C 123" -> try "ABC123", "ABC 123", "123ABC", etc.
+                variations.add(`${letters}${numbers}`);
                 variations.add(`${letters} ${numbers}`);
-                const spacedLetters = letters.split('').join(' ');
-                variations.add(`${spacedLetters} ${numbers}`);
-                variations.add(`${spacedLetters}${numbers}`);
                 
-                // For plate searches like "1234 abc", try reversing it to "abc 1234"
-                variations.add(`${numbers} ${letters}`);
+                // Also handle reverse order (123 ABC)
                 variations.add(`${numbers}${letters}`);
-                variations.add(`${numbers} ${spacedLetters}`);
+                variations.add(`${numbers} ${letters}`);
+
+                // Handle common Saudi format (3 letters then 4 numbers)
+                if (letters.length === 3 && numbers.length > 0) {
+                    const spacedLetters = letters.split('').join(' ');
+                    variations.add(`${spacedLetters} ${numbers}`);
+                    variations.add(`${spacedLetters}${numbers}`);
+                }
             }
             
-            const uniqueVariations = Array.from(variations);
-            const orConditions = uniqueVariations.flatMap(v => [
-                `plate_number.ilike.%${v}%`,
-                `plate_number_en.ilike.%${v}%`
-            ]);
-            orConditions.push(`vin.ilike.%${cleanQuery}%`);
+            const uniqueVariations = Array.from(variations).filter(v => v.length > 1);
+            const orConditions: string[] = [];
+            
+            if (uniqueVariations.length > 0) {
+                uniqueVariations.forEach(v => {
+                    // Search both Arabic and English plate columns with each variation
+                    orConditions.push(`plate_number.ilike.%${v}%`);
+                    orConditions.push(`plate_number_en.ilike.%${v}%`);
+                });
+            }
+            
+            // If it's a long string, it might be a VIN
+            if (cleanQuery.length > 4) {
+                orConditions.push(`vin.ilike.%${cleanQuery}%`);
+            }
             
             // Add year search if any token looks like a year
             const yearTokens = searchTokens.filter(t => /^(19|20)\d{2}$/.test(t));

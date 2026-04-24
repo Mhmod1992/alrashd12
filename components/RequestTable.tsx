@@ -124,7 +124,7 @@ const StatusBadge: React.FC<{ status: RequestStatus }> = ({ status }) => {
     }
 };
 
-const RequestTable: React.FC<RequestTableProps> = ({ 
+const RequestTable: React.FC<RequestTableProps> = React.memo(({ 
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
   title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
   onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh,
@@ -656,7 +656,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                     </tr>
                 </thead>
                 <tbody>
-                    <AnimatePresence mode="popLayout">
+                    <AnimatePresence>
                     {displayedRequests.length > 0 ? (
                         displayedRequests.map((request) => {
                             const clientInfo = getClientInfo(request.client_id);
@@ -704,16 +704,10 @@ const RequestTable: React.FC<RequestTableProps> = ({
 
                         return (
                             <motion.tr 
-                                layout
-                                initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-                                transition={{ 
-                                    type: "spring", 
-                                    stiffness: 350, 
-                                    damping: 25, 
-                                    mass: 0.8 
-                                }}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.2 }}
                                 key={request.id} 
                                 id={`request-row-${request.id}`} 
                                 className={rowClass}
@@ -1121,6 +1115,6 @@ const RequestTable: React.FC<RequestTableProps> = ({
       />
     </div>
   );
-};
+});
 
 export default RequestTable;

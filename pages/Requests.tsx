@@ -774,6 +774,14 @@ const Requests: React.FC = () => {
     const isLoadMoreVisible = searchedRequests === null && serverFetchedData === null && hasMoreRequests && dateFilter === 'all';
     const isAnyFilterActive = requestNumberQuery.trim() !== '' || comprehensiveQuery.trim() !== '' || statusFilter !== 'الكل' || employeeFilter !== 'الكل' || dateFilter !== 'today';
 
+    const [displayLimit, setDisplayLimit] = useState(20);
+    const [isPaginatingLocal, setIsPaginatingLocal] = useState(false);
+
+    useEffect(() => {
+        // Reset local limit when filters change significantly
+        setDisplayLimit(20);
+    }, [dateFilter, paymentFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm]);
+
     const { dataToDisplay, waitingPaymentRequests, carsWithHistory } = useMemo(() => {
         let sourceData: InspectionRequest[];
 
@@ -998,11 +1006,27 @@ const Requests: React.FC = () => {
         return employees.find(e => e.id === paymentRequest.employee_id);
     }, [paymentRequest, employees]);
 
+    const paginatedDataToDisplay = useMemo(() => {
+        return dataToDisplay.slice(0, displayLimit);
+    }, [dataToDisplay, displayLimit]);
+
     const handleLoadMore = useCallback(() => {
+        // First try to show more of what we already have locally
+        if (displayLimit < dataToDisplay.length) {
+            setIsPaginatingLocal(true);
+            // Small delay for smooth transition effect
+            setTimeout(() => {
+                setDisplayLimit(prev => prev + 20);
+                setIsPaginatingLocal(false);
+            }, 100);
+            return;
+        }
+
+        // If we showed everything locally, only then fetch from server if possible
         if (isLoadMoreVisible && !isLoadingMore) {
             loadMoreRequests();
         }
-    }, [isLoadMoreVisible, isLoadingMore, loadMoreRequests]);
+    }, [displayLimit, dataToDisplay.length, isLoadMoreVisible, isLoadingMore, loadMoreRequests]);
 
     return (
         <div className="container mx-auto">
@@ -1489,7 +1513,7 @@ const Requests: React.FC = () => {
             {(serverFetchedData || !isFetchingDateRange) && (
                 <>
                     <RequestTable
-                        requests={dataToDisplay}
+                        requests={paginatedDataToDisplay}
                         clients={clients}
                         cars={cars}
                         carMakes={carMakes}
@@ -1509,8 +1533,8 @@ const Requests: React.FC = () => {
                         onRefresh={fetchRequests}
                         isLoading={isSearching || isFetchingDateRange}
                         onLoadMore={handleLoadMore}
-                        hasMore={isLoadMoreVisible}
-                        isLoadingMore={isLoadingMore}
+                        hasMore={isLoadMoreVisible || displayLimit < dataToDisplay.length}
+                        isLoadingMore={isLoadingMore || isPaginatingLocal}
                         searchTokens={searchedRequests ? (requestNumberQuery || comprehensiveQuery).toLowerCase().split(/\s+/).filter(t => t.length > 0) : undefined}
                         highlightedRequestId={selectedRequestId}
                         triggerHighlight={triggerHighlight}
