@@ -7,40 +7,13 @@ import UserCircleIcon from './icons/UserCircleIcon';
 import AlertTriangleIcon from './icons/AlertTriangleIcon';
 import WhatsappIcon from './icons/WhatsappIcon';
 import { format } from 'date-fns';
+import { timeAgo } from '../lib/utils';
 
 interface ClientHistoryModalProps {
     isOpen: boolean;
     client: Client | null;
     onClose: () => void;
 }
-
-const timeAgo = (dateParam: string | Date | undefined) => {
-    if (!dateParam) return '';
-    const date = typeof dateParam === 'object' ? dateParam : new Date(dateParam);
-    const today = new Date();
-    const seconds = Math.round((today.getTime() - date.getTime()) / 1000);
-    const minutes = Math.round(seconds / 60);
-    const hours = Math.round(minutes / 60);
-    const days = Math.round(hours / 24);
-    const months = Math.round(days / 30);
-    const years = Math.round(months / 12);
-
-    if (seconds < 60) return `الآن`;
-    if (minutes < 60) return `منذ ${minutes} دقيقة`;
-    if (hours < 24) return `منذ ${hours} ساعة`;
-    if (days === 1) return `أمس`;
-    if (days === 2) return `منذ يومين`;
-    if (days <= 10) return `منذ ${days} أيام`;
-    if (days < 30) return `منذ ${days} يوم`;
-    if (months === 1) return `منذ شهر`;
-    if (months === 2) return `منذ شهرين`;
-    if (months <= 10) return `منذ ${months} أشهر`;
-    if (months < 12) return `منذ ${months} شهر`;
-    if (years === 1) return `منذ سنة`;
-    if (years === 2) return `منذ سنتين`;
-    if (years <= 10) return `منذ ${years} سنوات`;
-    return `منذ ${years} سنة`;
-};
 
 const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client, onClose }) => {
     const { fetchClientRequests, cars } = useAppContext();

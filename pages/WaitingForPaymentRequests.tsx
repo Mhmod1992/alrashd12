@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { supabase } from '../lib/supabaseClient';
 import { InspectionRequest, RequestStatus, PaymentType } from '../types';
 import Button from '../components/Button';
 import PlusIcon from '../components/icons/PlusIcon';
@@ -33,6 +34,14 @@ const WaitingForPaymentRequests: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [plateDisplayLanguage, setPlateDisplayLanguage] = useState<'ar' | 'en'>('ar');
+    
+    // History Modal State
+    const [historyModalCar, setHistoryModalCar] = useState<{ carId: string, carName: string } | null>(null);
+    const [carHistoryRequests, setCarHistoryRequests] = useState<InspectionRequest[]>([]);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [serverCarsWithHistory, setServerCarsWithHistory] = useState<Set<string>>(new Set());
+
+    const { fetchRequestsByCarId, triggerHighlight, setSelectedRequestId, setPage: navigateToPage } = useAppContext();
 
     // Handle search from URL
     useEffect(() => {
@@ -57,13 +66,120 @@ const WaitingForPaymentRequests: React.FC = () => {
         }
     }, [initialRequestModalState, setInitialRequestModalState, can]);
 
-    const waitingRequests = useMemo(() => {
+    const { dataToDisplay, carsWithHistory } = useMemo(() => {
         const waiting = requests.filter(r => r.status === RequestStatus.WAITING_PAYMENT);
-        if (!searchTerm.trim()) {
-            return waiting;
+        let sourceData = waiting;
+        if (searchTerm.trim()) {
+            sourceData = waiting.filter(r => String(r.request_number).includes(searchTerm.trim()));
         }
-        return waiting.filter(r => String(r.request_number).includes(searchTerm.trim()));
-    }, [requests, searchTerm]);
+
+        const identityToRequestCount = new Map<string, number>();
+        const carIdToIdentity = new Map<string, string>();
+
+        requests.forEach(req => {
+            const car = cars.find(c => c.id === req.car_id);
+            if (car) {
+                const identity = (car.vin || car.plate_number || car.plate_number_en || car.id).replace(/\s/g, '').toLowerCase();
+                identityToRequestCount.set(identity, (identityToRequestCount.get(identity) || 0) + 1);
+                carIdToIdentity.set(req.car_id, identity);
+            }
+        });
+
+        const carsWithHistorySet = new Set<string>();
+        sourceData.forEach(req => {
+            const identity = carIdToIdentity.get(req.car_id);
+            if (identity && (identityToRequestCount.get(identity) || 0) > 1) {
+                carsWithHistorySet.add(req.car_id);
+            }
+        });
+
+        return { dataToDisplay: sourceData, carsWithHistory: carsWithHistorySet };
+    }, [requests, searchTerm, cars]);
+
+    useEffect(() => {
+        const fetchHistory = async () => {
+             const uniqueCarIds = Array.from(new Set(dataToDisplay.map(r => r.car_id))).filter(Boolean);
+             if (uniqueCarIds.length === 0) return;
+
+             const chunks = [];
+             const chunkSize = 15;
+             for (let i = 0; i < uniqueCarIds.length; i += chunkSize) {
+                 chunks.push(uniqueCarIds.slice(i, i + chunkSize));
+             }
+
+             const newHistorySet = new Set<string>();
+
+             for (const chunk of chunks) {
+                 const chunkCars = cars.filter(c => chunk.includes(c.id));
+                 
+                 for (const car of chunkCars) {
+                     const plate = car.plate_number?.replace(/\s/g, '').toLowerCase();
+                     const plateEn = car.plate_number_en?.replace(/\s/g, '').toLowerCase();
+                     const vin = car.vin?.replace(/\s/g, '').toLowerCase();
+
+                     if (!plate && !plateEn && !vin) {
+                         const { count } = await supabase
+                            .from('inspection_requests')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('car_id', car.id);
+                         if (count && count > 1) newHistorySet.add(car.id);
+                         continue;
+                     }
+
+                     let queryParts = [];
+                     if (plate) queryParts.push(`plate_number.ilike.${plate}`); // Using exact lowercase matching
+                     if (plateEn) queryParts.push(`plate_number_en.ilike.${plateEn}`);
+                     if (vin) queryParts.push(`vin.ilike.${vin}`);
+
+                     const { data: matchingCars } = await supabase
+                        .from('cars')
+                        .select('id')
+                        .or(queryParts.join(','));
+                     
+                     if (matchingCars && matchingCars.length > 0) {
+                         const matchingCarIds = matchingCars.map((c: any) => c.id);
+                         const { count } = await supabase
+                            .from('inspection_requests')
+                            .select('*', { count: 'exact', head: true })
+                            .in('car_id', matchingCarIds);
+                         
+                         if (count && count > 1) {
+                             newHistorySet.add(car.id);
+                         }
+                     }
+                 }
+             }
+             
+             setServerCarsWithHistory(prev => {
+                 const next = new Set(prev);
+                 newHistorySet.forEach(id => next.add(id));
+                 return next;
+             });
+        };
+
+        const timeoutId = setTimeout(fetchHistory, 1500);
+        return () => clearTimeout(timeoutId);
+    }, [dataToDisplay, cars, supabase]);
+
+    const combinedCarsWithHistory = useMemo(() => {
+        const combined = new Set(carsWithHistory);
+        serverCarsWithHistory.forEach(id => combined.add(id));
+        return combined;
+    }, [carsWithHistory, serverCarsWithHistory]);
+
+    const handleOpenHistoryModal = async (event: React.MouseEvent, carId: string, carName: string) => {
+        event.stopPropagation();
+        setHistoryModalCar({ carId, carName });
+        setIsLoadingHistory(true);
+        try {
+            const history = await fetchRequestsByCarId(carId);
+            setCarHistoryRequests(history);
+        } catch (error) {
+            addNotification({ title: 'خطأ', message: 'فشل تحميل سجل السيارة.', type: 'error' });
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    };
 
     const handleResendWhatsApp = async (request: InspectionRequest) => {
         const client = clients.find(c => c.id === request.client_id);
@@ -159,7 +275,7 @@ const WaitingForPaymentRequests: React.FC = () => {
                 />
             </div>
 
-            {waitingRequests.length === 0 ? (
+            {dataToDisplay.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
                     <div className="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-full mb-4">
                         <RefreshCwIcon className="w-10 h-10 text-purple-500" />
@@ -178,7 +294,7 @@ const WaitingForPaymentRequests: React.FC = () => {
                 </div>
             ) : (
                 <RequestTable
-                    requests={waitingRequests}
+                    requests={dataToDisplay}
                     clients={clients}
                     cars={cars}
                     carMakes={carMakes}
@@ -192,6 +308,8 @@ const WaitingForPaymentRequests: React.FC = () => {
                     isLive={true}
                     onProcessPayment={can('process_payment') ? handleProcessPaymentClick : undefined}
                     onResendWhatsApp={handleResendWhatsApp}
+                    onHistoryClick={handleOpenHistoryModal}
+                    carsWithHistory={combinedCarsWithHistory}
                 />
             )}
 
@@ -284,6 +402,34 @@ const WaitingForPaymentRequests: React.FC = () => {
                     <Button onClick={confirmPayment}>تأكيد الاستلام</Button>
                 </div>
             </Modal>
+
+            {historyModalCar && (
+                <Modal 
+                    isOpen={!!historyModalCar} 
+                    onClose={() => setHistoryModalCar(null)} 
+                    title={`سجل فحص سيارة: ${historyModalCar.carName}`}
+                    size="4xl"
+                >
+                    <div className="p-1">
+                        <RequestTable 
+                            requests={carHistoryRequests}
+                            clients={clients}
+                            cars={cars}
+                            carMakes={carMakes}
+                            carModels={carModels}
+                            inspectionTypes={inspectionTypes}
+                            employees={employees}
+                            title="الطلبات السابقة"
+                            isLoading={isLoadingHistory}
+                            onRowClick={(id) => {
+                                setHistoryModalCar(null);
+                                setSelectedRequestId(id);
+                                navigateToPage('request-draft');
+                            }}
+                        />
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 };

@@ -278,6 +278,12 @@ const Requests: React.FC = () => {
         }
     };
 
+    const getBusinessDateStr = useCallback((date: string | Date) => {
+        const d = new Date(date);
+        if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+        return d.toLocaleDateString('en-CA');
+    }, []);
+
     // --- REAL-TIME SYNC FOR FILTERED DATA ---
     useEffect(() => {
         if (!serverFetchedData) return;
@@ -285,12 +291,7 @@ const Requests: React.FC = () => {
         let hasChanges = false;
         let newData = [...serverFetchedData];
         
-        // Custom Date Logic: Day starts at 4 AM
-        const now = new Date();
-        if (now.getHours() < 4) {
-            now.setDate(now.getDate() - 1);
-        }
-        const todayStr = now.toLocaleDateString('en-CA');
+        const todayStr = getBusinessDateStr(new Date());
 
         // 1. Update Existing items
         newData = newData.map(localItem => {
@@ -312,8 +313,8 @@ const Requests: React.FC = () => {
         // 2. Insert New items (Only for 'Today' filter)
         if (dateFilter === 'today') {
             requests.forEach(req => {
-                const reqDate = new Date(req.created_at).toLocaleDateString('en-CA');
-                if (reqDate === todayStr && !newData.find(r => r.id === req.id)) {
+                const reqBusDate = getBusinessDateStr(req.created_at);
+                if (reqBusDate === todayStr && !newData.find(r => r.id === req.id)) {
                     newData.unshift(req);
                     hasChanges = true;
                 }
@@ -350,43 +351,44 @@ const Requests: React.FC = () => {
     // --- DATABASE TOTAL COUNT FETCHING ---
     useEffect(() => {
         const fetchCount = async () => {
-            let start: string | undefined;
-            let end: string | undefined;
+            let startBound: string | undefined;
+            let endBound: string | undefined;
 
             if (dateFilter !== 'all') {
                 const now = new Date();
-                if (now.getHours() < 4) now.setDate(now.getDate() - 1);
+                const hour = now.getHours();
 
-                const s = new Date(now);
-                const e = new Date(now);
+                let dStart = new Date(now);
+                if (hour < 4) dStart.setDate(dStart.getDate() - 1);
+                dStart.setHours(4, 0, 0, 0);
+
+                let dEnd = new Date(dStart);
+                dEnd.setDate(dEnd.getDate() + 1);
+                dEnd.setMilliseconds(-1);
 
                 if (dateFilter === 'today') {
-                    s.setHours(0, 0, 0, 0);
-                    e.setHours(23, 59, 59, 999);
+                    // dStart and dEnd are already set to current business shift
                 } else if (dateFilter === 'yesterday') {
-                    s.setDate(now.getDate() - 1);
-                    s.setHours(0, 0, 0, 0);
-                    e.setDate(now.getDate() - 1);
-                    e.setHours(23, 59, 59, 999);
+                    dStart.setDate(dStart.getDate() - 1);
+                    dEnd.setDate(dEnd.getDate() - 1);
                 } else if (dateFilter === 'month') {
-                    s.setDate(1);
-                    s.setHours(0, 0, 0, 0);
-                    e.setMonth(now.getMonth() + 1, 0);
-                    e.setHours(23, 59, 59, 999);
+                    dStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                    dStart.setHours(0, 0, 0, 0);
+                    dEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
                 } else if (dateFilter === 'range' && rangeStartDate && rangeEndDate) {
-                    s.setTime(new Date(rangeStartDate).getTime());
-                    s.setHours(0, 0, 0, 0);
-                    e.setTime(new Date(rangeEndDate).getTime());
-                    e.setHours(23, 59, 59, 999);
+                    dStart = new Date(rangeStartDate);
+                    dStart.setHours(0, 0, 0, 0);
+                    dEnd = new Date(rangeEndDate);
+                    dEnd.setHours(23, 59, 59, 999);
                 } else if (dateFilter === 'range') {
                     return; // Wait for range to be applied
                 }
-                start = s.toISOString();
-                end = e.toISOString();
+                startBound = dStart.toISOString();
+                endBound = dEnd.toISOString();
             }
 
             const pType = paymentFilter === 'الكل' ? undefined : paymentFilter;
-            const count = await fetchRequestsCount(start, end, pType);
+            const count = await fetchRequestsCount(startBound, endBound, pType);
             setDbTotalCount(count);
         };
 
@@ -566,17 +568,17 @@ const Requests: React.FC = () => {
         const isDateChanged = lastDateFilter.current !== dateFilter;
         lastDateFilter.current = dateFilter;
 
-        // Custom Date Logic: Day starts at 4 AM
+        // Shift calculation logic for 4 AM start of business day
         const now = new Date();
-        const currentHour = now.getHours();
+        const hour = now.getHours();
         
-        // If before 4 AM, we are still in the "previous" day logically
-        if (currentHour < 4) {
-            now.setDate(now.getDate() - 1);
-        }
-
         let start = new Date(now);
-        let end = new Date(now);
+        if (hour < 4) start.setDate(start.getDate() - 1);
+        start.setHours(4, 0, 0, 0);
+        
+        let end = new Date(start);
+        end.setDate(end.getDate() + 1);
+        end.setMilliseconds(-1);
 
         // Case: No date filter AND no payment filter -> use local paginated data
         if (dateFilter === 'all' && paymentFilter === 'الكل') {
@@ -595,15 +597,13 @@ const Requests: React.FC = () => {
             end = new Date();
             end.setFullYear(end.getFullYear() + 1); // Way into the future
         } else if (dateFilter === 'today') {
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
+            // Current shift bounds are already set above
         } else if (dateFilter === 'yesterday') {
-            start.setDate(now.getDate() - 1);
-            start.setHours(0, 0, 0, 0);
-            end.setDate(now.getDate() - 1);
-            end.setHours(23, 59, 59, 999);
+            start.setDate(start.getDate() - 1);
+            end.setDate(end.getDate() - 1);
         } else if (dateFilter === 'month') {
             start = new Date(now.getFullYear(), now.getMonth(), 1);
+            start.setHours(0, 0, 0, 0);
             end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
         }
 
@@ -774,18 +774,6 @@ const Requests: React.FC = () => {
     const isLoadMoreVisible = searchedRequests === null && serverFetchedData === null && hasMoreRequests && dateFilter === 'all';
     const isAnyFilterActive = requestNumberQuery.trim() !== '' || comprehensiveQuery.trim() !== '' || statusFilter !== 'الكل' || employeeFilter !== 'الكل' || dateFilter !== 'today';
 
-    const [displayLimit, setDisplayLimit] = useSessionStorage('requests_display_limit', 10);
-    const [isPaginatingLocal, setIsPaginatingLocal] = useState(false);
-    const observerTarget = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (isFirstMount.current) {
-            isFirstMount.current = false;
-            return;
-        }
-        setDisplayLimit(10);
-    }, [dateFilter, paymentFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm]);
-
     const { dataToDisplay, waitingPaymentRequests, carsWithHistory } = useMemo(() => {
         let sourceData: InspectionRequest[];
 
@@ -799,14 +787,30 @@ const Requests: React.FC = () => {
             sourceData = requests;
         }
 
-        const carIdToRequestCount = new Map<string, number>();
+        // Map to keep track of identifiers across all local requests
+        const identifierToRequestCount = new Map<string, number>();
         requests.forEach(req => {
-            carIdToRequestCount.set(req.car_id, (carIdToRequestCount.get(req.car_id) || 0) + 1);
+            const car = cars.find(c => c.id === req.car_id);
+            if (car) {
+                if (car.plate_number) {
+                    const p = car.plate_number.trim();
+                    identifierToRequestCount.set(p, (identifierToRequestCount.get(p) || 0) + 1);
+                }
+                if (car.plate_number_en) {
+                    const p = car.plate_number_en.trim();
+                    identifierToRequestCount.set(p, (identifierToRequestCount.get(p) || 0) + 1);
+                }
+                if (car.vin) {
+                    const v = car.vin.trim();
+                    identifierToRequestCount.set(v, (identifierToRequestCount.get(v) || 0) + 1);
+                }
+            }
         });
+
         const carsWithHistorySet = new Set<string>();
-        carIdToRequestCount.forEach((count, carId) => {
+        identifierToRequestCount.forEach((count, identifier) => {
             if (count > 1) {
-                carsWithHistorySet.add(carId);
+                carsWithHistorySet.add(identifier);
             }
         });
 
@@ -861,30 +865,63 @@ const Requests: React.FC = () => {
 
     useEffect(() => {
         const fetchHistory = async () => {
-             const uniqueCarIds = Array.from(new Set(dataToDisplay.map(r => r.car_id))).filter(Boolean);
-             if (uniqueCarIds.length === 0) return;
+             const uniqueCars = Array.from(new Set(dataToDisplay.map(r => r.car_id)))
+                .map(id => cars.find(c => c.id === id))
+                .filter(Boolean) as Car[];
+             
+             if (uniqueCars.length === 0) return;
 
-             const chunks = [];
-             const chunkSize = 20;
-             for (let i = 0; i < uniqueCarIds.length; i += chunkSize) {
-                 chunks.push(uniqueCarIds.slice(i, i + chunkSize));
-             }
+             const plates = Array.from(new Set(uniqueCars.map(c => c.plate_number?.trim()).filter(Boolean))) as string[];
+             const platesEn = Array.from(new Set(uniqueCars.map(c => c.plate_number_en?.trim()).filter(Boolean))) as string[];
+             const vins = Array.from(new Set(uniqueCars.map(c => c.vin?.trim()).filter(Boolean))) as string[];
+
+             if (plates.length === 0 && platesEn.length === 0 && vins.length === 0) return;
 
              const newHistorySet = new Set<string>();
 
-             for (const chunk of chunks) {
-                 const { data } = await supabase
+             // Fetch all car IDs from DB that match these identifiers to check history across technical duplicates
+             let filterOr = '';
+             if (plates.length > 0) filterOr += `plate_number.in.(${plates.map(p => `"${p}"`).join(',')})`;
+             if (platesEn.length > 0) filterOr += (filterOr ? ',' : '') + `plate_number_en.in.(${platesEn.map(p => `"${p}"`).join(',')})`;
+             if (vins.length > 0) filterOr += (filterOr ? ',' : '') + `vin.in.(${vins.map(v => `"${v}"`).join(',')})`;
+
+             const { data: matchingCars } = await supabase
+                 .from('cars')
+                 .select('id, plate_number, plate_number_en, vin')
+                 .or(filterOr);
+
+             if (matchingCars && matchingCars.length > 0) {
+                 const matchingCarIds = matchingCars.map(c => c.id);
+                 
+                 // Check if these car IDs have more than 1 request total in the system
+                 const { data: requestCounts } = await supabase
                      .from('inspection_requests')
                      .select('car_id')
-                     .in('car_id', chunk);
-                 
-                 if (data) {
-                     const counts = new Map<string, number>();
-                     data.forEach((row: any) => {
-                         counts.set(row.car_id, (counts.get(row.car_id) || 0) + 1);
+                     .in('car_id', matchingCarIds);
+
+                 if (requestCounts) {
+                     const identifierToCount = new Map<string, number>();
+                     
+                     requestCounts.forEach(rc => {
+                         const carRecord = matchingCars.find(c => c.id === rc.car_id);
+                         if (carRecord) {
+                             if (carRecord.plate_number) {
+                                 const p = carRecord.plate_number.trim();
+                                 identifierToCount.set(p, (identifierToCount.get(p) || 0) + 1);
+                             }
+                             if (carRecord.plate_number_en) {
+                                 const p = carRecord.plate_number_en.trim();
+                                 identifierToCount.set(p, (identifierToCount.get(p) || 0) + 1);
+                             }
+                             if (carRecord.vin) {
+                                 const v = carRecord.vin.trim();
+                                 identifierToCount.set(v, (identifierToCount.get(v) || 0) + 1);
+                             }
+                         }
                      });
-                     counts.forEach((count, id) => {
-                         if (count > 1) newHistorySet.add(id);
+
+                     identifierToCount.forEach((count, identifier) => {
+                         if (count > 1) newHistorySet.add(identifier);
                      });
                  }
              }
@@ -961,21 +998,11 @@ const Requests: React.FC = () => {
         return employees.find(e => e.id === paymentRequest.employee_id);
     }, [paymentRequest, employees]);
 
-    const paginatedDataToDisplay = useMemo(() => {
-        return dataToDisplay.slice(0, displayLimit);
-    }, [dataToDisplay, displayLimit]);
-
     const handleLoadMore = useCallback(() => {
-        if (displayLimit < dataToDisplay.length && !isPaginatingLocal) {
-            setIsPaginatingLocal(true);
-            setTimeout(() => {
-                setDisplayLimit(prev => prev + 10);
-                setIsPaginatingLocal(false);
-            }, 500);
-        } else if (displayLimit >= dataToDisplay.length && isLoadMoreVisible && !isLoadingMore) {
+        if (isLoadMoreVisible && !isLoadingMore) {
             loadMoreRequests();
         }
-    }, [displayLimit, dataToDisplay.length, isPaginatingLocal, isLoadMoreVisible, isLoadingMore, loadMoreRequests]);
+    }, [isLoadMoreVisible, isLoadingMore, loadMoreRequests]);
 
     return (
         <div className="container mx-auto">
@@ -1462,7 +1489,7 @@ const Requests: React.FC = () => {
             {(serverFetchedData || !isFetchingDateRange) && (
                 <>
                     <RequestTable
-                        requests={paginatedDataToDisplay}
+                        requests={dataToDisplay}
                         clients={clients}
                         cars={cars}
                         carMakes={carMakes}
@@ -1482,8 +1509,8 @@ const Requests: React.FC = () => {
                         onRefresh={fetchRequests}
                         isLoading={isSearching || isFetchingDateRange}
                         onLoadMore={handleLoadMore}
-                        hasMore={(isLoadMoreVisible || displayLimit < dataToDisplay.length)}
-                        isLoadingMore={isLoadingMore || isPaginatingLocal}
+                        hasMore={isLoadMoreVisible}
+                        isLoadingMore={isLoadingMore}
                         searchTokens={searchedRequests ? (requestNumberQuery || comprehensiveQuery).toLowerCase().split(/\s+/).filter(t => t.length > 0) : undefined}
                         highlightedRequestId={selectedRequestId}
                         triggerHighlight={triggerHighlight}

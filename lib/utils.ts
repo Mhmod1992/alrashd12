@@ -140,25 +140,49 @@ export const formatBytes = (bytes: number, decimals = 2): string => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-export const timeAgo = (dateString: string): string => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
+export const timeAgo = (dateParam: string | Date | undefined): string => {
+    if (!dateParam) return '';
+    const date = typeof dateParam === 'string' ? new Date(dateParam) : dateParam;
     const now = new Date();
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
     if (seconds < 0) return 'الآن'; 
+    if (seconds < 60) return 'منذ لحظات';
 
-    let interval = seconds / 31536000;
-    if (interval > 1) return `منذ ${Math.floor(interval)} سنة`;
-    interval = seconds / 2592000;
-    if (interval > 1) return `منذ ${Math.floor(interval)} شهر`;
-    interval = seconds / 86400;
-    if (interval > 1) return `منذ ${Math.floor(interval)} يوم`;
-    interval = seconds / 3600;
-    if (interval > 1) return `منذ ${Math.floor(interval)} ساعة`;
-    interval = seconds / 60;
-    if (interval > 1) return `منذ ${Math.floor(interval)} دقيقة`;
-    return 'منذ لحظات';
+    const minutes = Math.round(seconds / 60);
+    const hours = Math.round(seconds / 3600);
+    const days = Math.round(seconds / 86400);
+    const months = Math.round(seconds / 2592000);
+    const years = Math.round(seconds / 31536000);
+
+    if (minutes < 60) {
+        if (minutes === 1) return `منذ دقيقة`;
+        if (minutes === 2) return `منذ دقيقتين`;
+        if (minutes <= 10) return `منذ ${minutes} دقائق`;
+        return `منذ ${minutes} دقيقة`;
+    }
+    if (hours < 24) {
+        if (hours === 1) return `منذ ساعة`;
+        if (hours === 2) return `منذ ساعتين`;
+        if (hours <= 10) return `منذ ${hours} ساعات`;
+        return `منذ ${hours} ساعة`;
+    }
+    if (days < 30) {
+        if (days === 1) return `أمس`;
+        if (days === 2) return `منذ يومين`;
+        if (days <= 10) return `منذ ${days} أيام`;
+        return `منذ ${days} يوماً`;
+    }
+    if (months < 12) {
+        if (months === 1) return `منذ شهر`;
+        if (months === 2) return `منذ شهرين`;
+        if (months <= 10) return `منذ ${months} أشهر`;
+        return `منذ ${months} شهراً`;
+    }
+    if (years === 1) return `منذ سنة`;
+    if (years === 2) return `منذ سنتين`;
+    if (years <= 10) return `منذ ${years} سنوات`;
+    return `منذ ${years} سنة`;
 };
 
 export const urlToBase64 = async (url: string): Promise<string | null> => {

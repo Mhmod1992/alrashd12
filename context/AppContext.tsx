@@ -1120,14 +1120,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     const fetchRequestsByCarId = useCallback(async (carId: string): Promise<InspectionRequest[]> => {
-        const { data, error } = await supabase.from('inspection_requests').select('*').eq('car_id', carId).order('created_at', { ascending: false });
+        // 1. Get the target car to find its identifiers
+        let car = cars.find(c => c.id === carId);
+        if (!car) {
+            const { data } = await supabase.from('cars').select('*').eq('id', carId).single();
+            if (data) car = data as Car;
+        }
+
+        if (!car) {
+            const { data, error } = await supabase.from('inspection_requests').select('*').eq('car_id', carId).order('created_at', { ascending: false });
+            if (error) throw error;
+            return (data as InspectionRequest[]) || [];
+        }
+
+        // 2. Find all car records that share the same plate or VIN (consolidating technical duplicates)
+        let identifierConditions = [`id.eq.${car.id}`];
+        if (car.plate_number) identifierConditions.push(`plate_number.eq."${car.plate_number.trim()}"`);
+        if (car.plate_number_en) identifierConditions.push(`plate_number_en.eq."${car.plate_number_en.trim()}"`);
+        if (car.vin) identifierConditions.push(`vin.eq."${car.vin.trim()}"`);
+
+        const { data: matchingCars } = await supabase
+            .from('cars')
+            .select('id')
+            .or(identifierConditions.join(','));
+        
+        const carIds = matchingCars?.map(c => c.id) || [carId];
+
+        // 3. Fetch all requests for all matching car IDs
+        const { data, error } = await supabase
+            .from('inspection_requests')
+            .select('*')
+            .in('car_id', carIds)
+            .order('created_at', { ascending: false });
+
         if (error) throw error;
         const results = (data as InspectionRequest[]) || [];
         if (results.length > 0) {
             await ensureEntitiesLoaded(results);
         }
         return results;
-    }, [ensureEntitiesLoaded]);
+    }, [cars, ensureEntitiesLoaded]);
     
     const fetchRequestByRequestNumberForAuth = useCallback(async (reqNum: number): Promise<InspectionRequest | null> => {
         const { data, error } = await supabase.from('inspection_requests').select('*').eq('request_number', reqNum).single();
@@ -1194,7 +1226,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
             
             if (foundCar) {
-                const { data: requestHistory } = await supabase.from('inspection_requests').select('*').eq('car_id', foundCar.id).order('created_at', { ascending: false }).limit(5);
+                // Find all car records that share these identifiers to get consolidated history
+                let identifierConditions = [`id.eq.${foundCar.id}`];
+                if (foundCar.plate_number) identifierConditions.push(`plate_number.eq."${foundCar.plate_number.trim()}"`);
+                if (foundCar.plate_number_en) identifierConditions.push(`plate_number_en.eq."${foundCar.plate_number_en.trim()}"`);
+                if (foundCar.vin) identifierConditions.push(`vin.eq."${foundCar.vin.trim()}"`);
+
+                const { data: matchingCars } = await supabase
+                    .from('cars')
+                    .select('id')
+                    .or(identifierConditions.join(','));
+                
+                const carIds = matchingCars?.map(c => c.id) || [foundCar.id];
+
+                const { data: requestHistory } = await supabase
+                    .from('inspection_requests')
+                    .select('*')
+                    .in('car_id', carIds)
+                    .order('created_at', { ascending: false })
+                    .limit(5);
+
                 let lastClient: Client | undefined;
                 if (requestHistory && requestHistory.length > 0) {
                     const { data: clientData } = await supabase.from('clients').select('*, inspection_requests(count)').eq('id', requestHistory[0].client_id).single();

@@ -686,6 +686,14 @@ const RequestTable: React.FC<RequestTableProps> = ({
                         const client = clients.find(c => c.id === request.client_id);
                         const hasHistory = (client?.inspection_requests?.[0]?.count || 0) > 1;
 
+                        // Check if car has history (same plate or VIN)
+                        const car = cars.find(c => c.id === request.car_id);
+                        const hasCarHistory = carsWithHistory && car && (
+                            (car.plate_number && carsWithHistory.has(car.plate_number.trim())) ||
+                            (car.plate_number_en && carsWithHistory.has(car.plate_number_en.trim())) ||
+                            (car.vin && carsWithHistory.has(car.vin.trim()))
+                        );
+
                         // Price column extras
                         let priceSuffix = null;
                         if (request.payment_type === PaymentType.Unpaid) {
@@ -765,7 +773,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                 </td>
                                 <td className={`px-6 py-4 sticky right-0 md:static z-10 shadow-sm md:shadow-none transition-colors duration-150 ${request.payment_type === PaymentType.Unpaid ? 'bg-rose-50 dark:bg-rose-900/20' : request.payment_type === PaymentType.Transfer ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30'}`}>
                                     <div className="flex items-center gap-2">
-                                        {carsWithHistory && onHistoryClick && carsWithHistory.has(request.car_id) && (
+                                        {hasCarHistory && onHistoryClick && (
                                             <button
                                                 onClick={(e) => onHistoryClick(e, request.car_id, carDisplayName)}
                                                 className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-800 transition-all hover:scale-110 shadow-sm border border-amber-200 dark:border-amber-800"
@@ -1077,11 +1085,11 @@ const RequestTable: React.FC<RequestTableProps> = ({
                 </tbody>
             </table>
             {hasMore && (
-                <div className="text-center py-4 border-t border-slate-100 dark:border-slate-700">
+                <div onClick={() => onLoadMore && onLoadMore()} className="text-center py-4 border-t border-slate-100 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                     {isLoadingMore ? (
                         <RefreshCwIcon className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
                     ) : (
-                        <span className="text-sm text-slate-400 dark:text-slate-500">قم بالتمرير لأسفل لتحميل المزيد...</span>
+                        <span className="text-sm text-blue-500 dark:text-blue-400 font-medium">اضغط هنا أو قم بالتمرير لأسفل لتحميل المزيد...</span>
                     )}
                 </div>
             )}
