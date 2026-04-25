@@ -108,8 +108,10 @@ const ReportHeader: React.FC<{ appName: string; logoUrl: string | null; settings
     useEffect(() => {
         if (!settings.showQrCode || !qrCodeRef.current || typeof QRCodeStyling === 'undefined') return;
         
-        // Use a smart URL that points to our app's /scan route
-        const content = `${window.location.origin}/scan/${requestNumber}`;
+        // Use the configured QR code content from settings, falling back to a default app scan URL.
+        // Also support a placeholder {request_number} for dynamic reports.
+        let content = settings.qrCodeContent || `${window.location.origin}/scan/{request_number}`;
+        content = content.replace('{request_number}', requestNumber.toString());
         
         const size = parseInt(settings.qrCodeSize, 10) || 96;
         const qrCode = new QRCodeStyling({

@@ -179,11 +179,24 @@ const RequestDraft: React.FC = () => {
         goBack, 
         shouldPrintDraft,
         setShouldPrintDraft,
-        settings
+        settings,
+        fetchAndUpdateSingleRequest,
+        isRefreshing
     } = useAppContext();
 
     const [isContentReady, setIsContentReady] = useState(false);
     const [isDraftQuality, setIsDraftQuality] = useState(true);
+    const [isFetchingRequest, setIsFetchingRequest] = useState(false);
+
+    // Fetch specific request if not in local list
+    useEffect(() => {
+        if (selectedRequestId && !requests.find(r => r.id === selectedRequestId) && !isFetchingRequest) {
+            setIsFetchingRequest(true);
+            fetchAndUpdateSingleRequest(selectedRequestId).finally(() => {
+                setIsFetchingRequest(false);
+            });
+        }
+    }, [selectedRequestId, requests, fetchAndUpdateSingleRequest, isFetchingRequest]);
 
     // Image Preloading Logic
     useEffect(() => {
@@ -242,20 +255,25 @@ const RequestDraft: React.FC = () => {
     const inspectionType = request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined;
 
     // Loading State (While fetching data OR while preloading image)
-    if (!request || !client || !car || !inspectionType || !isContentReady) {
+    const isDataMissing = !request || !client || !car || !inspectionType;
+
+    if (isDataMissing || !isContentReady || isFetchingRequest) {
         return (
              <div className="flex flex-col items-center justify-center h-screen text-center p-8">
                 <RefreshCwIcon className="w-12 h-12 text-blue-500 animate-spin mb-4" />
                 <p className="text-lg text-gray-700 dark:text-gray-300 font-semibold">
-                    {!isContentReady ? 'جاري تجهيز المسودة والصور...' : 'جاري تحميل بيانات الطلب...'}
+                    {(!isContentReady) ? 'جاري تجهيز المسودة والصور...' : (isFetchingRequest || isRefreshing) ? 'جاري جلب البيانات من الخادم...' : 'جاري تحميل بيانات الطلب...'}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">يرجى الانتظار قليلاً لضمان جودة الطباعة.</p>
                 
                 {/* Allow aborting if stuck too long */}
-                {(!request && isContentReady) && (
-                    <Button onClick={() => setPage('requests')} className="mt-6" variant="secondary">
-                        العودة للطلبات
-                    </Button>
+                {(!request && isContentReady && !isFetchingRequest && !isRefreshing) && (
+                    <div className="flex flex-col items-center gap-2 mt-6">
+                        <p className="text-red-500 text-sm mb-2">تعذر العثور على بيانات هذا الطلب.</p>
+                        <Button onClick={() => setPage('requests')} variant="secondary">
+                            العودة للطلبات
+                        </Button>
+                    </div>
                 )}
             </div>
         );
