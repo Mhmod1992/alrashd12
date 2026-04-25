@@ -373,14 +373,26 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             carText = carText.replace(yearMatch[0], '').trim();
         }
 
-        // 2. Extract Make (Handle compound names)
+        // 2. Extract Make (Handle compound names and known makes)
         let make = '';
         let model = '';
         
-        const foundCompound = compoundMakes.find(cm => carText.startsWith(cm));
+        // Try compound first
+        const foundCompound = compoundMakes.find(cm => carText.toLowerCase().startsWith(cm.toLowerCase()));
+        
+        // Try context makes
+        const foundContextMake = contextCarMakes.find(m => 
+            carText.toLowerCase().startsWith(m.name_en.toLowerCase()) || 
+            (m.name_ar && carText.startsWith(m.name_ar))
+        );
+
         if (foundCompound) {
             make = foundCompound;
-            model = carText.replace(foundCompound, '').trim();
+            model = carText.substring(foundCompound.length).trim();
+        } else if (foundContextMake) {
+            const nameToUse = carText.startsWith(foundContextMake.name_ar || '') ? (foundContextMake.name_ar || '') : foundContextMake.name_en;
+            make = nameToUse;
+            model = carText.substring(nameToUse.length).trim();
         } else {
             const parts = carText.split(/\s+/);
             make = parts[0] || '';
@@ -407,7 +419,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             price,
             originalText: initialReservationData.car_details || ''
         };
-    }, [initialReservationData]);
+    }, [initialReservationData, contextCarMakes]);
 
     const handleManualFill = (field: 'name' | 'phone' | 'make' | 'model' | 'year' | 'plate' | 'service' | 'price') => {
         if (!reservationFillData) return;
@@ -444,7 +456,18 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 break;
             case 'make':
                 setCarMakeSearchTerm(reservationFillData.make);
-                // Validation Alert
+                
+                // Try to resolve Make ID immediately
+                const termMake = reservationFillData.make.trim().toLowerCase();
+                const matchedMake = contextCarMakes.find(m => 
+                    m.name_en.toLowerCase() === termMake || 
+                    (m.name_ar && m.name_ar === reservationFillData.make.trim())
+                );
+                if (matchedMake) {
+                    setCarMakeId(matchedMake.id);
+                    fetchCarModelsByMake(matchedMake.id);
+                }
+
                 if (/\d/.test(reservationFillData.make) || reservationFillData.make.split(/\s+/).length > 2) {
                     addNotification({
                         title: 'تنبيه التوزيع',
@@ -455,7 +478,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 setTimeout(() => {
                     makeInputRef.current?.focus();
                     setIsMakeDropdownOpen(true);
-                    if (reservationFillData.make.length >= 1) {
+                    if (reservationFillData.make.length >= 1 && !matchedMake) {
                         setIsSearchingMake(true);
                         searchCarMakes(reservationFillData.make).then(results => {
                             setMakeSuggestions(results);
@@ -467,12 +490,33 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 break;
             case 'model':
                 setCarModelSearchTerm(reservationFillData.model);
+                
+                let resolvedMakeId = carMakeId;
+                if (!resolvedMakeId && reservationFillData.make) {
+                    const matched = contextCarMakes.find(m => 
+                        m.name_en.toLowerCase() === reservationFillData.make.toLowerCase() || 
+                        (m.name_ar && m.name_ar === reservationFillData.make)
+                    );
+                    if (matched) {
+                        setCarMakeId(matched.id);
+                        resolvedMakeId = matched.id;
+                    }
+                }
+
                 setTimeout(() => {
                     modelInputRef.current?.focus();
                     setIsModelDropdownOpen(true);
-                    if (reservationFillData.model.length >= 1 && carMakeId) {
+                    if (resolvedMakeId) {
+                        const hasModels = contextCarModels.some(m => m.make_id === resolvedMakeId);
+                        if (!hasModels) {
+                            setIsLoadingModels(true);
+                            fetchCarModelsByMake(resolvedMakeId).finally(() => setIsLoadingModels(false));
+                        }
+                    }
+
+                    if (reservationFillData.model.length >= 1 && resolvedMakeId) {
                         setIsSearchingModel(true);
-                        searchCarModels(carMakeId, reservationFillData.model).then(results => {
+                        searchCarModels(resolvedMakeId, reservationFillData.model).then(results => {
                             setModelSuggestions(results);
                             setIsModelDropdownOpen(results.length > 0);
                             setIsSearchingModel(false);
@@ -869,13 +913,28 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const handleModelFocus = () => {
-        if (!carMakeId) return;
+        let currentMakeId = carMakeId;
+
+        // If makeId is missing but search term exists, try to resolve it
+        if (!currentMakeId && carMakeSearchTerm.trim()) {
+            const term = carMakeSearchTerm.trim().toLowerCase();
+            const match = contextCarMakes.find(m => 
+                m.name_en.toLowerCase() === term || 
+                (m.name_ar && m.name_ar === carMakeSearchTerm.trim())
+            );
+            if (match) {
+                setCarMakeId(match.id);
+                currentMakeId = match.id;
+            }
+        }
+
+        if (!currentMakeId) return;
         setIsModelDropdownOpen(true);
 
-        const hasModels = contextCarModels.some(m => m.make_id === carMakeId);
+        const hasModels = contextCarModels.some(m => m.make_id === currentMakeId);
         if (!hasModels && !isLoadingModels) {
             setIsLoadingModels(true);
-            fetchCarModelsByMake(carMakeId).finally(() => setIsLoadingModels(false));
+            fetchCarModelsByMake(currentMakeId).finally(() => setIsLoadingModels(false));
         }
     };
 
