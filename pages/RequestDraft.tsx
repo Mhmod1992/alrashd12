@@ -54,8 +54,8 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
             };
         }
         return {
-            makeNameEn: carMake?.name_en || 'غير معروف',
-            modelNameEn: carModel?.name_en || 'غير معروف',
+            makeNameEn: carMake?.name_en || 'Unknown',
+            modelNameEn: carModel?.name_en || 'Unknown',
             year: car.year,
         };
     }, [request.car_snapshot, car, carMake, carModel]);
@@ -331,6 +331,9 @@ const RequestDraft: React.FC = () => {
                 .printable-content * {
                     color: black !important;
                     border-color: black !important;
+                }
+                .printable-content header {
+                    display: flex !important;
                 }
                 .lined-paper {
                     background-image: linear-gradient(to bottom, transparent calc(2.5rem - 1px), #d1d5db calc(2.5rem - 1px)) !important;

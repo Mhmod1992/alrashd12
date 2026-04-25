@@ -423,7 +423,6 @@ const PrintStyles = () => (
         .no-print, 
         .sidebar, 
         aside,
-        header, 
         [role="banner"],
         .print\\:hidden,
         #background-container,

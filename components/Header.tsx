@@ -180,7 +180,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   }, [latestWhatsAppMessage, setLatestWhatsAppMessage]);
 
   return (
-    <header className={`relative flex items-center justify-between h-20 px-6 gap-6 z-40 ${headerClasses}`}>
+    <header className={`relative flex items-center justify-between h-20 px-6 gap-6 z-40 no-print ${headerClasses}`}>
       
       {/* Left Side: Mobile/Tablet Toggle & Search */}
       <div className="flex items-center flex-1 max-w-2xl">
