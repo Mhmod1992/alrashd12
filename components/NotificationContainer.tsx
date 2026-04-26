@@ -18,7 +18,7 @@ const NotificationContainer: React.FC = () => {
   const visibleNotifications = [...notifications].reverse().slice(0, 3);
 
   return (
-    <div className="fixed top-16 left-4 right-4 sm:top-24 sm:left-auto sm:right-6 z-[99999] sm:w-full sm:max-w-sm pointer-events-none">
+    <div className="fixed top-16 left-4 right-4 sm:top-24 sm:left-auto sm:right-6 z-[99999] sm:w-full sm:max-w-sm pointer-events-none print:hidden">
       <div className="relative w-full">
         {visibleNotifications.map((notification, index) => {
           // Stacking logic:

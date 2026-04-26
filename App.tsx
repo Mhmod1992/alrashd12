@@ -405,15 +405,30 @@ const PrintStyles = () => (
           size: A4;
         }
 
+        /* Hide scrollbars during print */
+        ::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+        }
+        * {
+          scrollbar-width: none !important;
+        }
+
         /* Essential Reset for Printing */
-        html, body, #root {
+        html, body, #root, main, .print-container, .bg-gray-200 {
           height: auto !important;
           overflow: visible !important;
           margin: 0 !important;
           padding: 0 !important;
+          background-color: white !important;
           background: white !important;
           color: black !important;
           visibility: visible !important;
+          box-shadow: none !important;
+        }
+
+        * {
+          box-shadow: none !important;
         }
 
         /* Unset layout constraints */
@@ -425,6 +440,7 @@ const PrintStyles = () => (
           overflow: visible !important;
           display: block !important;
           position: static !important;
+          background: white !important;
         }
 
         /* Essential: Ensure visibility of the content */
@@ -458,7 +474,6 @@ const PrintStyles = () => (
         
         .dark * {
           color: black !important;
-          border-color: #e2e8f0 !important;
         }
 
         .report-wrapper {
@@ -467,6 +482,8 @@ const PrintStyles = () => (
           margin: 0 !important;
           padding: 0 !important;
           box-shadow: none !important;
+          border: none !important;
+          background: white !important;
           overflow: visible !important;
         }
         
