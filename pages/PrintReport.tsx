@@ -1100,13 +1100,13 @@ const PrintReport: React.FC = () => {
                 </h2>
                 <div className="flex gap-2">
                     {!fromPrint && (
-                        <Button variant="secondary" onClick={goBack} size="sm" disabled={isGenerating}>
+                        <Button variant="secondary" onClick={isSendingWhatsApp ? undefined : goBack} size="sm" disabled={isGenerating || isSendingWhatsApp}>
                             <Icon name="back" className="w-4 h-4 transform scale-x-[-1]" />
                             <span className="hidden sm:inline ms-1">العودة</span>
                         </Button>
                     )}
                     {fromPrint && (
-                        <Button variant="secondary" onClick={() => window.close()} size="sm" className="bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">
+                        <Button variant="secondary" onClick={isSendingWhatsApp ? undefined : () => window.close()} size="sm" className="bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100" disabled={isSendingWhatsApp}>
                             <Icon name="close" className="w-4 h-4" />
                             <span className="hidden sm:inline ms-1">إغلاق الصفحة</span>
                         </Button>
@@ -1114,9 +1114,10 @@ const PrintReport: React.FC = () => {
                     
                     <Button
                         variant="secondary"
-                        onClick={() => setIsPaperModalOpen(true)}
+                        onClick={() => !isSendingWhatsApp && setIsPaperModalOpen(true)}
                         size="sm"
                         className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                        disabled={isSendingWhatsApp}
                     >
                         <Icon name="folder-open" className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">المرفقات ({paperImages.length})</span>
@@ -1128,26 +1129,30 @@ const PrintReport: React.FC = () => {
                     </Button>
 
                     {translatedRequest ? (
-                        <Button onClick={handleClearTranslation} variant="secondary" size="sm" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100">
+                        <Button onClick={handleClearTranslation} variant="secondary" size="sm" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" disabled={isSendingWhatsApp}>
                             <Icon name="refresh-cw" className="w-4 h-4" />
                             <span className="hidden sm:inline ms-1">إلغاء الترجمة</span>
                         </Button>
                     ) : (
-                        <Button onClick={() => setIsTranslationModalOpen(true)} variant="secondary" size="sm" className="text-purple-600 border-purple-200 hover:bg-purple-50">
+                        <Button onClick={() => setIsTranslationModalOpen(true)} variant="secondary" size="sm" className="text-purple-600 border-purple-200 hover:bg-purple-50" disabled={isSendingWhatsApp}>
                             <SparklesIcon className="w-4 h-4" />
                             <span className="hidden sm:inline ms-1">ترجمة التقرير</span>
                         </Button>
                     )}
 
-                    <Button onClick={handleWhatsAppShare} variant="whatsapp" size="sm" disabled={isGenerating || isSendingWhatsApp}>
-                        <WhatsappIcon className={`w-4 h-4 ${isSendingWhatsApp ? 'animate-spin' : ''}`} />
-                        <span className="hidden sm:inline ms-1">{isSendingWhatsApp ? 'جاري الإرسال...' : 'إرسال'}</span>
+                    <Button onClick={handleWhatsAppShare} variant="whatsapp" size="sm" disabled={isGenerating || isSendingWhatsApp} className={isSendingWhatsApp ? 'opacity-90' : ''}>
+                        {isSendingWhatsApp ? (
+                            <RefreshCwIcon className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <WhatsappIcon className="w-4 h-4" />
+                        )}
+                        <span className="hidden sm:inline ms-1">{isSendingWhatsApp ? 'جاري الإرسال...' : 'إرسال واتساب'}</span>
                     </Button>
-                     <Button variant="secondary" onClick={handlePrint} size="sm" disabled={isGenerating}>
+                     <Button variant="secondary" onClick={handlePrint} size="sm" disabled={isGenerating || isSendingWhatsApp}>
                         <Icon name="print" className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">طباعة</span>
                     </Button>
-                    <Button onClick={handleDownloadNativePdf} size="sm" disabled={isGenerating}>
+                    <Button onClick={handleDownloadNativePdf} size="sm" disabled={isGenerating || isSendingWhatsApp}>
                         <Icon name="document-report" className="w-4 h-4" />
                         <span className="hidden sm:inline ms-1">PDF</span>
                     </Button>

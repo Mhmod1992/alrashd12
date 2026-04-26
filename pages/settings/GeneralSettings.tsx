@@ -40,7 +40,8 @@ const GeneralSettings: React.FC = () => {
             allowSignup: currentSettings.allowSignup,
             enableReviewPrompt: currentSettings.enableReviewPrompt,
             reviewLink: currentSettings.reviewLink,
-            reviewMessage: currentSettings.reviewMessage
+            reviewMessage: currentSettings.reviewMessage,
+            whatsappReviewMode: currentSettings.whatsappReviewMode
         });
         addNotification({ title: 'نجاح', message: 'تم حفظ الإعدادات بنجاح.', type: 'success' });
     } catch (error) {}
@@ -142,6 +143,39 @@ const GeneralSettings: React.FC = () => {
                               placeholder="اكتب نص الرسالة هنا..."
                           />
                           <p className="text-[10px] text-slate-400 mt-1.5">استخدم <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">{`{review_link}`}</code> لإدراج الرابط تلقائياً.</p>
+                      </div>
+
+                      <div className="pt-2">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">آلية إرسال طلب التقييم</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentSettings(prev => ({ ...prev, whatsappReviewMode: 'silent' }))}
+                            className={`flex flex-col p-3 rounded-xl border-2 transition-all text-right ${currentSettings.whatsappReviewMode === 'silent' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-slate-300'}`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${currentSettings.whatsappReviewMode === 'silent' ? 'border-blue-500' : 'border-slate-300 dark:border-slate-600'}`}>
+                                {currentSettings.whatsappReviewMode === 'silent' && <div className="w-2 h-2 bg-blue-500 rounded-full" />}
+                              </div>
+                              <span className={`text-sm font-bold ${currentSettings.whatsappReviewMode === 'silent' ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>الإرسال الصامت (Silent)</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">إرسال تلقائي عبر API بدون تدخل.</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setCurrentSettings(prev => ({ ...prev, whatsappReviewMode: 'interactive' }))}
+                            className={`flex flex-col p-3 rounded-xl border-2 transition-all text-right ${currentSettings.whatsappReviewMode === 'interactive' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-slate-300'}`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${currentSettings.whatsappReviewMode === 'interactive' ? 'border-blue-500' : 'border-slate-300 dark:border-slate-600'}`}>
+                                {currentSettings.whatsappReviewMode === 'interactive' && <div className="w-2 h-2 bg-blue-500 rounded-full" />}
+                              </div>
+                              <span className={`text-sm font-bold ${currentSettings.whatsappReviewMode === 'interactive' ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>وضع التأكيد (Interactive)</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">تظهر نافذة تسأل المستخدم قبل الإرسال.</span>
+                          </button>
+                        </div>
                       </div>
                   </div>
               )}

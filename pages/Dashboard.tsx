@@ -53,17 +53,17 @@ const QuickActions: React.FC = () => {
     ];
 
     return (
-        <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-6">
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 mb-6">
             {actions.map((btn, idx) => (
                 <button
                     key={idx}
                     onClick={btn.action}
-                    className="flex flex-col items-center justify-center p-2 sm:p-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all active:scale-95"
+                    className="flex flex-col items-center justify-center p-2.5 sm:p-3 bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-2xl shadow-sm border border-white/20 dark:border-slate-700/50 hover:shadow-lg transition-all active:scale-95 group"
                 >
-                    <div className={`p-1.5 sm:p-2.5 rounded-full mb-1 sm:mb-2 ${btn.color} shadow-sm`}>
+                    <div className={`p-2 sm:p-2.5 rounded-xl mb-1.5 sm:mb-2 ${btn.color} shadow-md transition-transform group-hover:scale-110`}>
                         {React.cloneElement(btn.icon as React.ReactElement<{ className?: string }>, { className: 'w-4 h-4 sm:w-5 sm:h-5' })}
                     </div>
-                    <span className="text-[9px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">{btn.label}</span>
+                    <span className="text-[10px] sm:text-xs font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">{btn.label}</span>
                 </button>
             ))}
         </div>
@@ -113,29 +113,29 @@ const ExecutiveKpiCard: React.FC<{
     isLoading?: boolean;
 }> = ({ title, value, trend, icon, colorClass, bgClass, isLoading }) => {
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col justify-between h-full relative overflow-hidden group hover:border-blue-200 transition-colors">
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg rounded-2xl p-4 shadow-sm border border-white/20 dark:border-slate-700/50 flex flex-col justify-between h-full relative overflow-hidden group hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-300">
             
             {/* Decor Circle */}
-            <div className={`absolute -right-4 -top-4 w-16 h-16 rounded-full opacity-10 ${bgClass} group-hover:scale-150 transition-transform duration-500`}></div>
+            <div className={`absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-10 ${bgClass} group-hover:scale-150 transition-transform duration-700 ease-in-out`}></div>
 
-            <div className="flex justify-between items-start mb-2 relative z-10">
-                <div className={`p-2 rounded-lg ${bgClass} ${colorClass}`}>
+            <div className="flex justify-between items-start mb-3 relative z-10">
+                <div className={`p-2.5 rounded-xl ${bgClass} ${colorClass} shadow-inner`}>
                     {React.cloneElement(icon as React.ReactElement<{ className?: string }>, { className: 'w-5 h-5' })}
                 </div>
                 {trend !== undefined && (
-                    <div className={`flex items-center gap-0.5 text-[10px] font-bold ${trend >= 0 ? 'text-emerald-600' : 'text-rose-500'} bg-slate-50 dark:bg-slate-900 px-1.5 py-0.5 rounded`}>
-                        <span>{Math.abs(trend)}%</span>
+                    <div className={`flex items-center gap-0.5 text-[10px] font-bold ${trend >= 0 ? 'text-emerald-600' : 'text-rose-500'} bg-slate-100/50 dark:bg-slate-900/50 px-2 py-1 rounded-full backdrop-blur-sm`}>
+                        <span>{trend >= 0 ? '+' : ''}{trend}%</span>
                         <TrendingUpIcon className={`w-3 h-3 ${trend < 0 ? 'rotate-180' : ''}`} />
                     </div>
                 )}
             </div>
             
             <div className="relative z-10">
-                <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">{title}</p>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{title}</p>
                 {isLoading ? (
-                    <div className="h-6 w-20 bg-slate-100 dark:bg-slate-700 rounded animate-pulse"></div>
+                    <div className="h-8 w-24 bg-slate-100/50 dark:bg-slate-700/50 rounded-lg animate-pulse"></div>
                 ) : (
-                    <h3 className="text-lg sm:text-2xl font-black text-slate-800 dark:text-white font-numeric tracking-tight">{value}</h3>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white font-numeric tracking-tight">{value}</h3>
                 )}
             </div>
         </div>
@@ -761,39 +761,48 @@ const Dashboard: React.FC = () => {
   const formattedDate = today.toLocaleDateString('ar-SA', dateOptions);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 p-4 animate-fade-in">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 p-2 sm:p-6 animate-fade-in custom-scrollbar">
         
         {/* Header Row */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-            <div>
-                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                    مرحباً، {authUser?.name.split(' ')[0]} <span className="text-2xl">👋</span>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6 px-2">
+            <div className="relative">
+                <div className="absolute -left-12 -top-12 w-24 h-24 bg-blue-500/20 rounded-full blur-3xl"></div>
+                <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3 relative z-10">
+                    مرحباً، {authUser?.name.split(' ')[0]} <span className="animate-bounce">👋</span>
                 </h1>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1 rounded-full w-fit border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <Icon name="calendar-clock" className="w-4 h-4 text-blue-500" />
-                    <span>{formattedDate}</span>
-                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm px-3 py-1 rounded-full border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+                        <TrendingUpIcon className="w-3 h-3 text-blue-500" />
+                        <span>آخر تحديث: {lastRefreshed.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </p>
+                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm px-3 py-1 rounded-full border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+                        <Icon name="calendar-clock" className="w-3 h-3 text-indigo-500" />
+                        <span>{formattedDate}</span>
+                    </p>
+                </div>
             </div>
             
-            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 self-end md:self-auto">
+            <div className="flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-1.5 rounded-2xl shadow-sm border border-slate-200/50 dark:border-slate-700/50 self-start md:self-auto">
                  <PeriodToggle activePeriod={activePeriod} onChange={setActivePeriod} isLoading={isLoading} />
-                 <button onClick={loadData} disabled={isLoading} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors">
-                     <RefreshCwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                 <button onClick={loadData} disabled={isLoading} className="p-2 text-slate-400 hover:text-blue-500 transition-all active:rotate-180 duration-700">
+                     <RefreshCwIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                  </button>
             </div>
         </div>
         
-        {/* Quick Actions (New Section) */}
-        <QuickActions />
+        {/* Quick Actions */}
+        <div className="px-2">
+            <QuickActions />
+        </div>
 
-        {/* KPI Grid (2 cols on mobile, 4 on desktop) */}
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        {/* KPI Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8 px-2">
             <ExecutiveKpiCard 
                 title="صافي الربح" 
                 value={`${netProfit.toLocaleString()}`} 
                 trend={12} 
                 icon={<DollarSignIcon />} 
-                bgClass="bg-emerald-100 dark:bg-emerald-900/30"
+                bgClass="bg-emerald-100 dark:bg-emerald-900/40"
                 colorClass="text-emerald-600 dark:text-emerald-400"
                 isLoading={isLoading} 
             />
@@ -802,7 +811,7 @@ const Dashboard: React.FC = () => {
                 value={`${totalRevenue.toLocaleString()}`} 
                 trend={5} 
                 icon={<Icon name="sparkles" />} 
-                bgClass="bg-blue-100 dark:bg-blue-900/30"
+                bgClass="bg-blue-100 dark:bg-blue-900/40"
                 colorClass="text-blue-600 dark:text-blue-400"
                 isLoading={isLoading} 
             />
@@ -811,64 +820,49 @@ const Dashboard: React.FC = () => {
                 value={`${avgTicket}`} 
                 trend={-2} 
                 icon={<BriefcaseIcon />} 
-                bgClass="bg-amber-100 dark:bg-amber-900/30"
+                bgClass="bg-amber-100 dark:bg-amber-900/40"
                 colorClass="text-amber-600 dark:text-amber-400"
                 isLoading={isLoading} 
             />
-             <ExecutiveKpiCard 
-                title="سيارات بالورشة" 
+            <ExecutiveKpiCard 
+                title="بالورشة حالياً" 
                 value={activeCars.toString()} 
                 icon={<Icon name="car" />} 
-                bgClass="bg-rose-100 dark:bg-rose-900/30"
+                bgClass="bg-rose-100 dark:bg-rose-900/40"
                 colorClass="text-rose-600 dark:text-rose-400"
                 isLoading={isLoading} 
             />
         </div>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 px-2">
              {/* Main Chart */}
-             <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 relative overflow-hidden">
-                 {/* ECG Grid Background */}
-                 <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05]" style={{ backgroundImage: 'linear-gradient(#3b82f6 1px, transparent 1px), linear-gradient(90deg, #3b82f6 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-                 
-                 <div className="flex justify-between items-center mb-4 relative z-10">
-                     <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
-                         <Icon name="history" className="w-4 h-4 text-blue-500" />
-                         مقارنة الإيرادات (الشهر الحالي مقابل السابق)
-                     </h3>
-                     <span className="text-[10px] text-slate-400">{lastRefreshed.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+             <div className="lg:col-span-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-white/20 dark:border-slate-700/50 p-6 relative overflow-hidden group hover:border-blue-300 dark:hover:border-blue-800 transition-all duration-500">
+                 <div className="flex justify-between items-center mb-6 relative z-10">
+                     <div>
+                        <h3 className="font-black text-slate-800 dark:text-white text-lg flex items-center gap-2">
+                             <TrendingUpIcon className="w-5 h-5 text-blue-500" />
+                             نبض الإيرادات
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">مقارنة أداء الشهر الحالي بالسابق</p>
+                     </div>
                  </div>
-                 <div className="w-full h-64 relative z-10 overflow-x-auto pb-2 custom-scrollbar">
-                     {isLoading ? <Skeleton className="min-w-[700px] w-full h-full rounded-lg" /> : (
+                 <div className="w-full h-72 sm:h-96 relative z-10 overflow-x-auto pb-2 custom-scrollbar">
+                     {isLoading ? <Skeleton className="min-w-[700px] w-full h-full rounded-2xl" /> : (
                          <div className="min-w-[700px] w-full h-full">
                              <ResponsiveContainer width="100%" height="100%">
-                                 <BarChart data={monthlyRevenueComparisonData} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
-                                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.5} />
-                                     <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} label={{ value: 'يوم', position: 'insideBottomRight', offset: -5, fontSize: 10 }} />
-                                     <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                                 <BarChart data={monthlyRevenueComparisonData} margin={{ top: 20, right: 10, bottom: 5, left: 10 }}>
+                                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.3} />
+                                     <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                                     <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                                      <RechartsTooltip 
-                                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
+                                         contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)', backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)' }}
                                          formatter={(value: number, name: string) => [`${value.toLocaleString()} ريال`, name]}
                                          labelFormatter={(label) => `يوم ${label}`}
                                      />
-                                     <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
-                                     
-                                     <Bar 
-                                        dataKey="current" 
-                                        name="الشهر الحالي" 
-                                        fill="#3b82f6" 
-                                        radius={[4, 4, 0, 0]} 
-                                        animationDuration={1500}
-                                     />
- 
-                                     <Bar 
-                                        dataKey="previous" 
-                                        name="الشهر الماضي" 
-                                        fill="#cbd5e1" 
-                                        radius={[4, 4, 0, 0]} 
-                                        animationDuration={1500}
-                                     />
+                                     <Legend verticalAlign="top" height={40} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold', paddingBottom: '20px' }}/>
+                                     <Bar dataKey="current" name="الشهر الحالي" fill="#3b82f6" radius={[6, 6, 0, 0]} animationDuration={1500} />
+                                     <Bar dataKey="previous" name="الشهر الماضي" fill="#e2e8f0" radius={[6, 6, 0, 0]} animationDuration={1500} />
                                  </BarChart>
                              </ResponsiveContainer>
                          </div>
@@ -876,100 +870,51 @@ const Dashboard: React.FC = () => {
                  </div>
              </div>
 
-             {/* Car Inspection Frequency Chart */}
-             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 flex flex-col">
+             {/* Top Cars Card */}
+             <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-white/20 dark:border-slate-700/50 p-6 flex flex-col group hover:border-blue-300 dark:hover:border-blue-800 transition-all duration-500">
                  <div className="flex justify-between items-center mb-6">
-                     <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
-                         <Icon name="car" className="w-4 h-4 text-blue-500" />
-                         أكثر السيارات فحصاً
-                     </h3>
+                    <div>
+                        <h3 className="font-black text-slate-800 dark:text-white text-lg flex items-center gap-2">
+                            <Icon name="car" className="w-5 h-5 text-indigo-500" />
+                            السيارات الأكثر فحصاً
+                        </h3>
+                    </div>
                      <select 
                          value={carFilter} 
                          onChange={(e) => setCarFilter(e.target.value as any)}
-                         className="text-xs border-slate-200 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                         className="text-[10px] font-bold border-none rounded-xl bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
                      >
                          <option value="yesterday">أمس</option>
-                         <option value="week">هذا الأسبوع</option>
-                         <option value="month">هذا الشهر</option>
+                         <option value="week">أسبوع</option>
+                         <option value="month">شهر</option>
                          <option value="all">الكل</option>
                      </select>
                  </div>
-                 <div className="w-full h-72 relative z-10">
-                     {isCarLoading ? <Skeleton className="w-full h-full rounded-lg" /> : (
-                         <div className="w-full h-full overflow-y-auto pr-2" dir="rtl">
-                             <div className="flex flex-col gap-3 pb-2">
-                                 {(() => {
-                                     const maxCount = Math.max(...carInspectionFrequencyData.map(d => d.count), 1);
-                                     return carInspectionFrequencyData.map((item, index) => {
-                                         const percentage = (item.count / maxCount) * 100;
-                                         return (
-                                             <div key={index} className="relative w-full min-h-[44px] bg-slate-50 rounded-lg overflow-hidden flex items-center group border border-slate-100">
-                                                 {/* Background Bar */}
-                                                 <div 
-                                                     className="absolute left-0 top-0 bottom-0 bg-blue-100/80 transition-all duration-500 ease-out group-hover:bg-blue-200/80"
-                                                     style={{ width: `${percentage}%` }}
-                                                 ></div>
-                                                 
-                                                 {/* Content */}
-                                                 <div className="relative z-10 flex justify-between items-center w-full px-4 py-2 gap-3">
-                                                     {/* Count (Right) */}
-                                                     <div className="font-bold text-blue-700 w-12 text-right shrink-0">
-                                                         {item.count}
-                                                     </div>
-                                                     
-                                                     {/* Make (Center) */}
-                                                     <div className="flex-1 text-center text-slate-700 font-medium leading-relaxed break-words">
-                                                         {item.make}
-                                                     </div>
-                                                     
-                                                     {/* Spacer (Left) to ensure perfect centering */}
-                                                     <div className="w-12 shrink-0"></div>
-                                                 </div>
-                                             </div>
-                                         );
-                                     });
-                                 })()}
-                             </div>
+                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+                     {isCarLoading ? <Skeleton className="w-full h-full rounded-2xl" /> : (
+                         <div className="flex flex-col gap-3">
+                             {carInspectionFrequencyData.length > 0 ? carInspectionFrequencyData.map((item, index) => {
+                                 const maxCount = Math.max(...carInspectionFrequencyData.map(d => d.count), 1);
+                                 const percentage = (item.count / maxCount) * 100;
+                                 return (
+                                     <div key={index} className="relative w-full h-11 bg-slate-50/50 dark:bg-slate-900/30 rounded-xl overflow-hidden flex items-center group/item border border-slate-100/50 dark:border-slate-700/30">
+                                         <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/5 dark:from-blue-400/10 dark:to-indigo-400/5 transition-all duration-700 ease-out" style={{ width: `${percentage}%` }}></div>
+                                         <div className="relative z-10 flex justify-between items-center w-full px-4 gap-3">
+                                             <div className="font-black text-blue-600 dark:text-blue-400 text-xs w-8">{item.count}</div>
+                                             <div className="flex-1 text-center text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">{item.make}</div>
+                                             <div className="w-8"></div>
+                                         </div>
+                                     </div>
+                                 );
+                             }) : <div className="text-center text-slate-400 text-xs py-10">لا توجد سجلات</div>}
                          </div>
                      )}
                  </div>
              </div>
         </div>
 
-        {/* Monthly Requests Comparison Chart */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 mb-6">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-slate-700 dark:text-white text-sm flex items-center gap-2">
-                    <Icon name="document-report" className="w-4 h-4 text-emerald-500" />
-                    مقارنة عدد السيارات (الشهر الحالي مقابل السابق)
-                </h3>
-            </div>
-            <div className="w-full h-72 overflow-x-auto pb-2 custom-scrollbar">
-                {isLoading ? <Skeleton className="min-w-[700px] w-full h-full rounded-lg" /> : (
-                    <div className="min-w-[700px] w-full h-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={monthlyRequestsComparisonData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
-                                <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                                <RechartsTooltip 
-                                    cursor={{fill: 'rgba(148, 163, 184, 0.1)'}}
-                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: number, name: string) => [`${value} سيارة`, name]}
-                                    labelFormatter={(label) => `يوم ${label}`}
-                                />
-                                <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/>
-                                <Bar dataKey="current" name="الشهر الحالي" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="previous" name="الشهر الماضي" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                )}
-            </div>
-        </div>
-
-        {/* Bottom Lists */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Bottom Detailed Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-2">
             <EmployeeLeaderboard data={leaderboardData} isLoading={isLoading} />
             <RecentTransactions transactions={transactionFeed} isLoading={isLoading} />
             <RecentActivity logs={activityLogs} isLoading={isLoading} />

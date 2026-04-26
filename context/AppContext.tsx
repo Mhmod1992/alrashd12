@@ -186,6 +186,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [shouldPrintDraft, setShouldPrintDraft] = useState(false);
 
     const isManualLogout = useRef(false);
+    const [whatsappApiStatus, setWhatsappApiStatus] = useState<'connected' | 'disconnected' | 'checking'>('disconnected');
 
     // Sync refs
     useEffect(() => { authUserRef.current = authUser; }, [authUser]);
@@ -1853,7 +1854,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [carMakes, carModels, setIsRefreshing]);
 
-    const sendWhatsAppMessage = useCallback(async (phone: string, text: string, clientName?: string): Promise<boolean> => {
+    const sendWhatsAppMessage = useCallback(async (phone: string, text: string, clientName?: string, options?: { suppressModal?: boolean, successMessage?: string }): Promise<boolean> => {
         const mode = settings.whatsappMode || 'manual';
         const apiUrl = settings.whatsappApiUrl;
         let success = false;
@@ -1871,19 +1872,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 });
 
                 if (response.ok) {
-                    if (clientName) {
-                        showWhatsAppSuccessModal(clientName, phone);
+                    console.log('WhatsApp API Success for:', phone);
+                    const finalClientName = clientName || 'عميل';
+                    if (options?.suppressModal) {
+                        addNotification({
+                            title: 'تم الإرسال',
+                            message: options.successMessage || 'تم إرسال رسالة الواتساب بنجاح',
+                            type: 'success'
+                        });
                     } else {
-                        addNotification({ title: 'نجاح', message: 'تم إرسال رسالة الواتساب عبر الخادم بنجاح', type: 'success' });
+                        showWhatsAppSuccessModal(finalClientName, phone);
                     }
                     success = true;
+                    setWhatsappApiStatus('connected');
                 } else {
                     console.error('WhatsApp API Error:', await response.text());
                     addNotification({ title: 'فشل الإرسال التلقائي', message: 'تعذر الإرسال عبر الخادم، سيتم فتح الواتساب اليدوي', type: 'warning' });
+                    setWhatsappApiStatus('disconnected');
                 }
             } catch (error) {
                 console.error('WhatsApp API Connection Error:', error);
                 addNotification({ title: 'فشل الاتصال بالخادم', message: 'تعذر الاتصال بخادم الواتساب، سيتم فتح الواتساب اليدوي', type: 'warning' });
+                setWhatsappApiStatus('disconnected');
             }
         }
 
@@ -1916,6 +1926,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return success;
     }, [settings.whatsappMode, settings.whatsappApiUrl, settings.whatsappApiKey, addNotification, showWhatsAppSuccessModal, setWhatsappMessages]);
 
+    const checkWhatsAppStatus = useCallback(async () => {
+        const mode = settings.whatsappMode || 'manual';
+        const apiUrl = settings.whatsappApiUrl;
+        
+        if (mode !== 'api' || !apiUrl) {
+            setWhatsappApiStatus('disconnected');
+            return;
+        }
+
+        setWhatsappApiStatus('checking');
+        try {
+            const baseUrl = apiUrl.replace(/\/$/, '');
+            // First attempt with /api/status - which we use in the settings page
+            let response = await fetch(`${baseUrl}/api/status`, {
+                method: 'GET',
+                headers: {
+                    'ngrok-skip-browser-warning': 'true',
+                    'Authorization': `Bearer ${settings.whatsappApiKey || ''}`,
+                }
+            });
+
+            // If /api/status is not found, try /api/health
+            if (!response.ok && response.status === 404) {
+                response = await fetch(`${baseUrl}/api/health`, {
+                    method: 'GET',
+                    headers: {
+                        'ngrok-skip-browser-warning': 'true',
+                        'Authorization': `Bearer ${settings.whatsappApiKey || ''}`,
+                    }
+                });
+            }
+
+            // If we got ANY response from the server (even 401 as long as it's the server responding), 
+            // it means the host is up.
+            if (response.ok || response.status === 401 || response.status === 403) {
+                // 401/403 means Unauthorized but server is alive and responding to our auth
+                setWhatsappApiStatus('connected');
+            } else {
+                setWhatsappApiStatus('disconnected');
+            }
+        } catch (error) {
+            console.error('WhatsApp Status Check Error:', error);
+            setWhatsappApiStatus('disconnected');
+        }
+    }, [settings.whatsappMode, settings.whatsappApiUrl, settings.whatsappApiKey]);
+
+    // Periodically check WhatsApp status
+    useEffect(() => {
+        if (settings.whatsappMode === 'api' && settings.whatsappApiUrl && authUser) {
+            checkWhatsAppStatus();
+            const interval = setInterval(checkWhatsAppStatus, 5 * 60 * 1000); // Check every 5 minutes
+            return () => clearInterval(interval);
+        }
+    }, [settings.whatsappMode, settings.whatsappApiUrl, authUser, checkWhatsAppStatus]);
+
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
         requests, clients, cars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
@@ -1936,6 +2001,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         findOrCreateCarMake, findOrCreateCarModel, initialRequestModalState, setInitialRequestModalState,
         currentDbUsage, currentStorageUsage, newRequestSuccessState, showNewRequestSuccessModal, hideNewRequestSuccessModal,
         whatsappSuccessModal, showWhatsAppSuccessModal, hideWhatsAppSuccessModal,
+        whatsappApiStatus, setWhatsappApiStatus, checkWhatsAppStatus,
         shouldPrintDraft, setShouldPrintDraft, fetchFinancialsData, createActivityLog, systemLogs, searchClients,
         searchCars, searchClientsPage, fetchClientRequests, fetchClientRequestsFiltered, getClientFinancialSummary, fetchRequestsByCarId, fetchRequestByRequestNumber, fetchRequestByRequestNumberForAuth, fetchRequestsByDateRange, fetchRequestsCount, fetchClientsCount,
         checkCarHistory,

@@ -4,22 +4,27 @@ import Button from '../../components/Button';
 import Icon from '../../components/Icon';
 
 const WhatsAppSettings: React.FC = () => {
-    const { settings, updateSettings, addNotification } = useAppContext();
+    const { settings, updateSettings, addNotification, setWhatsappApiStatus, checkWhatsAppStatus } = useAppContext();
     const [isTesting, setIsTesting] = useState(false);
     const [isSendingTest, setIsSendingTest] = useState(false);
     const [testPhone, setTestPhone] = useState('');
     const [showTestMessage, setShowTestMessage] = useState(false);
 
-    const handleModeChange = (mode: 'manual' | 'api') => {
-        updateSettings({ whatsappMode: mode });
+    const handleModeChange = async (mode: 'manual' | 'api') => {
+        await updateSettings({ whatsappMode: mode });
+        if (mode === 'api') {
+            checkWhatsAppStatus();
+        }
     };
 
     const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        updateSettings({ whatsappApiUrl: e.target.value });
+        const url = e.target.value;
+        updateSettings({ whatsappApiUrl: url });
     };
 
     const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        updateSettings({ whatsappApiKey: e.target.value });
+        const key = e.target.value;
+        updateSettings({ whatsappApiKey: key });
     };
 
     const testConnection = async () => {
@@ -29,6 +34,7 @@ const WhatsAppSettings: React.FC = () => {
         }
 
         setIsTesting(true);
+        setWhatsappApiStatus('checking');
         try {
             const response = await fetch(`${settings.whatsappApiUrl.replace(/\/$/, '')}/api/status`, {
                 headers: {
@@ -43,8 +49,10 @@ const WhatsAppSettings: React.FC = () => {
                     message: `الخادم يعمل بشكل صحيح وتم قبول مفتاح المصادقة. الحالة: ${data.status || 'متصل'}`, 
                     type: 'success' 
                 });
+                setWhatsappApiStatus('connected');
             } else {
                 const errorData = await response.json().catch(() => ({}));
+                setWhatsappApiStatus('disconnected');
                 if (response.status === 401 || response.status === 403) {
                     addNotification({ 
                         title: 'فشل المصادقة', 
@@ -56,6 +64,7 @@ const WhatsAppSettings: React.FC = () => {
                 }
             }
         } catch (error) {
+            setWhatsappApiStatus('disconnected');
             addNotification({ title: 'فشل الاتصال', message: 'تعذر الوصول إلى الخادم. تأكد من تشغيله ومن صحة الرابط', type: 'error' });
         } finally {
             setIsTesting(false);

@@ -74,6 +74,9 @@ export const FillRequest: React.FC = () => {
     const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
     const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
     const [isReviewPromptModalOpen, setIsReviewPromptModalOpen] = useState(false);
+    const [isCompleting, setIsCompleting] = useState(false);
+    const [isProcessingWhatsApp, setIsProcessingWhatsApp] = useState(false);
+
 
     // UI state
     const [isTechnicianModalOpen, setIsTechnicianModalOpen] = useState(false);
@@ -1494,14 +1497,22 @@ export const FillRequest: React.FC = () => {
         if (isLocked) return;
         
         if (settings.enableReviewPrompt) {
-            setIsReviewPromptModalOpen(true);
-            return;
+            if (settings.whatsappReviewMode === 'silent') {
+                await processCompletion(true);
+                return;
+            } else {
+                setIsReviewPromptModalOpen(true);
+                return;
+            }
         }
 
         await processCompletion();
     };
 
     const processCompletion = async (sendReview: boolean = false) => {
+        if (!request || isCompleting) return;
+        setIsCompleting(true);
+
         if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
         const newLog = createActivityLog('تغيير حالة الطلب', 'تم تحديد الطلب كمكتمل');
         const newLogArray = newLog ? [newLog, ...activityLog] : activityLog;
@@ -1514,13 +1525,26 @@ export const FillRequest: React.FC = () => {
             window.sessionStorage.setItem('skipScrollRestoration', 'true');
 
             if (sendReview && client?.phone && settings.reviewMessage && settings.reviewLink) {
+                setIsProcessingWhatsApp(true);
                 const message = settings.reviewMessage.replace('{review_link}', settings.reviewLink);
-                const phone = client.phone.replace(/\D/g, '').replace(/^0/, '966');
-                await sendWhatsAppMessage(phone, message);
+                let phone = client.phone.replace(/\D/g, '');
+                if (phone.startsWith('05')) phone = '966' + phone.substring(1);
+                else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+                
+                await sendWhatsAppMessage(phone, message, client?.name || 'عميل', {
+                    suppressModal: true,
+                    successMessage: 'تم ارسال التقيم الى العميل'
+                });
+                setIsProcessingWhatsApp(false);
             }
             
             setPage('requests');
-        } catch { }
+        } catch (error) {
+            console.error('Completion error:', error);
+        } finally {
+            setIsCompleting(false);
+            setIsProcessingWhatsApp(false);
+        }
     };
 
     const handleReopen = async () => {
@@ -2463,6 +2487,7 @@ export const FillRequest: React.FC = () => {
                         onReview={() => setIsReviewModalOpen(true)}
                         onPrint={handlePreviewAndPrint}
                         onComplete={can('mark_request_complete') ? handleComplete : undefined}
+                        isCompleting={isCompleting}
                         onToggleStamp={handleToggleStamp}
                         reportStamps={request?.report_stamps}
                         canChangeStatus={!isLocked && can('change_request_status')}
@@ -2581,24 +2606,20 @@ export const FillRequest: React.FC = () => {
 
                     <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t dark:border-slate-700">
                         <Button 
-                            onClick={() => {
-                                setIsReviewPromptModalOpen(false);
-                                processCompletion(true);
-                            }} 
+                            onClick={() => processCompletion(true)} 
+                            disabled={isCompleting}
                             className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white"
-                            leftIcon={<WhatsappIcon className="w-5 h-5" />}
+                            leftIcon={isProcessingWhatsApp ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <WhatsappIcon className="w-5 h-5" />}
                         >
-                            إكمال وإرسال
+                            {isProcessingWhatsApp ? 'جاري الإرسال...' : 'إكمال وإرسال'}
                         </Button>
                         <Button 
                             variant="secondary" 
-                            onClick={() => {
-                                setIsReviewPromptModalOpen(false);
-                                processCompletion(false);
-                            }} 
+                            disabled={isCompleting}
+                            onClick={() => processCompletion(false)} 
                             className="flex-1"
                         >
-                            إكمال فقط
+                            {isCompleting && !isProcessingWhatsApp ? 'جاري الحفظ...' : 'إكمال فقط'}
                         </Button>
                     </div>
                 </div>

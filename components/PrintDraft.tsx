@@ -35,7 +35,7 @@ const PrintDraft = React.forwardRef<HTMLDivElement, PrintDraftProps>((props, ref
             <p><strong>السيارة:</strong> {carMake?.name_ar} {carModel?.name_ar}</p>
             <p><strong>سنة الصنع:</strong> {car?.year}</p>
             <p><strong>رقم اللوحة/الشاصي:</strong> {car?.plate_number}</p>
-            <p><strong>نوع الفحص:</strong> {inspectionType?.name}</p>
+            <p><strong>نوع الفحص:</strong> <span className="bg-yellow-100 px-1 rounded">{inspectionType?.name}</span></p>
             <p className="font-bold text-xl"><strong>المبلغ:</strong> {price} ريال</p>
         </div>
         <footer className="mt-8 pt-4 border-t-2 text-center text-sm">

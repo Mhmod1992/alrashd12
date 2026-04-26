@@ -63,7 +63,7 @@ const Requests: React.FC = () => {
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
-        setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage,
+        page, setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage,
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
@@ -123,31 +123,6 @@ const Requests: React.FC = () => {
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
 
-    // Smart Back Logic: Scroll to and highlight the selected request when returning to the page
-    useEffect(() => {
-        if (selectedRequestId) {
-            // Check if we should skip scroll restoration (e.g. after completing a request)
-            const skipScroll = window.sessionStorage.getItem('skipScrollRestoration');
-            if (skipScroll === 'true') {
-                window.sessionStorage.removeItem('skipScrollRestoration');
-                setSelectedRequestId(null);
-                return;
-            }
-
-            // Wait for the table to render and data to be ready
-            const timer = setTimeout(() => {
-                const element = document.getElementById(`request-row-${selectedRequestId}`);
-                if (element) {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    triggerHighlight(selectedRequestId);
-                    // Clear the selected ID after a delay to prevent re-triggering on every render
-                    // but keep it long enough for the highlight animation to be visible
-                    setTimeout(() => setSelectedRequestId(null), 3000);
-                }
-            }, 800); // Slightly longer delay to ensure table data is loaded
-            return () => clearTimeout(timer);
-        }
-    }, [selectedRequestId, triggerHighlight, setSelectedRequestId]);
     const actionsMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -271,10 +246,15 @@ const Requests: React.FC = () => {
             setPrefilledReservation(null);
         }
 
-        // Event-Based Reset: If a new request is created while in another date filter, force reset to today so it appears in the table immediately
+        // Event-Based Reset: If a new request is created, force reset to today so it appears in the table immediately
         if (dateFilter !== 'today') {
             setDateFilter('today');
             setPaymentFilter('الكل');
+            addNotification({ 
+                title: 'تنبيه الفلتر', 
+                message: 'تمت العودة لتاريخ اليوم لمشاهدة الطلب الجديد.', 
+                type: 'info' 
+            });
         }
     };
 
@@ -425,8 +405,69 @@ const Requests: React.FC = () => {
         }
     }, [setRequestNumberQuery, setComprehensiveQuery, setStatusFilter, setEmployeeFilter, setRangeStartDate, setRangeEndDate, setDateFilter, clearSearchedRequests]);
 
-    // --- Sticky Filter Trap (Auto-Reset on Inactivity) ---
+    // Smart Back Logic: Scroll to and highlight the selected request when returning to the page
     useEffect(() => {
+        // 1. Check if we should reset filters (Direct Navigation from Sidebar)
+        const resetFilters = window.sessionStorage.getItem('resetRequestsFilters');
+        if (resetFilters === 'true') {
+            window.sessionStorage.removeItem('resetRequestsFilters');
+            clearFilters();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            // Clear selected ID to ensure fresh start
+            setSelectedRequestId(null);
+            return;
+        }
+
+        // 2. Check if we should skip scroll restoration (e.g. after returning from Draft or completing a request)
+        const skipScroll = window.sessionStorage.getItem('skipScrollRestoration');
+        if (skipScroll === 'true') {
+            window.sessionStorage.removeItem('skipScrollRestoration');
+            setSelectedRequestId(null);
+            
+            // Requirements: Reset scroll to top, ignore local memory (clear filters), and refresh list
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            // Clear all filters and search state
+            if (typeof clearFilters === 'function') {
+                clearFilters();
+            }
+            
+            // Trigger a refresh
+            if (typeof fetchRequests === 'function') {
+                fetchRequests();
+            }
+            return;
+        }
+
+        if (selectedRequestId) {
+            // Wait for the table to render and data to be ready
+            const timer = setTimeout(() => {
+                const element = document.getElementById(`request-row-${selectedRequestId}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    triggerHighlight(selectedRequestId);
+                    // Clear the selected ID after a delay to prevent re-triggering on every render
+                    // but keep it long enough for the highlight animation to be visible
+                    setTimeout(() => setSelectedRequestId(null), 3000);
+                }
+            }, 800); // Slightly longer delay to ensure table data is loaded
+            return () => clearTimeout(timer);
+        }
+    }, [selectedRequestId, triggerHighlight, setSelectedRequestId, fetchRequests, clearFilters, page]);
+
+    const isJustReturned = useRef(true);
+
+    // --- Sticky Filter Trap (Auto-Reset Logic) ---
+    useEffect(() => {
+        // 1. Reset on Return: Only on first render of this component session
+        if (isJustReturned.current) {
+            if (dateFilter === 'yesterday') {
+                setDateFilter('today');
+            }
+            isJustReturned.current = false;
+            return;
+        }
+
         if (dateFilter === 'today' || isSearchActive) return;
 
         let inactivityTimer: number;
@@ -436,7 +477,12 @@ const Requests: React.FC = () => {
             inactivityTimer = window.setTimeout(() => {
                 setDateFilter('today');
                 setPaymentFilter('الكل');
-            }, 5 * 60 * 1000); // 5 minutes of inactivity
+                addNotification({ 
+                    title: 'تصفير تلقائي', 
+                    message: 'تمت العودة لطلبات اليوم بسبب الخمول لضمان استقبال العمل الجديد.', 
+                    type: 'info' 
+                });
+            }, 3 * 60 * 1000); // 3 minutes of inactivity
         };
 
         const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
@@ -448,7 +494,7 @@ const Requests: React.FC = () => {
             window.clearTimeout(inactivityTimer);
             events.forEach(event => document.removeEventListener(event, handleActivity));
         };
-    }, [dateFilter, isSearchActive, setDateFilter, setPaymentFilter]);
+    }, [dateFilter, isSearchActive, setDateFilter, setPaymentFilter, addNotification]);
 
 
     // --- SEARCH EXECUTION ---
@@ -773,6 +819,18 @@ const Requests: React.FC = () => {
 
     const isLoadMoreVisible = searchedRequests === null && serverFetchedData === null && hasMoreRequests && dateFilter === 'all';
     const isAnyFilterActive = requestNumberQuery.trim() !== '' || comprehensiveQuery.trim() !== '' || statusFilter !== 'الكل' || employeeFilter !== 'الكل' || dateFilter !== 'today';
+
+    // Auto-Reset when attempting to create a new request
+    useEffect(() => {
+        if (isModalOpen && dateFilter !== 'today') {
+            setDateFilter('today');
+            addNotification({ 
+                title: 'تصفير الفلتر', 
+                message: 'تمت العودة لطلبات اليوم لضمان ظهور الطلب الجديد بعد إكماله.', 
+                type: 'info' 
+            });
+        }
+    }, [isModalOpen, dateFilter, setDateFilter, addNotification]);
 
     const [displayLimit, setDisplayLimit] = useState(20);
     const [isPaginatingLocal, setIsPaginatingLocal] = useState(false);

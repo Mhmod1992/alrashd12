@@ -34,6 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
   const handleNavigation = (view: Page) => {
     if (view === 'requests') {
         clearSearchedRequests();
+        window.sessionStorage.setItem('resetRequestsFilters', 'true');
     }
     setPage(view);
     if (window.innerWidth < 1024) { 
@@ -43,71 +44,63 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
 
   // Grouped Navigation Items
   const navGroups = useMemo(() => {
-    // Group 1: Operations (العمليات اليومية)
-    const operationsItems = [];
-    
+    // Group 1: Core Operations (العمليات الأساسية)
+    const coreOperations = [];
     if (can('view_dashboard')) {
-        operationsItems.push({ id: 'dashboard', label: 'لوحة التحكم', icon: HomeIcon });
+        coreOperations.push({ id: 'dashboard', label: 'لوحة التحكم', icon: HomeIcon });
     }
-
-    if (authUser?.role === 'receptionist' || can('view_waiting_requests')) {
-        operationsItems.push({ id: 'waiting-requests', label: 'طلبات بانتظار الدفع', icon: DollarSignIcon });
-    }
-
     if (can('view_requests_list') && authUser?.role !== 'receptionist') {
-        operationsItems.push({ id: 'requests', label: 'إدارة الطلبات', icon: FileTextIcon });
+        coreOperations.push({ id: 'requests', label: 'الطلبات النشطة', icon: FileTextIcon });
     }
-    
+    if (authUser?.role === 'receptionist' || can('view_waiting_requests')) {
+        coreOperations.push({ id: 'waiting-requests', label: 'بانتظار الدفع', icon: DollarSignIcon });
+    }
+    coreOperations.push({ id: 'whatsapp-inbox', label: 'صندوق الواتساب', icon: WhatsappIcon });
+
+    // Group 2: Records & Technical (السجلات والفحص)
+    const technicalItems = [];
     if (can('manage_reservations')) {
-        operationsItems.push({ id: 'reservations', label: 'الحجوزات الواردة', icon: CalendarClockIcon });
+        technicalItems.push({ id: 'reservations', label: 'الحجوزات الواردة', icon: CalendarClockIcon });
     }
-    
     if (can('view_archive')) {
-        operationsItems.push({ id: 'archive', label: 'أرشيف الفحص', icon: ArchiveIcon });
+        technicalItems.push({ id: 'archive', label: 'أرشيف الفحص', icon: ArchiveIcon });
     }
-    
     if (can('manage_paper_archive')) {
-        operationsItems.push({ id: 'paper-archive', label: 'أرشيف الورقيات', icon: FolderOpenIcon });
+        technicalItems.push({ id: 'paper-archive', label: 'أرشيف الورقيات', icon: FolderOpenIcon });
     }
 
-    if (can('manage_clients') && authUser?.role !== 'receptionist') {
-      operationsItems.push({ id: 'clients', label: 'إدارة العملاء', icon: UsersIcon });
-    }
-
-    operationsItems.push({ id: 'whatsapp-inbox', label: 'صندوق الواتساب', icon: WhatsappIcon });
-
-    // Group 2: Financials (المالية)
+    // Group 3: Financials (الإدارة المالية)
     const financialItems = [];
     if (can('view_financials')) {
-      financialItems.push({ id: 'financials', label: 'المالية والتقارير', icon: DollarSignIcon });
+      financialItems.push({ id: 'financials', label: 'التقارير المالية', icon: TrendingUpIcon });
     }
-    
     if (can('manage_revenues')) {
-        financialItems.push({ id: 'revenues', label: 'الإيرادات الأخرى', icon: TrendingUpIcon });
+        financialItems.push({ id: 'revenues', label: 'الإيرادات الأخرى', icon: DollarSignIcon });
     }
-    
     if (can('manage_expenses')) {
         financialItems.push({ id: 'expenses', label: 'إدارة المصروفات', icon: CreditCardIcon });
     }
 
-    // Group 3: Admin & Settings (الإدارة)
+    // Group 4: Administration (النظام والإدارة)
     const adminItems = [];
-    if (can('manage_employees') || can('manage_technicians')) {
-        adminItems.push({ id: 'employees', label: 'شئون الموظفين', icon: UserCircleIcon });
+    if (can('manage_clients') && authUser?.role !== 'receptionist') {
+        adminItems.push({ id: 'clients', label: 'إدارة العملاء', icon: UsersIcon });
     }
-
     if (can('manage_brokers')) {
-      adminItems.push({ id: 'brokers', label: 'إدارة السماسرة', icon: BriefcaseIcon });
+        adminItems.push({ id: 'brokers', label: 'إدارة السماسرة', icon: BriefcaseIcon });
     }
-
+    if (can('manage_employees') || can('manage_technicians')) {
+        adminItems.push({ id: 'employees', label: 'شؤون الموظفين', icon: UserCircleIcon });
+    }
     if (can('view_settings')) {
-      adminItems.push({ id: 'settings', label: 'الإعدادات', icon: SettingsIcon });
+      adminItems.push({ id: 'settings', label: 'الإعدادات العامة', icon: SettingsIcon });
     }
 
     return [
-        { title: 'العمليات', items: operationsItems },
-        { title: 'المالية', items: financialItems },
-        { title: 'الإدارة', items: adminItems }
+        { title: 'العمليات الدورية', items: coreOperations },
+        { title: 'الفحص والأرشيف', items: technicalItems },
+        { title: 'المالية والمحاسبة', items: financialItems },
+        { title: 'النظام والإدارة', items: adminItems }
     ].filter(group => group.items.length > 0);
 
   }, [can, authUser]);
@@ -201,15 +194,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
 
             <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-6 custom-scrollbar flex flex-col">
                 {navGroups.map((group, groupIndex) => (
-                    <div key={groupIndex}>
-                        {/* Section Header (Only show if there are items and it's not the only group) */}
+                    <div key={groupIndex} className={groupIndex > 0 ? "pt-2" : ""}>
+                        {/* Section Header */}
                         {navGroups.length > 1 && group.items.length > 0 && (
-                            <div className={`text-[10px] font-bold uppercase tracking-wider mb-2 px-4 ${designClasses.sectionTitle}`}>
-                                {group.title}
+                            <div className="flex items-center gap-2 mb-3 px-4">
+                                <div className={`text-[10px] font-bold uppercase tracking-[0.15em] whitespace-nowrap ${designClasses.sectionTitle}`}>
+                                    {group.title}
+                                </div>
+                                <div className="h-px w-full bg-slate-200 dark:bg-slate-700/50 opacity-50"></div>
                             </div>
                         )}
                         
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                             {group.items.map(item => {
                                 const isActive = page === item.id;
                                 return (
@@ -229,14 +225,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
                                                 handleNavigation(item.id as Page);
                                             }
                                         }}
-                                        className={`flex items-center gap-x-3 px-4 py-2.5 transition-all duration-200 group ${
+                                        className={`relative flex items-center gap-x-3 px-4 py-2.5 transition-all duration-300 group overflow-hidden ${
                                         isActive
                                         ? designClasses.active
                                         : designClasses.inactive
                                         }`}
                                     >
-                                        <item.icon className={`h-5 w-5 transition-transform group-hover:scale-110 ${isActive ? 'text-white dark:text-white' : 'opacity-70 group-hover:opacity-100'}`} />
-                                        <span className="font-medium text-sm">{item.label}</span>
+                                        {/* Active Indicator Line */}
+                                        {isActive && (
+                                            <div className="absolute right-0 top-1/4 bottom-1/4 w-1 bg-white dark:bg-white rounded-l-full"></div>
+                                        )}
+                                        
+                                        <item.icon className={`h-5 w-5 transition-transform duration-300 group-hover:scale-110 ${isActive ? 'text-white dark:text-white' : 'opacity-70 group-hover:opacity-100'}`} />
+                                        <span className={`font-medium text-sm transition-colors duration-300 ${isActive ? 'translate-x-[-2px]' : ''}`}>{item.label}</span>
                                     </a>
                                 );
                             })}
@@ -262,25 +263,27 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
 
             {authUser && (
                 <div className={`p-4 flex-shrink-0 ${designClasses.footer}`}>
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-slate-700 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold border-2 border-white dark:border-slate-600 shadow-sm">
-                            {authUser.name.charAt(0).toUpperCase()}
+                    <div className="bg-white/50 dark:bg-slate-800/50 rounded-2xl p-3 border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold border-2 border-white dark:border-slate-700 shadow-md">
+                                {authUser.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                                    {authUser.name}
+                                </p>
+                                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                                    {authUser.role === 'general_manager' ? 'مدير عام' : authUser.role === 'manager' ? 'مدير' : authUser.role === 'receptionist' ? 'استقبال' : 'موظف'}
+                                </p>
+                            </div>
+                            <button 
+                                onClick={logout} 
+                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all duration-300"
+                                title="تسجيل الخروج"
+                            >
+                                <LogOutIcon className="w-5 h-5" />
+                            </button>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
-                                {authUser.name}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                                {authUser.role === 'general_manager' ? 'مدير عام' : authUser.role === 'manager' ? 'مدير' : authUser.role === 'receptionist' ? 'استقبال' : 'موظف'}
-                            </p>
-                        </div>
-                        <button 
-                            onClick={logout} 
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                            title="تسجيل الخروج"
-                        >
-                            <LogOutIcon className="w-5 h-5" />
-                        </button>
                     </div>
                 </div>
             )}

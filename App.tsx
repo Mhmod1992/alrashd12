@@ -240,9 +240,22 @@ const AppContent: React.FC = () => {
 
   if (page === 'print-report' || page === 'request-draft') {
     return (
-      <Suspense fallback={<PageLoader />}>
-        {mainContent()}
-      </Suspense>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans rtl overflow-x-hidden relative">
+        <Suspense fallback={<PageLoader />}>
+          {mainContent()}
+        </Suspense>
+        
+        {/* Global Overlays for Full Screen Pages */}
+        <NotificationContainer />
+        <WhatsAppSuccessModal 
+          isOpen={whatsappSuccessModal.isOpen} 
+          onClose={hideWhatsAppSuccessModal} 
+          clientName={whatsappSuccessModal.clientName} 
+          phone={whatsappSuccessModal.phone} 
+        />
+        <ConfirmModal />
+        <IncomingRequestNotifier />
+      </div>
     );
   }
 

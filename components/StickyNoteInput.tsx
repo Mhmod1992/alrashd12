@@ -34,6 +34,7 @@ interface StickyNoteInputProps {
     onPrevTab?: () => void;
     onToggleStamp?: (stamp: import('../types').ReportStamp) => void;
     reportStamps?: import('../types').ReportStamp[];
+    isCompleting?: boolean;
 }
 
 interface SpeechRecognition {
@@ -138,7 +139,8 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
     onNextTab,
     onPrevTab,
     onToggleStamp,
-    reportStamps = []
+    reportStamps = [],
+    isCompleting = false
 }) => {
     const { addNotification } = useAppContext();
     const isMounted = useRef(true);
@@ -410,17 +412,27 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
             {!isLocked && onComplete && (
                 <button 
                     onClick={handleCompleteClick} 
+                    disabled={isCompleting}
                     className={`
                         flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-md
                         ${isConfirmingComplete 
                             ? 'bg-green-600 text-white px-4 py-2 hover:bg-green-700 scale-105' 
                             : 'bg-transparent text-slate-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-slate-800 p-2'
                         }
+                        ${isCompleting ? 'opacity-50 cursor-not-allowed' : ''}
                     `} 
-                    title={isConfirmingComplete ? "تأكيد الإكمال؟" : "إكمال الطلب"}
+                    title={isCompleting ? "جاري الإكمال..." : (isConfirmingComplete ? "تأكيد الإكمال؟" : "إكمال الطلب")}
                 >
-                    <CheckCircleIcon className={`w-5 h-5 ${isConfirmingComplete ? 'animate-bounce' : ''}`} />
-                    {isConfirmingComplete && <span className="font-bold text-xs whitespace-nowrap">تأكيد؟</span>}
+                    {isCompleting ? (
+                        <RefreshCwIcon className="w-5 h-5 animate-spin" />
+                    ) : (
+                        <CheckCircleIcon className={`w-5 h-5 ${isConfirmingComplete ? 'animate-bounce' : ''}`} />
+                    )}
+                    {(isConfirmingComplete || isCompleting) && (
+                        <span className="font-bold text-xs whitespace-nowrap">
+                            {isCompleting ? 'جاري الإرسال...' : 'تأكيد؟'}
+                        </span>
+                    )}
                 </button>
             )}
         </>

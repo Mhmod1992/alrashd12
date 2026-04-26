@@ -28,7 +28,7 @@ const MiniPlateDisplay: React.FC<{ plateNumber: string; settings: Settings; larg
                 <div className="text-center flex-shrink-0 flex flex-col items-center">
                     <div className={`font-bold tracking-[0.3em] ${large ? 'text-3xl' : 'text-base'}`}>{arLetters.split('').join(' ')}</div>
                     <div className="w-full h-px bg-slate-300 dark:bg-slate-600 my-1"></div>
-                    <div className={`font-bold tracking-[0.2em] opacity-80 ${large ? 'text-base' : 'text-[11px]'}`}>{enLetters.split('').reverse().join(' ')}</div>
+                    <div className={`font-bold tracking-[0.2em] ${large ? 'text-3xl' : 'text-base'}`}>{enLetters.split('').reverse().join(' ')}</div>
                 </div>
                 
                 <div className={`bg-slate-300 dark:bg-slate-500 flex-shrink-0 ${large ? 'w-0.5 h-14' : 'w-px h-10'}`}></div>
@@ -38,7 +38,7 @@ const MiniPlateDisplay: React.FC<{ plateNumber: string; settings: Settings; larg
                         {numbers.split('').join(' ')}
                     </div>
                     <div className="w-full h-px bg-slate-300 dark:bg-slate-600 my-1"></div>
-                    <div className={`font-bold tracking-[0.3em] opacity-80 ${large ? 'text-3xl' : 'text-[11px]'}`}>
+                    <div className={`font-bold tracking-[0.3em] ${large ? 'text-3xl' : 'text-base'}`}>
                         {numbers.split('').join(' ')}
                     </div>
                 </div>

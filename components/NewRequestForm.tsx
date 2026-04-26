@@ -1209,6 +1209,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                 return false;
                             }
                         }
+                        // Payment note is now optional as per latest request
                     }
                 }
                 checkField('inspectionType', typeInputRef);
@@ -1344,9 +1345,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             if (initialReservationData || isFromReservation) {
                 paymentNoteValue = `[WA-RES] ${paymentNote.trim()}`.trim();
             } else {
-                if (isEditMode || finalPaymentType === PaymentType.Transfer || finalPaymentType === PaymentType.Unpaid) {
-                    paymentNoteValue = paymentNote.trim() ? paymentNote.trim() : undefined;
-                }
+                paymentNoteValue = paymentNote.trim() ? paymentNote.trim() : undefined;
             }
 
             const splitPaymentDetails = paymentType === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined;

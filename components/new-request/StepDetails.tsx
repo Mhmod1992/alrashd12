@@ -128,9 +128,14 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">قيمة الفحص (ريال)</label>
                     <input
                         ref={props.priceInputRef}
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={props.inspectionPrice}
-                        onChange={(e) => props.setInspectionPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                        onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            props.setInspectionPrice(val === '' ? '' : Number(val));
+                        }}
                         required={!props.isReservationMode}
                         className={props.getInputClass('inspectionPrice')}
                     />
@@ -191,20 +196,18 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                                 <option key={pt} value={pt}>{pt}</option>
                             ))}
                         </select>
-                        {(props.isEditMode || props.paymentType === PaymentType.Transfer || props.paymentType === PaymentType.Unpaid) && (
-                            <div className="mt-2 animate-fade-in">
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                    ملاحظة الدفع / الطلب
-                                </label>
-                                <input
-                                    type="text"
-                                    value={props.paymentNote}
-                                    onChange={(e) => props.setPaymentNote(e.target.value)}
-                                    className={formInputClasses}
-                                    placeholder="اختياري: مثال رقم الحوالة أو أي ملاحظة"
-                                />
-                            </div>
-                        )}
+                        <div className="mt-2 animate-fade-in">
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                ملاحظة الدفع / الطلب
+                            </label>
+                            <input
+                                type="text"
+                                value={props.paymentNote}
+                                onChange={(e) => props.setPaymentNote(e.target.value)}
+                                className={formInputClasses}
+                                placeholder="اختياري: مثال رقم الحوالة أو أي ملاحظة"
+                            />
+                        </div>
                         {props.paymentType === PaymentType.Split && (
                             <div className="mt-2 animate-fade-in p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
                                 <div className="text-xs text-slate-500 mb-2">إجمالي المطلوب: <span className="font-bold text-slate-800 dark:text-slate-200">{props.inspectionPrice} ريال</span></div>
@@ -212,21 +215,20 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                                     <div>
                                         <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">نقدي</label>
                                         <input
-                                            type="number"
+                                            type="text"
+                                            inputMode="numeric"
                                             value={props.splitCashAmount}
                                             onChange={(e) => {
-                                                const v = e.target.value === '' ? 0 : Number(e.target.value);
+                                                const v = e.target.value === '' ? 0 : Number(e.target.value.replace(/\D/g, ''));
                                                 props.onSplitCashChange(v);
                                             }}
                                             className="w-full p-2 text-sm border rounded dark:bg-slate-800 dark:border-slate-600"
-                                            min="0"
-                                            max={Number(props.inspectionPrice) || 0}
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">بطاقة</label>
                                         <input
-                                            type="number"
+                                            type="text"
                                             value={props.splitCardAmount}
                                             readOnly
                                             className="w-full p-2 text-sm border rounded bg-slate-100 dark:bg-slate-600 dark:border-slate-500 text-slate-500 cursor-not-allowed"

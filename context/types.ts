@@ -245,6 +245,9 @@ export interface AppContextType {
     whatsappSuccessModal: { isOpen: boolean; clientName: string; phone: string; };
     showWhatsAppSuccessModal: (clientName: string, phone: string) => void;
     hideWhatsAppSuccessModal: () => void;
+    whatsappApiStatus: 'connected' | 'disconnected' | 'checking';
+    setWhatsappApiStatus: (status: 'connected' | 'disconnected' | 'checking') => void;
+    checkWhatsAppStatus: () => Promise<void>;
     // --- Remote Deletion Event ---
     lastRemoteDeleteId: string | null;
     setLastRemoteDeleteId: (id: string | null) => void;

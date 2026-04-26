@@ -98,13 +98,16 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                 <div className="w-full flex justify-between items-end">
                     
                     {/* LEFT SIDE (Start in RTL): Inspection Type, Request Number & Vehicle Name */}
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-300">#{request.request_number}</h1>
                         <div className="flex items-center gap-3">
-                            <div className="border border-black dark:border-slate-400 rounded px-2 py-1 text-center font-bold text-sm">
+                            <div 
+                                className="border border-black dark:border-slate-400 rounded px-2 py-1 text-center font-bold text-sm"
+                                style={{ backgroundColor: '#fef3c7' }}
+                            >
                                <strong className="me-1">نوع الفحص:</strong>
-                               <span>{inspectionType.name}</span>
+                               <span className="bg-yellow-200 px-1 rounded text-black">{inspectionType.name}</span>
                             </div>
-                            <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-300">#{request.request_number}</h1>
                         </div>
                         
                         <div className="flex items-baseline gap-2">
@@ -237,6 +240,7 @@ const RequestDraft: React.FC = () => {
             // Short delay to allow DOM render after isContentReady becomes true
             const timer = setTimeout(() => {
                 window.print();
+                window.sessionStorage.setItem('skipScrollRestoration', 'true');
                 setShouldPrintDraft(false); 
                 goBack(); 
             }, 500);
@@ -281,7 +285,10 @@ const RequestDraft: React.FC = () => {
     
     const handlePrint = () => window.print();
     const handleStartFilling = () => setPage('fill-request');
-    const handleBack = () => goBack();
+    const handleBack = () => {
+        window.sessionStorage.setItem('skipScrollRestoration', 'true');
+        goBack();
+    };
 
     const pageData = { request, client, car, carMake, carModel, inspectionType };
 

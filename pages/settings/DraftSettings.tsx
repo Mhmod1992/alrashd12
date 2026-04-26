@@ -147,7 +147,9 @@ const DraftPreview: React.FC<{ settings: DraftSettingsType }> = ({ settings }) =
             {/* Mock Header */}
             <div className="relative w-full flex justify-center items-center pb-4 border-b-2 border-black">
                 <div className="absolute top-0 right-0 text-sm">
-                    <div className="border border-black rounded px-2 py-1 font-semibold">نوع الفحص: فحص كامل</div>
+                    <div className="border border-black rounded px-2 py-1 font-semibold" style={{ backgroundColor: '#fef3c7' }}>
+                        نوع الفحص: <span className="bg-yellow-200 px-1 rounded">فحص كامل</span>
+                    </div>
                 </div>
                 <div className="text-center">
                     <h1 className="text-3xl font-semibold text-slate-700">#1001</h1>

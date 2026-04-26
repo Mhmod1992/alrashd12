@@ -114,6 +114,8 @@ interface StepCarProps {
     showPlateField?: boolean;
 }
 
+import YearPicker from '../YearPicker';
+
 const StepCar: React.FC<StepCarProps> = (props) => {
     return (
         <fieldset className="bg-white dark:bg-slate-800/50 p-4 sm:p-6 rounded-lg shadow-sm">
@@ -388,15 +390,11 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">سنة الصنع</label>
-                    <input
-                        ref={props.yearInputRef}
-                        type="number"
+                    <YearPicker
                         value={props.carYear}
-                        onChange={e => props.setCarYear(Number(e.target.value))}
-                        onFocus={(e) => e.target.select()}
+                        onChange={props.setCarYear}
+                        className={props.getInputClass('carYear')}
                         required
-                        className="mt-1 block w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200"
-                        autoComplete="off"
                     />
                 </div>
             </div>

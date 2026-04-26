@@ -33,7 +33,8 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
     setPage, setSelectedRequestId, fetchAndUpdateSingleRequest, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
     unreadMessagesCount, setIsMailboxOpen, searchRequestByNumber, clearSearchedRequests, searchedRequests,
     searchQuery, setSearchQuery, can,
-    unreadWhatsAppCount, latestWhatsAppMessage, setLatestWhatsAppMessage
+    unreadWhatsAppCount, latestWhatsAppMessage, setLatestWhatsAppMessage,
+    whatsappApiStatus
   } = useAppContext();
 
   const design = settings.design || 'aero';
@@ -269,6 +270,26 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                 )}
                 {unreadWhatsAppCount > 0 && (
                     <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-800"></span>
+                )}
+                
+                {/* WhatsApp API Status Indicator */}
+                {settings.whatsappMode === 'api' && (
+                    <div 
+                        className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-slate-800 flex items-center justify-center transition-all shadow-sm ${
+                            whatsappApiStatus === 'connected' ? 'bg-emerald-500' : 
+                            whatsappApiStatus === 'checking' ? 'bg-yellow-400' : 
+                            'bg-red-500 animate-pulse'
+                        }`}
+                        title={
+                            whatsappApiStatus === 'connected' ? 'خدمة الواتساب متصلة' : 
+                            whatsappApiStatus === 'checking' ? 'جاري التحقق من الخدمة...' : 
+                            'خدمة الواتساب غير متصلة!'
+                        }
+                    >
+                        {whatsappApiStatus === 'disconnected' && (
+                            <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-75"></span>
+                        )}
+                    </div>
                 )}
             </button>
 

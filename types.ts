@@ -452,6 +452,7 @@ export interface Settings {
   enableReviewPrompt?: boolean;
   reviewLink?: string;
   reviewMessage?: string;
+  whatsappReviewMode?: 'silent' | 'interactive';
   whatsappMode?: 'manual' | 'api';
   whatsappApiUrl?: string;
   whatsappApiKey?: string;
