@@ -30,20 +30,22 @@ const defaultPermissionsByRole: Record<Role, Permission[]> = {
         'view_activity_log', 'view_archive', 'manage_notes', 'manage_findings', 'change_request_status', 'mark_request_complete', 'manage_brokers',
         'add_broker_commission', 'pay_broker_commission',
         'view_login_notifications', 'manage_appearance', 'edit_request_price', 'export_data', 'send_internal_messages', 'process_payment',
-        'view_waiting_requests', 'view_car_history_on_create', 'view_requests_list', 'view_settings',
+        'view_waiting_requests', 'view_car_history_on_create', 'view_requests_list', 
+        'view_requests_payment_filters', 'view_requests_date_filters', 'view_requests_price_column', 'view_requests_stats_cards',
+        'view_settings',
         'manage_paper_archive', 'manage_revenues', 'manage_expenses', 'delete_whatsapp_messages'
     ],
     // Employee/Technician: No Dashboard, No Financials, No Archive by default.
-    employee: ['create_requests', 'fill_requests', 'view_request_info', 'manage_notes', 'manage_findings', 'send_internal_messages', 'mark_request_complete', 'view_requests_list'],
+    employee: ['create_requests', 'fill_requests', 'view_request_info', 'manage_notes', 'manage_findings', 'send_internal_messages', 'mark_request_complete', 'view_requests_list', 'view_requests_stats_cards', 'view_requests_date_filters'],
     // Receptionist: No Dashboard, No Financials.
-    receptionist: ['create_requests', 'manage_clients', 'send_internal_messages', 'process_payment', 'view_waiting_requests', 'manage_reservations', 'view_requests_list', 'add_broker_commission']
+    receptionist: ['create_requests', 'manage_clients', 'send_internal_messages', 'process_payment', 'view_waiting_requests', 'manage_reservations', 'view_requests_list', 'add_broker_commission', 'view_requests_payment_filters', 'view_requests_date_filters', 'view_requests_price_column', 'view_requests_stats_cards', 'resend_whatsapp_report']
 };
 
 const categorizedPermissions: Record<string, Permission[]> = {
-    'صلاحيات العرض والقوائم': ['view_dashboard', 'view_waiting_requests', 'view_requests_list', 'view_completed_requests', 'manage_reservations', 'view_archive', 'manage_paper_archive', 'manage_clients'],
+    'صلاحيات العرض والقوائم': ['view_dashboard', 'view_requests_list', 'view_requests_payment_filters', 'view_requests_date_filters', 'view_requests_price_column', 'view_requests_stats_cards', 'view_waiting_requests', 'view_completed_requests', 'manage_reservations', 'view_archive', 'manage_paper_archive', 'manage_clients'],
     'المالية والتقارير': ['view_financials', 'manage_revenues', 'manage_expenses'],
     'الإدارة والإعدادات': ['manage_employees', 'manage_brokers', 'add_broker_commission', 'pay_broker_commission', 'view_settings'],
-    'إجراءات الطلبات والعمليات': ['create_requests', 'fill_requests', 'update_requests_data', 'change_request_status', 'mark_request_complete', 'delete_requests', 'print_request', 'view_request_info', 'view_car_history_on_create', 'manage_notes', 'manage_findings', 'view_activity_log'],
+    'إجراءات الطلبات والعمليات': ['create_requests', 'fill_requests', 'update_requests_data', 'change_request_status', 'mark_request_complete', 'delete_requests', 'print_request', 'view_request_info', 'view_car_history_on_create', 'manage_notes', 'manage_findings', 'view_activity_log', 'resend_whatsapp_report'],
     'إجراءات أخرى وإعدادات تفصيلية': ['send_internal_messages', 'view_login_notifications', 'export_data', 'edit_request_price', 'process_payment', 'delete_expenses', 'delete_whatsapp_messages', 'manage_settings_general', 'manage_settings_technical', 'manage_appearance', 'manage_api_keys']
 };
 

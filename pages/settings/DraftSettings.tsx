@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
-import { DraftSettings as DraftSettingsType } from '../../types';
+import { DraftSettings as DraftSettingsType, DraftCustomField } from '../../types';
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
 import DownloadIcon from '../../components/icons/DownloadIcon';
 import TrashIcon from '../../components/icons/TrashIcon';
@@ -179,6 +179,22 @@ const DraftPreview: React.FC<{ settings: DraftSettingsType }> = ({ settings }) =
                     }}
                 >
                     <img src={settings.customImageUrl} alt="Preview" className="w-full h-full object-contain" />
+                    {/* Custom Fields below image if absolute */}
+                    {settings.customFields && settings.customFields.length > 0 && (
+                        <>
+                            <div className="mt-1 grid grid-cols-2 gap-1">
+                                {settings.customFields.map(field => (
+                                    <div key={field.id} className="flex items-center gap-1">
+                                        <div className="w-2.5 h-2.5 border border-black rounded-sm flex-shrink-0" />
+                                        <span className="text-[8px] whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: field.textColor || '#000000' }}>
+                                            {field.label || 'حقل مخصص'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-1 border-b border-black w-full" />
+                        </>
+                    )}
                     {/* Size Label for clarity */}
                     <div className="absolute -top-6 left-0 text-[10px] bg-blue-100 text-blue-700 px-1 rounded whitespace-nowrap">
                         X:{settings.imageX} Y:{settings.imageY} | {settings.imageWidth}x{settings.imageHeight}mm
@@ -200,6 +216,22 @@ const DraftPreview: React.FC<{ settings: DraftSettingsType }> = ({ settings }) =
                             }}
                         >
                             <img src={settings.customImageUrl} alt="Preview" className="w-full h-full object-contain" />
+                            {/* Custom Fields below image if float */}
+                            {settings.customFields && settings.customFields.length > 0 && (
+                                <>
+                                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                                        {settings.customFields.map(field => (
+                                            <div key={field.id} className="flex items-center gap-1">
+                                                <div className="w-3 h-3 border border-black rounded-sm flex-shrink-0" />
+                                                <span className="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: field.textColor || '#000000' }}>
+                                                    {field.label || 'حقل مخصص'}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-2 border-b border-black w-full" />
+                                </>
+                            )}
                             <div className="absolute -bottom-6 left-0 text-[10px] bg-blue-100 text-blue-700 px-1 rounded whitespace-nowrap">
                                 مدمج (Float) | {settings.imageWidth}x{settings.imageHeight}mm
                             </div>
@@ -247,7 +279,9 @@ const DraftSettings: React.FC = () => {
         imageWidth: 170,
         imageHeight: 90,
         showImageForInspectionTypeIds: [],
-        imageStyle: 'float' // Default to float as per user preference
+        imageStyle: 'float',
+        customFields: [],
+        defaultPrintAsDraft: false
     };
     
     // Local state to manage form changes
@@ -259,9 +293,33 @@ const DraftSettings: React.FC = () => {
             ...defaultDraftSettings,
             ...settings.draftSettings,
             // Ensure defaults if missing
-            imageStyle: settings.draftSettings?.imageStyle || 'float'
+            imageStyle: settings.draftSettings?.imageStyle || 'float',
+            customFields: settings.draftSettings?.customFields || [],
+            defaultPrintAsDraft: settings.draftSettings?.defaultPrintAsDraft ?? false
         }));
     }, [settings.draftSettings]);
+
+    const handleAddCustomField = () => {
+        const newField = {
+            id: Date.now().toString(),
+            label: '',
+            type: 'checkbox' as const,
+            textColor: '#000000'
+        };
+        handleSettingChange('customFields', [...(localDraftSettings.customFields || []), newField]);
+    };
+
+    const handleUpdateCustomField = (id: string, updates: Partial<DraftCustomField>) => {
+        const updatedFields = (localDraftSettings.customFields || []).map(f => 
+            f.id === id ? { ...f, ...updates } : f
+        );
+        handleSettingChange('customFields', updatedFields);
+    };
+
+    const handleRemoveCustomField = (id: string) => {
+        const filteredFields = (localDraftSettings.customFields || []).filter(f => f.id !== id);
+        handleSettingChange('customFields', filteredFields);
+    };
     
     const handleSettingChange = (key: keyof DraftSettingsType, value: any) => {
         setLocalDraftSettings(prev => ({...prev, [key]: value }));
@@ -431,6 +489,26 @@ const DraftSettings: React.FC = () => {
                 {/* Left Side: Controls */}
                 <div className="space-y-6">
                     <div className="p-4 border rounded-lg dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <h4 className="font-semibold text-lg text-slate-800 dark:text-slate-200">جودة الطباعة الافتراضية</h4>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    تحديد ما إذا كان خيار "الطباعة بجودة مسودة" يكون مفعلاً تلقائياً عند الدخول لصفحة المسودة.
+                                </p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer"
+                                    checked={localDraftSettings.defaultPrintAsDraft || false}
+                                    onChange={(e) => handleSettingChange('defaultPrintAsDraft', e.target.checked)}
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div className="p-4 border rounded-lg dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                         <h4 className="font-semibold text-lg mb-4 text-slate-800 dark:text-slate-200">صورة مخصصة (خلفية أو مخطط)</h4>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                             يمكنك رفع صورة (مثل مخطط هيكل السيارة أو شعار كبير) لتظهر خلف الملاحظات أو في مكان مخصص على الورقة.
@@ -473,6 +551,58 @@ const DraftSettings: React.FC = () => {
                                         ? 'سيتم تثبيت الصورة داخل حاوية الملاحظات (أعلى اليسار) وستلتف النصوص حولها.' 
                                         : 'يمكنك تحريك الصورة بحرية في أي مكان على الصفحة باستخدام إحداثيات X و Y.'}
                                 </p>
+                            </div>
+
+                            {/* Custom Fields Selection */}
+                            <div className="pt-4 border-t dark:border-slate-600">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="font-semibold text-sm text-slate-700 dark:text-slate-300">حقول مخصصة أسفل الصورة (Checkboxes)</h4>
+                                    <Button size="sm" variant="secondary" onClick={handleAddCustomField}>
+                                        <Icon name="add" className="w-3 h-3" />
+                                        إضافة حقل
+                                    </Button>
+                                </div>
+                                <div className="space-y-4">
+                                    {(localDraftSettings.customFields || []).length === 0 && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2 italic">
+                                            لا توجد حقول إضافية مضافة حالياً.
+                                        </p>
+                                    )}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {(localDraftSettings.customFields || []).map((field, index) => (
+                                            <div key={field.id} className="p-3 border dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl space-y-3 relative group shadow-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1">
+                                                        <label className="text-[10px] font-bold text-slate-400 mb-1 block uppercase">نص الحقل</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={field.label}
+                                                            onChange={(e) => handleUpdateCustomField(field.id, { label: e.target.value })}
+                                                            placeholder="مثال: تم فحص الهيكل"
+                                                            className="w-full p-2 text-sm border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-1 focus:ring-blue-500"
+                                                        />
+                                                    </div>
+                                                    <div className="flex-shrink-0">
+                                                        <label className="text-[10px] font-bold text-slate-400 mb-1 block uppercase">اللون</label>
+                                                        <input 
+                                                            type="color" 
+                                                            value={field.textColor || '#000000'}
+                                                            onChange={(e) => handleUpdateCustomField(field.id, { textColor: e.target.value })}
+                                                            className="w-10 h-9 p-0 border-0 bg-transparent cursor-pointer rounded-lg overflow-hidden"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleRemoveCustomField(field.id)}
+                                                    className="absolute -top-2 -right-2 p-1.5 bg-red-50 text-red-500 border border-red-100 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm opacity-0 group-hover:opacity-100"
+                                                    title="حذف الحقل"
+                                                >
+                                                    <Icon name="delete" className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             <div>

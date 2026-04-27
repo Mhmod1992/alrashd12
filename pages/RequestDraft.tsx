@@ -91,6 +91,22 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                         alt="Custom Draft Image"
                         className="w-full h-full object-contain"
                     />
+                    {/* Custom Checkboxes below image if absolute */}
+                    {draftSettings.customFields && draftSettings.customFields.length > 0 && (
+                        <>
+                            <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1">
+                                {draftSettings.customFields.map(field => (
+                                    <div key={field.id} className="flex items-center gap-1.5">
+                                        <div className="w-3 h-3 border border-black rounded-sm flex-shrink-0" />
+                                        <span className="text-[10px] font-bold whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: field.textColor || '#000000' }}>
+                                            {field.label}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-1 border-b border-black w-full" />
+                        </>
+                    )}
                 </div>
             )}
 
@@ -159,6 +175,22 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                                 alt="Custom Draft Image"
                                 className="w-full h-full object-contain"
                             />
+                            {/* Custom Checkboxes below image if float */}
+                            {draftSettings.customFields && draftSettings.customFields.length > 0 && (
+                                <>
+                                    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
+                                        {draftSettings.customFields.map(field => (
+                                            <div key={field.id} className="flex items-center gap-2">
+                                                <div className="w-4 h-4 border border-black rounded-sm flex-shrink-0" />
+                                                <span className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: field.textColor || '#000000' }}>
+                                                    {field.label}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-2 border-b border-black w-full" />
+                                </>
+                            )}
                         </div>
                     )}
                     {/* This div will have the lined background and will expand */}
@@ -188,8 +220,15 @@ const RequestDraft: React.FC = () => {
     } = useAppContext();
 
     const [isContentReady, setIsContentReady] = useState(false);
-    const [isDraftQuality, setIsDraftQuality] = useState(true);
+    const [isDraftQuality, setIsDraftQuality] = useState(settings.draftSettings?.defaultPrintAsDraft ?? true);
     const [isFetchingRequest, setIsFetchingRequest] = useState(false);
+
+    // Update isDraftQuality when settings loaded (if not already set)
+    useEffect(() => {
+        if (settings.draftSettings) {
+            setIsDraftQuality(settings.draftSettings.defaultPrintAsDraft ?? true);
+        }
+    }, [settings.draftSettings]);
 
     // Fetch specific request if not in local list
     useEffect(() => {

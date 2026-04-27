@@ -519,7 +519,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
                     <footer className={`border-t-2 flex justify-between items-start gap-4 break-inside-avoid ${isPrintView ? 'mt-4 pt-2' : 'mt-6 pt-4'}`} style={{ borderColor: reportSettings.borderColor }}>
                         <div className="flex-grow" style={{ color: reportSettings.textColor, opacity: 0.8 }}>
-                            <p data-setting-section="text-disclaimer" className={`break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.disclaimer) : fontSizes.disclaimer}`}><span className="font-bold">{reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}</span> {reportSettings.disclaimerText}</p>
+                            <p data-setting-section="text-disclaimer" className={`break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes?.disclaimer || 'text-xs') : (fontSizes?.disclaimer || 'text-xs')}`}><span className="font-bold">{reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}</span> {reportSettings.disclaimerText || (reportDirection === 'ltr' ? 'No disclaimer provided' : 'لا يوجد نص إخلاء مسؤولية')}</p>
                         </div>
                         <div data-setting-section="branding-stamp" className="flex-shrink-0 text-center">
                             <p className="font-bold text-xs mb-1" style={{ color: reportSettings.textColor, opacity: 0.7 }}>{reportDirection === 'ltr' ? 'Stamp' : 'ختم الورشة'}</p>

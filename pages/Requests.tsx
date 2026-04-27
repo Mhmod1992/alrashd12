@@ -1317,7 +1317,7 @@ const Requests: React.FC = () => {
             )}
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4 mb-6 space-y-4 animate-slide-in-down">
-                {!isSearchActive && (
+                {!isSearchActive && can('view_requests_stats_cards') && (
                     <>
                         {showStats ? (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
@@ -1338,7 +1338,7 @@ const Requests: React.FC = () => {
                 )}
 
                 <div className={`${!isSearchActive ? 'border-t border-slate-200 dark:border-slate-700 pt-4' : ''} space-y-4`}>
-                    {!isSearchActive && dateFilter !== 'today' && (
+                    {!isSearchActive && can('view_requests_date_filters') && dateFilter !== 'today' && (
                         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-400 p-3 rounded-lg flex items-center justify-between shadow-sm animate-fade-in text-sm font-semibold flex-col sm:flex-row gap-3">
                             <div className="flex items-center gap-2">
                                 <AlertTriangleIcon className="w-5 h-5 flex-shrink-0" />
@@ -1354,7 +1354,7 @@ const Requests: React.FC = () => {
                         </div>
                     )}
 
-                    {!isSearchActive && (
+                    {!isSearchActive && can('view_requests_date_filters') && (
                         <div className="bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner w-full overflow-x-auto no-scrollbar">
                             <div className="flex items-center min-w-max md:min-w-0 md:w-full gap-1">
                                 <DateFilterButton filter="today" label="اليوم" />
@@ -1366,7 +1366,7 @@ const Requests: React.FC = () => {
                         </div>
                     )}
 
-                    {!isSearchActive && dateFilter === 'range' && (
+                    {!isSearchActive && can('view_requests_date_filters') && dateFilter === 'range' && (
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end pt-2 animate-fade-in">
                             <div>
                                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">من تاريخ</label>

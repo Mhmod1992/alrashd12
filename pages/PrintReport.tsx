@@ -18,6 +18,7 @@ import ReactMarkdown from 'react-markdown';
 import UploadIcon from '../components/icons/UploadIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
+import { motion, AnimatePresence } from 'motion/react';
 import { pdf } from '@react-pdf/renderer';
 import OrderPdf from '../components/reports/OrderPdf';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -1449,6 +1450,37 @@ const PrintReport: React.FC = () => {
                     )}
                 </div>
             </Modal>
+            
+            {/* Floating Price Card - Desktop only, hidden during print */}
+            <AnimatePresence>
+                <motion.div 
+                    initial={{ opacity: 0, x: -50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className="fixed top-24 left-8 z-[60] hidden lg:flex flex-col items-center gap-2 p-5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/50 dark:border-slate-700/50 print:hidden select-none hover:scale-105 transition-transform"
+                >
+                    <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                        <Icon name="car" className="w-4 h-4" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">سعر الطلب</span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-4xl font-black text-blue-600 dark:text-blue-400 drop-shadow-sm">
+                            {originalRequest?.price || 0}
+                        </span>
+                        <span className="text-sm font-black text-slate-500 dark:text-slate-400">ر.س</span>
+                    </div>
+                    <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent my-1" />
+                    <div className="flex flex-col items-center gap-1">
+                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 px-2 py-0.5 rounded-full">
+                            {inspectionType?.name || 'فحص فني'}
+                        </span>
+                        <div className="flex items-center gap-1 text-[9px] text-slate-400">
+                            <Icon name="history" className="w-3 h-3" />
+                            <span>رقم الطلب: {originalRequest?.request_number}</span>
+                        </div>
+                    </div>
+                </motion.div>
+            </AnimatePresence>
         </div>
     );
 };

@@ -564,6 +564,7 @@ const ReportSettingsPage: React.FC = () => {
                                         <FontSizeSelector label="عناوين الأقسام" value={reportSettings.fontSizes.categoryTitle} onChange={v => handleFontSizeChange('categoryTitle', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="بنود الفحص" value={reportSettings.fontSizes.findingTitle} onChange={v => handleFontSizeChange('findingTitle', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="نصوص الملاحظات" value={reportSettings.fontSizes.noteText} onChange={v => handleFontSizeChange('noteText', v)} options={FONT_SIZE_OPTIONS} />
+                                        <FontSizeSelector label="نص إخلاء المسؤولية" value={reportSettings.fontSizes.disclaimer} onChange={v => handleFontSizeChange('disclaimer', v)} options={FONT_SIZE_OPTIONS} />
                                         <div className="flex flex-col gap-1.5">
                                             <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">حجم العلامة المائية</label>
                                             <input 

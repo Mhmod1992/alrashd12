@@ -66,6 +66,11 @@ export const PERMISSIONS = {
   pay_broker_commission: 'صرف عمولات السماسرة',
   add_broker_commission: 'إضافة عمولة سمسار للطلب',
   view_requests_list: 'عرض صفحة إدارة الطلبات',
+  view_requests_payment_filters: 'عرض فلاتر الدفع في صفحة الطلبات',
+  view_requests_date_filters: 'عرض فلاتر النطاق الزمني في صفحة الطلبات',
+  view_requests_price_column: 'عرض عمود السعر في جدول الطلبات',
+  view_requests_stats_cards: 'عرض البطاقات الإحصائية في صفحة الطلبات',
+  resend_whatsapp_report: 'إعادة إرسال التقرير عبر الواتساب',
   view_settings: 'عرض صفحة الإعدادات',
 } as const;
 
@@ -418,6 +423,13 @@ export interface CustomReportTemplate {
   settings: ReportSettings;
 }
 
+export interface DraftCustomField {
+  id: string;
+  label: string;
+  type: 'checkbox' | 'text';
+  textColor?: string;
+}
+
 export interface DraftSettings {
   customImageUrl: string | null;
   imageX: number;
@@ -426,6 +438,8 @@ export interface DraftSettings {
   imageHeight: number;
   showImageForInspectionTypeIds: string[];
   imageStyle?: 'absolute' | 'float';
+  customFields?: DraftCustomField[];
+  defaultPrintAsDraft?: boolean;
 }
 
 export interface Settings {

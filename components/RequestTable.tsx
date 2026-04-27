@@ -581,7 +581,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
             {getStatusIndicator()}
         </div>
         
-        {!isWaitingTable && availablePaymentTypes.length > 0 && (
+        {!isWaitingTable && can('view_requests_payment_filters') && availablePaymentTypes.length > 0 && (
             <div className="flex-1 flex items-center justify-start sm:justify-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto order-3 sm:order-none pb-1 sm:pb-0">
                 <button
                     onClick={() => setPaymentFilter('الكل')}
@@ -651,7 +651,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">نوع الفحص</th>
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">الحالة</th>
                         {!isWaitingTable && <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">التاريخ</th>}
-                        {!isWaitingTable && <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">السعر</th>}
+                        {!isWaitingTable && can('view_requests_price_column') && <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">السعر</th>}
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700 text-left">إجراءات</th>
                     </tr>
                 </thead>
@@ -822,7 +822,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                         </div>
                                     </td>
                                 }
-                                {!isWaitingTable &&
+                                {!isWaitingTable && can('view_requests_price_column') &&
                                      <td className="px-6 py-4">
                                         <div className="relative">
                                             <div 
@@ -976,7 +976,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                     <div className="flex items-center justify-end gap-1">
                                         {isWaitingPayment ? (
                                             <>
-                                                {onProcessPayment && (
+                                                {onProcessPayment && can('process_payment') && (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); onProcessPayment(request); }}
                                                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300 dark:hover:bg-green-900/60 transition-all font-semibold text-xs shadow-sm border border-green-200 dark:border-green-800"
@@ -986,7 +986,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                         تحصيل
                                                     </button>
                                                 )}
-                                                {onResendWhatsApp && (
+                                                {onResendWhatsApp && can('resend_whatsapp_report') && (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); onResendWhatsApp(request); }}
                                                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#25D366] text-white hover:bg-[#128C7E] transition-all font-semibold text-xs shadow-sm"
@@ -1031,7 +1031,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                             </>
                                         )}
                                         
-                                        {!isWaitingPayment && (
+                                        {!isWaitingPayment && can('print_request') && (
                                             <button
                                                 onClick={(e) => handleViewDraft(e, request.id)}
                                                 className="p-2 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
@@ -1070,7 +1070,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                         >
-                            <td colSpan={isWaitingTable ? 6 : 8} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                            <td colSpan={isWaitingTable ? 6 : (can('view_requests_price_column') ? 8 : 7)} className="p-8 text-center text-slate-500 dark:text-slate-400">
                                 لا توجد طلبات تطابق نوع الدفع المحدد.
                             </td>
                         </motion.tr>
