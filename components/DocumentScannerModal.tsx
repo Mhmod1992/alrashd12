@@ -178,13 +178,18 @@ const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({ isOpen, onC
             }
 
             // 4. Export
+            const supportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+            const format = supportsWebP ? 'image/webp' : 'image/jpeg';
+            const quality = supportsWebP ? 0.7 : 0.85;
+
             canvas.toBlob((blob) => {
                 if (blob) {
-                    const newFile = new File([blob], `scanned_a4_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                    const ext = supportsWebP ? 'webp' : 'jpg';
+                    const newFile = new File([blob], `scanned_a4_${Date.now()}.${ext}`, { type: format });
                     onConfirm(newFile);
                 }
                 setIsProcessing(false);
-            }, 'image/jpeg', 0.85);
+            }, format, quality);
 
         } catch (e) {
             console.error(e);

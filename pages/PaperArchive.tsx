@@ -28,12 +28,12 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // --- Image Optimization Helper ---
-const optimizeDocumentImage = async (file: File, grayscale: boolean = true): Promise<File> => {
+const optimizeDocumentImage = async (file: File, grayscale: boolean = false): Promise<File> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.src = URL.createObjectURL(file);
         img.onload = () => {
-            const maxWidth = 1200; // Max width for documents
+            const maxWidth = 1400; // Max width for documents - slightly increased for better clarity
             let width = img.width;
             let height = img.height;
 
@@ -57,22 +57,28 @@ const optimizeDocumentImage = async (file: File, grayscale: boolean = true): Pro
 
             // Apply filters based on mode
             if (grayscale) {
-                ctx.filter = 'grayscale(100%) contrast(120%)';
+                ctx.filter = 'grayscale(100%) contrast(120%) brightness(105%)';
             } else {
-                // Slight contrast boost for color documents, but no grayscale
-                ctx.filter = 'contrast(105%)';
+                // Slight contrast and saturation boost for color documents to keep text popping
+                ctx.filter = 'contrast(110%) saturate(110%)';
             }
             
             ctx.drawImage(img, 0, 0, width, height);
             
+            // Check for WebP support
+            const supportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+            const format = supportsWebP ? 'image/webp' : 'image/jpeg';
+            const extension = supportsWebP ? '.webp' : '.jpg';
+            const quality = supportsWebP ? 0.6 : 0.7; // WebP manages quality better at lower percentages
+
             canvas.toBlob((blob) => {
                 if (!blob) {
                     reject(new Error('Blob creation failed'));
                     return;
                 }
-                const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' });
+                const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + extension, { type: format });
                 resolve(newFile);
-            }, 'image/jpeg', 0.7);
+            }, format, quality);
             
             URL.revokeObjectURL(img.src);
         };
@@ -133,6 +139,8 @@ const PaperArchive: React.FC = () => {
     const [deleteTargetFile, setDeleteTargetFile] = useState<{ data: string, type: string } | null>(null);
     const [deletePassword, setDeletePassword] = useState('');
     const [deleteError, setDeleteError] = useState('');
+
+    const camInputRef = useRef<HTMLInputElement>(null);
 
     // Debounce search query
     useEffect(() => {
@@ -380,7 +388,8 @@ const PaperArchive: React.FC = () => {
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
         
         if (isMobile) {
-            setIsCameraOpen(true);
+            // Direct camera access for faster field archiving
+            camInputRef.current?.click();
         } else {
             setIsSourceChoiceModalOpen(true);
         }
@@ -430,6 +439,15 @@ const PaperArchive: React.FC = () => {
         }
     };
     
+    const handleCameraFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || !selectedRequest || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+        
+        // Fast-track: Bypass manual scanner for direct camera capture to "Automate" as requested
+        processFiles([file], currentUploadType);
+        e.target.value = '';
+    };
+
     const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || !selectedRequest) return;
         const files: File[] = Array.from(e.target.files);
@@ -548,9 +566,8 @@ const PaperArchive: React.FC = () => {
 
                 let optimizedFile = file;
                 if (!file.name.startsWith('scanned_')) {
-                     // Pass true for grayscale only if internal draft
-                     const shouldGrayscale = type === 'internal_draft';
-                     optimizedFile = await optimizeDocumentImage(file, shouldGrayscale);
+                     // Color by default for all archive types as requested
+                     optimizedFile = await optimizeDocumentImage(file, false);
                 }
                 
                 totalOptimizedSize += optimizedFile.size;
@@ -570,11 +587,12 @@ const PaperArchive: React.FC = () => {
                 }
 
                 const timestamp = Date.now();
+                const extension = optimizedFile.type.split('/')[1] === 'webp' ? '.webp' : '.jpg';
                 const customFileName = `Req-${selectedRequest.request_number}_${prefix}_${timestamp}_${i+1}`;
                 const publicUrl = await uploadImage(optimizedFile, 'attached_files', folder, customFileName); 
                 
                 newAttachments.push({
-                    name: customFileName + '.jpg',
+                    name: customFileName + extension,
                     type: type,
                     data: publicUrl,
                     archived_by_name: authUser?.name || 'مجهول',
@@ -1107,6 +1125,7 @@ const PaperArchive: React.FC = () => {
             </Modal>
             
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelected} className="hidden" />
+            <input ref={camInputRef} type="file" accept="image/*" capture="environment" onChange={handleCameraFileSelected} className="hidden" />
             <input ref={pdfInputRef} type="file" accept="application/pdf" multiple onChange={handleFileSelected} className="hidden" />
 
             <DocumentScannerModal 
@@ -1114,7 +1133,7 @@ const PaperArchive: React.FC = () => {
                 onClose={() => setIsScannerOpen(false)} 
                 imageFile={scannerFile} 
                 onConfirm={handleScannerConfirm}
-                forceFilter={currentUploadType === 'internal_draft' ? 'bw' : undefined}
+                // Removed forceFilter to allow color for all document types as requested
             />
             
             <CameraPage 
