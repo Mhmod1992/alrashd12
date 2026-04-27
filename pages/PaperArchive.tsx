@@ -140,8 +140,6 @@ const PaperArchive: React.FC = () => {
     const [deletePassword, setDeletePassword] = useState('');
     const [deleteError, setDeleteError] = useState('');
 
-    const camInputRef = useRef<HTMLInputElement>(null);
-
     // Debounce search query
     useEffect(() => {
         // Instant local search for speed
@@ -383,16 +381,7 @@ const PaperArchive: React.FC = () => {
     
     const handleUploadClick = (type: 'manual_paper' | 'internal_draft') => {
         setCurrentUploadType(type);
-        
-        // Check if mobile device
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
-        
-        if (isMobile) {
-            // Direct camera access for faster field archiving
-            camInputRef.current?.click();
-        } else {
-            setIsSourceChoiceModalOpen(true);
-        }
+        setIsSourceChoiceModalOpen(true);
     };
 
     const extractPdfPages = async (file: File): Promise<File[]> => {
@@ -439,15 +428,6 @@ const PaperArchive: React.FC = () => {
         }
     };
     
-    const handleCameraFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || !selectedRequest || e.target.files.length === 0) return;
-        const file = e.target.files[0];
-        
-        // Fast-track: Bypass manual scanner for direct camera capture to "Automate" as requested
-        processFiles([file], currentUploadType);
-        e.target.value = '';
-    };
-
     const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || !selectedRequest) return;
         const files: File[] = Array.from(e.target.files);
@@ -619,7 +599,15 @@ const PaperArchive: React.FC = () => {
             });
 
             setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles, activity_log: updatedLog }) : null);
-            setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles, activity_log: updatedLog } : r));
+            
+            // Auto-update UI based on filters: if "Not Archived" filter is active and we just archived it, remove from list
+            if (archiveStatusFilter === 'not_archived' && updatedFiles.some(f => f.type === 'internal_draft')) {
+                setFilteredRequests(prev => prev.filter(r => r.id !== selectedRequest.id));
+            } else if (archiveStatusFilter === 'archived' && !updatedFiles.some(f => f.type === 'internal_draft')) {
+                setFilteredRequests(prev => prev.filter(r => r.id !== selectedRequest.id));
+            } else {
+                setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles, activity_log: updatedLog } : r));
+            }
 
             const savings = totalOriginalSize > 0 ? Math.round(((totalOriginalSize - totalOptimizedSize) / totalOriginalSize) * 100) : 0;
             
@@ -677,7 +665,16 @@ const PaperArchive: React.FC = () => {
             });
             
              setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles }) : null);
-             setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles } : r));
+             
+             // Auto-update UI based on filters: if "Archived" filter is active and we just removed the last archive file, remove from list
+             if (archiveStatusFilter === 'archived' && !updatedFiles.some(f => f.type === 'internal_draft')) {
+                 setFilteredRequests(prev => prev.filter(r => r.id !== selectedRequest.id));
+             } else if (archiveStatusFilter === 'not_archived' && updatedFiles.some(f => f.type === 'internal_draft')) {
+                 // Technically this case shouldn't happen during delete but for safety:
+                 setFilteredRequests(prev => prev.filter(r => r.id !== selectedRequest.id));
+             } else {
+                 setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles } : r));
+             }
              
              addNotification({ title: 'تم الحذف', message: 'تم حذف الصفحة.', type: 'info' });
              setIsDeleteModalOpen(false);
@@ -1125,7 +1122,6 @@ const PaperArchive: React.FC = () => {
             </Modal>
             
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelected} className="hidden" />
-            <input ref={camInputRef} type="file" accept="image/*" capture="environment" onChange={handleCameraFileSelected} className="hidden" />
             <input ref={pdfInputRef} type="file" accept="application/pdf" multiple onChange={handleFileSelected} className="hidden" />
 
             <DocumentScannerModal 
