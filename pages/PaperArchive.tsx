@@ -133,7 +133,6 @@ const PaperArchive: React.FC = () => {
     const [isExtractingPdf, setIsExtractingPdf] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const pdfInputRef = useRef<HTMLInputElement>(null);
-    const camInputRef = useRef<HTMLInputElement>(null);
 
     // Delete Confirmation Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -359,11 +358,10 @@ const PaperArchive: React.FC = () => {
         // Check if mobile device
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
         
-        if (isMobile && autoCamera) {
+        if (autoCamera) {
             setActiveArchiveTab('internal');
             setCurrentUploadType('internal_draft');
-            // Direct system camera for maximum speed in QR workflow
-            camInputRef.current?.click();
+            setIsCameraOpen(true);
         } else {
             setActiveArchiveTab('all');
         }
@@ -433,13 +431,6 @@ const PaperArchive: React.FC = () => {
     const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || !selectedRequest) return;
         const files: File[] = Array.from(e.target.files);
-
-        // Auto-archive fast track if from camera directly
-        if (e.target === camInputRef.current) {
-            processFiles(files, 'internal_draft');
-            e.target.value = '';
-            return;
-        }
 
         // Check if there's a PDF file
         const pdfFiles = files.filter(f => f.type === 'application/pdf');
@@ -1129,7 +1120,6 @@ const PaperArchive: React.FC = () => {
             </Modal>
             
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelected} className="hidden" />
-            <input ref={camInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileSelected} className="hidden" />
             <input ref={pdfInputRef} type="file" accept="application/pdf" multiple onChange={handleFileSelected} className="hidden" />
 
             <DocumentScannerModal 
