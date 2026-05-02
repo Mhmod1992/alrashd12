@@ -415,6 +415,7 @@ export interface ReportSettings {
   workshopLogoHeight: number;
   carLogoHeight: number;
   noteHighlightOpacity: number;
+  showTechnicianName: boolean;
 }
 
 export interface CustomReportTemplate {
@@ -483,7 +484,7 @@ export interface UserPreferences {
   isTechnician?: boolean; // Add isTechnician here
 }
 
-export type SettingsPage = 'general' | 'appearance' | 'request' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management' | 'technical' | 'whatsapp' | 'reports_archive';
+export type SettingsPage = 'general' | 'appearance' | 'request' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management' | 'technical' | 'whatsapp' | 'reports_archive' | 'storage';
 
 export interface Employee {
   id: string;

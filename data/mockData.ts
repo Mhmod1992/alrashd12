@@ -161,7 +161,8 @@ export const mockSettings: Settings = {
         showPriceOnReport: true,
         workshopLogoHeight: 90,
         carLogoHeight: 60,
-        noteHighlightOpacity: 0.1
+        noteHighlightOpacity: 0.1,
+        showTechnicianName: true,
     },
     draftSettings: {
         customImageUrl: null,

@@ -1144,121 +1144,135 @@ const PrintReport: React.FC = () => {
 
     return (
         <div className="bg-white dark:bg-gray-900 min-h-screen flex flex-col print:!bg-white print:!min-h-0 print:!border-none">
-            <header className="no-print bg-white dark:bg-slate-800 p-4 shadow-md flex justify-between items-center sticky top-0 z-50">
-                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                    معاينة التقرير
-                    {translatedRequest && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full border border-purple-200">مترجم (مؤقت)</span>}
-                </h2>
-                <div className="flex gap-2">
-                    {!fromPrint && (
-                        <Button variant="secondary" onClick={isSendingWhatsApp ? undefined : goBack} size="sm" disabled={isGenerating || isSendingWhatsApp}>
-                            <Icon name="back" className="w-4 h-4 transform scale-x-[-1]" />
-                            <span className="hidden sm:inline ms-1">العودة</span>
-                        </Button>
-                    )}
-                    {fromPrint && (
-                        <Button variant="secondary" onClick={isSendingWhatsApp ? undefined : () => window.close()} size="sm" className="bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100" disabled={isSendingWhatsApp}>
-                            <Icon name="close" className="w-4 h-4" />
-                            <span className="hidden sm:inline ms-1">إغلاق الصفحة</span>
-                        </Button>
-                    )}
-
-                    {originalRequest?.status !== RequestStatus.COMPLETE && (
-                        <Button 
-                            variant="primary" 
-                            onClick={handleCompleteRequest} 
-                            size="sm" 
-                            className="bg-green-600 hover:bg-green-700 text-white border-green-700 md:px-4"
-                            disabled={isGenerating || isSendingWhatsApp}
-                        >
-                            <CheckCircleIcon className="w-4 h-4" />
-                            <span className="hidden sm:inline ms-1">إكمال الطلب</span>
-                        </Button>
-                    )}
-                    
-                    <Button
-                        variant="secondary"
-                        onClick={() => !isSendingWhatsApp && setIsPaperModalOpen(true)}
-                        size="sm"
-                        className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
-                        disabled={isSendingWhatsApp}
-                    >
-                        <Icon name="folder-open" className="w-4 h-4" />
-                        <span className="hidden sm:inline ms-1">المرفقات ({paperImages.length})</span>
-                    </Button>
-
-                    <div className="relative">
-                        <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            className="text-slate-700 border-slate-200 hover:bg-slate-50 flex items-center gap-1"
-                            onClick={() => setIsExtraMenuOpen(!isExtraMenuOpen)}
-                            disabled={isSendingWhatsApp}
-                        >
-                            <SparklesIcon className="w-4 h-4 text-blue-500" />
-                            <span className="hidden sm:inline">أدوات الذكاء</span>
-                            <Icon name="chevron-down" className={`w-3 h-3 transition-transform ${isExtraMenuOpen ? 'rotate-180' : ''}`} />
-                        </Button>
-
-                        <AnimatePresence>
-                            {isExtraMenuOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-10" onClick={() => setIsExtraMenuOpen(false)} />
-                                    <motion.div 
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute top-full mt-2 left-0 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-20 overflow-hidden"
-                                    >
-                                        <button 
-                                            onClick={() => { setIsAiModalOpen(true); setIsExtraMenuOpen(false); }} 
-                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-                                        >
-                                            <SparklesIcon className="w-4 h-4 text-blue-500" />
-                                            <span>تحليل التقرير (AI)</span>
-                                        </button>
-                                        
-                                        <div className="h-px bg-slate-100 dark:bg-slate-700 mx-2" />
-
-                                        {translatedRequest ? (
-                                            <button 
-                                                onClick={() => { handleClearTranslation(); setIsExtraMenuOpen(false); }} 
-                                                className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
-                                            >
-                                                <Icon name="refresh-cw" className="w-4 h-4" />
-                                                <span>إلغاء الترجمة</span>
-                                            </button>
-                                        ) : (
-                                            <button 
-                                                onClick={() => { setIsTranslationModalOpen(true); setIsExtraMenuOpen(false); }} 
-                                                className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
-                                            >
-                                                <SparklesIcon className="w-4 h-4 text-purple-500" />
-                                                <span>ترجمة التقرير (AI)</span>
-                                            </button>
-                                        )}
-                                    </motion.div>
-                                </>
-                            )}
-                        </AnimatePresence>
+            <header className="no-print bg-white dark:bg-slate-800 p-2 sm:p-4 shadow-md sticky top-0 z-50">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-3">
+                    <div className="flex items-center justify-between w-full md:w-auto md:min-w-[150px]">
+                        <h2 className="text-base sm:text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 whitespace-nowrap">
+                            معاينة التقرير
+                            {translatedRequest && <span className="hidden sm:inline-block text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200">مترجم</span>}
+                        </h2>
+                        <div className="md:hidden">
+                            {/* Mobile specific shortcuts if needed */}
+                        </div>
                     </div>
+                    
+                    <div className="flex-grow flex items-center justify-center w-full py-1">
+                        <div className="flex flex-wrap items-center justify-center gap-2 px-2">
+                            {!fromPrint && (
+                                <Button variant="secondary" onClick={isSendingWhatsApp ? undefined : goBack} size="sm" disabled={isGenerating || isSendingWhatsApp} className="flex-shrink-0">
+                                    <Icon name="back" className="w-4 h-4 transform scale-x-[-1]" />
+                                    <span className="hidden sm:inline ms-1">العودة</span>
+                                </Button>
+                            )}
+                            {fromPrint && (
+                                <Button variant="secondary" onClick={isSendingWhatsApp ? undefined : () => window.close()} size="sm" className="bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 flex-shrink-0" disabled={isSendingWhatsApp}>
+                                    <Icon name="close" className="w-4 h-4" />
+                                    <span className="hidden sm:inline ms-1">إغلاق الصفحة</span>
+                                </Button>
+                            )}
 
-                    <Button onClick={handleWhatsAppShare} variant="whatsapp" size="sm" disabled={isGenerating || isSendingWhatsApp} className={isSendingWhatsApp ? 'opacity-90' : ''}>
-                        {isSendingWhatsApp ? (
-                            <RefreshCwIcon className="w-4 h-4 animate-spin" />
-                        ) : (
-                            <WhatsappIcon className="w-4 h-4" />
-                        )}
-                        <span className="hidden sm:inline ms-1">{isSendingWhatsApp ? 'جاري الإرسال...' : 'إرسال واتساب'}</span>
-                    </Button>
-                     <Button variant="secondary" onClick={handlePrint} size="sm" disabled={isGenerating || isSendingWhatsApp}>
-                        <Icon name="print" className="w-4 h-4" />
-                        <span className="hidden sm:inline ms-1">طباعة</span>
-                    </Button>
-                    <Button onClick={handleDownloadNativePdf} size="sm" disabled={isGenerating || isSendingWhatsApp}>
-                        <Icon name="document-report" className="w-4 h-4" />
-                        <span className="hidden sm:inline ms-1">PDF</span>
-                    </Button>
+                            {originalRequest?.status !== RequestStatus.COMPLETE && (
+                                <Button 
+                                    variant="primary" 
+                                    onClick={handleCompleteRequest} 
+                                    size="sm" 
+                                    className="bg-green-600 hover:bg-green-700 text-white border-green-700 sm:px-4 flex-shrink-0"
+                                    disabled={isGenerating || isSendingWhatsApp}
+                                >
+                                    <CheckCircleIcon className="w-4 h-4" />
+                                    <span className="hidden sm:inline ms-1">إكمال الطلب</span>
+                                </Button>
+                            )}
+                            
+                            <Button
+                                variant="secondary"
+                                onClick={() => !isSendingWhatsApp && setIsPaperModalOpen(true)}
+                                size="sm"
+                                className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 flex-shrink-0"
+                                disabled={isSendingWhatsApp}
+                            >
+                                <Icon name="folder-open" className="w-4 h-4" />
+                                <span className="hidden sm:inline ms-1">المرفقات ({paperImages.length})</span>
+                            </Button>
+
+                            <div className="relative flex-shrink-0">
+                                <Button 
+                                    variant="secondary" 
+                                    size="sm" 
+                                    className="text-slate-700 border-slate-200 hover:bg-slate-50 flex items-center gap-1"
+                                    onClick={() => setIsExtraMenuOpen(!isExtraMenuOpen)}
+                                    disabled={isSendingWhatsApp}
+                                >
+                                    <SparklesIcon className="w-4 h-4 text-blue-500" />
+                                    <span className="hidden sm:inline">أدوات الذكاء</span>
+                                    <Icon name="chevron-down" className={`w-3 h-3 transition-transform ${isExtraMenuOpen ? 'rotate-180' : ''}`} />
+                                </Button>
+
+                                <AnimatePresence>
+                                    {isExtraMenuOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-10" onClick={() => setIsExtraMenuOpen(false)} />
+                                            <motion.div 
+                                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                className="absolute top-full mt-2 right-0 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-20 overflow-hidden"
+                                            >
+                                                <button 
+                                                    onClick={() => { setIsAiModalOpen(true); setIsExtraMenuOpen(false); }} 
+                                                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                                                >
+                                                    <SparklesIcon className="w-4 h-4 text-blue-500" />
+                                                    <span>تحليل التقرير (AI)</span>
+                                                </button>
+                                                
+                                                <div className="h-px bg-slate-100 dark:bg-slate-700 mx-2" />
+
+                                                {translatedRequest ? (
+                                                    <button 
+                                                        onClick={() => { handleClearTranslation(); setIsExtraMenuOpen(false); }} 
+                                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
+                                                    >
+                                                        <Icon name="refresh-cw" className="w-4 h-4" />
+                                                        <span>إلغاء الترجمة</span>
+                                                    </button>
+                                                ) : (
+                                                    <button 
+                                                        onClick={() => { setIsTranslationModalOpen(true); setIsExtraMenuOpen(false); }} 
+                                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
+                                                    >
+                                                        <SparklesIcon className="w-4 h-4 text-purple-500" />
+                                                        <span>ترجمة التقرير (AI)</span>
+                                                    </button>
+                                                )}
+                                            </motion.div>
+                                        </>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
+                            <Button onClick={handleWhatsAppShare} variant="whatsapp" size="sm" disabled={isGenerating || isSendingWhatsApp} className={`flex-shrink-0 ${isSendingWhatsApp ? 'opacity-90' : ''}`}>
+                                {isSendingWhatsApp ? (
+                                    <RefreshCwIcon className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <WhatsappIcon className="w-4 h-4" />
+                                )}
+                                <span className="hidden sm:inline ms-1">{isSendingWhatsApp ? 'جاري الإرسال...' : 'إرسال واتساب'}</span>
+                            </Button>
+                            <Button variant="secondary" onClick={handlePrint} size="sm" className="flex-shrink-0" disabled={isGenerating || isSendingWhatsApp}>
+                                <Icon name="print" className="w-4 h-4" />
+                                <span className="hidden sm:inline ms-1">طباعة</span>
+                            </Button>
+                            <Button onClick={handleDownloadNativePdf} size="sm" className="flex-shrink-0" disabled={isGenerating || isSendingWhatsApp}>
+                                <Icon name="document-report" className="w-4 h-4" />
+                                <span className="hidden sm:inline ms-1">PDF</span>
+                            </Button>
+                        </div>
+                    </div>
+                    
+                    <div className="hidden md:block md:min-w-[150px]">
+                        {/* Placeholder to balance the header if title is on the left */}
+                    </div>
                 </div>
             </header>
             
@@ -1270,10 +1284,10 @@ const PrintReport: React.FC = () => {
                 </div>
             )}
             
-            <main className="flex-1 bg-gray-200 dark:bg-gray-900/50 py-8 overflow-auto print-container print:!py-0 print:!bg-white print:overflow-visible print:!px-0 print:!mx-0 print:!border-none" dir={reportDirection}>
-                <div className="flex justify-center w-full min-h-full print:block print:w-full print:h-auto print:!m-0 print:!p-0 print:!bg-white print:!border-none">
-                    <div className="origin-top transition-transform duration-200 print:transform-none print:!m-0 print:!p-0 print:!bg-white print:!border-none" style={{ transform: `scale(${previewScale})`, marginBottom: `-${(1 - previewScale) * 100}%` }}>
-                        <div className="report-wrapper bg-white shadow-2xl print:shadow-none mx-auto overflow-hidden print:overflow-visible print:h-auto print:min-h-0 print:w-full print:max-w-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!ring-0" style={{ width: '210mm', minHeight: '297mm' }}>
+            <main className="flex-1 bg-gray-200 dark:bg-gray-900/50 py-8 overflow-auto print-container print:!py-0 print:!bg-white print:!overflow-visible print:!px-0 print:!mx-0 print:!border-none" dir={reportDirection}>
+                <div className="flex justify-center w-full min-h-full print:block print:!w-full print:!h-auto print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!overflow-visible">
+                    <div className="origin-top transition-transform duration-200 print:transform-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!overflow-visible print:!h-auto print:!w-full" style={{ transform: `scale(${previewScale})`, marginBottom: `-${(1 - previewScale) * 100}%` }}>
+                        <div className="report-wrapper bg-white shadow-2xl print:shadow-none mx-auto overflow-hidden print:!overflow-visible print:!h-auto print:!min-h-0 print:!w-full print:!max-w-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!ring-0" style={{ width: '210mm', minHeight: '297mm' }}>
                             { client && car && inspectionType ?
                                 <>
                                     <InspectionReport
@@ -1291,14 +1305,14 @@ const PrintReport: React.FC = () => {
                                         reportDirection={reportDirection}
                                     />
                                     {publicImages.length > 0 && (
-                                        <div className="w-full mt-4 border-t-2 border-slate-200 pt-8 print:break-before-page p-4">
+                                        <div className="w-full mt-4 print:mt-0 p-4 print:p-0">
                                             <h3 className="text-xl font-bold mb-4 text-slate-800 print:hidden" style={{ fontFamily: reportSettings.fontFamily }}>
                                                 المرفقات ({publicImages.length})
                                             </h3>
-                                            <div className="flex flex-col gap-4">
+                                            <div className="flex flex-col gap-4 print:gap-0 print:block">
                                                 {publicImages.map((file, idx) => (
-                                                    <div key={idx} className="w-full break-inside-avoid mb-4">
-                                                        <img src={file.data} alt={`Attachment ${idx + 1}`} className="w-full h-auto object-contain border rounded-lg" style={{ maxHeight: '290mm' }} />
+                                                    <div key={idx} className="w-full print:break-before-page print:mb-0 mb-4 flex print:items-center print:justify-center print:h-[270mm] print:overflow-hidden relative">
+                                                        <img src={file.data} alt={`Attachment ${idx + 1}`} className="max-w-full h-auto object-contain print:border-none print:rounded-none border rounded-lg mx-auto print:max-h-[260mm] print:max-w-[190mm]" style={{ pageBreakInside: 'avoid' }} />
                                                     </div>
                                                 ))}
                                             </div>

@@ -8,9 +8,14 @@ interface ExcelPrintTableProps {
   cars: Car[];
   carMakes: CarMake[];
   carModels: CarModel[];
+  stats?: any;
+  startDate?: string;
+  endDate?: string;
+  filterType?: string;
+  activeFilter?: PaymentType | 'all' | 'unpaid';
 }
 
-const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, cars, carMakes, carModels }) => {
+const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, cars, carMakes, carModels, activeFilter = 'all' }) => {
   const getClientName = (clientId: string) => clients.find(c => c.id === clientId)?.name || 'غير معروف';
   
   const getCarInfo = (request: InspectionRequest) => {
@@ -23,6 +28,13 @@ const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, ca
     const make = carMakes.find(m => m.id === car.make_id)?.name_en;
     const model = carModels.find(m => m.id === car.model_id)?.name_en;
     return `${make || ''} ${model || ''} ${car.year}`;
+  };
+
+  const getEffectivePrice = (request: InspectionRequest) => {
+      if (request.payment_type !== PaymentType.Split) return request.price;
+      if (activeFilter === PaymentType.Cash) return request.split_payment_details?.cash || 0;
+      if (activeFilter === PaymentType.Card) return request.split_payment_details?.card || 0;
+      return request.price;
   };
 
   const getPaymentLabel = (type: PaymentType, details?: any) => {
@@ -49,9 +61,9 @@ const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, ca
   };
 
   const totals = {
-    price: requests.reduce((acc, r) => acc + r.price, 0),
+    price: requests.reduce((acc, r) => acc + getEffectivePrice(r), 0),
     commission: requests.reduce((acc, r) => acc + (r.broker?.commission || 0), 0),
-    net: requests.reduce((acc, r) => acc + (r.price - (r.broker?.commission || 0)), 0),
+    net: requests.reduce((acc, r) => acc + (getEffectivePrice(r) - (r.broker?.commission || 0)), 0),
   };
 
   return (
@@ -77,8 +89,9 @@ const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, ca
         </thead>
         <tbody>
           {requests.map((request, index) => {
+            const effectivePrice = getEffectivePrice(request);
             const commission = request.broker?.commission || 0;
-            const net = request.price - commission;
+            const net = effectivePrice - commission;
             return (
               <tr key={request.id}>
                 <td className="border border-black p-1 text-center text-[7.5pt]">{request.request_number}</td>
@@ -88,7 +101,7 @@ const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, ca
                   {new Date(request.created_at).toLocaleDateString('en-GB')}
                 </td>
                 <td className="border border-black p-1 text-center font-bold text-[8pt] bg-gray-50/50">
-                  {request.price.toLocaleString()}
+                  {effectivePrice.toLocaleString()}
                 </td>
                 <td className={`border border-black p-1 text-center font-bold text-[8pt] ${getPaymentColorClass(request.payment_type)}`}>
                   {getPaymentLabel(request.payment_type, request.split_payment_details)}

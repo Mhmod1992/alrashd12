@@ -192,8 +192,8 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
           </svg>
         </button>
         
-        {/* Modern Search Bar */}
-        <div className="relative w-full max-w-md hidden md:block group">
+        {/* Modern Search Bar - Removed as per user request */}
+{/*         <div className="relative w-full max-w-md hidden md:block group">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none transition-colors group-focus-within:text-blue-500">
                <SearchIcon className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
             </span>
@@ -214,7 +214,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                     <XIcon className="h-5 w-5" />
                 </button>
             )}
-        </div>
+        </div> */}
       </div>
       
       <div className="flex items-center gap-1 sm:gap-2">

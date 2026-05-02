@@ -648,6 +648,12 @@ const Financials: React.FC = () => {
         if (!stats) return [];
         if (paymentStatusFilter === 'all') return stats.filteredRequests;
         if (paymentStatusFilter === 'unpaid') return stats.filteredRequests.filter(r => r.payment_type === PaymentType.Unpaid);
+        if (paymentStatusFilter === PaymentType.Cash) {
+            return stats.filteredRequests.filter(r => r.payment_type === PaymentType.Cash || (r.payment_type === PaymentType.Split && (r.split_payment_details?.cash || 0) > 0));
+        }
+        if (paymentStatusFilter === PaymentType.Card) {
+            return stats.filteredRequests.filter(r => r.payment_type === PaymentType.Card || (r.payment_type === PaymentType.Split && (r.split_payment_details?.card || 0) > 0));
+        }
         return stats.filteredRequests.filter(r => r.payment_type === paymentStatusFilter);
     }, [stats, paymentStatusFilter]);
 
@@ -1316,6 +1322,7 @@ const Financials: React.FC = () => {
                                     cars={cars}
                                     carMakes={carMakes}
                                     carModels={carModels}
+                                    activeFilter={paymentStatusFilter}
                                 />
                             </div>
                             {(filterType === 'today' || filterType === 'yesterday') && (
@@ -1325,6 +1332,7 @@ const Financials: React.FC = () => {
                                     cars={cars}
                                     carMakes={carMakes}
                                     carModels={carModels}
+                                    activeFilter={paymentStatusFilter}
                                 />
                             )}
                             {stats?.filteredExpenses && stats.filteredExpenses.length > 0 && (

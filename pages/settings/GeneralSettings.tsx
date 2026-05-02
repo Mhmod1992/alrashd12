@@ -1,14 +1,16 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
+import ImageIcon from '../../components/icons/ImageIcon';
+import { supabase } from '../../lib/supabaseClient';
 
 const GeneralSettings: React.FC = () => {
   const { settings, updateSettings, addNotification, uploadImage } = useAppContext();
   const [currentSettings, setCurrentSettings] = useState(settings);
   const [isUploading, setIsUploading] = useState(false);
   const formInputClasses = "mt-1 block w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
+
 
   useEffect(() => {
     setCurrentSettings(settings);
@@ -212,6 +214,7 @@ const GeneralSettings: React.FC = () => {
           </div>
         </div>
       </div>
+
       <div className="flex justify-end sticky bottom-0 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm py-4 border-t border-slate-200 dark:border-slate-800">
           <Button onClick={handleSaveChanges} leftIcon={<Icon name="save" className="w-5 h-5"/>} disabled={isUploading} className="shadow-lg shadow-blue-500/20">حفظ الإعدادات</Button>
       </div>

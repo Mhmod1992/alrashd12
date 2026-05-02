@@ -177,13 +177,13 @@ const InfoPair: React.FC<{ label: string; value?: React.ReactNode; className?: s
 );
 
 const FindingCategorySection: React.FC<{ title: string, children: React.ReactNode; settings: ReportSettings; technicians?: string[]; isPrintView?: boolean; direction?: 'rtl' | 'ltr' }> = ({ title, children, settings, technicians, isPrintView, direction }) => (
-    <div data-setting-section="colors-backgrounds" className={`finding-category border rounded-lg overflow-hidden ${isPrintView ? 'mb-2' : 'mb-4'}`} style={{ borderColor: settings.borderColor }}>
-        <div data-setting-section="colors-section-titles" className={`${isPrintView ? 'p-1' : 'p-2'} flex justify-center items-center`} style={{ backgroundColor: settings.findingsHeaderBackgroundColor, color: settings.findingsHeaderFontColor }}>
+    <div data-setting-section="colors-backgrounds" className={`finding-category border rounded-lg overflow-hidden print:overflow-hidden ${isPrintView ? 'mb-2' : 'mb-4'}`} style={{ borderColor: settings.borderColor }}>
+        <div data-setting-section="colors-section-titles" className={`${isPrintView ? 'p-1' : 'p-2'} flex justify-center items-center print:rounded-t-[7px]`} style={{ backgroundColor: settings.findingsHeaderBackgroundColor, color: settings.findingsHeaderFontColor }}>
             <h3 className={`font-bold ${isPrintView ? getPrintSize(settings.fontSizes.categoryTitle) : settings.fontSizes.categoryTitle}`}>{title}</h3>
         </div>
-        <div className={isPrintView ? 'p-2' : 'p-3'} style={{ backgroundColor: settings.findingContainerBackgroundColor }}>
+        <div className={`${isPrintView ? 'p-2' : 'p-3'} print:rounded-b-[7px]`} style={{ backgroundColor: settings.findingContainerBackgroundColor }}>
             {children}
-            {technicians && technicians.length > 0 && (
+            {settings.showTechnicianName && technicians && technicians.length > 0 && (
                 <div className={`border-t flex ${direction === 'ltr' ? 'justify-start' : 'justify-end'} items-center gap-2 ${isPrintView ? 'mt-2 pt-1' : 'mt-4 pt-2'}`} style={{ borderColor: settings.borderColor }}>
                     <span className="text-xs opacity-70" style={{ color: settings.textColor }}>{direction === 'ltr' ? 'Inspected by:' : 'تم الفحص بواسطة:'}</span>
                     <span className={`font-bold ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: settings.primaryColor }}>{technicians.join('، ')}</span>
@@ -376,8 +376,41 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                     </div>
                 )}
 
-                <div className="relative z-0">
-                    <div className="report-header-section">
+                <table className="w-full border-collapse m-0 p-0 border-0 bg-white relative">
+                    <thead className="hidden print:table-header-group">
+                        <tr>
+                            <th className="p-0 border-0 align-top font-normal text-start">
+                                <div className="h-[80px] flex flex-col justify-end overflow-hidden">
+                                    <div className="grid grid-cols-3 items-end border-b-2 pb-2 mb-8" style={{ borderColor: reportSettings.borderColor }}>
+                                        <div className="flex flex-row items-center gap-3 justify-start">
+                                            {reportSettings.reportLogoUrl && <img src={reportSettings.reportLogoUrl} alt="Logo" className="w-auto object-contain" referrerPolicy="no-referrer" style={{ height: '28px' }} />}
+                                            <span className="font-bold text-sm min-w-max" style={{ color: reportSettings.appNameColor }}>{appName}</span>
+                                        </div>
+                                        <div className="text-[11px] font-bold opacity-60 text-center transform rtl:translate-x-1/3 ltr:-translate-x-1/3" style={{ color: reportSettings.textColor }}>
+                                            {reportDirection === 'ltr' ? '... Report Content Continued' : '... تتمة التقرير الفني'}
+                                        </div>
+                                        <div className="flex flex-row items-center justify-end gap-2 text-[10px] sm:text-[11px]">
+                                            <span className="font-bold whitespace-nowrap" style={{ color: reportSettings.primaryColor }}>#{request.request_number}</span>
+                                            <span className="opacity-60 whitespace-nowrap" style={{ color: reportSettings.textColor }}>{new Date(request.created_at).toLocaleDateString('en-GB')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tfoot className="hidden print:table-footer-group">
+                        <tr>
+                            <td className="p-0 border-0 text-center opacity-60 text-[10px] pb-0 pt-0 h-[20px] align-bottom">
+                                {reportDirection === 'ltr' ? '... See remaining details on the next page' : '... انظر باقي التفاصيل في الصفحة التالية'}
+                            </td>
+                        </tr>
+                    </tfoot>
+                    <tbody className="print:table-row-group border-0">
+                        <tr>
+                            <td className="p-0 border-0 align-top">
+                                <div className="print:-mt-[80px] print:pt-[10px] print:bg-white print:relative print:z-10 w-full" style={isPrintView ? { backgroundColor: '#ffffff' } : {}}>
+                                    <div className="relative z-0">
+                                        <div className="report-header-section">
                         <ReportHeader appName={appName} logoUrl={reportSettings.reportLogoUrl} settings={reportSettings} requestNumber={request.request_number} isPrintView={isPrintView} direction={reportDirection} />
 
                         <div className={`${isPrintView ? 'mb-2 space-y-2' : 'mb-6 space-y-4'}`}>
@@ -517,7 +550,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         </FindingCategorySection>
                     )}
 
-                    <footer className={`border-t-2 flex justify-between items-start gap-4 break-inside-avoid ${isPrintView ? 'mt-4 pt-2' : 'mt-6 pt-4'}`} style={{ borderColor: reportSettings.borderColor }}>
+                    <footer className={`border-t-2 border-b-2 border-b-transparent print:border-b-transparent flex justify-between items-start gap-4 break-inside-avoid relative ${isPrintView ? 'mt-4 pt-2 pb-6' : 'mt-6 pt-4 pb-8'}`} style={{ borderTopColor: reportSettings.borderColor }}>
                         <div className="flex-grow" style={{ color: reportSettings.textColor, opacity: 0.8 }}>
                             <p data-setting-section="text-disclaimer" className={`break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes?.disclaimer || 'text-xs') : (fontSizes?.disclaimer || 'text-xs')}`}><span className="font-bold">{reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}</span> {reportSettings.disclaimerText || (reportDirection === 'ltr' ? 'No disclaimer provided' : 'لا يوجد نص إخلاء مسؤولية')}</p>
                         </div>
@@ -529,8 +562,13 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                     {reportSettings.showPageNumbers && <div className="page-footer-container"></div>}
                 </div>
             </div>
-        </div>
-    );
+        </td>
+    </tr>
+</tbody>
+</table>
+</div>
+</div>
+);
 });
 
 export default InspectionReport;

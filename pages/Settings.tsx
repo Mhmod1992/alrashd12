@@ -16,6 +16,7 @@ import DraftSettings from './settings/DraftSettings';
 import PlateSettings from './settings/PlateSettings';
 import ReportSettingsPage from './settings/ReportSettings'; // Renamed to avoid clash
 import DatabaseManagement from './settings/DatabaseManagement'; // Now acts as Maintenance
+import StorageManagement from './settings/StorageManagement';
 import ApiSettings from './settings/ApiSettings';
 import WhatsAppSettings from './settings/WhatsAppSettings';
 import ReportsArchive from './settings/ReportsArchive';
@@ -83,6 +84,7 @@ const Settings: React.FC = () => {
             title: 'الصيانة والنظام',
             items: [
                 { id: 'database', label: 'حالة النظام والصيانة', icon: 'database', permission: 'manage_settings_general', component: DatabaseManagement } as any, 
+                { id: 'storage', label: 'إدارة مساحة التخزين', icon: 'archive', permission: 'manage_settings_general', component: StorageManagement },
             ]
         },
         {
