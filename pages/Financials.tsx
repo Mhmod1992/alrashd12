@@ -1322,7 +1322,6 @@ const Financials: React.FC = () => {
                                     cars={cars}
                                     carMakes={carMakes}
                                     carModels={carModels}
-                                    activeFilter={paymentStatusFilter}
                                 />
                             </div>
                             {(filterType === 'today' || filterType === 'yesterday') && (
@@ -1332,7 +1331,6 @@ const Financials: React.FC = () => {
                                     cars={cars}
                                     carMakes={carMakes}
                                     carModels={carModels}
-                                    activeFilter={paymentStatusFilter}
                                 />
                             )}
                             {stats?.filteredExpenses && stats.filteredExpenses.length > 0 && (

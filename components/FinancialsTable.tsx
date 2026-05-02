@@ -35,8 +35,7 @@ const FinancialsTable: React.FC<{
   cars: Car[];
   carMakes: CarMake[];
   carModels: CarModel[];
-  activeFilter?: PaymentType | 'all' | 'unpaid';
-}> = ({ requests, clients, cars, carMakes, carModels, activeFilter = 'all' }) => {
+}> = ({ requests, clients, cars, carMakes, carModels }) => {
 
   const getClientName = (clientId: string) => clients.find(c => c.id === clientId)?.name || 'غير معروف';
   const getCarInfo = (request: InspectionRequest) => {
@@ -51,20 +50,13 @@ const FinancialsTable: React.FC<{
     return `${make || ''} ${model || ''} ${car.year}`;
   };
 
-  const getEffectivePrice = (request: InspectionRequest) => {
-      if (request.payment_type !== PaymentType.Split) return request.price;
-      if (activeFilter === PaymentType.Cash) return request.split_payment_details?.cash || 0;
-      if (activeFilter === PaymentType.Card) return request.split_payment_details?.card || 0;
-      return request.price;
-  };
-
   const totals = useMemo(() => {
     return {
-      price: requests.reduce((acc, r) => acc + getEffectivePrice(r), 0),
+      price: requests.reduce((acc, r) => acc + r.price, 0),
       commission: requests.reduce((acc, r) => acc + (r.broker?.commission || 0), 0),
-      net: requests.reduce((acc, r) => acc + (getEffectivePrice(r) - (r.broker?.commission || 0)), 0),
+      net: requests.reduce((acc, r) => acc + (r.price - (r.broker?.commission || 0)), 0),
     };
-  }, [requests, activeFilter]);
+  }, [requests]);
 
   return (
     <div className="overflow-x-auto custom-scrollbar print:overflow-visible">
@@ -95,9 +87,8 @@ const FinancialsTable: React.FC<{
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
           {requests.map((request) => {
-            const effectivePrice = getEffectivePrice(request);
             const commission = request.broker?.commission || 0;
-            const netIncome = effectivePrice - commission;
+            const netIncome = request.price - commission;
             return (
               <tr key={request.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors print:border-b print:border-slate-200">
                 <td className="px-3 py-2.5">
@@ -108,7 +99,7 @@ const FinancialsTable: React.FC<{
                 <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-slate-200">{getClientName(request.client_id)}</td>
                 <td className="px-3 py-2.5 text-[11px] text-slate-600 dark:text-slate-300">{getCarInfo(request)}</td>
                 <td className="px-3 py-2.5 whitespace-nowrap text-[10px] font-mono text-slate-500 font-numeric">{new Date(request.created_at).toLocaleDateString('en-GB')}</td>
-                <td className="px-3 py-2.5 font-black font-numeric">{effectivePrice.toLocaleString('en-US')}</td>
+                <td className="px-3 py-2.5 font-black font-numeric">{request.price.toLocaleString('en-US')}</td>
                 <td className="px-3 py-2.5"><PaymentMethodBadge request={request} /></td>
                 <td className="px-3 py-2.5 text-[10px] text-slate-500 dark:text-slate-400 print:text-black">
                   {request.payment_note ? (
