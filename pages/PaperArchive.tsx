@@ -11,6 +11,7 @@ import FolderOpenIcon from '../components/icons/FolderOpenIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import CameraIcon from '../components/icons/CameraIcon';
 import UploadIcon from '../components/icons/UploadIcon';
+import PlusIcon from '../components/icons/PlusIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import XIcon from '../components/icons/XIcon';
 import { SkeletonTable } from '../components/Skeleton';
@@ -125,7 +126,7 @@ const PaperArchive: React.FC = () => {
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [scannerFile, setScannerFile] = useState<File | null>(null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
-    const [activeArchiveTab, setActiveArchiveTab] = useState<'all' | 'public' | 'internal'>('all');
+    const [activeArchiveTab, setActiveArchiveTab] = useState<'all' | 'internal' | 'colored' | 'pdf'>('all');
 
     const [isSourceChoiceModalOpen, setIsSourceChoiceModalOpen] = useState(false);
     const [currentUploadType, setCurrentUploadType] = useState<'manual_paper' | 'internal_draft'>('manual_paper');
@@ -176,6 +177,22 @@ const PaperArchive: React.FC = () => {
         }, 500);
         return () => clearTimeout(timer);
     }, [searchQuery, clients, cars, carMakes, carModels]);
+
+    const [viewMode, setViewMode] = useState<'table' | 'gallery'>('table');
+    const [zoomLevel, setZoomLevel] = useState(1);
+    const [gallerySubFilter, setGallerySubFilter] = useState<'all' | 'drafts_only' | 'attachments_only'>('all');
+    const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+    const [lightboxImages, setLightboxImages] = useState<{url: string, title: string, subTitle: string, requestId: string, file: any}[]>([]);
+
+    const openLightbox = (images: {url: string, title: string, subTitle: string, requestId: string, file: any}[], index: number) => {
+        setLightboxImages(images);
+        setSelectedImageIndex(index);
+        setZoomLevel(1);
+    };
+
+    const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.5, 4));
+    const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.5, 1));
+    const resetZoom = () => setZoomLevel(1);
 
     // Fetch Logic
     const loadData = async () => {
@@ -552,10 +569,12 @@ const PaperArchive: React.FC = () => {
 
                 let folder = 'drafts';
                 let prefix = 'Draft';
+                let finalType = type;
 
                 if (source === 'pdf') {
                     folder = 'pdf_extracts';
-                    prefix = 'PDF-Extract';
+                    prefix = 'PDF-Page';
+                    finalType = 'pdf_page';
                 } else if (type === 'manual_paper') {
                     folder = 'colored_attachments';
                     prefix = 'Colored';
@@ -571,7 +590,7 @@ const PaperArchive: React.FC = () => {
                 
                 newAttachments.push({
                     name: customFileName + extension,
-                    type: type,
+                    type: finalType,
                     data: publicUrl,
                     archived_by_name: authUser?.name || 'مجهول',
                     archived_at: new Date().toISOString()
@@ -620,7 +639,7 @@ const PaperArchive: React.FC = () => {
 
             if (activeArchiveTab !== 'all') {
                 if (type === 'internal_draft') setActiveArchiveTab('internal');
-                else setActiveArchiveTab('public');
+                else setActiveArchiveTab('colored');
             }
 
         } catch (error: any) {
@@ -688,14 +707,46 @@ const PaperArchive: React.FC = () => {
     }
 
     const getRequestStatus = (req: InspectionRequest) => {
-        return req.attached_files?.some(f => f.type === 'internal_draft') || false;
+        return (req.attached_files?.length || 0) > 0;
     };
 
-    const paperImages = selectedRequest?.attached_files?.filter(f => f.type === 'manual_paper' || f.type === 'internal_draft') || [];
-    const publicImages = paperImages.filter(f => f.type !== 'internal_draft');
+    const paperImages = selectedRequest?.attached_files || [];
     const internalImages = paperImages.filter(f => f.type === 'internal_draft');
+    const coloredImages = paperImages.filter(f => f.type === 'manual_paper');
+    const pdfImages = paperImages.filter(f => f.type === 'pdf_page');
     
-    const displayedImages = activeArchiveTab === 'all' ? paperImages : (activeArchiveTab === 'public' ? publicImages : internalImages);
+    const displayedImages = useMemo(() => {
+        if (activeArchiveTab === 'all') return paperImages;
+        if (activeArchiveTab === 'internal') return internalImages;
+        if (activeArchiveTab === 'colored') return coloredImages;
+        if (activeArchiveTab === 'pdf') return pdfImages;
+        return paperImages;
+    }, [activeArchiveTab, paperImages, internalImages, coloredImages, pdfImages]);
+
+    // Flatten all images for global gallery view
+    const allArchivedImages = useMemo(() => {
+        const images: {url: string, title: string, subTitle: string, requestId: string, file: any}[] = [];
+        displayedRequests.forEach(req => {
+            const client = clients.find(c => c.id === req.client_id);
+            const car = cars.find(c => c.id === req.car_id);
+            const make = carMakes.find(m => m.id === car?.make_id);
+            const model = carModels.find(m => m.id === car?.model_id);
+            const requestTitle = `طلب #${req.request_number}`;
+            const clientName = client?.name || 'عميل غير معروف';
+            const carName = `${make?.name_ar || ''} ${model?.name_ar || ''} ${car?.plate_number || ''}`;
+
+            (req.attached_files || []).forEach(file => {
+                images.push({
+                    url: file.data,
+                    title: requestTitle,
+                    subTitle: `${clientName} | ${carName}`,
+                    requestId: req.id,
+                    file: file
+                });
+            });
+        });
+        return images;
+    }, [displayedRequests, clients, cars, carMakes, carModels]);
 
     return (
         <div className="container mx-auto animate-fade-in p-4 pb-20">
@@ -759,6 +810,26 @@ const PaperArchive: React.FC = () => {
                     <button onClick={() => setDateFilter('month')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'month' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>هذا الشهر</button>
                     <button onClick={() => setDateFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>الكل</button>
                     <button onClick={() => setDateFilter('custom')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'custom' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>مخصص</button>
+                </div>
+
+                <div className="flex bg-slate-200 dark:bg-slate-700 p-1.5 rounded-xl">
+                    <button 
+                        onClick={() => setViewMode('table')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'table' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}
+                    >
+                        <Icon name="list" className="w-4 h-4" />
+                        <span>قائمة</span>
+                    </button>
+                    <button 
+                        onClick={() => {
+                            setViewMode('gallery');
+                            setArchiveStatusFilter('all');
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'gallery' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}
+                    >
+                        <Icon name="gallery" className="w-4 h-4" />
+                        <span>معرض</span>
+                    </button>
                 </div>
             </div>
 
@@ -846,7 +917,7 @@ const PaperArchive: React.FC = () => {
                             <RefreshCwIcon className="w-10 h-10 animate-spin text-blue-500 mx-auto mb-2" />
                             <p className="text-slate-500 text-sm">جاري تحميل البيانات...</p>
                         </div>
-                    ) : (
+                    ) : viewMode === 'table' ? (
                         <table className="w-full text-right border-collapse">
                             <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold">
                                 <tr>
@@ -941,6 +1012,215 @@ const PaperArchive: React.FC = () => {
                                 )}
                             </tbody>
                         </table>
+                    ) : (
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50">
+                             {/* Gallery Specific Sub-Filters */}
+                             <div className="flex flex-wrap gap-2 mb-6 justify-center">
+                                 <button 
+                                     onClick={() => setGallerySubFilter('all')}
+                                     className={`px-4 py-2 rounded-full text-xs font-bold transition-all border ${gallerySubFilter === 'all' ? 'bg-blue-600 text-white border-blue-600 shadow-lg scale-105' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-blue-400'}`}
+                                 >
+                                     عرض الكل
+                                 </button>
+                                 <button 
+                                     onClick={() => setGallerySubFilter('drafts_only')}
+                                     className={`px-4 py-2 rounded-full text-xs font-bold transition-all border ${gallerySubFilter === 'drafts_only' ? 'bg-yellow-500 text-black border-yellow-500 shadow-lg scale-105' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-yellow-400'}`}
+                                 >
+                                     مسودات فقط
+                                 </button>
+                                 <button 
+                                     onClick={() => setGallerySubFilter('attachments_only')}
+                                     className={`px-4 py-2 rounded-full text-xs font-bold transition-all border ${gallerySubFilter === 'attachments_only' ? 'bg-blue-500 text-white border-blue-500 shadow-lg scale-105' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-blue-400'}`}
+                                 >
+                                     مرفقات فقط
+                                 </button>
+                             </div>
+
+                             {displayedRequests.filter(req => {
+                                 const files = req.attached_files || [];
+                                 
+                                 // First level: global tab filter (already applied to images, but here we filter cards)
+                                 let matchesTab = false;
+                                 if (activeArchiveTab === 'all') matchesTab = files.length > 0;
+                                 else if (activeArchiveTab === 'internal') matchesTab = files.some(f => f.type === 'internal_draft');
+                                 else if (activeArchiveTab === 'colored') matchesTab = files.some(f => f.type === 'manual_paper');
+                                 else if (activeArchiveTab === 'pdf') matchesTab = files.some(f => f.type === 'pdf_page');
+                                 
+                                 if (!matchesTab) return false;
+
+                                 // Second level: Gallery Sub-Filter (Drafts only vs Attachments only)
+                                 if (gallerySubFilter === 'drafts_only') {
+                                     return files.some(f => f.type === 'internal_draft');
+                                 }
+                                 if (gallerySubFilter === 'attachments_only') {
+                                     return files.some(f => f.type === 'manual_paper' || f.type === 'pdf_page');
+                                 }
+
+                                 return true;
+                             }).length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                    {displayedRequests.filter(req => {
+                                        const files = req.attached_files || [];
+                                        
+                                        let matchesTab = false;
+                                        if (activeArchiveTab === 'all') matchesTab = files.length > 0;
+                                        else if (activeArchiveTab === 'internal') matchesTab = files.some(f => f.type === 'internal_draft');
+                                        else if (activeArchiveTab === 'colored') matchesTab = files.some(f => f.type === 'manual_paper');
+                                        else if (activeArchiveTab === 'pdf') matchesTab = files.some(f => f.type === 'pdf_page');
+                                        
+                                        if (!matchesTab) return false;
+
+                                        if (gallerySubFilter === 'drafts_only') {
+                                            return files.some(f => f.type === 'internal_draft');
+                                        }
+                                        if (gallerySubFilter === 'attachments_only') {
+                                            return files.some(f => f.type === 'manual_paper' || f.type === 'pdf_page');
+                                        }
+
+                                        return true;
+                                    }).map((req) => {
+                                        const client = clients.find(c => c.id === req.client_id);
+                                        const car = cars.find(c => c.id === req.car_id);
+                                        const make = carMakes.find(m => m.id === car?.make_id);
+                                        const model = carModels.find(m => m.id === car?.model_id);
+                                        const carName = `${make?.name_ar || ''} ${model?.name_ar || ''} ${car?.plate_number || ''}`;
+
+                                        const reqImages = (req.attached_files || []).filter(f => {
+                                            let matches = true;
+                                            if (activeArchiveTab === 'internal') matches = (f.type === 'internal_draft');
+                                            else if (activeArchiveTab === 'colored') matches = (f.type === 'manual_paper');
+                                            else if (activeArchiveTab === 'pdf') matches = (f.type === 'pdf_page');
+                                            
+                                            if (!matches) return false;
+
+                                            if (gallerySubFilter === 'drafts_only') return f.type === 'internal_draft';
+                                            if (gallerySubFilter === 'attachments_only') return f.type !== 'internal_draft';
+
+                                            return true;
+                                        });
+
+                                        return (
+                                            <div 
+                                                key={req.id} 
+                                                className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col group h-full"
+                                            >
+                                                {/* Card Header - Enhanced with subtle pattern or better hierarchy */}
+                                                <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 relative overflow-hidden">
+                                                    {/* Decorative background accent */}
+                                                    <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/5 rounded-full -mr-8 -mt-8"></div>
+                                                    
+                                                    <div className="relative flex justify-between items-start">
+                                                        <div className="space-y-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[10px] font-black px-2 py-0.5 rounded-md tracking-wider">طلب #{req.request_number}</span>
+                                                                <span className="text-[10px] text-slate-400 font-medium">{new Date(req.created_at).toLocaleDateString('ar-SA')}</span>
+                                                            </div>
+                                                            <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm truncate max-w-[180px] leading-tight mt-1">{client?.name || 'عميل مجهول'}</h3>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="w-1.5 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-full"></span>
+                                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate tracking-tight">{carName}</p>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <button 
+                                                            onClick={() => openUploadModal(req)} 
+                                                            className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:hover:border-blue-800 shadow-none hover:shadow-sm"
+                                                            title="إضافة ملفات"
+                                                        >
+                                                            <PlusIcon className="w-5 h-5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Mini Gallery - More sophisticated layout */}
+                                                <div className="flex-1 p-3 bg-white dark:bg-slate-800">
+                                                    <div className="grid grid-cols-2 gap-2.5 h-full min-h-[170px]">
+                                                        {reqImages.length > 0 ? (
+                                                            <>
+                                                                {reqImages.slice(0, 3).map((img, idx) => (
+                                                                    <div 
+                                                                        key={img.data} 
+                                                                        className={`relative rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700/50 cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 ${idx === 0 && reqImages.length > 2 ? 'row-span-2' : 'h-24 md:h-auto'}`}
+                                                                        onClick={() => {
+                                                                            const globalIdx = allArchivedImages.findIndex(ai => ai.url === img.data);
+                                                                            if (globalIdx !== -1) openLightbox(allArchivedImages, globalIdx);
+                                                                        }}
+                                                                    >
+                                                                        <img src={img.data} alt="req-img" className="w-full h-full object-cover transform transition-transform duration-500 group-hover:scale-110" />
+                                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
+                                                                        
+                                                                        {/* Discreet type indicator */}
+                                                                        <div className="absolute bottom-2 right-2">
+                                                                            {img.type === 'internal_draft' && <span className="px-1.5 py-0.5 bg-yellow-500 text-[8px] font-black text-black rounded-md shadow-sm uppercase">مسودة</span>}
+                                                                            {img.type === 'pdf_page' && <span className="px-1.5 py-0.5 bg-red-500 text-[8px] font-black text-white rounded-md shadow-sm uppercase">PDF</span>}
+                                                                            {img.type === 'manual_paper' && <span className="px-1.5 py-0.5 bg-blue-500 text-[8px] font-black text-white rounded-md shadow-sm uppercase">ملون</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                                {reqImages.length > 3 && (
+                                                                    <div 
+                                                                        className="relative rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-all shadow-sm"
+                                                                        onClick={() => openUploadModal(req)}
+                                                                    >
+                                                                        <span className="text-xl font-black text-slate-400 dark:text-slate-500 tracking-tighter">+{reqImages.length - 3}</span>
+                                                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">المزيد</span>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <div className="col-span-2 flex flex-col items-center justify-center py-10 text-slate-300 dark:text-slate-600 border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-2xl group-hover:border-blue-200 dark:group-hover:border-blue-900 transition-colors">
+                                                                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                                                                    <Icon name="gallery" className="w-10 h-10 opacity-30" />
+                                                                </div>
+                                                                <span className="text-xs font-bold uppercase tracking-widest opacity-60">لا يوجد أرشفة</span>
+                                                                <button onClick={() => openUploadModal(req)} className="mt-3 text-[10px] font-black text-blue-600 hover:underline uppercase tracking-tight">ابدأ الأرشفة الآن</button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Card Footer - Professional Status Badges */}
+                                                <div className="px-4 py-3 bg-slate-50/80 dark:bg-slate-800/50 mt-auto border-t dark:border-slate-700 flex justify-between items-center">
+                                                    <div className="flex gap-1.5">
+                                                        {reqImages.filter(f => f.type === 'internal_draft').length > 0 && (
+                                                            <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/20 px-2 py-0.5 rounded-md border border-yellow-200/50 dark:border-yellow-700/30">
+                                                                <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></div>
+                                                                <span className="text-[9px] font-black text-yellow-700 dark:text-yellow-400">{reqImages.filter(f => f.type === 'internal_draft').length}</span>
+                                                            </div>
+                                                        )}
+                                                        {reqImages.filter(f => f.type === 'manual_paper').length > 0 && (
+                                                            <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-md border border-blue-200/50 dark:border-blue-700/30">
+                                                                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                                                                <span className="text-[9px] font-black text-blue-700 dark:text-blue-400">{reqImages.filter(f => f.type === 'manual_paper').length}</span>
+                                                            </div>
+                                                        )}
+                                                        {reqImages.filter(f => f.type === 'pdf_page').length > 0 && (
+                                                            <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-md border border-red-200/50 dark:border-red-700/30">
+                                                                <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                                                                <span className="text-[9px] font-black text-red-700 dark:text-red-400">{reqImages.filter(f => f.type === 'pdf_page').length}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    <button 
+                                                        onClick={() => openUploadModal(req)} 
+                                                        className="group/btn flex items-center gap-1 text-[10px] font-black text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-tight"
+                                                    >
+                                                        <span>كل الملفات</span>
+                                                        <Icon name="chevron-left" className="w-3 h-3 transform transition-transform group-hover/btn:-translate-x-1" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                             ) : (
+                                <div className="p-20 text-center text-slate-400">
+                                    <Icon name="gallery" className="w-16 h-16 mx-auto mb-4 opacity-10" />
+                                    <p className="font-bold">لا توجد طلبات مؤرشفة للعرض في هذه الفترة</p>
+                                </div>
+                             )}
+                        </div>
                     )}
                 </div>
             </div>
@@ -964,24 +1244,30 @@ const PaperArchive: React.FC = () => {
                         </div>
                         
                         {/* Tabs */}
-                        <div className="flex border-b dark:border-slate-700 mb-4">
+                        <div className="flex border-b dark:border-slate-700 mb-4 overflow-x-auto no-scrollbar">
                             <button
-                                className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'all' ? 'border-b-2 border-slate-600 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                className={`flex-shrink-0 px-4 py-2 text-sm font-bold transition-colors whitespace-nowrap ${activeArchiveTab === 'all' ? 'border-b-2 border-slate-600 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
                                 onClick={() => setActiveArchiveTab('all')}
                             >
                                     الكل ({paperImages.length})
                             </button>
                             <button
-                                className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'public' ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                onClick={() => setActiveArchiveTab('public')}
+                                className={`flex-shrink-0 px-4 py-2 text-sm font-bold transition-colors whitespace-nowrap ${activeArchiveTab === 'internal' ? 'border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                onClick={() => setActiveArchiveTab('internal')}
                             >
-                                    مرفقات التقرير ({publicImages.length})
+                                    المسودات ({internalImages.length})
                             </button>
                             <button
-                                className={`flex-1 py-2 text-sm font-bold transition-colors ${activeArchiveTab === 'internal' ? 'border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                     onClick={() => setActiveArchiveTab('internal')}
+                                className={`flex-shrink-0 px-4 py-2 text-sm font-bold transition-colors whitespace-nowrap ${activeArchiveTab === 'colored' ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                onClick={() => setActiveArchiveTab('colored')}
                             >
-                                    مسودات داخلية ({internalImages.length})
+                                    المرفقات الملونة ({coloredImages.length})
+                            </button>
+                            <button
+                                className={`flex-shrink-0 px-4 py-2 text-sm font-bold transition-colors whitespace-nowrap ${activeArchiveTab === 'pdf' ? 'border-b-2 border-red-500 text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                onClick={() => setActiveArchiveTab('pdf')}
+                            >
+                                    ملفات PDF ({pdfImages.length})
                             </button>
                         </div>
 
@@ -993,7 +1279,7 @@ const PaperArchive: React.FC = () => {
                                     <span className="text-sm font-bold text-blue-700 dark:text-blue-300">جاري استخراج الصفحات من ملف PDF...</span>
                                 </div>
                             )}
-                            {activeArchiveTab === 'public' && (
+                            {activeArchiveTab === 'colored' && (
                                 <div className="flex gap-2">
                                     <button onClick={() => handleUploadClick('manual_paper')} disabled={isUploading || isExtractingPdf} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
                                         <CameraIcon className="w-5 h-5" />
@@ -1006,15 +1292,6 @@ const PaperArchive: React.FC = () => {
                                         title="رفع من الجهاز"
                                     >
                                         <UploadIcon className="w-5 h-5" />
-                                    </button>
-                                    <button 
-                                        onClick={() => { setCurrentUploadType('manual_paper'); pdfInputRef.current?.click(); }} 
-                                        disabled={isUploading || isExtractingPdf}
-                                        className="p-3 rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all flex items-center justify-center gap-2"
-                                        title="رفع ملف PDF"
-                                    >
-                                        <Icon name="document-report" className="w-5 h-5" />
-                                        <span className="font-bold text-sm hidden sm:inline">PDF</span>
                                     </button>
                                 </div>
                             )}
@@ -1033,21 +1310,25 @@ const PaperArchive: React.FC = () => {
                                     >
                                         <UploadIcon className="w-5 h-5" />
                                     </button>
+                                </div>
+                            )}
+
+                            {activeArchiveTab === 'pdf' && (
+                                <div className="flex gap-2">
                                     <button 
-                                        onClick={() => { setCurrentUploadType('internal_draft'); pdfInputRef.current?.click(); }} 
+                                        onClick={() => { setCurrentUploadType('manual_paper'); pdfInputRef.current?.click(); }} 
                                         disabled={isUploading || isExtractingPdf}
-                                        className="p-3 rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all flex items-center justify-center gap-2"
-                                        title="رفع ملف PDF"
+                                        className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all transition-all"
                                     >
                                         <Icon name="document-report" className="w-5 h-5" />
-                                        <span className="font-bold text-sm hidden sm:inline">PDF</span>
+                                        <span className="font-bold text-sm">رفع واستخراج صفحات من ملف PDF</span>
                                     </button>
                                 </div>
                             )}
 
                             {activeArchiveTab === 'all' && (
                                 <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg text-center text-slate-500 text-sm">
-                                    يرجى اختيار تبويب "مرفقات التقرير" أو "مسودات داخلية" لإضافة ملفات جديدة.
+                                    يرجى اختيار تبويب "المسودات"، "المرفقات الملونة"، أو "ملفات PDF" لإضافة ملفات جديدة.
                                 </div>
                             )}
 
@@ -1107,6 +1388,159 @@ const PaperArchive: React.FC = () => {
                     </div>
                 </div>
             </Modal>
+
+            {/* Global Lightbox / Gallery Viewer */}
+            {selectedImageIndex !== null && lightboxImages.length > 0 && (
+                <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col animate-fade-in text-white overflow-hidden">
+                    {/* Lightbox Header - Restored to fixed position */}
+                    <div className="p-4 flex justify-between items-center bg-black/60 backdrop-blur-md border-b border-white/10 z-50">
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={() => setSelectedImageIndex(null)}
+                                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                            >
+                                <XIcon className="w-6 h-6" />
+                            </button>
+                            <div>
+                                <h5 className="font-bold text-sm">{lightboxImages[selectedImageIndex].title}</h5>
+                                <p className="text-[10px] opacity-70">{lightboxImages[selectedImageIndex].subTitle}</p>
+                            </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center bg-white/10 rounded-lg overflow-hidden border border-white/10 shadow-lg">
+                                <button 
+                                    onClick={handleZoomIn}
+                                    className="p-2 hover:bg-white/20 transition-colors border-l border-white/5"
+                                    title="تكبير"
+                                >
+                                    <Icon name="plus" className="w-4 h-4" />
+                                </button>
+                                <button 
+                                    onClick={resetZoom}
+                                    className="px-3 py-1 text-[10px] font-bold hover:bg-white/20 transition-colors border-l border-white/5 min-w-[50px] text-center"
+                                    title="إعادة التعيين"
+                                >
+                                    {Math.round(zoomLevel * 100)}%
+                                </button>
+                                <button 
+                                    onClick={handleZoomOut}
+                                    className="p-2 hover:bg-white/20 transition-colors"
+                                    title="تصغير"
+                                >
+                                    <Icon name="minus" className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="text-[10px] font-mono font-bold text-slate-400">
+                                {selectedImageIndex + 1} / {lightboxImages.length}
+                            </div>
+                            <div className="flex gap-2">
+                                <a 
+                                    href={lightboxImages[selectedImageIndex].url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="p-2 hover:bg-white/10 rounded-lg transition-all"
+                                    title="فتح في نافذة جديدة"
+                                >
+                                    <Icon name="external-link" className="w-5 h-5" />
+                                </a>
+                                <button
+                                    onClick={() => initiateDelete(lightboxImages[selectedImageIndex].file)}
+                                    className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-all"
+                                    title="حذف"
+                                >
+                                    <TrashIcon className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Main Image Area */}
+                    <div className="flex-1 relative bg-slate-950 overflow-auto scrollbar-hide">
+                        {/* Navigation Arrows - Using fixed position to stay visible during scroll */}
+                        <button 
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setSelectedImageIndex(prev => prev! > 0 ? prev! - 1 : lightboxImages.length - 1);
+                                setZoomLevel(1);
+                            }}
+                            className="fixed left-6 top-1/2 -translate-y-1/2 p-4 bg-black/40 hover:bg-white/10 rounded-full transition-all z-50 border border-white/10 backdrop-blur-sm"
+                        >
+                            <Icon name="chevron-left" className="w-8 h-8" />
+                        </button>
+
+                        <div 
+                            className="min-w-full min-h-full flex"
+                            style={{ padding: zoomLevel > 1 ? '40vh 20vw' : '2.5rem' }}
+                        >
+                            <div className="relative m-auto flex flex-col items-center">
+                                <img 
+                                    src={lightboxImages[selectedImageIndex].url} 
+                                    alt="Gallery Preview" 
+                                    className={`shadow-2xl transition-transform duration-300 origin-center ${zoomLevel >= 2.5 ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
+                                    style={{ 
+                                        transform: `scale(${zoomLevel})`,
+                                        maxWidth: zoomLevel > 1 ? 'none' : '90vw',
+                                        maxHeight: zoomLevel > 1 ? 'none' : '70vh'
+                                    }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (zoomLevel === 1) setZoomLevel(1.5);
+                                        else if (zoomLevel <= 1.5) setZoomLevel(2);
+                                        else if (zoomLevel <= 2) setZoomLevel(2.5);
+                                        else resetZoom();
+                                    }}
+                                />
+                                
+                                {lightboxImages[selectedImageIndex].file && (
+                                    <div className={`mt-6 transition-opacity duration-300 ${zoomLevel > 1 ? 'opacity-40' : 'opacity-100'} flex flex-col items-center gap-2`}>
+                                        <span className={`px-2 py-1 rounded text-[10px] font-bold shadow-lg ${
+                                            lightboxImages[selectedImageIndex].file.type === 'internal_draft' ? 'bg-yellow-500 text-black' :
+                                            lightboxImages[selectedImageIndex].file.type === 'pdf_page' ? 'bg-red-600 text-white' :
+                                            'bg-blue-600 text-white'
+                                        }`}>
+                                            {lightboxImages[selectedImageIndex].file.type === 'internal_draft' ? 'مسودة داخلية' :
+                                             lightboxImages[selectedImageIndex].file.type === 'pdf_page' ? 'صفحة PDF' : 'مرفق ملون'}
+                                        </span>
+                                        {lightboxImages[selectedImageIndex].file.archived_by_name && (
+                                            <div className="bg-white/5 backdrop-blur-md px-3 py-2 rounded-lg text-center border border-white/10">
+                                                <div className="text-[10px] font-bold">{lightboxImages[selectedImageIndex].file.archived_by_name}</div>
+                                                {lightboxImages[selectedImageIndex].file.archived_at && (
+                                                    <div className="text-[8px] opacity-50 mt-1">{new Date(lightboxImages[selectedImageIndex].file.archived_at).toLocaleString('ar-SA')}</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setSelectedImageIndex(prev => prev! < lightboxImages.length - 1 ? prev! + 1 : 0);
+                                setZoomLevel(1);
+                            }}
+                            className="fixed right-6 top-1/2 -translate-y-1/2 p-4 bg-black/40 hover:bg-white/10 rounded-full transition-all z-50 border border-white/10 backdrop-blur-sm"
+                        >
+                            <Icon name="chevron-right" className="w-8 h-8" />
+                        </button>
+                    </div>
+
+                    {/* Thumbnails Section */}
+                    <div className="h-24 bg-black/40 backdrop-blur-sm p-2 flex gap-2 overflow-x-auto no-scrollbar scroll-smooth flex-shrink-0">
+                        {lightboxImages.map((img, idx) => (
+                            <button
+                                key={img.url + idx}
+                                onClick={() => setSelectedImageIndex(idx)}
+                                className={`h-full aspect-[3/4] flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${idx === selectedImageIndex ? 'border-blue-500 scale-105 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-transparent opacity-50 hover:opacity-80'}`}
+                            >
+                                <img src={img.url} alt="" className="w-full h-full object-cover" />
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <Modal isOpen={isSourceChoiceModalOpen} onClose={() => setIsSourceChoiceModalOpen(false)} title="اختر مصدر الصورة" size="sm">
                 <div className="p-4 flex flex-col gap-4">

@@ -1587,6 +1587,9 @@ export const FillRequest: React.FC = () => {
                 const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
 
                 try {
+                    // Mark interaction to pause sync
+                    lastInteractionRef.current = Date.now();
+
                     const updates: any = {
                         id: request.id,
                         report_stamps: newStamps,
@@ -1596,7 +1599,7 @@ export const FillRequest: React.FC = () => {
 
                     // Auto-add/remove notes if stamping as INCOMPLETE
                     if (isAdding && stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
-                        const noteText = "لم يتم إكمال الفحص  بناءً على طلب العميل.";
+                        const noteText = "لم يتم إكمال الفحص بناءً على طلب العميل.";
                         const updatedCategoryNotes = { ...categoryNotes };
                         
                         visibleFindingCategories.forEach(cat => {
@@ -1618,7 +1621,7 @@ export const FillRequest: React.FC = () => {
                         updates.category_notes = updatedCategoryNotes;
                         
                         // Also add an activity log entry for this automatic action
-                        const autoNoteLog = createActivityLog('إضافة ملاحظات تلقائية', 'تم إضافة ملاحظة "لم يتم إكمال الطلب بناءً على طلب العميل" لجميع الأقسام باللون الأحمر');
+                        const autoNoteLog = createActivityLog('إضافة ملاحظات تلقائية', 'تم إضافة ملاحظة "لم يتم إكمال الفحص بناءً على طلب العميل" لجميع الأقسام باللون الأحمر');
                         if (autoNoteLog) {
                             updates.activity_log = [autoNoteLog, ...newActivityLog];
                             setActivityLog(updates.activity_log);
@@ -1626,21 +1629,27 @@ export const FillRequest: React.FC = () => {
                             setActivityLog(newActivityLog);
                         }
                     } else if (!isAdding && stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
-                        const noteText = "لم يتم إكمال الطلب بناءً على طلب العميل.";
+                        const noteText = "لم يتم إكمال الفحص بناءً على طلب العميل.";
+                        const noteTextAlt = "لم يتم إكمال الطلب بناءً على طلب العميل.";
+                        const noteTextAlt2 = "لم يتم إكمال الفحص  بناءً على طلب العميل.";
                         const updatedCategoryNotes = { ...categoryNotes };
                         let removedCount = 0;
 
                         Object.keys(updatedCategoryNotes).forEach(catId => {
-                            const originalCount = updatedCategoryNotes[catId].length;
-                            updatedCategoryNotes[catId] = updatedCategoryNotes[catId].filter(n => n.text !== noteText);
-                            removedCount += (originalCount - updatedCategoryNotes[catId].length);
+                            if (updatedCategoryNotes[catId] && Array.isArray(updatedCategoryNotes[catId])) {
+                                const originalCount = updatedCategoryNotes[catId].length;
+                                updatedCategoryNotes[catId] = updatedCategoryNotes[catId].filter(n => 
+                                    n.text !== noteText && n.text !== noteTextAlt && n.text !== noteTextAlt2
+                                );
+                                removedCount += (originalCount - updatedCategoryNotes[catId].length);
+                            }
                         });
 
                         if (removedCount > 0) {
                             setCategoryNotes(updatedCategoryNotes);
                             updates.category_notes = updatedCategoryNotes;
                             
-                            const autoRemoveLog = createActivityLog('حذف ملاحظات تلقائية', `تم حذف ${removedCount} ملاحظة "لم يتم إكمال الطلب بناءً على طلب العميل"`);
+                            const autoRemoveLog = createActivityLog('حذف ملاحظات تلقائية', `تم حذف ${removedCount} ملاحظة "لم يتم إكمال الفحص بناءً على طلب العميل"`);
                             if (autoRemoveLog) {
                                 updates.activity_log = [autoRemoveLog, ...newActivityLog];
                                 setActivityLog(updates.activity_log);

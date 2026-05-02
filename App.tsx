@@ -39,6 +39,8 @@ const WaitingForPaymentRequests = lazy(() => import('./pages/WaitingForPaymentRe
 const Employees = lazy(() => import('./pages/Employees')); // Import Employees Page
 const Reservations = lazy(() => import('./pages/Reservations')); // Import Reservations Page
 
+import ForgotPassword from './pages/ForgotPassword';
+
 const PageLoader = () => (
   <div className="flex h-full items-center justify-center">
     <div className="flex flex-col items-center">
@@ -183,6 +185,12 @@ const AppContent: React.FC = () => {
 
   if (!isSetupComplete) {
     return <GeneralManagerSetup />;
+  }
+
+  // Handle paths that don't require authentication
+  const pathname = window.location.pathname;
+  if (pathname === '/forgot-password') {
+    return <ForgotPassword />;
   }
 
   if (!authUser) {

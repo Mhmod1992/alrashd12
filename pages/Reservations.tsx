@@ -196,7 +196,24 @@ const Reservations: React.FC = () => {
         // Add country code if missing (assuming Saudi Arabia +966)
         const phoneWithCode = cleanPhone.startsWith('966') ? cleanPhone : `966${cleanPhone.startsWith('0') ? cleanPhone.substring(1) : cleanPhone}`;
         
-        const message = `مرحباً ${res.client_name}، نؤكد استلام حجزك لسيارة ${res.car_details} لفحص ${res.service_type}. يرجى تأكيد الموعد.`;
+        const reservationId = res.reservation_number ? `RSV-${String(res.reservation_number).padStart(4, '0')}` : '---';
+        let message = `أهلاً بك *${res.client_name}*، يسعدنا إبلاغك بتأكيد حجزك لفحص السيارة بنجاح.`;
+        
+        const make = carMakes.find(m => m.id === res.car_make_id);
+        const model = carModels.find(m => m.id === res.car_model_id);
+        const carNameEn = make && model ? `${make.name_en} ${model.name_en}` : res.car_details;
+
+        if (carNameEn && carNameEn.trim()) {
+            message += `\nالسيارة: *${carNameEn}*`;
+        }
+        
+        message += `\nرقم الحجز الخاص بك: *${reservationId}*`;
+        
+        if (res.price) {
+            message += `\nالسعر: *${res.price}* ريال`;
+        }
+        
+        message += `\n\nفريقنا بانتظارك في موعدك المحدد. نتشرف بزيارتك`;
         await sendWhatsAppMessage(phoneWithCode, message);
     };
 

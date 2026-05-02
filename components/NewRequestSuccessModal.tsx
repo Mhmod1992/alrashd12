@@ -38,8 +38,8 @@ const NewRequestSuccessModal: React.FC = () => {
         }
         hideNewRequestSuccessModal();
         
-        // Redirect logic based on role
-        if (isReceptionist) {
+        // Redirect logic based on context or role
+        if (isReceptionist || newRequestSuccessState.showWhatsAppButton) {
             setPage('waiting-requests');
         } else {
             setPage('requests');
@@ -74,13 +74,18 @@ const NewRequestSuccessModal: React.FC = () => {
         const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);
         const inspectionTypeName = inspectionType ? inspectionType.name : 'فحص';
 
-        const message = `أهلاً ${client.name}، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${request.request_number}*\n📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
+        let carInfo = '';
+        if (request.car_snapshot) {
+            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
+        }
+
+        const message = `أهلاً *${client.name}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${request.request_number}*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
         
         await sendWhatsAppMessage(phone, message, client.name);
         hideNewRequestSuccessModal();
         
-        // Ensure receptionist goes to waiting list after sending message
-        if (isReceptionist) {
+        // Ensure we go to waiting list if we sent from there
+        if (isReceptionist || newRequestSuccessState.showWhatsAppButton) {
             setPage('waiting-requests');
         }
     };
@@ -123,7 +128,7 @@ const NewRequestSuccessModal: React.FC = () => {
                         العودة للقائمة
                     </Button>
                     
-                    {isReceptionist ? (
+                    { (isReceptionist || newRequestSuccessState.showWhatsAppButton) ? (
                         <Button onClick={handleSendToClient} variant="whatsapp" leftIcon={<WhatsappIcon className="w-5 h-5" />}>
                             إرسال للعميل
                         </Button>

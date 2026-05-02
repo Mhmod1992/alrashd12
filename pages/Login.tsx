@@ -359,6 +359,15 @@ const Login: React.FC = () => {
                                             <Button type="submit" className="w-full text-lg py-3 shadow-lg shadow-blue-500/30" disabled={isLoading}>
                                                 {isLoading ? 'جاري التحقق...' : 'دخول'}
                                             </Button>
+                                            <div className="text-center mt-3">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => window.location.href = '/forgot-password'}
+                                                    className="text-xs font-bold text-blue-600 hover:text-blue-500 transition-colors"
+                                                >
+                                                    نسيت كلمة المرور؟
+                                                </button>
+                                            </div>
                                         </div>
                                     </form>
                                     {allowSignup && (

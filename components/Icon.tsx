@@ -37,6 +37,7 @@ import FilterIcon from './icons/FilterIcon';
 import LockIcon from './icons/LockIcon';
 import SearchIcon from './icons/SearchIcon';
 import EyeIcon from './icons/EyeIcon';
+import ExternalLinkIcon from './icons/ExternalLinkIcon';
 import ArchiveIcon from './icons/ArchiveIcon';
 import StarIcon from './icons/StarIcon';
 import WhatsappIcon from './icons/WhatsappIcon';
@@ -50,17 +51,21 @@ import ClipboardCheckIcon from './icons/ClipboardCheckIcon';
 import BarChartIcon from './icons/BarChartIcon';
 import ShieldCheckIcon from './icons/ShieldCheckIcon';
 import DatabaseIcon from './icons/DatabaseIcon';
+import MinusIcon from './icons/MinusIcon';
 
 
 interface IconProps {
-  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'chevron-left' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan' | 'users' | 'clipboard-check' | 'bar-chart' | 'shield-check' | 'database';
+  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'chevron-left' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'external-link' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan' | 'users' | 'clipboard-check' | 'bar-chart' | 'shield-check' | 'database' | 'list' | 'plus' | 'minus';
   className?: string;
 }
 
 const Icon: React.FC<IconProps> = ({ name, className }) => {
   switch (name) {
     case 'add':
+    case 'plus':
       return <PlusIcon className={className} />;
+    case 'minus':
+      return <MinusIcon className={className} />;
     case 'lock':
       return <LockIcon className={className} />;
     case 'back':
@@ -137,6 +142,10 @@ const Icon: React.FC<IconProps> = ({ name, className }) => {
         return <SearchIcon className={className} />;
     case 'eye':
         return <EyeIcon className={className} />;
+    case 'external-link':
+        return <ExternalLinkIcon className={className} />;
+    case 'list':
+        return <ClipboardListIcon className={className} />;
     case 'archive':
         return <ArchiveIcon className={className} />;
     case 'star':

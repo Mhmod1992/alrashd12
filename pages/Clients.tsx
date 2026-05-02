@@ -501,7 +501,7 @@ const Clients: React.FC = () => {
     const handleSendWhatsAppReminder = async () => {
         if (!selectedClient || clientFinancials.totalRemaining <= 0) return;
         
-        const message = `عزيزي العميل ${selectedClient.name}، نود تذكيركم بوجود مبالغ مستحقة فحص سيارات طرفنا بقيمة ${clientFinancials.totalRemaining} ريال. يرجى التكرم بالسداد في أقرب وقت. شكراً لتعاملكم معنا.`;
+        const message = `عزيزي العميل *${selectedClient.name}*، نود تذكيركم بوجود مبالغ مستحقة فحص سيارات طرفنا بقيمة *${clientFinancials.totalRemaining}* ريال. يرجى التكرم بالسداد في أقرب وقت. شكراً لتعاملكم معنا.`;
         
         let phone = selectedClient.phone.replace(/\D/g, '');
         if (phone.startsWith('05')) {

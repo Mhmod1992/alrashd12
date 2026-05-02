@@ -57,11 +57,18 @@ const StatBlock: React.FC<{ title: string; count: number; icon: React.ReactEleme
 );
 
 
+// Module-level cache to preserve server-fetched data during navigation
+let moduleCachedServerData: InspectionRequest[] | null = null;
+let moduleCachedDateFilter = '';
+let moduleCachedPaymentFilter = '';
+let moduleCachedRangeStart = '';
+let moduleCachedRangeEnd = '';
+
 const Requests: React.FC = () => {
     const {
         requests, clients, cars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings,
         initialRequestModalState, setInitialRequestModalState,
-        searchedRequests, searchRequestByNumber, clearSearchedRequests,
+        searchedRequests, searchRequestByNumber, clearSearchedRequests, searchQuery, setSearchQuery,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
         page, setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage,
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
@@ -83,7 +90,28 @@ const Requests: React.FC = () => {
     const [dateFilter, setDateFilter] = useSessionStorage<'today' | 'all' | 'yesterday' | 'month' | 'range'>('requests_date_filter', 'today');
     const [rangeStartDate, setRangeStartDate] = useSessionStorage('requests_range_start', '');
     const [rangeEndDate, setRangeEndDate] = useSessionStorage('requests_range_end', '');
-    const [serverFetchedData, setServerFetchedData] = useState<InspectionRequest[] | null>(null);
+    const [serverFetchedData, setServerFetchedData] = useState<InspectionRequest[] | null>(() => {
+        if (
+            moduleCachedDateFilter === dateFilter &&
+            moduleCachedPaymentFilter === paymentFilter &&
+            moduleCachedRangeStart === rangeStartDate &&
+            moduleCachedRangeEnd === rangeEndDate
+        ) {
+            return moduleCachedServerData;
+        }
+        return null;
+    });
+
+    useEffect(() => {
+        if (serverFetchedData !== null) {
+            moduleCachedServerData = serverFetchedData;
+            moduleCachedDateFilter = dateFilter;
+            moduleCachedPaymentFilter = paymentFilter;
+            moduleCachedRangeStart = rangeStartDate;
+            moduleCachedRangeEnd = rangeEndDate;
+        }
+    }, [serverFetchedData, dateFilter, paymentFilter, rangeStartDate, rangeEndDate]);
+
     const [isFetchingDateRange, setIsFetchingDateRange] = useState(false);
     const [dbTotalCount, setDbTotalCount] = useState<number | null>(null);
 
@@ -267,7 +295,7 @@ const Requests: React.FC = () => {
     // --- REAL-TIME SYNC FOR FILTERED DATA ---
     useEffect(() => {
         if (!serverFetchedData) return;
-
+        
         let hasChanges = false;
         let newData = [...serverFetchedData];
         
@@ -331,6 +359,7 @@ const Requests: React.FC = () => {
     // --- DATABASE TOTAL COUNT FETCHING ---
     useEffect(() => {
         const fetchCount = async () => {
+            setDbTotalCount(null); // Force loading state for stats when filters change
             let startBound: string | undefined;
             let endBound: string | undefined;
 
@@ -378,8 +407,13 @@ const Requests: React.FC = () => {
     const [isSearching, setIsSearching] = useState(false);
 
     const clearFilters = useCallback(() => {
+        if (searchDebounceRef.current) {
+            window.clearTimeout(searchDebounceRef.current);
+        }
+        setIsSearching(false);
         setRequestNumberQuery('');
         setComprehensiveQuery('');
+        setSearchQuery('');
         setStatusFilter('الكل');
         setEmployeeFilter('الكل');
         setPaymentFilter('الكل');
@@ -403,57 +437,33 @@ const Requests: React.FC = () => {
             const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
             window.history.replaceState(window.history.state, '', newUrl);
         }
-    }, [setRequestNumberQuery, setComprehensiveQuery, setStatusFilter, setEmployeeFilter, setRangeStartDate, setRangeEndDate, setDateFilter, clearSearchedRequests]);
+    }, [setRequestNumberQuery, setComprehensiveQuery, setSearchQuery, setStatusFilter, setEmployeeFilter, setRangeStartDate, setRangeEndDate, setDateFilter, clearSearchedRequests]);
 
-    // Smart Back Logic: Scroll to and highlight the selected request when returning to the page
+    const hasScrolledRef = useRef<string | null>(null);
+
+    // Auto-scroll to selected request if it exists
     useEffect(() => {
-        // 1. Check if we should reset filters (Direct Navigation from Sidebar)
-        const resetFilters = window.sessionStorage.getItem('resetRequestsFilters');
-        if (resetFilters === 'true') {
-            window.sessionStorage.removeItem('resetRequestsFilters');
-            clearFilters();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            // Clear selected ID to ensure fresh start
-            setSelectedRequestId(null);
-            return;
-        }
-
-        // 2. Check if we should skip scroll restoration (e.g. after returning from Draft or completing a request)
-        const skipScroll = window.sessionStorage.getItem('skipScrollRestoration');
-        if (skipScroll === 'true') {
-            window.sessionStorage.removeItem('skipScrollRestoration');
-            setSelectedRequestId(null);
-            
-            // Requirements: Reset scroll to top, ignore local memory (clear filters), and refresh list
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            
-            // Clear all filters and search state
-            if (typeof clearFilters === 'function') {
-                clearFilters();
-            }
-            
-            // Trigger a refresh
-            if (typeof fetchRequests === 'function') {
-                fetchRequests();
-            }
-            return;
-        }
-
-        if (selectedRequestId) {
+        if (selectedRequestId && page === 'requests' && hasScrolledRef.current !== selectedRequestId) {
             // Wait for the table to render and data to be ready
             const timer = setTimeout(() => {
                 const element = document.getElementById(`request-row-${selectedRequestId}`);
                 if (element) {
                     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     triggerHighlight(selectedRequestId);
-                    // Clear the selected ID after a delay to prevent re-triggering on every render
-                    // but keep it long enough for the highlight animation to be visible
-                    setTimeout(() => setSelectedRequestId(null), 3000);
+                    
+                    // Mark as scrolled so it doesn't snap back repeatedly
+                    hasScrolledRef.current = selectedRequestId;
+                    
+                    // Also clear after a delay to be safe and clean the state
+                    setTimeout(() => {
+                        setSelectedRequestId(null);
+                        hasScrolledRef.current = null;
+                    }, 5000);
                 }
-            }, 800); // Slightly longer delay to ensure table data is loaded
+            }, 800); 
             return () => clearTimeout(timer);
         }
-    }, [selectedRequestId, triggerHighlight, setSelectedRequestId, fetchRequests, clearFilters, page]);
+    }, [selectedRequestId, triggerHighlight, setSelectedRequestId, page]);
 
     const isJustReturned = useRef(true);
 
@@ -461,9 +471,6 @@ const Requests: React.FC = () => {
     useEffect(() => {
         // 1. Reset on Return: Only on first render of this component session
         if (isJustReturned.current) {
-            if (dateFilter === 'yesterday') {
-                setDateFilter('today');
-            }
             isJustReturned.current = false;
             return;
         }
@@ -590,9 +597,20 @@ const Requests: React.FC = () => {
     // --- SERVER SIDE DATE FETCHING LOGIC ---
     const executeDateFetch = useCallback(async (start: string, end: string, paymentType?: PaymentType, isSilent = false) => {
         if (!isSilent) {
-            setIsFetchingDateRange(true);
-            setServerFetchedData(null);
+            // Prevent clearing data if it was just successfully restored from module cache
+            if (
+                serverFetchedData !== null && 
+                moduleCachedDateFilter === dateFilter && 
+                moduleCachedPaymentFilter === paymentFilter
+            ) {
+                // Do not clear, just optionally show mini-loader (isFetchingDateRange handles this without clearing UI)
+                setIsFetchingDateRange(true);
+            } else {
+                setIsFetchingDateRange(true);
+                setServerFetchedData(null);
+            }
         }
+        setSearchQuery('');
         clearSearchedRequests();
         setRequestNumberQuery('');
         setComprehensiveQuery('');
@@ -606,9 +624,58 @@ const Requests: React.FC = () => {
         } finally {
             setIsFetchingDateRange(false);
         }
-    }, [fetchRequestsByDateRange, clearSearchedRequests, addNotification]);
+    }, [fetchRequestsByDateRange, clearSearchedRequests, setSearchQuery, addNotification]);
 
     const lastDateFilter = useRef(dateFilter);
+
+    // Smart Back Logic: Scroll to and highlight the selected request when returning to the page
+    useEffect(() => {
+        // 1. Check if we should reset filters (Direct Navigation from Sidebar or Return from completion)
+        const resetFilters = window.sessionStorage.getItem('resetRequestsFilters');
+        const skipScroll = window.sessionStorage.getItem('skipScrollRestoration');
+
+        if (resetFilters === 'true') {
+            window.sessionStorage.removeItem('resetRequestsFilters');
+            window.sessionStorage.removeItem('skipScrollRestoration');
+            
+            // Bypass full spinner by ensuring the next effect doesn't think it's a new date change if they were on a different date filter
+            lastDateFilter.current = 'today';
+            
+            // Critical clear: ensure we start fresh on 'Today'
+            clearFilters();
+            return;
+        }
+
+        if (skipScroll === 'true') {
+            window.sessionStorage.removeItem('skipScrollRestoration');
+            
+            // Logic: If on a special filter (not today/yesterday) or searching, preserve everything for Smart Back
+            const isSpecialFilter = dateFilter !== 'today' && dateFilter !== 'yesterday';
+            const isSearchActive = requestNumberQuery.trim().length > 0 || comprehensiveQuery.trim().length > 0;
+
+            if (isSpecialFilter || isSearchActive) {
+                // Keep the filter and the selectedRequestId as is.
+                // The auto-scroll effect (line 445) will detect selectedRequestId and scroll once data renders.
+                return;
+            }
+
+            // Otherwise, for standard Today/Yesterday, we can reset to top for a clean UI
+            lastDateFilter.current = 'today';
+            clearFilters();
+            setSelectedRequestId(null);
+            
+            // Ensure scroll to top happens after UI settles
+            setTimeout(() => {
+                const mainContent = document.querySelector('main');
+                if (mainContent) {
+                    mainContent.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 100);
+            
+            return;
+        }
+    }, [clearFilters, setSelectedRequestId, page, dateFilter, requestNumberQuery, comprehensiveQuery]);
 
     useEffect(() => {
         const isDateChanged = lastDateFilter.current !== dateFilter;
@@ -629,11 +696,13 @@ const Requests: React.FC = () => {
         // Case: No date filter AND no payment filter -> use local paginated data
         if (dateFilter === 'all' && paymentFilter === 'الكل') {
             setServerFetchedData(null); 
+            setIsFetchingDateRange(false);
             return;
         }
 
         // Case: Custom range is handled by handleApplyCustomRange
         if (dateFilter === 'range') {
+            setIsFetchingDateRange(false);
             return;
         }
 
@@ -782,7 +851,12 @@ const Requests: React.FC = () => {
             phone = '966' + phone;
         }
 
-        const message = `مرحباً ${client.name}،\n\nنود تذكيركم بالطلب رقم #${request.request_number} الذي لا يزال بانتظار الدفع.\n\nالمبلغ المطلوب: ${request.price} ريال.\n\nشكراً لكم.`;
+        let carInfo = '';
+        if (request.car_snapshot) {
+            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
+        }
+
+        const message = `أهلاً *${client.name}*، نود تذكيركم بالطلب رقم *#${request.request_number}* الذي لا يزال بانتظار الدفع.\n\n${carInfo}المبلغ المطلوب: *${request.price}* ريال.\n\nشكراً لكم.`;
 
         await sendWhatsAppMessage(phone, message);
     };
@@ -832,13 +906,30 @@ const Requests: React.FC = () => {
         }
     }, [isModalOpen, dateFilter, setDateFilter, addNotification]);
 
-    const [displayLimit, setDisplayLimit] = useState(20);
+    const [displayLimit, setDisplayLimit] = useSessionStorage<number>('requests_display_limit', 20);
     const [isPaginatingLocal, setIsPaginatingLocal] = useState(false);
 
+    const prevFiltersRef = useRef({
+        dateFilter, paymentFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm
+    });
+
     useEffect(() => {
-        // Reset local limit when filters change significantly
-        setDisplayLimit(20);
-    }, [dateFilter, paymentFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm]);
+        const prev = prevFiltersRef.current;
+        if (
+            prev.dateFilter !== dateFilter ||
+            prev.paymentFilter !== paymentFilter ||
+            prev.statusFilter !== statusFilter ||
+            prev.employeeFilter !== employeeFilter ||
+            prev.requestNumberQuery !== requestNumberQuery ||
+            prev.comprehensiveQuery !== comprehensiveQuery ||
+            prev.waitingSearchTerm !== waitingSearchTerm
+        ) {
+            setDisplayLimit(20);
+            prevFiltersRef.current = {
+                dateFilter, paymentFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm
+            };
+        }
+    }, [dateFilter, paymentFilter, statusFilter, employeeFilter, requestNumberQuery, comprehensiveQuery, waitingSearchTerm, setDisplayLimit]);
 
     const { dataToDisplay, waitingPaymentRequests, carsWithHistory } = useMemo(() => {
         let sourceData: InspectionRequest[];
@@ -850,7 +941,10 @@ const Requests: React.FC = () => {
             sourceData = serverFetchedData;
         }
         else {
-            sourceData = requests;
+            // Requirement: "Don't show any data until all data is loaded and then apply filter"
+            // If we have a filter active (including default 'today'), we wait for serverFetchedData
+            // and don't fallback to the global 'requests' list (top 50) which would be misleading.
+            sourceData = (dateFilter !== 'all' || paymentFilter !== 'الكل') ? [] : requests;
         }
 
         // Map to keep track of identifiers across all local requests
@@ -1522,9 +1616,13 @@ const Requests: React.FC = () => {
             </div>
 
             {isFetchingDateRange && (
-                <div className="text-center p-8">
-                    <RefreshCwIcon className="w-8 h-8 mx-auto animate-spin text-blue-500" />
-                    <p className="mt-2 text-slate-500">جاري تحميل البيانات من الخادم...</p>
+                <div className="text-center p-20 animate-pulse">
+                    <div className="relative inline-block">
+                        <RefreshCwIcon className="w-12 h-12 mx-auto animate-spin text-blue-500 mb-4" />
+                        <div className="absolute top-0 right-0 w-3 h-3 bg-blue-400 rounded-full animate-ping"></div>
+                    </div>
+                    <p className="text-lg font-bold text-slate-700 dark:text-slate-200">جاري تحميل البيانات وتطبيق الفلاتر...</p>
+                    <p className="text-sm text-slate-400 dark:text-slate-500 mt-2 font-medium">يرجى الانتظار للحصول على أحدث المعلومات</p>
                 </div>
             )}
 
@@ -1568,7 +1666,7 @@ const Requests: React.FC = () => {
                 </div>
             )}
 
-            {(serverFetchedData || !isFetchingDateRange) && (
+            {!isFetchingDateRange && (
                 <>
                     <RequestTable
                         requests={paginatedDataToDisplay}

@@ -439,6 +439,7 @@ export interface DraftSettings {
   showImageForInspectionTypeIds: string[];
   imageStyle?: 'absolute' | 'float';
   customFields?: DraftCustomField[];
+  signatureFields?: { id: string; label: string; fontSize?: number; applicableInspectionTypeIds?: string[] }[];
   defaultPrintAsDraft?: boolean;
 }
 

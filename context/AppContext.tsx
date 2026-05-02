@@ -181,7 +181,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } = useThemeScope(authUser, setAuthUser, can);
     
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
-    const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; }>({ isOpen: false, requestNumber: null, requestId: null });
+    const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; }>({ isOpen: false, requestNumber: null, requestId: null, showWhatsAppButton: false });
     const [whatsappSuccessModal, setWhatsappSuccessModal] = useState<{ isOpen: boolean; clientName: string; phone: string; }>({ isOpen: false, clientName: '', phone: '' });
     const [shouldPrintDraft, setShouldPrintDraft] = useState(false);
 
@@ -1349,7 +1349,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const removeNotification = useCallback((id: string) => setNotifications(prev => prev.filter(n => n.id !== id)), []);
 
-    const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber }), []);
+    const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null, showWhatsAppButton: boolean = false) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber, showWhatsAppButton }), []);
     const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null }), []);
 
     const showWhatsAppSuccessModal = useCallback((clientName: string, phone: string) => setWhatsappSuccessModal({ isOpen: true, clientName, phone }), []);
@@ -1967,8 +1967,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setWhatsappApiStatus('disconnected');
             }
         } catch (error) {
-            console.error('WhatsApp Status Check Error:', error);
+            // Avoid flooding the console with errors if the API is simply down or unreachable
+            // This is common and not "dangerous", so we just set status to disconnected
             setWhatsappApiStatus('disconnected');
+            
+            // Log as a warning instead of error to avoid red noise in console
+            // only if it's a fetch/network error
+            if (error instanceof Error && (error.message.includes('fetch') || error.message.includes('NetworkError'))) {
+                console.warn('WhatsApp API connectivity check failed (API may be offline):', error.message);
+            } else {
+                console.error('WhatsApp Status Check Error:', error);
+            }
         }
     }, [settings.whatsappMode, settings.whatsappApiUrl, settings.whatsappApiKey]);
 

@@ -10,7 +10,7 @@ import SparklesIcon from '../components/icons/SparklesIcon';
 import ReportTranslationModal from '../components/ReportTranslationModal';
 import AiAnalysisModal from '../components/AiAnalysisModal';
 import Modal from '../components/Modal'; 
-import { InspectionRequest, ReportSettings, CustomFindingCategory, Note } from '../types';
+import { InspectionRequest, ReportSettings, CustomFindingCategory, Note, RequestStatus } from '../types';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import CameraIcon from '../components/icons/CameraIcon';
@@ -257,7 +257,8 @@ const PrintReport: React.FC = () => {
         selectedRequestId, requests, clients, cars, carMakes, 
         carModels, inspectionTypes, setPage, predefinedFindings, 
         customFindingCategories, settings, addNotification, goBack,
-        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage, authUser, technicians, employees, sendWhatsAppMessage
+        fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage, authUser, technicians, employees, sendWhatsAppMessage,
+        showConfirmModal, createActivityLog
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
@@ -300,6 +301,7 @@ const PrintReport: React.FC = () => {
     const [previewScale, setPreviewScale] = useState(1);
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+    const [isExtraMenuOpen, setIsExtraMenuOpen] = useState(false);
     
     // Check if coming from print button to hide back button
     const searchParams = new URLSearchParams(window.location.search);
@@ -608,6 +610,42 @@ const PrintReport: React.FC = () => {
 
     const handlePrint = () => {
         window.print();
+    };
+
+    const handleCompleteRequest = async () => {
+        if (!originalRequest || isSendingWhatsApp) return;
+
+        showConfirmModal({
+            title: 'إكمال الطلب',
+            message: 'هل أنت متأكد من تحديد هذا الطلب كمكتمل؟ لن يتمكن الفنيون من التعديل عليه بعد ذلك.',
+            onConfirm: async () => {
+                try {
+                    setIsSendingWhatsApp(true); // Reuse this to disable other buttons during operation
+                    const newLog = createActivityLog('تغيير حالة الطلب', 'تم تحديد الطلب كمكتمل من صفحة المعاينة');
+                    const newLogArray = newLog ? [newLog, ...(originalRequest.activity_log || [])] : (originalRequest.activity_log || []);
+                    
+                    await updateRequest({
+                        id: originalRequest.id,
+                        status: RequestStatus.COMPLETE,
+                        activity_log: newLogArray,
+                        updated_at: new Date().toISOString()
+                    });
+                    
+                    addNotification({ title: 'نجاح', message: 'تم تحديد الطلب كمكتمل بنجاح.', type: 'success' });
+                    
+                    // Set flags for Requests page to reset filters and scroll to top
+                    window.sessionStorage.setItem('skipScrollRestoration', 'true');
+                    
+                    setPage('requests');
+                    window.scrollTo(0, 0); // Reset scroll position to top
+                } catch (error) {
+                    console.error('Completion error:', error);
+                    addNotification({ title: 'خطأ', message: 'فشل إكمال الطلب.', type: 'error' });
+                } finally {
+                    setIsSendingWhatsApp(false);
+                }
+            }
+        });
     };
 
     const handleSaveAiAnalysis = async (analysis: string) => {
@@ -963,7 +1001,8 @@ const PrintReport: React.FC = () => {
     const uploadReportToStorage = async (blob: Blob): Promise<string> => {
         setLoadingState('جاري الرفع إلى الأرشيف...');
         const pdfFilename = getPdfFilename();
-        const customNameWithoutExt = pdfFilename.replace(/\.pdf$/, '');
+        const shortId = Math.random().toString(36).substring(2, 6);
+        const customNameWithoutExt = pdfFilename.replace(/\.pdf$/, '') + `_v${shortId}`;
         const file = new File([blob], pdfFilename, { type: 'application/pdf' });
         const publicUrl = await uploadImage(file, 'reports', undefined, customNameWithoutExt);
         
@@ -1000,7 +1039,7 @@ const PrintReport: React.FC = () => {
                         const response = await fetch(originalRequest.report_url, { method: 'HEAD' });
                         if (response.ok) {
                             // File exists, reuse the link
-                            await openWhatsapp(originalRequest.report_url);
+                            await openWhatsapp(`${originalRequest.report_url}?t=${Date.now()}`);
                             return;
                         } else {
                             console.log("Existing report URL returned non-OK status. Generating a new one.");
@@ -1017,7 +1056,7 @@ const PrintReport: React.FC = () => {
             if (!blob) return;
             
             const publicUrl = await uploadReportToStorage(blob);
-            await openWhatsapp(publicUrl);
+            await openWhatsapp(`${publicUrl}?t=${Date.now()}`);
         } catch (error: any) { 
             console.error('WhatsApp Share Error:', error);
             addNotification({ title: 'خطأ', message: 'فشل الإرسال.', type: 'error' }); 
@@ -1034,11 +1073,22 @@ const PrintReport: React.FC = () => {
 
         const clientNameRaw = client?.name || 'العميل';
         const clientNameFormatted = `*${clientNameRaw}*`;
-        const carInfo = `*${carMake?.name_ar || carMake?.name_en || ''} ${carModel?.name_ar || carModel?.name_en || ''} ${car?.year || ''}*`.trim();
+        
+        let carDisplay = '';
+        if (originalRequest?.car_snapshot) {
+            const snap = originalRequest.car_snapshot;
+            carDisplay = `*${snap.make_en || snap.make_ar} ${snap.model_en || snap.model_ar} ${snap.year || ''}*`.trim();
+        } else {
+            const carInfoEn = `*${carMake?.name_en || carMake?.name_ar || ''} ${carModel?.name_en || carModel?.name_ar || ''}*`.trim();
+            const carYear = car?.year || '';
+            carDisplay = `${carInfoEn} ${carYear}`.trim();
+        }
+
         const workshopName = `*${settings.appName}*`;
         const reviewLink = reportSettings.qrCodeContent || settings.googleMapsLink || '';
 
-        const message = `تحية طيبة، السيد/ة ${clientNameFormatted} المحترم/ة،\n\nنود إفادتكم بصدور تقرير الفحص الفني لمركبتكم ${carInfo}. يمكنكم استعراض التفاصيل الكاملة من خلال الرابط:\n🔗 ${link}\n\nنسعى دوماً لتقديم أفضل تجربة لعملائنا، لذا تهمنا مشاركتكم لتقييم الخدمة عبر الرابط التالي:\n⭐ ${reviewLink}\n\nمع خالص التقدير، إدارة وفريق ${workshopName}`;
+        const reportInstruction = settings.whatsappMode === 'api' ? '' : ' يمكنكم استعراض التفاصيل الكاملة من خلال الرابط:';
+        const message = `تحية طيبة، السيد/ة ${clientNameFormatted} المحترم/ة،\n\nنود إفادتكم بصدور تقرير الفحص الفني لمركبتكم ${carDisplay}.${reportInstruction}\n🔗 ${link}\n\nنسعى دوماً لتقديم أفضل تجربة لعملائنا، لذا تهمنا مشاركتكم لتقييم الخدمة عبر الرابط التالي:\n⭐ ${reviewLink}\n\nمع خالص التقدير، إدارة وفريق ${workshopName}`;
         
         await sendWhatsAppMessage(phone, message, clientNameRaw);
     };
@@ -1112,6 +1162,19 @@ const PrintReport: React.FC = () => {
                             <span className="hidden sm:inline ms-1">إغلاق الصفحة</span>
                         </Button>
                     )}
+
+                    {originalRequest?.status !== RequestStatus.COMPLETE && (
+                        <Button 
+                            variant="primary" 
+                            onClick={handleCompleteRequest} 
+                            size="sm" 
+                            className="bg-green-600 hover:bg-green-700 text-white border-green-700 md:px-4"
+                            disabled={isGenerating || isSendingWhatsApp}
+                        >
+                            <CheckCircleIcon className="w-4 h-4" />
+                            <span className="hidden sm:inline ms-1">إكمال الطلب</span>
+                        </Button>
+                    )}
                     
                     <Button
                         variant="secondary"
@@ -1124,22 +1187,61 @@ const PrintReport: React.FC = () => {
                         <span className="hidden sm:inline ms-1">المرفقات ({paperImages.length})</span>
                     </Button>
 
-                    <Button onClick={() => setIsAiModalOpen(true)} variant="secondary" size="sm" className="text-blue-600 border-blue-200 hover:bg-blue-50">
-                        <SparklesIcon className="w-4 h-4" />
-                        <span className="hidden sm:inline ms-1">تحليل التقرير</span>
-                    </Button>
+                    <div className="relative">
+                        <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            className="text-slate-700 border-slate-200 hover:bg-slate-50 flex items-center gap-1"
+                            onClick={() => setIsExtraMenuOpen(!isExtraMenuOpen)}
+                            disabled={isSendingWhatsApp}
+                        >
+                            <SparklesIcon className="w-4 h-4 text-blue-500" />
+                            <span className="hidden sm:inline">أدوات الذكاء</span>
+                            <Icon name="chevron-down" className={`w-3 h-3 transition-transform ${isExtraMenuOpen ? 'rotate-180' : ''}`} />
+                        </Button>
 
-                    {translatedRequest ? (
-                        <Button onClick={handleClearTranslation} variant="secondary" size="sm" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" disabled={isSendingWhatsApp}>
-                            <Icon name="refresh-cw" className="w-4 h-4" />
-                            <span className="hidden sm:inline ms-1">إلغاء الترجمة</span>
-                        </Button>
-                    ) : (
-                        <Button onClick={() => setIsTranslationModalOpen(true)} variant="secondary" size="sm" className="text-purple-600 border-purple-200 hover:bg-purple-50" disabled={isSendingWhatsApp}>
-                            <SparklesIcon className="w-4 h-4" />
-                            <span className="hidden sm:inline ms-1">ترجمة التقرير</span>
-                        </Button>
-                    )}
+                        <AnimatePresence>
+                            {isExtraMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setIsExtraMenuOpen(false)} />
+                                    <motion.div 
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        className="absolute top-full mt-2 left-0 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-20 overflow-hidden"
+                                    >
+                                        <button 
+                                            onClick={() => { setIsAiModalOpen(true); setIsExtraMenuOpen(false); }} 
+                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                                        >
+                                            <SparklesIcon className="w-4 h-4 text-blue-500" />
+                                            <span>تحليل التقرير (AI)</span>
+                                        </button>
+                                        
+                                        <div className="h-px bg-slate-100 dark:bg-slate-700 mx-2" />
+
+                                        {translatedRequest ? (
+                                            <button 
+                                                onClick={() => { handleClearTranslation(); setIsExtraMenuOpen(false); }} 
+                                                className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
+                                            >
+                                                <Icon name="refresh-cw" className="w-4 h-4" />
+                                                <span>إلغاء الترجمة</span>
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                onClick={() => { setIsTranslationModalOpen(true); setIsExtraMenuOpen(false); }} 
+                                                className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
+                                            >
+                                                <SparklesIcon className="w-4 h-4 text-purple-500" />
+                                                <span>ترجمة التقرير (AI)</span>
+                                            </button>
+                                        )}
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
+                    </div>
 
                     <Button onClick={handleWhatsAppShare} variant="whatsapp" size="sm" disabled={isGenerating || isSendingWhatsApp} className={isSendingWhatsApp ? 'opacity-90' : ''}>
                         {isSendingWhatsApp ? (
@@ -1463,11 +1565,29 @@ const PrintReport: React.FC = () => {
                         <Icon name="car" className="w-4 h-4" />
                         <span className="text-[10px] font-black uppercase tracking-widest">سعر الطلب</span>
                     </div>
-                    <div className="flex items-baseline gap-1.5">
-                        <span className="text-4xl font-black text-blue-600 dark:text-blue-400 drop-shadow-sm">
-                            {originalRequest?.price || 0}
-                        </span>
-                        <span className="text-sm font-black text-slate-500 dark:text-slate-400">ر.س</span>
+                    <div className="flex flex-col items-center gap-1">
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="text-4xl font-black text-blue-600 dark:text-blue-400 drop-shadow-sm">
+                                {originalRequest?.price || 0}
+                            </span>
+                            <span className="text-sm font-black text-slate-500 dark:text-slate-400">ر.س</span>
+                        </div>
+                        {originalRequest?.payment_type && (
+                            <div className={`text-[10px] font-bold px-3 py-1 rounded-full border shadow-sm ${
+                                originalRequest.payment_type === 'نقدي' 
+                                    ? 'bg-green-100 text-green-700 border-green-200' 
+                                    : originalRequest.payment_type === 'تحويل'
+                                    ? 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                    : originalRequest.payment_type === 'بطاقة'
+                                    ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                    : originalRequest.payment_type === 'غير مدفوع'
+                                    ? 'bg-red-100 text-red-700 border-red-200'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                            }`}>
+                                {originalRequest.payment_type === 'غير مدفوع' ? 'آجل' : 
+                                 originalRequest.payment_type === 'بطاقة' ? 'شبكة' : originalRequest.payment_type}
+                            </div>
+                        )}
                     </div>
                     <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent my-1" />
                     <div className="flex flex-col items-center gap-1">

@@ -69,6 +69,15 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
     // Determine layout mode: 'float' (default if undefined) or 'absolute'
     const isFloatMode = draftSettings?.imageStyle !== 'absolute';
 
+    const visibleSignatures = React.useMemo(() => {
+        if (!draftSettings?.signatureFields) return [];
+        return draftSettings.signatureFields.filter(field => 
+            !field.applicableInspectionTypeIds || 
+            field.applicableInspectionTypeIds.length === 0 || 
+            field.applicableInspectionTypeIds.includes(inspectionType.id)
+        );
+    }, [draftSettings?.signatureFields, inspectionType.id]);
+
     const plateToDisplay = car.vin ? `شاصي: ${car.vin}` : (car.plate_number || '');
 
     return (
@@ -159,7 +168,19 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
             </header>
 
             <section className="mt-4 flex-grow flex flex-col z-10">
-                <h2 className="text-lg font-bold mb-2">ملاحظات الفحص</h2>
+                <div className="flex justify-between items-end mb-2">
+                    <h2 className="text-lg font-bold">ملاحظات الفحص</h2>
+                    {visibleSignatures.length > 0 && (
+                        <div className="flex gap-6 items-end text-sm">
+                            {visibleSignatures.map(field => (
+                                <div key={field.id} className="flex items-baseline gap-2">
+                                    <span className="font-bold" style={{ fontSize: field.fontSize ? `${field.fontSize}px` : '14px' }}>{field.label}</span>
+                                    <span className="text-gray-400">.......................</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
                 <div className="flex-grow p-2 lined-paper border border-gray-300 dark:border-slate-600 rounded-md">
                     {/* FLOAT POSITIONED IMAGE (Rendered inside flow if mode is float) */}
                     {showImage && isFloatMode && (
@@ -240,6 +261,18 @@ const RequestDraft: React.FC = () => {
         }
     }, [selectedRequestId, requests, fetchAndUpdateSingleRequest, isFetchingRequest]);
 
+    const request = requests.find(r => r.id === selectedRequestId);
+    
+    // Data fetching logic
+    const client = request ? clients.find(c => c.id === request.client_id) : undefined;
+    const car = request ? cars.find(c => c.id === request.car_id) : undefined;
+    const carModel = car ? carModels.find(m => m.id === car.model_id) : undefined;
+    const carMake = car ? carMakes.find(m => m.id === car.make_id) : undefined;
+    const inspectionType = request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined;
+
+    // Loading State (While fetching data OR while preloading image)
+    const isDataMissing = !request || !client || !car || !inspectionType;
+
     // Image Preloading Logic
     useEffect(() => {
         // If there's a custom image in settings, we must wait for it to load
@@ -273,32 +306,20 @@ const RequestDraft: React.FC = () => {
         }
     }, [settings.draftSettings?.customImageUrl]);
 
-    // Printing Logic (Only when content is ready)
+    // Printing Logic (Only when content is ready AND data is available)
     React.useEffect(() => {
-        if (shouldPrintDraft && isContentReady) {
+        if (shouldPrintDraft && isContentReady && !isDataMissing && !isFetchingRequest && !isRefreshing) {
             // Short delay to allow DOM render after isContentReady becomes true
             const timer = setTimeout(() => {
                 window.print();
                 window.sessionStorage.setItem('skipScrollRestoration', 'true');
                 setShouldPrintDraft(false); 
                 goBack(); 
-            }, 500);
+            }, 1000); // 1 second delay to ensure everything is rendered correctly
 
             return () => clearTimeout(timer);
         }
-    }, [shouldPrintDraft, isContentReady, setShouldPrintDraft, goBack]);
-
-    const request = requests.find(r => r.id === selectedRequestId);
-    
-    // Data fetching logic
-    const client = request ? clients.find(c => c.id === request.client_id) : undefined;
-    const car = request ? cars.find(c => c.id === request.car_id) : undefined;
-    const carModel = car ? carModels.find(m => m.id === car.model_id) : undefined;
-    const carMake = car ? carMakes.find(m => m.id === car.make_id) : undefined;
-    const inspectionType = request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined;
-
-    // Loading State (While fetching data OR while preloading image)
-    const isDataMissing = !request || !client || !car || !inspectionType;
+    }, [shouldPrintDraft, isContentReady, isDataMissing, isFetchingRequest, isRefreshing, setShouldPrintDraft, goBack]);
 
     if (isDataMissing || !isContentReady || isFetchingRequest) {
         return (

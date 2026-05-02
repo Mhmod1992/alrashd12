@@ -1,5 +1,6 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Font, Image, Svg, Path, Circle, Line } from '@react-pdf/renderer';
+import { Document, Page, View, StyleSheet, Font, Image, Svg, Path, Circle, Line } from '@react-pdf/renderer';
+import { ArabicText as Text } from './ArabicText';
 
 // Register Arabic Font
 Font.register({

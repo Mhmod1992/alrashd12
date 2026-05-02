@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Image, Font, Svg, Path, Circle } from '@react-pdf/renderer';
+import { Document, Page, View, StyleSheet, Image, Font, Svg, Path, Circle } from '@react-pdf/renderer';
+import { ArabicText as Text } from '../ArabicText';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor, ReportStamp, Technician, Employee } from '../../types';
 
 // Register Arabic Font (Tajawal)

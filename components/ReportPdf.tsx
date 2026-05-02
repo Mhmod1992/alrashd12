@@ -1,5 +1,6 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
+import { Document, Page, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
+import { ArabicText as Text } from './ArabicText';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings } from '../types';
 
 // Register Arabic font

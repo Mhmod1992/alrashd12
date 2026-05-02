@@ -30,6 +30,7 @@ interface NewRequestFormProps {
     initialReservationData?: Partial<Reservation>;
     initialData?: InspectionRequest; // For Edit Mode
     isReservationMode?: boolean;
+    forceWhatsApp?: boolean;
 }
 
 const NewRequestForm: React.FC<NewRequestFormProps> = ({
@@ -42,7 +43,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     onSuccess,
     initialReservationData,
     initialData,
-    isReservationMode = false
+    isReservationMode = false,
+    forceWhatsApp = false
 }) => {
     const {
         settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addNotification,
@@ -1437,7 +1439,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 });
 
                 if (newAddedRequest) {
-                    showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number);
+                    showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number, forceWhatsApp);
                     onSuccess(newAddedRequest);
                 }
             }

@@ -704,10 +704,14 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
 
                         return (
                             <motion.tr 
+                                layout
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
-                                transition={{ duration: 0.2 }}
+                                transition={{ 
+                                    layout: { type: "spring", stiffness: 500, damping: 50, mass: 1 },
+                                    opacity: { duration: 0.2 } 
+                                }}
                                 key={request.id} 
                                 id={`request-row-${request.id}`} 
                                 className={rowClass}

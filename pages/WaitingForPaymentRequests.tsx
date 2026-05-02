@@ -195,7 +195,12 @@ const WaitingForPaymentRequests: React.FC = () => {
             phone = '966' + phone;
         }
     
-        const message = `مرحباً ${client.name}،\n\nنود تذكيركم بالطلب رقم #${request.request_number} الذي لا يزال بانتظار الدفع.\n\nالمبلغ المطلوب: ${request.price} ريال.\n\nشكراً لكم.`;
+        let carInfo = '';
+        if (request.car_snapshot) {
+            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
+        }
+    
+        const message = `أهلاً *${client.name}*، نود تذكيركم بالطلب رقم *#${request.request_number}* الذي لا يزال بانتظار الدفع.\n\n${carInfo}المبلغ المطلوب: *${request.price}* ريال.\n\nشكراً لكم.`;
         
         await sendWhatsAppMessage(phone, message);
     };
@@ -323,6 +328,7 @@ const WaitingForPaymentRequests: React.FC = () => {
                         brokers={brokers}
                         onCancel={() => setIsModalOpen(false)}
                         onSuccess={() => setIsModalOpen(false)}
+                        forceWhatsApp={true}
                     />
                 </Modal>
             )}

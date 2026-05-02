@@ -103,7 +103,6 @@ export const useDataScope = (
             ] = results;
 
             if (waError) console.error("WA Error:", waError);
-            console.log("WA Msgs:", waMsgs?.length);
 
             // Cleanup old notifications (older than 30 days)
             // Only run cleanup once per day for admins/managers
@@ -218,17 +217,33 @@ export const useDataScope = (
         if (!fetchedRequests || fetchedRequests.length === 0) return;
 
         const clientIdsToFetch = Array.from(new Set(fetchedRequests.map(r => r.client_id)))
-            .filter(id => id && !clients.some(c => c.id === id));
+            .filter(id => id && !clients.some(c => c.id === id)) as string[];
 
         const carIdsToFetch = Array.from(new Set(fetchedRequests.map(r => r.car_id)))
-            .filter(id => id && !cars.some(c => c.id === id));
+            .filter(id => id && !cars.some(c => c.id === id)) as string[];
+
+        const CHUNK_SIZE = 50; // Use small chunks to keep URLs short
+
+        const fetchInChunks = async (ids: string[], table: string, select: string = '*') => {
+            const results: any[] = [];
+            for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+                const chunk = ids.slice(i, i + CHUNK_SIZE);
+                const { data, error } = await supabase.from(table).select(select).in('id', chunk);
+                if (error) {
+                    console.error(`Error fetching ${table} chunk:`, error);
+                    continue;
+                }
+                if (data) results.push(...data);
+            }
+            return results;
+        };
 
         const promises = [];
 
         if (clientIdsToFetch.length > 0) {
             promises.push(
-                supabase.from('clients').select('*, inspection_requests(count)').in('id', clientIdsToFetch)
-                    .then(({ data }) => {
+                fetchInChunks(clientIdsToFetch, 'clients', '*, inspection_requests(count)')
+                    .then(data => {
                         if (data && data.length > 0) {
                             setClients(prev => {
                                 const existingIds = new Set(prev.map(c => c.id));
@@ -242,8 +257,8 @@ export const useDataScope = (
 
         if (carIdsToFetch.length > 0) {
             promises.push(
-                supabase.from('cars').select('*').in('id', carIdsToFetch)
-                    .then(({ data }) => {
+                fetchInChunks(carIdsToFetch, 'cars')
+                    .then(data => {
                         if (data && data.length > 0) {
                             setCars(prev => {
                                 const existingIds = new Set(prev.map(c => c.id));
