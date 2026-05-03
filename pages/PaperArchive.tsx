@@ -410,8 +410,8 @@ const PaperArchive: React.FC = () => {
 
             for (let i = 1; i <= numPages; i++) {
                 const page = await pdf.getPage(i);
-                // Scale 1.5 usually gives a good balance between quality and size (around 1200px width for A4)
-                const viewport = page.getViewport({ scale: 1.5 });
+                // Scale 4.0 provides very high resolution (approx 288 DPI), ensuring crisp text
+                const viewport = page.getViewport({ scale: 4.0 });
                 
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
@@ -429,12 +429,13 @@ const PaperArchive: React.FC = () => {
                 await page.render(renderContext).promise;
 
                 const blob = await new Promise<Blob | null>((resolve) => {
-                    // Compress to JPEG with 0.7 quality to keep size small
-                    canvas.toBlob(resolve, 'image/jpeg', 0.7);
+                    // Compress to JPEG with 0.8 quality for crisp text without huge file size
+                    canvas.toBlob(resolve, 'image/jpeg', 0.8);
                 });
 
                 if (blob) {
-                    const fileName = `${file.name.replace(/\.[^/.]+$/, "")}_page_${i}.jpg`;
+                    // Start filename with 'scanned_' to bypass secondary downscaling in optimizeDocumentImage
+                    const fileName = `scanned_${file.name.replace(/\.[^/.]+$/, "")}_page_${i}.jpg`;
                     extractedFiles.push(new File([blob], fileName, { type: 'image/jpeg' }));
                 }
             }
