@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, Cell } from 'recharts';
 import { useAppContext } from '../context/AppContext';
 import Icon from '../components/Icon';
 import UserCircleIcon from '../components/icons/UserCircleIcon';
@@ -302,9 +303,9 @@ const UnifiedDirectory: React.FC = () => {
                 if (['general_manager', 'manager', 'receptionist', 'employee'].includes(roleFilter)) {
                     matchesRole = person.role === roleFilter;
                 } 
-                // If filtering by 'technician' (which encompasses all manual laborers stored in 'technicians' table)
+                // If filtering by 'technician' (which encompasses all manual laborers stored in 'technicians' table OR employees marked as technicians)
                 else if (roleFilter === 'technician') {
-                    matchesRole = person.role === 'technician'; // This comes from our normalization above
+                    matchesRole = person.role === 'technician' || (person.type === 'employee' && person.preferences?.isTechnician); // Include tech-enabled employees
                 }
             }
 
@@ -381,7 +382,10 @@ const UnifiedDirectory: React.FC = () => {
                                 </td>
                                 <td className="px-6 py-4">
                                     <span className={`px-2 py-1 rounded text-xs font-bold ${person.type === 'employee' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-                                        {person.type === 'employee' ? (person.role === 'general_manager' ? 'مدير عام' : person.role === 'manager' ? 'مدير' : person.role === 'receptionist' ? 'استقبال' : 'موظف نظام') : (person.title || 'فني / عامل')}
+                                        {person.type === 'employee' ? 
+                                            (person.preferences?.isTechnician && person.title ? person.title : 
+                                                (person.role === 'general_manager' ? 'مدير عام' : person.role === 'manager' ? 'مدير' : person.role === 'receptionist' ? 'استقبال' : 'موظف نظام')
+                                            ) : (person.title || 'فني / عامل')}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300 font-numeric">
@@ -424,59 +428,152 @@ const UnifiedDirectory: React.FC = () => {
     );
 }
 
-// Simple Bar Chart using HTML/Tailwind for visual representation
+const getColorHex = (tailwindClass: string) => {
+    switch (tailwindClass) {
+        case 'bg-blue-500': return '#3b82f6';
+        case 'bg-purple-500': return '#a855f7';
+        case 'bg-orange-500': return '#f97316';
+        default: return '#64748b';
+    }
+};
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-white dark:bg-slate-800 p-2 border border-slate-200 dark:border-slate-700 rounded shadow-sm text-xs">
+                <p className="font-bold text-slate-700 dark:text-slate-200">{label}</p>
+                <p className="text-slate-600 dark:text-slate-400 font-numeric">{`${payload[0].value} مشاركة`}</p>
+            </div>
+        );
+    }
+    return null;
+};
+
+// Recharts Bar Chart
 const PerformanceBarChart: React.FC<{ data: { name: string; count: number; color: string }[] }> = ({ data }) => {
-    const maxCount = Math.max(...data.map(d => d.count), 1);
-    
     return (
-        <div className="flex flex-col gap-3 w-full h-48 justify-end items-center">
-            <div className="flex justify-around items-end w-full h-full gap-4">
-                {data.map((item, i) => {
-                    const height = (item.count / maxCount) * 100;
-                    return (
-                        <div key={i} className="flex flex-col items-center flex-1 h-full justify-end group">
-                            <div className="text-[10px] font-bold text-slate-500 mb-1 opacity-0 group-hover:opacity-100 transition-opacity font-numeric">{item.count}</div>
-                            <div 
-                                className={`w-full max-w-[40px] rounded-t-lg transition-all duration-500 ease-out hover:opacity-80 ${item.color}`}
-                                style={{ height: `${height}%` }}
-                            ></div>
-                            <div className="mt-2 text-[10px] font-bold text-slate-600 dark:text-slate-400 text-center truncate w-full">{item.name}</div>
-                        </div>
-                    );
-                })}
+        <div className="w-full h-48" style={{ direction: 'ltr' }}>
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data} margin={{ top: 20, right: 0, left: 0, bottom: 0 }} barSize={32}>
+                    <XAxis 
+                        dataKey="name" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b' }} 
+                        dy={8}
+                    />
+                    <Tooltip cursor={{ fill: 'transparent' }} content={<CustomTooltip />} />
+                    <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={getColorHex(entry.color)} />
+                        ))}
+                    </Bar>
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
+
+// Component for displaying top performers in a category
+const CategoryRankCard: React.FC<{ 
+    title: string; 
+    icon: React.ReactNode; 
+    items: { name: string; count: number; color: string; id: string }[];
+    onItemClick: (id: string) => void;
+    accentColor: string;
+    unit: string;
+}> = ({ title, icon, items, onItemClick, accentColor, unit }) => {
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col">
+            <div className={`p-3 border-b border-slate-50 dark:border-slate-700/50 flex items-center justify-between ${accentColor}`}>
+                <div className="flex items-center gap-2">
+                    {icon}
+                    <h3 className="font-bold text-sm">{title}</h3>
+                </div>
+                <span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">{items.length} موظف</span>
+            </div>
+            <div className="p-2 space-y-1 flex-1">
+                {items.length > 0 ? (
+                    items.map((item, index) => (
+                        <button 
+                            key={item.id}
+                            onClick={() => onItemClick(item.id)}
+                            className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group"
+                        >
+                            <div className="flex items-center gap-2">
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700 ring-4 ring-yellow-50' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                                    {index + 1}
+                                </div>
+                                <span className="text-xs font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 transition-colors">{item.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="text-xs font-bold font-numeric text-slate-800 dark:text-slate-100">{item.count}</span>
+                                <span className="text-[10px] text-slate-400">{unit}</span>
+                            </div>
+                        </button>
+                    ))
+                ) : (
+                    <div className="py-8 text-center text-slate-400 text-xs">لا يوجد بيانات</div>
+                )}
             </div>
         </div>
     );
 };
 
 const PerformanceView: React.FC = () => {
-    const { employees, technicians, requests, setSelectedRequestId, setPage } = useAppContext();
+    const { employees, technicians, requests, customFindingCategories, setSelectedRequestId, setPage, fetchRequestsByDateRange } = useAppContext();
     
     // Filters State
-    const [viewFilter, setViewFilter] = useState<'all' | 'employee' | 'technician'>('all');
-    const [sortOrder, setSortOrder] = useState<'most_active' | 'least_active' | 'name'>('most_active'); // Removed revenue sort
-    const [dateFilterType, setDateFilterType] = useState<'today' | 'yesterday' | 'month' | 'year' | 'custom'>('month');
+    const [viewFilter, setViewFilter] = useState<'all' | 'employee' | 'technician' | 'creators' | 'noters' | 'inspectors'>('all');
+    const [sortOrder, setSortOrder] = useState<'most_active' | 'least_active' | 'name'>('most_active');
+    const [dateFilterType, setDateFilterType] = useState<'today' | 'yesterday' | 'month' | 'year' | 'custom'>('today');
     
     const [startDate, setStartDate] = useState<string>(() => {
         const d = new Date();
-        d.setDate(1); // Default to start of current month
-        return d.toISOString().split('T')[0];
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
     const [endDate, setEndDate] = useState<string>(() => {
         const d = new Date();
-        return d.toISOString().split('T')[0];
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
+
+    const [serverRequests, setServerRequests] = useState<InspectionRequest[]>([]);
+    const [isLoadingServer, setIsLoadingServer] = useState(false);
+
+    const fetchDataForRange = async (startStr: string, endStr: string) => {
+        setIsLoadingServer(true);
+        try {
+            const startStrDate = new Date(startStr);
+            startStrDate.setHours(0, 0, 0, 0);
+            
+            const endStrDate = new Date(endStr);
+            endStrDate.setHours(23, 59, 59, 999);
+
+            // Fetch current AND previous period for growth stats
+            const duration = endStrDate.getTime() - startStrDate.getTime();
+            const prevEnd = new Date(startStrDate.getTime() - 1);
+            const prevStart = new Date(prevEnd.getTime() - duration);
+
+            const data = await fetchRequestsByDateRange(prevStart.toISOString(), endStrDate.toISOString());
+            setServerRequests(data || []);
+        } catch (error) {
+            console.error("Failed to fetch performance data:", error);
+        } finally {
+            setIsLoadingServer(false);
+        }
+    };
 
     // Handle Quick Date Filters
     const applyDateFilter = (type: 'today' | 'yesterday' | 'month' | 'year' | 'custom') => {
         setDateFilterType(type);
+        if (type === 'custom') return; // Do not overwrite dates, wait for user search
+        
         const now = new Date();
         let start = new Date();
         let end = new Date();
 
         switch (type) {
             case 'today':
-                // Already set to now
                 break;
             case 'yesterday':
                 start.setDate(now.getDate() - 1);
@@ -490,66 +587,155 @@ const PerformanceView: React.FC = () => {
                 start = new Date(now.getFullYear(), 0, 1);
                 end = new Date(now.getFullYear(), 11, 31);
                 break;
-            case 'custom':
-                // Do not change dates, user will select
-                return;
         }
 
-        // if (type !== 'custom') { // Removed redundant check
-            setStartDate(start.toISOString().split('T')[0]);
-            setEndDate(end.toISOString().split('T')[0]);
-        // }
+        const formatDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        
+        const s = formatDateStr(start);
+        const e = formatDateStr(end);
+        
+        setStartDate(s);
+        setEndDate(e);
+        
+        if (type !== 'today') {
+            fetchDataForRange(s, e);
+        }
     };
 
+    // Initialize initial load for 'today' if needed, though we rely on local 'requests' array.
+    
     // Details Modal State
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-    const [selectedPersonDetails, setSelectedPersonDetails] = useState<{ name: string; requests: InspectionRequest[] } | null>(null);
+    const [detailsTab, setDetailsTab] = useState<'all' | 'created' | 'noted' | 'inspected' | 'multiple_sections'>('all');
+    const [selectedPersonDetails, setSelectedPersonDetails] = useState<{ 
+        name: string; 
+        requests: InspectionRequest[];
+        created: InspectionRequest[];
+        inspected: InspectionRequest[];
+        noted: InspectionRequest[];
+        multipleSections: InspectionRequest[];
+    } | null>(null);
+
+    const allStaff = useMemo(() => [
+        ...employees.map(e => ({ ...e, type: 'employee' as const })),
+        ...technicians.map(t => ({ ...t, type: 'technician' as const }))
+    ], [employees, technicians]);
 
     const stats = useMemo(() => {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
+        const start = startDate ? new Date(startDate) : new Date(0);
+        if (!isNaN(start.getTime())) start.setHours(0, 0, 0, 0);
+        
+        const end = endDate ? new Date(endDate) : new Date();
+        if (!isNaN(end.getTime())) end.setHours(23, 59, 59, 999);
 
         // Previous Period Logic (Automatic)
-        const duration = end.getTime() - start.getTime();
+        const duration = (!isNaN(end.getTime()) && !isNaN(start.getTime())) ? end.getTime() - start.getTime() : 0;
         const prevEnd = new Date(start.getTime() - 1);
         const prevStart = new Date(prevEnd.getTime() - duration);
 
-        const currentRequests = requests.filter(r => {
+        const activeRequests = dateFilterType === 'today' ? requests : serverRequests;
+
+        const currentRequests = activeRequests.filter(r => {
+            if (!r.created_at) return false;
             const d = new Date(r.created_at);
-            return d >= start && d <= end;
+            return !isNaN(d.getTime()) && d >= start && d <= end;
         });
 
-        const prevRequests = requests.filter(r => {
+        const prevRequests = activeRequests.filter(r => {
+            if (!r.created_at) return false;
             const d = new Date(r.created_at);
-            return d >= prevStart && d <= prevEnd;
+            return !isNaN(d.getTime()) && d >= prevStart && d <= prevEnd;
         });
-
-        const allStaff = [
-            ...employees.map(e => ({ ...e, type: 'employee' as const })),
-            ...technicians.map(t => ({ ...t, type: 'technician' as const }))
-        ];
 
         let processedStats = allStaff.map((person: any) => {
-            // Function to filter requests for a person
-            const filterPersonRequests = (reqs: InspectionRequest[]) => {
-                if (person.type === 'employee') {
-                     return reqs.filter(r => 
-                        r.employee_id === person.id || 
-                        Object.values(r.technician_assignments || {}).some(ids => ids.includes(person.id))
-                     );
-                } else {
-                     return reqs.filter(r => 
-                        Object.values(r.technician_assignments || {}).some(ids => ids.includes(person.id))
-                     );
-                }
+            const analyzeRequests = (reqs: InspectionRequest[]) => {
+                const created: InspectionRequest[] = [];
+                const inspected: InspectionRequest[] = [];
+                const noted: InspectionRequest[] = [];
+                const multipleSectionsArr: InspectionRequest[] = [];
+                const allUnique = new Map<string, InspectionRequest>();
+                let totalSectionsInspected = 0;
+                let multipleSectionsCount = 0;
+
+                reqs.forEach(r => {
+                    let involved = false;
+
+                    // 1. Created (محاسب / منشئ الطلب)
+                    if (person.type === 'employee' && r.employee_id === person.id) {
+                        created.push(r);
+                        involved = true;
+                    }
+
+                    // 2. Inspected (الفاحص / الفني)
+                    let sectionsInspectedInThisReq = 0;
+                    if (r.technician_assignments) {
+                        Object.values(r.technician_assignments).forEach(techList => {
+                            if (techList.includes(person.id)) {
+                                sectionsInspectedInThisReq++;
+                            }
+                        });
+                    }
+
+                    if (sectionsInspectedInThisReq > 0) {
+                        inspected.push(r);
+                        totalSectionsInspected += sectionsInspectedInThisReq;
+                        if (sectionsInspectedInThisReq > 1) {
+                            multipleSectionsCount++;
+                            multipleSectionsArr.push(r);
+                        }
+                        involved = true;
+                    }
+
+                    // 3. Noted (مدخل البيانات / كاتب الملاحظات أو من عدل بنود)
+                    let wroteNote = false;
+                    
+                    // Check activity logs
+                    if (r.activity_log?.some(log => log.employeeId === person.id && (
+                        log.action.includes('ملاحظة') || 
+                        log.action.includes('فحص') || 
+                        log.action.includes('صوتي') || 
+                        log.action.includes('حفظ مؤقت')
+                    ))) {
+                        wroteNote = true;
+                    }
+
+                    if (!wroteNote && r.general_notes?.some(n => n.authorId === person.id || (n.authorName === person.name && person.type === 'employee'))) {
+                        wroteNote = true;
+                    }
+                    if (!wroteNote && r.category_notes) {
+                        wroteNote = Object.values(r.category_notes).flat().some(n => n.authorId === person.id || (n.authorName === person.name && person.type === 'employee'));
+                    }
+                    if (wroteNote) {
+                        noted.push(r);
+                        involved = true;
+                    }
+
+                    if (involved) {
+                        allUnique.set(r.id, r);
+                    }
+                });
+
+                return {
+                    created,
+                    inspected,
+                    noted,
+                    createdCount: created.length,
+                    inspectedCount: totalSectionsInspected,
+                    inspectedCarsCount: inspected.length,
+                    multipleSectionsCount: multipleSectionsCount,
+                    multipleSections: multipleSectionsArr,
+                    notedCount: noted.length,
+                    allUnique: Array.from(allUnique.values())
+                };
             };
 
-            const personCurrentReqs = filterPersonRequests(currentRequests);
-            const personPrevReqs = filterPersonRequests(prevRequests);
+            const currentAnalysis = analyzeRequests(currentRequests);
+            const prevAnalysis = analyzeRequests(prevRequests);
 
-            // Growth Calculation
+            const personCurrentReqs = currentAnalysis.allUnique;
+            const personPrevReqs = prevAnalysis.allUnique;
+
+            // Growth Calculation based on allUnique length
             const growthPercent = personPrevReqs.length > 0 
                 ? Math.round(((personCurrentReqs.length - personPrevReqs.length) / personPrevReqs.length) * 100)
                 : (personCurrentReqs.length > 0 ? 100 : 0);
@@ -558,8 +744,17 @@ const PerformanceView: React.FC = () => {
                 id: person.id,
                 name: person.name,
                 type: person.type,
-                role: person.role || person.title || 'فني',
+                role: person.title || (person.role === 'employee' ? 'موظف' : person.role) || 'فني',
                 requestCount: personCurrentReqs.length,
+                createdCount: currentAnalysis.createdCount,
+                inspectedCount: currentAnalysis.inspectedCount,
+                inspectedCarsCount: currentAnalysis.inspectedCarsCount,
+                multipleSectionsCount: currentAnalysis.multipleSectionsCount,
+                notedCount: currentAnalysis.notedCount,
+                createdRequests: currentAnalysis.created,
+                inspectedRequests: currentAnalysis.inspected,
+                multipleSectionsRequests: currentAnalysis.multipleSections,
+                notedRequests: currentAnalysis.noted,
                 prevRequestCount: personPrevReqs.length,
                 growth: growthPercent,
                 associatedRequests: personCurrentReqs
@@ -567,14 +762,25 @@ const PerformanceView: React.FC = () => {
         });
 
         // 1. Filter by Type
-        if (viewFilter !== 'all') {
-            processedStats = processedStats.filter(p => p.type === viewFilter);
+        if (viewFilter === 'creators') {
+            processedStats = processedStats.filter(p => p.createdCount > 0);
+        } else if (viewFilter === 'noters') {
+            processedStats = processedStats.filter(p => p.notedCount > 0);
+        } else if (viewFilter === 'inspectors') {
+            processedStats = processedStats.filter(p => p.inspectedCount > 0);
         }
 
         // 2. Sort
         processedStats.sort((a, b) => {
-            if (sortOrder === 'most_active') return b.requestCount - a.requestCount;
-            if (sortOrder === 'least_active') return a.requestCount - b.requestCount;
+            const getSortValue = (stat: any) => {
+                if (viewFilter === 'creators') return stat.createdCount;
+                if (viewFilter === 'noters') return stat.notedCount;
+                if (viewFilter === 'inspectors') return stat.inspectedCount;
+                return stat.requestCount;
+            };
+
+            if (sortOrder === 'most_active') return getSortValue(b) - getSortValue(a);
+            if (sortOrder === 'least_active') return getSortValue(a) - getSortValue(b);
             if (sortOrder === 'name') return a.name.localeCompare(b.name);
             return 0;
         });
@@ -583,22 +789,141 @@ const PerformanceView: React.FC = () => {
 
     }, [employees, technicians, requests, viewFilter, sortOrder, startDate, endDate]);
 
-    const topPerformersData = useMemo(() => {
-        return stats.slice(0, 5).map((s, i) => ({
+    const topCreatorsData = useMemo(() => {
+        return [...stats].sort((a,b) => b.createdCount - a.createdCount).slice(0, 5).filter(s => s.createdCount > 0).map((s, i) => ({
             name: s.name,
-            count: s.requestCount,
-            color: ['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500'][i % 5]
+            count: s.createdCount,
+            color: 'bg-blue-500'
+        }));
+    }, [stats]);
+
+    const topNotersData = useMemo(() => {
+        return [...stats].sort((a,b) => b.notedCount - a.notedCount).slice(0, 5).filter(s => s.notedCount > 0).map((s, i) => ({
+            name: s.name,
+            count: s.notedCount,
+            color: 'bg-purple-500'
+        }));
+    }, [stats]);
+
+    const topInspectorsData = useMemo(() => {
+        return [...stats].sort((a,b) => b.inspectedCount - a.inspectedCount).slice(0, 5).filter(s => s.inspectedCount > 0).map((s, i) => ({
+            name: s.name,
+            count: s.inspectedCount,
+            color: 'bg-orange-500'
         }));
     }, [stats]);
 
     const topPerformer = stats.length > 0 && (sortOrder === 'most_active') ? stats[0] : null; 
     const totalRequestsInPeriod = stats.reduce((sum, s) => sum + s.requestCount, 0);
 
-    const handleOpenDetails = (personStat: typeof stats[0]) => {
+    const topCreator = useMemo(() => [...stats].sort((a,b) => b.createdCount - a.createdCount).find(s => s.createdCount > 0) || null, [stats]);
+    const topNoter = useMemo(() => [...stats].sort((a,b) => b.notedCount - a.notedCount).find(s => s.notedCount > 0) || null, [stats]);
+    
+    const topInspectorsPerRole = useMemo(() => {
+        const start = startDate ? new Date(startDate) : new Date(0);
+        if (!isNaN(start.getTime())) start.setHours(0, 0, 0, 0);
+        
+        const end = endDate ? new Date(endDate) : new Date();
+        if (!isNaN(end.getTime())) end.setHours(23, 59, 59, 999);
+
+        const activeRequests = dateFilterType === 'today' ? requests : serverRequests;
+
+        const currentRequests = activeRequests.filter(r => {
+            if (!r.created_at) return false;
+            const d = new Date(r.created_at);
+            return !isNaN(d.getTime()) && d >= start && d <= end;
+        });
+
+        // Map technician assignments to categories
+        const techCategoryCounts: Record<string, Record<string, number>> = {}; // categoryName -> { techId -> count }
+
+        currentRequests.forEach(r => {
+            if (r.technician_assignments) {
+                Object.entries(r.technician_assignments).forEach(([catId, techIds]) => {
+                    const cat = customFindingCategories.find(c => c.id === catId);
+                    const catName = cat ? cat.name : (catId === 'general' ? 'عام' : catId);
+                    
+                    if (!techCategoryCounts[catName]) techCategoryCounts[catName] = {};
+                    
+                    techIds.forEach(id => {
+                        techCategoryCounts[catName][id] = (techCategoryCounts[catName][id] || 0) + 1;
+                    });
+                });
+            }
+        });
+
+        return Object.entries(techCategoryCounts).map(([catName, techCounts]) => {
+            const items = Object.entries(techCounts)
+                .map(([techId, count]) => {
+                    const person = allStaff.find(p => p.id === techId);
+                    return {
+                        id: techId,
+                        name: person ? person.name : 'فني غير معروف',
+                        count: count,
+                        color: 'bg-orange-500'
+                    };
+                })
+                .sort((a, b) => b.count - a.count);
+
+            return {
+                role: catName,
+                items
+            };
+        }).sort((a, b) => (b.items[0]?.count || 0) - (a.items[0]?.count || 0));
+
+    }, [customFindingCategories, requests, serverRequests, startDate, endDate, dateFilterType, allStaff]);
+
+    const groupedCreators = useMemo(() => {
+        return [...stats]
+            .filter(s => s.createdCount > 0)
+            .sort((a, b) => b.createdCount - a.createdCount)
+            .map(s => ({
+                id: s.id,
+                name: s.name,
+                count: s.createdCount,
+                color: 'bg-blue-500'
+            }));
+    }, [stats]);
+
+    const groupedNoters = useMemo(() => {
+        return [...stats]
+            .filter(s => s.notedCount > 0)
+            .sort((a, b) => b.notedCount - a.notedCount)
+            .map(s => ({
+                id: s.id,
+                name: s.name,
+                count: s.notedCount,
+                color: 'bg-purple-500'
+            }));
+    }, [stats]);
+
+    const groupedMultipleSections = useMemo(() => {
+        return [...stats]
+            .filter(s => s.multipleSectionsCount > 0)
+            .sort((a, b) => b.multipleSectionsCount - a.multipleSectionsCount)
+            .map(s => ({
+                id: s.id,
+                name: s.name,
+                count: s.multipleSectionsCount,
+                color: 'bg-yellow-500'
+            }));
+    }, [stats]);
+
+    const handleOpenDetailsById = (id: string, defaultTab?: 'all' | 'created' | 'noted' | 'inspected' | 'multiple_sections') => {
+        const personStat = stats.find(s => s.id === id);
+        if (personStat) handleOpenDetails(personStat, defaultTab);
+    };
+
+    const handleOpenDetails = (personStat: typeof stats[0], defaultTab: 'all' | 'created' | 'noted' | 'inspected' | 'multiple_sections' = 'all') => {
         setSelectedPersonDetails({
             name: personStat.name,
-            requests: personStat.associatedRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            requests: personStat.associatedRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+            created: personStat.createdRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+            inspected: personStat.inspectedRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+            noted: personStat.notedRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+            multipleSections: personStat.multipleSectionsRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         });
+        setDetailsTab(defaultTab);
         setIsDetailsModalOpen(true);
     };
 
@@ -616,12 +941,18 @@ const PerformanceView: React.FC = () => {
         <div className="space-y-8 animate-fade-in">
             {/* Filter Bar */}
             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col gap-4">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
                     <button onClick={() => applyDateFilter('today')} className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${dateFilterType === 'today' ? activeFilterClass : inactiveFilterClass}`}>اليوم</button>
                     <button onClick={() => applyDateFilter('yesterday')} className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${dateFilterType === 'yesterday' ? activeFilterClass : inactiveFilterClass}`}>أمس</button>
                     <button onClick={() => applyDateFilter('month')} className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${dateFilterType === 'month' ? activeFilterClass : inactiveFilterClass}`}>هذا الشهر</button>
                     <button onClick={() => applyDateFilter('year')} className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${dateFilterType === 'year' ? activeFilterClass : inactiveFilterClass}`}>هذه السنة</button>
                     <button onClick={() => setDateFilterType('custom')} className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${dateFilterType === 'custom' ? activeFilterClass : inactiveFilterClass}`}>نطاق مخصص</button>
+                    {isLoadingServer && (
+                        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mr-2 text-xs font-bold animate-pulse">
+                            <Icon name="loader" className="w-4 h-4 animate-spin" />
+                            <span>جاري عرض البيانات...</span>
+                        </div>
+                    )}
                 </div>
 
                 {dateFilterType === 'custom' && (
@@ -646,41 +977,126 @@ const PerformanceView: React.FC = () => {
                                 minDate={startDate ? new Date(startDate) : undefined}
                             />
                         </div>
+                        <div className="w-full md:w-auto">
+                            <button 
+                                onClick={() => fetchDataForRange(startDate, endDate)} 
+                                disabled={isLoadingServer || !startDate || !endDate}
+                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-bold transition-colors w-full md:w-auto"
+                            >
+                                {isLoadingServer ? 'جاري البحث...' : 'بحث'}
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
 
             {/* Top Stats & Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Stats Cards Column */}
-                <div className="space-y-4">
-                     <StatCard 
-                        title="الأكثر نشاطاً"
-                        value={topPerformer ? topPerformer.name : '-'}
-                        subValue={topPerformer ? `${topPerformer.requestCount} مشاركة` : ''}
-                        icon={<Icon name="sparkles" className="w-6 h-6"/>}
-                        color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
-                        trend={topPerformer?.growth}
-                    />
-                     <StatCard 
-                        title="إجمالي التفاعلات (مشاركات)"
-                        value={totalRequestsInPeriod.toString()}
-                        icon={<BriefcaseIcon className="w-6 h-6"/>}
-                        color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-                    />
+            <div className="flex flex-col gap-6">
+                {/* Simplified Summary Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-blue-600 to-indigo-700 p-6 rounded-2xl shadow-lg text-white">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                            <BriefcaseIcon className="w-8 h-8"/>
+                        </div>
+                        <div>
+                            <p className="text-blue-100 text-xs font-bold mb-1">إجمالي التفاعلات في هذه الفترة</p>
+                            <h2 className="text-3xl font-bold font-numeric">{totalRequestsInPeriod} <span className="text-sm font-normal opacity-80">نشاط سجل</span></h2>
+                        </div>
+                    </div>
+                    {topPerformer && (
+                        <div className="flex items-center gap-3 bg-black/10 p-3 rounded-xl border border-white/10">
+                            <div className="text-right">
+                                <p className="text-blue-100 text-[10px] font-bold">الموظف الأكثر نشاطاً</p>
+                                <p className="font-bold text-sm">{topPerformer.name}</p>
+                            </div>
+                            <div className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center text-yellow-900 shadow-lg animate-pulse">
+                                <Icon name="award" className="w-5 h-5"/>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Chart Column */}
-                <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col justify-between">
-                     <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
-                        <TrendingUpIcon className="w-5 h-5 text-blue-500" />
-                        أفضل 5 مساهمين (حسب عدد الطلبات)
-                     </h3>
-                     {topPerformersData.length > 0 ? (
-                         <PerformanceBarChart data={topPerformersData} />
-                     ) : (
-                         <div className="flex-1 flex items-center justify-center text-slate-400">لا توجد بيانات للفترة المحددة.</div>
-                     )}
+                {/* Categorized Performance Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Creators */}
+                    <CategoryRankCard 
+                        title="منشئو الطلبات"
+                        icon={<Icon name="plus-circle" className="w-4 h-4"/>}
+                        items={groupedCreators}
+                        onItemClick={(id) => handleOpenDetailsById(id, 'created')}
+                        accentColor="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
+                        unit="طلب"
+                    />
+
+                    {/* Data Entry / Noters */}
+                    <CategoryRankCard 
+                        title="مدخلو البيانات"
+                        icon={<Icon name="edit-3" className="w-4 h-4"/>}
+                        items={groupedNoters}
+                        onItemClick={(id) => handleOpenDetailsById(id, 'noted')}
+                        accentColor="bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400"
+                        unit="ملاحظة"
+                    />
+
+                    {/* Multiple Sections Participations */}
+                    <CategoryRankCard 
+                        title="المشاركات المتعددة بالطلب (قسمين فأكثر)"
+                        icon={<Icon name="layers" className="w-4 h-4"/>}
+                        items={groupedMultipleSections}
+                        onItemClick={(id) => handleOpenDetailsById(id, 'multiple_sections')}
+                        accentColor="bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400"
+                        unit="طلب"
+                    />
+
+                    {/* Inspectors by Role */}
+                    {topInspectorsPerRole.map((cat, idx) => (
+                        <CategoryRankCard 
+                            key={cat.role}
+                            title={`أبرز المنفذين: ${cat.role === 'general_manager' ? 'مدير عام' : cat.role === 'manager' ? 'مدير' : cat.role === 'receptionist' ? 'استقبال' : cat.role === 'technician' ? 'فني' : cat.role}`}
+                            icon={<Icon name="user-check" className="w-4 h-4"/>}
+                            items={cat.items}
+                            onItemClick={(id) => handleOpenDetailsById(id, 'inspected')}
+                            accentColor="bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"
+                            unit="فحص"
+                        />
+                    ))}
+                </div>
+
+                {/* Chart Row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 flex flex-col justify-between">
+                         <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-2 text-xs flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+                            أفضل المنشئين للطلبات
+                         </h3>
+                         {topCreatorsData.length > 0 ? (
+                             <PerformanceBarChart data={topCreatorsData} />
+                         ) : (
+                             <div className="flex-1 flex items-center justify-center text-slate-400 text-xs">لا يوجد بيانات</div>
+                         )}
+                    </div>
+                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 flex flex-col justify-between">
+                         <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-2 text-xs flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-purple-500 inline-block"></span>
+                            أفضل الكُتاب والمُدخلين
+                         </h3>
+                         {topNotersData.length > 0 ? (
+                             <PerformanceBarChart data={topNotersData} />
+                         ) : (
+                             <div className="flex-1 flex items-center justify-center text-slate-400 text-xs">لا يوجد بيانات</div>
+                         )}
+                    </div>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 flex flex-col justify-between">
+                         <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-2 text-xs flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-orange-500 inline-block"></span>
+                            أفضل الفنيين (فحص)
+                         </h3>
+                         {topInspectorsData.length > 0 ? (
+                             <PerformanceBarChart data={topInspectorsData} />
+                         ) : (
+                             <div className="flex-1 flex items-center justify-center text-slate-400 text-xs">لا يوجد بيانات</div>
+                         )}
+                    </div>
                 </div>
             </div>
 
@@ -693,8 +1109,9 @@ const PerformanceView: React.FC = () => {
                         {/* Tabs Filter */}
                         <div className="flex bg-slate-200 dark:bg-slate-700 rounded-lg p-1">
                             <button onClick={() => setViewFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${viewFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>الكل</button>
-                            <button onClick={() => setViewFilter('employee')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${viewFilter === 'employee' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>المستخدمين</button>
-                            <button onClick={() => setViewFilter('technician')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${viewFilter === 'technician' ? 'bg-white dark:bg-slate-600 shadow-sm text-orange-600 dark:text-orange-300' : 'text-slate-500 dark:text-slate-400'}`}>الفنيين</button>
+                            <button onClick={() => setViewFilter('creators')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${viewFilter === 'creators' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>منشئي الطلبات</button>
+                            <button onClick={() => setViewFilter('noters')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${viewFilter === 'noters' ? 'bg-white dark:bg-slate-600 shadow-sm text-purple-600 dark:text-purple-300' : 'text-slate-500 dark:text-slate-400'}`}>كُتاب الملاحظات</button>
+                            <button onClick={() => setViewFilter('inspectors')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${viewFilter === 'inspectors' ? 'bg-white dark:bg-slate-600 shadow-sm text-orange-600 dark:text-orange-300' : 'text-slate-500 dark:text-slate-400'}`}>الفنيين (فحص)</button>
                         </div>
 
                         {/* Sort Dropdown */}
@@ -719,8 +1136,10 @@ const PerformanceView: React.FC = () => {
                             <tr>
                                 <th className="px-6 py-3">الموظف / الفني</th>
                                 <th className="px-6 py-3">الدور</th>
-                                <th className="px-6 py-3 text-center">الطلبات (الحالية)</th>
-                                <th className="px-6 py-3 text-center">الطلبات (السابقة)</th>
+                                <th className="px-6 py-3 text-center">إنشاء طلبات</th>
+                                <th className="px-6 py-3 text-center">كتابة الملاحظات</th>
+                                <th className="px-6 py-3 text-center">أقسام الفحص</th>
+                                <th className="px-6 py-3 text-center">إجمالي المشاركات</th>
                                 <th className="px-6 py-3 text-center">النمو</th>
                                 <th className="px-6 py-3 text-center">إجراءات</th>
                             </tr>
@@ -735,8 +1154,10 @@ const PerformanceView: React.FC = () => {
                                                 {person.role === 'general_manager' ? 'مدير عام' : person.role === 'manager' ? 'مدير' : person.role === 'receptionist' ? 'استقبال' : person.role === 'technician' ? 'فني' : person.role}
                                             </span>
                                         </td>
+                                        <td className="px-6 py-4 text-center font-bold text-blue-600 font-numeric">{person.createdCount || 0}</td>
+                                        <td className="px-6 py-4 text-center font-bold text-purple-600 font-numeric">{person.notedCount || 0}</td>
+                                        <td className="px-6 py-4 text-center font-bold text-orange-600 font-numeric">{person.inspectedCount || 0}</td>
                                         <td className="px-6 py-4 text-center font-bold text-slate-700 dark:text-slate-200 font-numeric">{person.requestCount}</td>
-                                        <td className="px-6 py-4 text-center text-slate-400 font-numeric">{person.prevRequestCount}</td>
                                         <td className="px-6 py-4 text-center">
                                              <div className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-bold ${person.growth > 0 ? 'bg-green-100 text-green-700' : person.growth < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
                                                 <span className="dir-ltr font-numeric">{person.growth > 0 ? '+' : ''}{person.growth}%</span>
@@ -756,7 +1177,7 @@ const PerformanceView: React.FC = () => {
                             })}
                             {stats.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-8 text-slate-500">لا توجد بيانات للعرض حسب الفلاتر الحالية.</td>
+                                    <td colSpan={8} className="text-center py-8 text-slate-500">لا توجد بيانات للعرض حسب الفلاتر الحالية.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -766,10 +1187,44 @@ const PerformanceView: React.FC = () => {
 
             {/* Details Modal */}
             <Modal isOpen={isDetailsModalOpen} onClose={() => setIsDetailsModalOpen(false)} title={`مشاركات: ${selectedPersonDetails?.name}`} size="lg">
-                <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
-                    {selectedPersonDetails && selectedPersonDetails.requests.length > 0 ? (
-                        <div className="space-y-2">
-                            {selectedPersonDetails.requests.map(req => (
+                <div className="flex flex-col gap-4">
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setDetailsTab('all')} 
+                            className={`flex-1 text-xs font-bold py-2 rounded-md transition-all ${detailsTab === 'all' ? 'bg-white dark:bg-slate-700 shadow text-slate-800 dark:text-white' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                        >
+                            الكل ({selectedPersonDetails?.requests.length || 0})
+                        </button>
+                        <button 
+                            onClick={() => setDetailsTab('created')} 
+                            className={`flex-1 text-xs font-bold py-2 rounded-md transition-all ${detailsTab === 'created' ? 'bg-white dark:bg-slate-700 shadow text-blue-600' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                        >
+                            تم إنشاؤها ({selectedPersonDetails?.created.length || 0})
+                        </button>
+                        <button 
+                            onClick={() => setDetailsTab('noted')} 
+                            className={`flex-1 text-xs font-bold py-2 rounded-md transition-all ${detailsTab === 'noted' ? 'bg-white dark:bg-slate-700 shadow text-purple-600' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                        >
+                            ملاحظات/تعديل ({selectedPersonDetails?.noted.length || 0})
+                        </button>
+                        <button 
+                            onClick={() => setDetailsTab('inspected')} 
+                            className={`flex-1 text-xs font-bold py-2 rounded-md transition-all ${detailsTab === 'inspected' ? 'bg-white dark:bg-slate-700 shadow text-orange-600' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                        >
+                            تم فحصها ({selectedPersonDetails?.inspected.length || 0})
+                        </button>
+                        <button 
+                            onClick={() => setDetailsTab('multiple_sections')} 
+                            className={`flex-1 text-xs font-bold py-2 rounded-md transition-all ${detailsTab === 'multiple_sections' ? 'bg-white dark:bg-slate-700 shadow text-yellow-600' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                        >
+                            أقسام متعددة ({selectedPersonDetails?.multipleSections.length || 0})
+                        </button>
+                    </div>
+
+                    <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                        {selectedPersonDetails && (detailsTab === 'all' ? selectedPersonDetails.requests : detailsTab === 'created' ? selectedPersonDetails.created : detailsTab === 'noted' ? selectedPersonDetails.noted : detailsTab === 'multiple_sections' ? selectedPersonDetails.multipleSections : selectedPersonDetails.inspected).length > 0 ? (
+                            <div className="space-y-2">
+                                {(detailsTab === 'all' ? selectedPersonDetails.requests : detailsTab === 'created' ? selectedPersonDetails.created : detailsTab === 'noted' ? selectedPersonDetails.noted : detailsTab === 'multiple_sections' ? selectedPersonDetails.multipleSections : selectedPersonDetails.inspected).map(req => (
                                 <div key={req.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold px-2 py-1 rounded text-xs">
@@ -801,6 +1256,7 @@ const PerformanceView: React.FC = () => {
                         <div className="text-center py-8 text-slate-500">لا توجد مشاركات مسجلة.</div>
                     )}
                 </div>
+                </div>
                 <div className="mt-4 pt-4 border-t dark:border-slate-700 flex justify-end">
                     <Button variant="secondary" onClick={() => setIsDetailsModalOpen(false)}>إغلاق</Button>
                 </div>
@@ -810,7 +1266,15 @@ const PerformanceView: React.FC = () => {
 };
 
 const Employees: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'directory' | 'payroll' | 'performance'>('directory');
+    const { can } = useAppContext();
+    
+    // Fallback to manage_employees if specific permissions aren't set yet for older instances
+    const canViewDirectory = can('view_hr_global_directory') || can('manage_employees');
+    const canViewPayroll = can('view_hr_salaries_payrolls') || can('manage_employees');
+    const canViewPerformance = can('view_hr_performance_record') || can('manage_employees');
+
+    const defaultTab = canViewDirectory ? 'directory' : (canViewPayroll ? 'payroll' : (canViewPerformance ? 'performance' : 'directory'));
+    const [activeTab, setActiveTab] = useState<'directory' | 'payroll' | 'performance'>(defaultTab as any);
 
     return (
         <div className="container mx-auto pb-20">
@@ -818,31 +1282,42 @@ const Employees: React.FC = () => {
                 <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200">شؤون الموظفين</h2>
                 
                 <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
-                    <button 
-                        onClick={() => setActiveTab('directory')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'directory' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
-                    >
-                        الدليل الشامل
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('payroll')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'payroll' ? 'bg-white dark:bg-slate-600 shadow text-green-600 dark:text-green-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
-                    >
-                        الرواتب والمسيرات
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('performance')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'performance' ? 'bg-white dark:bg-slate-600 shadow text-purple-600 dark:text-purple-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
-                    >
-                        سجل الأداء
-                    </button>
+                    {canViewDirectory && (
+                        <button 
+                            onClick={() => setActiveTab('directory')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'directory' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+                        >
+                            الدليل الشامل
+                        </button>
+                    )}
+                    {canViewPayroll && (
+                        <button 
+                            onClick={() => setActiveTab('payroll')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'payroll' ? 'bg-white dark:bg-slate-600 shadow text-green-600 dark:text-green-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+                        >
+                            الرواتب والمسيرات
+                        </button>
+                    )}
+                    {canViewPerformance && (
+                        <button 
+                            onClick={() => setActiveTab('performance')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'performance' ? 'bg-white dark:bg-slate-600 shadow text-purple-600 dark:text-purple-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+                        >
+                            سجل الأداء
+                        </button>
+                    )}
                 </div>
             </div>
 
             <div className="mt-6">
-                {activeTab === 'directory' && <UnifiedDirectory />}
-                {activeTab === 'payroll' && <PayrollManager />}
-                {activeTab === 'performance' && <PerformanceView />}
+                {(activeTab === 'directory' && canViewDirectory) && <UnifiedDirectory />}
+                {(activeTab === 'payroll' && canViewPayroll) && <PayrollManager />}
+                {(activeTab === 'performance' && canViewPerformance) && <PerformanceView />}
+                {(!canViewDirectory && !canViewPayroll && !canViewPerformance) && (
+                    <div className="text-center py-12 text-slate-500 font-bold">
+                        ليس لديك الصلاحيات الكافية لعرض محتوى هذه الصفحة.
+                    </div>
+                )}
             </div>
         </div>
     );

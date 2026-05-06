@@ -55,6 +55,10 @@ export const PERMISSIONS = {
   process_payment: 'تحصيل المدفوعات وتفعيل الطلبات',
   manage_clients: 'ادارة العملاء',
   manage_employees: 'إدارة الموظفين والصلاحيات',
+  view_hr_page: 'عرض صفحة شؤون الموظفين',
+  view_hr_global_directory: 'عرض الدليل الشامل (أرقام الجوال والسكن)',
+  view_hr_salaries_payrolls: 'عرض سجل الرواتب والمسيرات',
+  view_hr_performance_record: 'عرض سجل الأداء والعمليات',
   manage_brokers: 'إدارة السماسرة',
   manage_technicians: 'إدارة الفنيين (غير المستخدمين)',
   manage_settings_general: 'إدارة الإعدادات العامة',
@@ -496,6 +500,7 @@ export interface Employee {
   password?: string;
   preferences?: UserPreferences;
   salary?: number;
+  title?: string;
 }
 
 export interface Notification {

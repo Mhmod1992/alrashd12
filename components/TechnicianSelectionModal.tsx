@@ -39,7 +39,7 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
                 id: e.id, 
                 name: e.name, 
                 type: 'emp',
-                title: 'موظف نظام'
+                title: e.title || 'موظف نظام'
             }));
         
         // Sort alphabetically

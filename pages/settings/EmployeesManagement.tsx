@@ -33,7 +33,7 @@ const defaultPermissionsByRole: Record<Role, Permission[]> = {
         'view_waiting_requests', 'view_car_history_on_create', 'view_requests_list', 
         'view_requests_payment_filters', 'view_requests_date_filters', 'view_requests_price_column', 'view_requests_stats_cards',
         'view_settings',
-        'manage_paper_archive', 'manage_revenues', 'manage_expenses', 'delete_whatsapp_messages'
+        'manage_paper_archive', 'manage_revenues', 'manage_expenses', 'delete_whatsapp_messages', 'view_hr_page', 'view_hr_global_directory', 'view_hr_salaries_payrolls', 'view_hr_performance_record'
     ],
     // Employee/Technician: No Dashboard, No Financials, No Archive by default.
     employee: ['create_requests', 'fill_requests', 'view_request_info', 'manage_notes', 'manage_findings', 'send_internal_messages', 'mark_request_complete', 'view_requests_list', 'view_requests_stats_cards', 'view_requests_date_filters'],
@@ -45,6 +45,7 @@ const categorizedPermissions: Record<string, Permission[]> = {
     'صلاحيات العرض والقوائم': ['view_dashboard', 'view_requests_list', 'view_requests_payment_filters', 'view_requests_date_filters', 'view_requests_price_column', 'view_requests_stats_cards', 'view_waiting_requests', 'view_completed_requests', 'manage_reservations', 'view_archive', 'manage_paper_archive', 'manage_clients'],
     'المالية والتقارير': ['view_financials', 'manage_revenues', 'manage_expenses'],
     'الإدارة والإعدادات': ['manage_employees', 'manage_brokers', 'add_broker_commission', 'pay_broker_commission', 'view_settings'],
+    'شؤون الموظفين': ['view_hr_page', 'view_hr_global_directory', 'view_hr_salaries_payrolls', 'view_hr_performance_record'],
     'إجراءات الطلبات والعمليات': ['create_requests', 'fill_requests', 'update_requests_data', 'change_request_status', 'mark_request_complete', 'delete_requests', 'print_request', 'view_request_info', 'view_car_history_on_create', 'manage_notes', 'manage_findings', 'view_activity_log', 'resend_whatsapp_report'],
     'إجراءات أخرى وإعدادات تفصيلية': ['send_internal_messages', 'view_login_notifications', 'export_data', 'edit_request_price', 'process_payment', 'delete_expenses', 'delete_whatsapp_messages', 'manage_settings_general', 'manage_settings_technical', 'manage_appearance', 'manage_api_keys']
 };
@@ -380,6 +381,19 @@ const EmployeesManagement: React.FC = () => {
                             <span className="text-sm font-bold text-slate-700 dark:text-slate-300">إتاحة هذا الموظف في قائمة الفنيين والمشاركين في الطلب</span>
                         </label>
                          <p className="text-xs text-slate-400 mt-1 mr-8">عند التفعيل، سيظهر اسم الموظف في قائمة "الفنيين" في صفحة تعبئة الطلب، ويمكن إضافته كمنفذ للفحص.</p>
+                         
+                         {currentEmployee.preferences?.isTechnician && (
+                             <div className="mt-3 mr-8 animate-fade-in">
+                                 <label className="block text-[10px] font-bold text-slate-500 mb-1">المسمى الفني / الأختصاص (مثل: فني ميكانيك، فني كهرباء)</label>
+                                 <input 
+                                     type="text" 
+                                     value={currentEmployee.title || ''} 
+                                     onChange={e => setCurrentEmployee(p => ({ ...p, title: e.target.value }))}
+                                     placeholder="مثال: فني فحص بودي"
+                                     className={formInputClasses}
+                                 />
+                             </div>
+                         )}
                     </div>
 
                     {isEditing && showPasswordInput && (

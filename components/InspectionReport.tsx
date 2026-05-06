@@ -169,10 +169,10 @@ const InfoBlock: React.FC<{ title: string; icon: React.ReactNode; children: Reac
     </div>
 );
 
-const InfoPair: React.FC<{ label: string; value?: React.ReactNode; className?: string; isPrintView?: boolean; fontSizes: ReportFontSizes; direction?: 'rtl' | 'ltr' }> = ({ label, value, className = "", isPrintView, fontSizes, direction }) => (
-    <div className={`flex justify-between items-center gap-2 ${className} ${direction === 'ltr' ? 'flex-row' : ''}`}>
-        <span className={`font-semibold whitespace-nowrap opacity-80 ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{label}:</span>
-        <div className={`text-${direction === 'ltr' ? 'right' : 'left'} font-medium ${isPrintView ? getPrintSize(fontSizes.blockContent) : fontSizes.blockContent}`}>{value || '-'}</div>
+const InfoPair: React.FC<{ label: string; value?: React.ReactNode; className?: string; isPrintView?: boolean; fontSizes: ReportFontSizes; direction?: 'rtl' | 'ltr'; highlight?: boolean }> = ({ label, value, className = "", isPrintView, fontSizes, direction, highlight }) => (
+    <div className={`flex justify-between items-center gap-2 ${className} ${direction === 'ltr' ? 'flex-row' : ''} ${highlight ? 'py-1' : ''}`}>
+        <span className={`whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel} ${highlight ? 'font-bold opacity-100 text-[0.85em]' : 'font-semibold opacity-80'}`}>{label}:</span>
+        <div className={`text-${direction === 'ltr' ? 'right' : 'left'} ${isPrintView ? getPrintSize(fontSizes.blockContent) : fontSizes.blockContent} ${highlight ? 'font-bold text-[0.90em]' : 'font-medium'}`}>{value || '-'}</div>
     </div>
 );
 
@@ -212,8 +212,8 @@ const FindingItem: React.FC<{ finding: StructuredFinding; predefinedFinding?: Pr
             </div>
             <div className={`finding-content flex-grow flex flex-col items-center justify-center text-center w-full ${isPrintView ? 'p-1' : 'p-2'}`} style={{ backgroundColor: '#f8fafc' }}>
                 <div className="finding-text-wrapper w-full flex flex-col items-center justify-center">
-                    <h4 className={`font-bold w-full leading-tight line-clamp-2 mb-1 break-words whitespace-pre-wrap ${isPrintView ? 'text-[9px]' : fontSizes.findingTitle}`}><span>{finding.findingName}</span></h4>
-                    {finding.value?.trim() && <p className={`font-medium w-full text-slate-600 break-words whitespace-pre-wrap ${isPrintView ? 'text-[9px]' : fontSizes.findingValue}`}><span>{finding.value}</span></p>}
+                    <h4 className={`font-bold w-full leading-tight line-clamp-2 mb-1 break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingTitle) : fontSizes.findingTitle}`}><span>{finding.findingName}</span></h4>
+                    {finding.value?.trim() && <p className={`font-medium w-full text-slate-600 break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingValue || fontSizes.findingTitle) : (fontSizes.findingValue || fontSizes.findingTitle)}`}><span>{finding.value}</span></p>}
                 </div>
             </div>
         </div>
@@ -380,7 +380,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                     </div>
                 )}
 
-                <table className="w-full border-collapse m-0 p-0 border-0 bg-white relative">
+                <table className="w-full border-collapse m-0 p-0 border-0 bg-white relative print:static">
                     <thead className="hidden print:table-header-group">
                         <tr>
                             <th className="p-0 border-0 align-top font-normal text-start">
@@ -412,9 +412,9 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                     <tbody className="print:table-row-group border-0">
                         <tr>
                             <td className="p-0 border-0 align-top">
-                                <div className="print:-mt-[80px] print:pt-[10px] print:bg-white print:relative print:z-10 w-full" style={isPrintView ? { backgroundColor: '#ffffff' } : {}}>
-                                    <div className="relative z-0">
-                                        <div className="report-header-section">
+                                <div className="print:-mt-[80px] print:pt-[10px] print:bg-white w-full" style={isPrintView ? { backgroundColor: '#ffffff' } : {}}>
+                                    <div className="relative z-0 print:relative">
+                                        <div className="report-header-section print:relative print:z-50 print:bg-white">
                         <ReportHeader appName={appName} logoUrl={reportSettings.reportLogoUrl} settings={reportSettings} requestNumber={request.request_number} isPrintView={isPrintView} direction={reportDirection} />
 
                         <div className={`${isPrintView ? 'mb-2 space-y-2' : 'mb-6 space-y-4'}`}>
@@ -442,10 +442,10 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                                 </div>
                                 <div>
                                     <InfoBlock title={reportDirection === 'ltr' ? "Request Info" : "بيانات الطلب"} icon={<Icon name="document-report" className="w-5 h-5" />} settings={reportSettings} className="h-full" isPrintView={isPrintView} direction={reportDirection}>
-                                        <InfoPair label={reportDirection === 'ltr' ? "Report No." : "رقم التقرير"} value={<strong>#{request.request_number}</strong>} isPrintView={isPrintView} fontSizes={fontSizes} direction={reportDirection} />
+                                        <InfoPair highlight label={reportDirection === 'ltr' ? "Report No." : "رقم التقرير"} value={`#${request.request_number}`} isPrintView={isPrintView} fontSizes={fontSizes} direction={reportDirection} />
                                         <InfoPair label={reportDirection === 'ltr' ? "Date" : "التاريخ"} value={new Date(request.created_at).toLocaleDateString('en-GB')} isPrintView={isPrintView} fontSizes={fontSizes} direction={reportDirection} />
                                         <InfoPair label={reportDirection === 'ltr' ? "Time" : "الوقت"} value={new Date(request.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} isPrintView={isPrintView} fontSizes={fontSizes} direction={reportDirection} />
-                                        <InfoPair label={reportDirection === 'ltr' ? "Type" : "نوع الفحص"} value={inspectionType.name} isPrintView={isPrintView} fontSizes={fontSizes} direction={reportDirection} />
+                                        <InfoPair highlight label={reportDirection === 'ltr' ? "Type" : "نوع الفحص"} value={inspectionType.name} isPrintView={isPrintView} fontSizes={fontSizes} direction={reportDirection} />
                                     </InfoBlock>
                                 </div>
                             </div>
@@ -554,7 +554,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         </FindingCategorySection>
                     )}
 
-                    <footer className={`border-t-2 border-b-2 border-b-transparent print:border-b-transparent flex justify-between items-start gap-4 break-inside-avoid relative ${isPrintView ? 'mt-4 pt-2 pb-6' : 'mt-6 pt-4 pb-8'}`} style={{ borderTopColor: reportSettings.borderColor }}>
+                    <footer className={`border-t-2 border-b-2 border-b-transparent print:border-b-transparent flex justify-between items-start gap-4 break-inside-avoid relative print:static ${isPrintView ? 'mt-4 pt-2 pb-6' : 'mt-6 pt-4 pb-8'}`} style={{ borderTopColor: reportSettings.borderColor }}>
                         <div className="flex-grow" style={{ color: reportSettings.textColor, opacity: 0.8 }}>
                             <p data-setting-section="text-disclaimer" className={`break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes?.disclaimer || 'text-xs') : (fontSizes?.disclaimer || 'text-xs')}`}><span className="font-bold">{reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}</span> {reportSettings.disclaimerText || (reportDirection === 'ltr' ? 'No disclaimer provided' : 'لا يوجد نص إخلاء مسؤولية')}</p>
                         </div>
@@ -564,6 +564,11 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         </div>
                     </footer>
                     {reportSettings.showPageNumbers && <div className="page-footer-container"></div>}
+                    
+                    {/* Mask block to hide 'continued on next page' ONLY on the last page and show 'End of Report'. */}
+                    <div className="hidden print:flex w-full h-[30px] relative z-50 bg-white text-gray-500 font-bold items-center justify-center text-sm" style={{ marginBottom: '-30px' }}>
+                        {reportDirection === 'ltr' ? '*** End of Report ***' : '*** نهاية التقرير ***'}
+                    </div>
                 </div>
             </div>
         </td>

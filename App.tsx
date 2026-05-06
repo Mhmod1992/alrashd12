@@ -423,8 +423,9 @@ const PrintStyles = () => (
         }
 
         /* Essential Reset for Printing */
-        html, body, #root, main, .print-container, .bg-gray-200 {
+        html, body, #root, main, .print-container, .bg-gray-200, .min-h-screen {
           height: auto !important;
+          min-height: 0 !important;
           overflow: visible !important;
           margin: 0 !important;
           padding: 0 !important;
@@ -435,6 +436,15 @@ const PrintStyles = () => (
           box-shadow: none !important;
         }
 
+        /* Target the specific wrapper in App.tsx */
+        div.min-h-screen.relative {
+          height: auto !important;
+          min-height: 0 !important;
+          overflow: visible !important;
+          position: static !important;
+          background: transparent !important;
+        }
+
         * {
           box-shadow: none !important;
         }
@@ -443,7 +453,8 @@ const PrintStyles = () => (
         .flex-col.h-screen, 
         .flex-1.overflow-hidden,
         .flex-1.overflow-y-auto,
-        main.overflow-y-auto {
+        main.overflow-y-auto,
+        .overflow-x-hidden {
           height: auto !important;
           overflow: visible !important;
           display: block !important;

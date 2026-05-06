@@ -89,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
     if (can('manage_brokers')) {
         adminItems.push({ id: 'brokers', label: 'إدارة السماسرة', icon: BriefcaseIcon });
     }
-    if (can('manage_employees') || can('manage_technicians')) {
+    if (can('manage_employees') || can('manage_technicians') || can('view_hr_page')) {
         adminItems.push({ id: 'employees', label: 'شؤون الموظفين', icon: UserCircleIcon });
     }
     if (can('view_settings')) {

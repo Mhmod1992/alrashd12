@@ -577,7 +577,7 @@ const ReportSettingsPage: React.FC = () => {
                                         <FontSizeSelector label="بيانات العميل" value={reportSettings.fontSizes.clientData} onChange={v => handleFontSizeChange('clientData', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="اسم السيارة (EN)" value={reportSettings.fontSizes.carName} onChange={v => handleFontSizeChange('carName', v)} options={HEADER_FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="عناوين الأقسام" value={reportSettings.fontSizes.categoryTitle} onChange={v => handleFontSizeChange('categoryTitle', v)} options={FONT_SIZE_OPTIONS} />
-                                        <FontSizeSelector label="بنود الفحص" value={reportSettings.fontSizes.findingTitle} onChange={v => handleFontSizeChange('findingTitle', v)} options={FONT_SIZE_OPTIONS} />
+                                        <FontSizeSelector label="بنود الفحص" value={reportSettings.fontSizes.findingTitle} onChange={v => { handleFontSizeChange('findingTitle', v); handleFontSizeChange('findingValue', v); }} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="نصوص الملاحظات" value={reportSettings.fontSizes.noteText} onChange={v => handleFontSizeChange('noteText', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="نص إخلاء المسؤولية" value={reportSettings.fontSizes.disclaimer} onChange={v => handleFontSizeChange('disclaimer', v)} options={FONT_SIZE_OPTIONS} />
                                         <div className="flex flex-col gap-1.5">
