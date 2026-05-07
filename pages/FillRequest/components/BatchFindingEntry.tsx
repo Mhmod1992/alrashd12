@@ -24,7 +24,6 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
     const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
     const [defaultValue, setDefaultValue] = useState('');
     const searchInputRef = useRef<HTMLInputElement>(null);
-    const quickWords = ['يسار', 'يمين', 'أمام', 'خلف', 'كبوت', 'شنطة', 'سقف'];
 
     const handleAddRow = () => { setRows(prev => [...prev, { id: uuidv4(), findingId: '', value: '' }]); };
     const handleRemoveRow = (id: string) => { if (rows.length === 1) { setRows([{ id: uuidv4(), findingId: '', value: '' }]); } else { setRows(prev => prev.filter(r => r.id !== id)); } };
@@ -151,9 +150,9 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
     };
 
     return (
-        <div className="flex flex-col h-[75vh] bg-gray-50 dark:bg-slate-900 rounded-lg overflow-hidden">
+        <div className="flex flex-col h-[85vh] sm:h-[75vh] bg-gray-50 dark:bg-slate-900 rounded-lg overflow-hidden">
             {/* Header / Tabs */}
-            <div className="flex flex-col p-4 bg-white dark:bg-slate-800 border-b dark:border-slate-700 gap-3">
+            <div className="flex flex-col p-4 bg-white dark:bg-slate-800 border-b dark:border-slate-700 gap-3 shrink-0">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-lg gap-1 shrink-0">
                         <button
@@ -192,29 +191,15 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
                                 className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-900 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                             />
                         </div>
-                        <div className="flex flex-wrap gap-1 justify-end">
-                            {quickWords.map(word => (
-                                <button
-                                    key={word}
-                                    onClick={() => {
-                                        setSearchTerm(word);
-                                        searchInputRef.current?.focus();
-                                    }}
-                                    className="px-2 py-1 text-[10px] font-medium bg-slate-100 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-blue-900 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-600 transition-colors"
-                                >
-                                    {word}
-                                </button>
-                            ))}
-                        </div>
                     </div>
                 </div>
 
                 {/* Group Filter Buttons */}
                 {availableGroups.length > 0 && (viewMode === 'gallery' || viewMode === 'bundles') && (
-                    <div className="flex flex-wrap gap-2 mt-1">
+                    <div className="flex overflow-x-auto hide-scrollbar gap-2 mt-1 pb-2 w-full max-w-full">
                         <button
                             onClick={() => setSelectedGroup(null)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                            className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                                 selectedGroup === null
                                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                                     : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-transparent hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -226,7 +211,7 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
                             <button
                                 key={g}
                                 onClick={() => setSelectedGroup(g)}
-                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                                     selectedGroup === g
                                         ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                                         : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-transparent hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -344,15 +329,15 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
                 )}
             </div>
 
-            <div className="p-6 border-t dark:border-slate-700 bg-white dark:bg-slate-800 shadow-inner flex flex-col sm:flex-row justify-between items-center gap-4 z-10 relative">
-                <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-full border border-blue-100 dark:border-blue-800/50">
-                        <span className="text-sm text-slate-600 dark:text-slate-300">المحددة:</span>
-                        <span className="font-bold text-blue-600 dark:text-blue-400 text-lg">{viewMode === 'rows' ? rows.filter(r => r.findingId).length : selectedIds.size}</span>
+            <div className="p-3 sm:p-6 border-t dark:border-slate-700 bg-white dark:bg-slate-800 shadow-inner flex flex-col sm:flex-row justify-between items-center gap-3 z-10 relative shrink-0">
+                <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-800/50">
+                        <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">المحددة:</span>
+                        <span className="font-bold text-blue-600 dark:text-blue-400 text-base sm:text-lg">{viewMode === 'rows' ? rows.filter(r => r.findingId).length : selectedIds.size}</span>
                     </div>
 
                     {(viewMode === 'gallery' || viewMode === 'bundles') && selectedIds.size > 0 && (
-                        <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 px-3 py-1.5 rounded-lg border border-green-100 dark:border-green-800/50">
+                        <div className="flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-green-100 dark:border-green-800/50">
                             <span className="text-xs text-slate-500 dark:text-slate-400">القيمة الافتراضية:</span>
                             <select
                                 value={defaultValue}
@@ -369,17 +354,17 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
                     )}
                 </div>
 
-                <div className="flex gap-3 w-full sm:w-auto">
+                <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0 justify-center">
                     {(viewMode === 'gallery' || viewMode === 'bundles') && (
-                        <Button variant="secondary" onClick={() => setSelectedIds(new Set(filteredFindings.map(f => f.id)))} size="sm">تحديد الكل</Button>
+                        <Button variant="secondary" onClick={() => setSelectedIds(new Set(filteredFindings.map(f => f.id)))} size="sm" className="px-2 sm:px-4 text-[10px] sm:text-sm">تحديد الكل</Button>
                     )}
-                    <Button variant="secondary" onClick={onClose}>إلغاء</Button>
+                    <Button variant="secondary" onClick={onClose} size="sm" className="px-3 sm:px-4 text-xs sm:text-sm">إلغاء</Button>
                     <Button
                         onClick={handleSave}
                         disabled={((viewMode === 'gallery' || viewMode === 'bundles') ? selectedIds.size === 0 : rows.filter(r => r.findingId).length === 0)}
-                        className="px-8 shadow-lg shadow-blue-500/20"
+                        className="px-4 sm:px-8 shadow-lg shadow-blue-500/20 text-xs sm:text-base py-1.5 sm:py-2 whitespace-nowrap"
                     >
-                        حفظ وإضافة للتقرير
+                        حفظ وإضافة
                     </Button>
                 </div>
             </div>
