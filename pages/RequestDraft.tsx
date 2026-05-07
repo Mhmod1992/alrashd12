@@ -46,17 +46,21 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
     const { settings } = useAppContext();
     
     const carDetails = React.useMemo(() => {
+        let logoUrl = carMake?.logo_url || '';
+        
         if (request.car_snapshot) {
             return {
                 makeNameEn: request.car_snapshot.make_en,
                 modelNameEn: request.car_snapshot.model_en,
                 year: request.car_snapshot.year,
+                logoUrl,
             };
         }
         return {
             makeNameEn: carMake?.name_en || 'Unknown',
             modelNameEn: carModel?.name_en || 'Unknown',
             year: car.year,
+            logoUrl,
         };
     }, [request.car_snapshot, car, carMake, carModel]);
 
@@ -120,28 +124,33 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
             )}
 
             <header className="relative flex flex-col pb-4 border-b-2 border-black dark:border-slate-400 z-10">
-                <div className="w-full flex justify-between items-end">
+                <div className="w-full flex justify-between items-end relative">
                     
                     {/* LEFT SIDE (Start in RTL): Inspection Type, Request Number & Vehicle Name */}
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 max-w-[60%]">
                         <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-300">#{request.request_number}</h1>
                         <div className="flex items-center gap-3">
-                            <div 
-                                className="border border-black dark:border-slate-400 rounded px-2 py-1 text-center font-bold text-sm"
-                                style={{ backgroundColor: '#fef3c7' }}
-                            >
-                               <strong className="me-1">نوع الفحص:</strong>
-                               <span className="bg-yellow-200 px-1 rounded text-black">{inspectionType.name}</span>
+                            <div className="border border-black dark:border-slate-400 rounded px-2 py-1 text-center font-bold text-sm bg-transparent">
+                               <span className="me-1 text-slate-800 dark:text-slate-300">نوع الفحص:</span>
+                               <span className="bg-yellow-300 border border-black px-1 rounded text-black inline-block">{inspectionType.name}</span>
                             </div>
                         </div>
                         
-                        <div className="flex items-baseline gap-2">
-                            <p className="text-lg font-bold">{`${carDetails.makeNameEn} ${carDetails.modelNameEn} ${carDetails.year}`}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                            {carDetails.logoUrl && (
+                                <img
+                                    src={carDetails.logoUrl}
+                                    alt={`${carDetails.makeNameEn} Logo`}
+                                    className="max-w-[40px] max-h-[40px] object-contain opacity-90 mix-blend-multiply flex-shrink-0"
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                            )}
+                            <p className="text-lg break-words leading-tight"><strong className="font-bold">{carDetails.makeNameEn}</strong> {carDetails.modelNameEn} {carDetails.year}</p>
                         </div>
                     </div>
 
                     {/* RIGHT SIDE: Group containing [Date+Plate Column] and [QR Code] */}
-                    <div className="flex items-end gap-4">
+                    <div className="flex items-end gap-4 flex-shrink-0">
                         
                         {/* Column 1: Date/Time (Top) -> Plate (Bottom) */}
                         <div className="flex flex-col items-center gap-1">
@@ -365,26 +374,30 @@ const RequestDraft: React.FC = () => {
                         <Button variant="secondary" onClick={handleBack} leftIcon={<Icon name="back" className="w-5 h-5 transform scale-x-[-1]" />}>
                            العودة
                         </Button>
-                        <Button onClick={handleStartFilling} variant="secondary" leftIcon={<Icon name="edit" className="w-5 h-5" />}>
-                           بدء التعبئة
-                        </Button>
-                        <div className="flex items-center gap-3 p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                            <label htmlFor="draft-quality-toggle" className="flex items-center cursor-pointer gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="draft-quality-toggle"
-                                    checked={isDraftQuality}
-                                    onChange={(e) => setIsDraftQuality(e.target.checked)}
-                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                    طباعة بجودة مسودة
-                                </span>
-                            </label>
-                            <Button onClick={handlePrint} leftIcon={<Icon name="print" className="w-5 h-5" />}>
-                                طباعة
-                            </Button>
-                        </div>
+                        {!shouldPrintDraft && (
+                            <>
+                                <Button onClick={handleStartFilling} variant="secondary" leftIcon={<Icon name="edit" className="w-5 h-5" />}>
+                                   بدء التعبئة
+                                </Button>
+                                <div className="flex items-center gap-3 p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                                    <label htmlFor="draft-quality-toggle" className="flex items-center cursor-pointer gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id="draft-quality-toggle"
+                                            checked={isDraftQuality}
+                                            onChange={(e) => setIsDraftQuality(e.target.checked)}
+                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            طباعة بجودة مسودة
+                                        </span>
+                                    </label>
+                                    <Button onClick={handlePrint} leftIcon={<Icon name="print" className="w-5 h-5" />}>
+                                        طباعة
+                                    </Button>
+                                </div>
+                            </>
+                        )}
                     </div>
                  </div>
             </div>
