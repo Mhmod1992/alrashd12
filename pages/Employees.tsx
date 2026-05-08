@@ -18,6 +18,7 @@ import SaveIcon from '../components/icons/SaveIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import BanknotesIcon from '../components/icons/BanknotesIcon';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
+import { Award, PlusCircle, Edit3, Layers, UserCheck } from 'lucide-react';
 
 // --- Helper Components for Stats ---
 const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; color: string; subValue?: string; trend?: number }> = ({ title, value, icon, color, subValue, trend }) => (
@@ -949,7 +950,7 @@ const PerformanceView: React.FC = () => {
                     <button onClick={() => setDateFilterType('custom')} className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${dateFilterType === 'custom' ? activeFilterClass : inactiveFilterClass}`}>نطاق مخصص</button>
                     {isLoadingServer && (
                         <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mr-2 text-xs font-bold animate-pulse">
-                            <Icon name="loader" className="w-4 h-4 animate-spin" />
+                            <RefreshCwIcon className="w-4 h-4 animate-spin" />
                             <span>جاري عرض البيانات...</span>
                         </div>
                     )}
@@ -1010,7 +1011,7 @@ const PerformanceView: React.FC = () => {
                                 <p className="font-bold text-sm">{topPerformer.name}</p>
                             </div>
                             <div className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center text-yellow-900 shadow-lg animate-pulse">
-                                <Icon name="award" className="w-5 h-5"/>
+                                <Award className="w-5 h-5"/>
                             </div>
                         </div>
                     )}
@@ -1021,7 +1022,7 @@ const PerformanceView: React.FC = () => {
                     {/* Creators */}
                     <CategoryRankCard 
                         title="منشئو الطلبات"
-                        icon={<Icon name="plus-circle" className="w-4 h-4"/>}
+                        icon={<PlusCircle className="w-4 h-4"/>}
                         items={groupedCreators}
                         onItemClick={(id) => handleOpenDetailsById(id, 'created')}
                         accentColor="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
@@ -1031,7 +1032,7 @@ const PerformanceView: React.FC = () => {
                     {/* Data Entry / Noters */}
                     <CategoryRankCard 
                         title="مدخلو البيانات"
-                        icon={<Icon name="edit-3" className="w-4 h-4"/>}
+                        icon={<Edit3 className="w-4 h-4"/>}
                         items={groupedNoters}
                         onItemClick={(id) => handleOpenDetailsById(id, 'noted')}
                         accentColor="bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400"
@@ -1041,7 +1042,7 @@ const PerformanceView: React.FC = () => {
                     {/* Multiple Sections Participations */}
                     <CategoryRankCard 
                         title="المشاركات المتعددة بالطلب (قسمين فأكثر)"
-                        icon={<Icon name="layers" className="w-4 h-4"/>}
+                        icon={<Layers className="w-4 h-4"/>}
                         items={groupedMultipleSections}
                         onItemClick={(id) => handleOpenDetailsById(id, 'multiple_sections')}
                         accentColor="bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400"
@@ -1053,7 +1054,7 @@ const PerformanceView: React.FC = () => {
                         <CategoryRankCard 
                             key={cat.role}
                             title={`أبرز المنفذين: ${cat.role === 'general_manager' ? 'مدير عام' : cat.role === 'manager' ? 'مدير' : cat.role === 'receptionist' ? 'استقبال' : cat.role === 'technician' ? 'فني' : cat.role}`}
-                            icon={<Icon name="user-check" className="w-4 h-4"/>}
+                            icon={<UserCheck className="w-4 h-4"/>}
                             items={cat.items}
                             onItemClick={(id) => handleOpenDetailsById(id, 'inspected')}
                             accentColor="bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"

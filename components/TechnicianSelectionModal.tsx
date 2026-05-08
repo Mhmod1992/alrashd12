@@ -15,10 +15,18 @@ interface TechnicianSelectionModalProps {
     categoryName: string;
 }
 
+const parseTitles = (title?: string): string[] => {
+    if (!title) return ['أخرى'];
+    // Split by / - , ، and whitespace variants
+    const parts = title.split(/[\/\-،,]+/).map(t => t.trim()).filter(t => t.length > 0);
+    return parts.length > 0 ? parts : ['أخرى'];
+};
+
 const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isOpen, onClose, request, categoryId, categoryName }) => {
     const { technicians, employees, updateRequest, addNotification, inspectionTypes, customFindingCategories } = useAppContext();
     const [isSaving, setIsSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedTitleFilter, setSelectedTitleFilter] = useState<string | null>(null);
 
     // --- NEW STATE FOR TABBED INTERFACE ---
     const [activeTabId, setActiveTabId] = useState<string>('');
@@ -30,7 +38,8 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
             id: t.id, 
             name: t.name, 
             type: 'tech',
-            title: t.title || 'فني'
+            title: t.title || 'فني',
+            parsedTitles: parseTitles(t.title || 'فني')
         }));
         
         const empList = employees
@@ -39,7 +48,8 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
                 id: e.id, 
                 name: e.name, 
                 type: 'emp',
-                title: e.title || 'موظف نظام'
+                title: e.title || 'موظف نظام',
+                parsedTitles: parseTitles(e.title || 'موظف نظام')
             }));
         
         // Sort alphabetically
@@ -47,9 +57,21 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
     }, [technicians, employees]);
 
     const filteredStaff = useMemo(() => {
-        if (!searchTerm) return allStaff;
-        return allStaff.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    }, [allStaff, searchTerm]);
+        let result = allStaff;
+        if (selectedTitleFilter) {
+            result = result.filter(s => s.parsedTitles.includes(selectedTitleFilter));
+        }
+        if (searchTerm) {
+            result = result.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        }
+        return result;
+    }, [allStaff, searchTerm, selectedTitleFilter]);
+
+    const uniqueTitles = useMemo(() => {
+        const titles = new Set<string>();
+        allStaff.forEach(s => s.parsedTitles.forEach(t => titles.add(t)));
+        return Array.from(titles).sort();
+    }, [allStaff]);
     
     // Get all categories for the current request to build tabs
     const requestCategories = useMemo(() => {
@@ -61,6 +83,11 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
             .filter((c): c is CustomFindingCategory => !!c);
     }, [request, inspectionTypes, customFindingCategories, categoryId]);
 
+
+    useEffect(() => {
+        setSearchTerm('');
+        setSelectedTitleFilter(null);
+    }, [activeTabId]);
 
     // Initialize selection from request data when modal opens
     useEffect(() => {
@@ -155,27 +182,72 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
                         className="w-full p-2.5 pl-10 text-sm border rounded-lg dark:bg-slate-800 dark:border-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                 </div>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                    <button
+                        onClick={() => setSelectedTitleFilter(null)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                            selectedTitleFilter === null
+                                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                        }`}
+                    >
+                        الكل
+                    </button>
+                    {uniqueTitles.map(title => (
+                        <button
+                            key={title}
+                            onClick={() => setSelectedTitleFilter(title)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                selectedTitleFilter === title
+                                    ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                            }`}
+                        >
+                            {title}
+                        </button>
+                    ))}
+                </div>
                 
-                <div className="flex-1 overflow-y-auto border rounded-lg dark:border-gray-700 custom-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
+                <div className="flex-1 overflow-y-auto border rounded-lg dark:border-gray-700 custom-scrollbar bg-slate-50/50 dark:bg-slate-900/50 p-2">
                     {filteredStaff.length > 0 ? (
-                        filteredStaff.map(person => (
-                            <label key={person.id} className={`flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/50 border-b dark:border-slate-800 last:border-0 ${selectedIdsForCurrentTab.has(person.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
-                                <div className="flex items-center gap-3">
-                                    <div className={`p-1.5 rounded-full ${person.type === 'emp' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                                        {person.type === 'emp' ? <UserCircleIcon className="w-4 h-4"/> : <BriefcaseIcon className="w-4 h-4"/>}
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-sm text-gray-900 dark:text-white">{person.name}</p>
-                                        <p className="text-[10px] text-gray-500 dark:text-gray-400">{person.title}</p>
-                                    </div>
+                        Object.entries(
+                            filteredStaff.reduce((acc, person) => {
+                                // If a title filter is active, only group by that title
+                                // Otherwise group by all parsed titles
+                                const titlesToGroup = selectedTitleFilter ? [selectedTitleFilter] : person.parsedTitles;
+                                titlesToGroup.forEach(t => {
+                                    if (!acc[t]) acc[t] = [];
+                                    if (!acc[t].find(p => p.id === person.id)) {
+                                        acc[t].push(person);
+                                    }
+                                });
+                                return acc;
+                            }, {} as Record<string, typeof filteredStaff>)
+                        ).map(([title, staff]) => (
+                            <div key={title} className="mb-4 last:mb-0">
+                                <h3 className="px-3 py-1 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 rounded-md mb-1">{title}</h3>
+                                <div className="flex flex-col gap-1">
+                                    {staff.map(person => (
+                                        <label key={person.id + '-' + title} className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors ${selectedIdsForCurrentTab.has(person.id) ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : 'bg-transparent border-transparent dark:border-transparent'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-1.5 rounded-full ${person.type === 'emp' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                                                    {person.type === 'emp' ? <UserCircleIcon className="w-4 h-4"/> : <BriefcaseIcon className="w-4 h-4"/>}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-sm text-gray-900 dark:text-white">{person.name}</p>
+                                                </div>
+                                            </div>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={selectedIdsForCurrentTab.has(person.id)} 
+                                                onChange={() => handleToggle(person.id)}
+                                                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                            />
+                                        </label>
+                                    ))}
                                 </div>
-                                <input 
-                                    type="checkbox" 
-                                    checked={selectedIdsForCurrentTab.has(person.id)} 
-                                    onChange={() => handleToggle(person.id)}
-                                    className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                />
-                            </label>
+                            </div>
                         ))
                     ) : (
                         <div className="p-4 text-center text-gray-500 text-sm">

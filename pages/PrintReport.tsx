@@ -18,6 +18,8 @@ import ReactMarkdown from 'react-markdown';
 import UploadIcon from '../components/icons/UploadIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
+import UserCircleIcon from '../components/icons/UserCircleIcon';
+import TechnicianSelectionModal from '../components/TechnicianSelectionModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { pdf } from '@react-pdf/renderer';
 import OrderPdf from '../components/reports/OrderPdf';
@@ -293,6 +295,8 @@ const PrintReport: React.FC = () => {
     const [deleteTargetFile, setDeleteTargetFile] = useState<{ data: string, type: string } | null>(null);
     const [deletePassword, setDeletePassword] = useState('');
     const [deleteError, setDeleteError] = useState('');
+
+    const [isTechnicianModalOpen, setIsTechnicianModalOpen] = useState(false);
 
     const [isDataReady, setIsDataReady] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -1127,6 +1131,42 @@ const PrintReport: React.FC = () => {
         }
     };
 
+    const assignedTechsGrouped = useMemo(() => {
+        if (!originalRequest?.technician_assignments) return [];
+        
+        const colorStyles = [
+            { bg: 'bg-blue-50 dark:bg-blue-900/20', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800', muted: 'text-blue-500 dark:text-blue-400' },
+            { bg: 'bg-emerald-50 dark:bg-emerald-900/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', muted: 'text-emerald-600 dark:text-emerald-500' },
+            { bg: 'bg-purple-50 dark:bg-purple-900/20', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800', muted: 'text-purple-500 dark:text-purple-400' },
+            { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', muted: 'text-amber-600 dark:text-amber-500' },
+            { bg: 'bg-rose-50 dark:bg-rose-900/20', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800', muted: 'text-rose-500 dark:text-rose-400' },
+            { bg: 'bg-cyan-50 dark:bg-cyan-900/20', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-800', muted: 'text-cyan-600 dark:text-cyan-500' },
+        ];
+
+        const result: { categoryName: string; names: string[]; style: typeof colorStyles[0] }[] = [];
+        let colorIdx = 0;
+        
+        Object.entries(originalRequest.technician_assignments).forEach(([catId, assignedIds]) => {
+            if (!assignedIds || assignedIds.length === 0) return;
+            const category = customFindingCategories.find(c => c.id === catId);
+            const catName = category ? category.name : catId;
+            
+            const techNames = technicians.filter(t => assignedIds.includes(t.id)).map(t => t.name);
+            const empNames = employees.filter(e => assignedIds.includes(e.id)).map(e => e.name);
+            const allNames = [...techNames, ...empNames];
+            
+            if (allNames.length > 0) {
+                result.push({ 
+                    categoryName: catName, 
+                    names: allNames,
+                    style: colorStyles[colorIdx % colorStyles.length]
+                });
+                colorIdx++;
+            }
+        });
+        return result;
+    }, [originalRequest, customFindingCategories, technicians, employees]);
+
     if (!request || !isDataReady) {
         return (
             <div className="flex flex-col items-center justify-center h-screen text-center p-4">
@@ -1184,6 +1224,7 @@ const PrintReport: React.FC = () => {
                                     <span className="hidden sm:inline ms-1">إكمال الطلب</span>
                                 </Button>
                             )}
+                            
                             
                             <Button
                                 variant="secondary"
@@ -1276,6 +1317,30 @@ const PrintReport: React.FC = () => {
                     </div>
                 </div>
             </header>
+            
+            {/* Small screen assigned technicians bar */}
+            <div className="md:hidden flex items-center overflow-x-auto py-2 px-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 scrollbar-hide gap-2 no-print">
+                <Button 
+                    variant="secondary" 
+                    onClick={() => setIsTechnicianModalOpen(true)} 
+                    size="sm" 
+                    className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 flex-shrink-0 shadow-sm"
+                    disabled={isSendingWhatsApp || originalRequest?.status === RequestStatus.COMPLETE}
+                >
+                    <UserCircleIcon className="w-4 h-4" />
+                    <span className="ms-1 font-bold text-xs">الفنيين</span>
+                </Button>
+                {assignedTechsGrouped.length > 0 ? (
+                    assignedTechsGrouped.map((group, idx) => (
+                        <div key={idx} className={`flex items-center gap-1 ${group.style.bg} px-2.5 py-1.5 rounded-full border ${group.style.border} whitespace-nowrap shadow-sm`}>
+                            <span className={`text-[10px] font-bold ${group.style.muted}`}>{group.categoryName}:</span>
+                            <span className={`text-xs font-semibold ${group.style.text}`}>{group.names.join('، ')}</span>
+                        </div>
+                    ))
+                ) : (
+                    <span className="text-xs font-medium text-slate-400 ms-2 whitespace-nowrap">لم يتم تعيين فنيين</span>
+                )}
+            </div>
             
             {isGenerating && (
                 <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
@@ -1616,6 +1681,51 @@ const PrintReport: React.FC = () => {
                     </div>
                 </motion.div>
             </AnimatePresence>
+            
+            {/* Desktop Floating Technicians Card */}
+            <AnimatePresence>
+                <motion.div 
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
+                    className="fixed top-48 right-8 z-[60] hidden lg:flex flex-col gap-2 p-4 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/50 dark:border-slate-700/50 print:hidden select-none hover:scale-105 transition-transform max-w-[280px]"
+                >
+                    <div className="flex items-center justify-between mb-1 pb-2 border-b border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                            <UserCircleIcon className="w-4 h-4" />
+                            <span className="text-xs font-black uppercase tracking-widest">فريق العمل</span>
+                        </div>
+                        {originalRequest?.status !== RequestStatus.COMPLETE && (
+                            <button onClick={() => setIsTechnicianModalOpen(true)} className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg text-blue-600 transition-colors" title="إدارة الفنيين">
+                                <Icon name="plus" className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    
+                    <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto w-full custom-scrollbar pe-1">
+                        {assignedTechsGrouped.length > 0 ? (
+                            assignedTechsGrouped.map((group, idx) => (
+                                <div key={idx} className={`${group.style.bg} rounded-lg p-2 border ${group.style.border}`}>
+                                    <div className={`text-[10px] font-bold ${group.style.muted} mb-1`}>{group.categoryName}</div>
+                                    <div className={`text-xs font-semibold ${group.style.text} leading-relaxed`}>
+                                        {group.names.join('، ')}
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-xs text-center text-slate-400 py-4 font-medium bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-200 dark:border-slate-700">لم يتم تعيين فنيين</div>
+                        )}
+                    </div>
+                </motion.div>
+            </AnimatePresence>
+            
+            <TechnicianSelectionModal 
+                isOpen={isTechnicianModalOpen} 
+                onClose={() => setIsTechnicianModalOpen(false)} 
+                request={originalRequest} 
+                categoryId="ALL" 
+                categoryName="تعيين الفنيين" 
+            />
         </div>
     );
 };

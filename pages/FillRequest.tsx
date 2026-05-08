@@ -59,7 +59,7 @@ export const FillRequest: React.FC = () => {
         setSelectedRequestId, updateRequest, addNotification, uploadImage,
         deleteImage, can, settings, goBack, showConfirmModal, createActivityLog,
         fetchRequestTabContent, fetchFullRequestForSave, setIsFocusMode,
-        hasUnsavedChanges, setHasUnsavedChanges, unreadMessagesCount, setIsMailboxOpen, technicians,
+        hasUnsavedChanges, setHasUnsavedChanges, unreadMessagesCount, setIsMailboxOpen, technicians, employees,
         fetchAndUpdateSingleRequest, sendWhatsAppMessage
     } = useAppContext();
 
@@ -2122,7 +2122,9 @@ export const FillRequest: React.FC = () => {
         });
 
         const assignedTechIds = request?.technician_assignments?.[categoryId] || [];
-        const assignedTechs = technicians.filter(t => assignedTechIds.includes(t.id));
+        const allStaff = [...technicians, ...employees.filter(e => e.preferences?.isTechnician)];
+        const assignedTechs = allStaff.filter(t => assignedTechIds.includes(t.id));
+        const assignedNames = assignedTechs.map(t => t.name).join('، ');
         const isInMultiSelectMode = multiSelectMode[categoryId];
 
         return (
@@ -2134,22 +2136,24 @@ export const FillRequest: React.FC = () => {
                         {/* We could add subtabs here if voice memos are needed per category */}
                     </div>
 
-                    {!isLocked && (
-                        <button
-                            onClick={() => {
+                    <button
+                        onClick={() => {
+                            if (!isLocked) {
                                 setTechnicianModalTarget({ id: categoryId, name: activeCategory.name });
                                 setIsTechnicianModalOpen(true);
-                            }}
-                            className={`flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 hover:text-${themeColor}-600 dark:hover:text-${themeColor}-400 bg-slate-100 dark:bg-slate-700/50 px-3 py-1.5 rounded-full transition-colors border border-transparent hover:border-${themeColor}-200 dark:hover:border-${themeColor}-800 self-end sm:self-center whitespace-nowrap`}
-                        >
-                            <UserCircleIcon className="w-4 h-4" />
-                            <span>
-                                {assignedTechs.length > 0
-                                    ? `فنيين (${assignedTechs.length})`
-                                    : 'تحديد الفنيين'}
-                            </span>
-                        </button>
-                    )}
+                            }
+                        }}
+                        disabled={isLocked}
+                        className={`flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 ${!isLocked ? `hover:text-${themeColor}-600 dark:hover:text-${themeColor}-400 bg-slate-100 dark:bg-slate-700/50 cursor-pointer hover:border-${themeColor}-200 dark:hover:border-${themeColor}-800` : 'bg-transparent text-slate-500 cursor-default'} px-3 py-1.5 rounded-full transition-colors border border-transparent self-end sm:self-center whitespace-nowrap overflow-hidden max-w-full sm:max-w-md`}
+                        title={assignedNames}
+                    >
+                        <UserCircleIcon className={`w-4 h-4 shrink-0 ${assignedTechs.length > 0 ? 'text-blue-500' : ''}`} />
+                        <span className="truncate">
+                            {assignedTechs.length > 0
+                                ? <span className="font-medium"><span className="text-xs text-slate-400 font-normal ml-1">بواسطة:</span><span className="text-blue-600 dark:text-blue-400">{assignedNames}</span></span>
+                                : 'تحديد الفنيين'}
+                        </span>
+                    </button>
                 </div>
 
                 <div className="flex flex-col gap-4">

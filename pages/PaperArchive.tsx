@@ -16,11 +16,13 @@ import TrashIcon from '../components/icons/TrashIcon';
 import XIcon from '../components/icons/XIcon';
 import { SkeletonTable } from '../components/Skeleton';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
+import UserCircleIcon from '../components/icons/UserCircleIcon';
 import { formatBytes } from '../lib/utils';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import CustomDatePicker from '../components/CustomDatePicker';
 import InAppScannerModal from '../components/InAppScannerModal';
+import TechnicianSelectionModal from '../components/TechnicianSelectionModal';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -105,7 +107,11 @@ const PaperArchive: React.FC = () => {
         fetchAllPaperArchiveRequests,
         fetchRequestByRequestNumber,
         authUser,
-        createActivityLog
+        createActivityLog,
+        technicians,
+        employees,
+        customFindingCategories,
+        requests
     } = useAppContext();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -119,6 +125,28 @@ const PaperArchive: React.FC = () => {
     const [selectedRequest, setSelectedRequest] = useState<InspectionRequest | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [filteredRequests, setFilteredRequests] = useState<InspectionRequest[]>([]);
+    
+    // Sync filteredRequests with context updates
+    useEffect(() => {
+        if (requests.length > 0 && filteredRequests.length > 0) {
+            const updatedFiltered = filteredRequests.map(fr => {
+                const contextReq = requests.find(r => r.id === fr.id);
+                return contextReq ? contextReq : fr;
+            });
+            // Only update if something actually changed to avoid infinite loops
+            const isChanged = updatedFiltered.some((r, i) => r !== filteredRequests[i]);
+            if (isChanged) {
+                setFilteredRequests(updatedFiltered);
+            }
+        }
+        
+        if (selectedRequest && requests.length > 0) {
+            const contextReq = requests.find(r => r.id === selectedRequest.id);
+            if (contextReq && JSON.stringify(contextReq.technician_assignments) !== JSON.stringify(selectedRequest.technician_assignments)) {
+                setSelectedRequest(contextReq);
+            }
+        }
+    }, [requests, filteredRequests, selectedRequest]);
     const [isLoading, setIsLoading] = useState(true);
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
 
@@ -183,6 +211,70 @@ const PaperArchive: React.FC = () => {
     const [gallerySubFilter, setGallerySubFilter] = useState<'all' | 'drafts_only' | 'attachments_only'>('all');
     const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
     const [lightboxImages, setLightboxImages] = useState<{url: string, title: string, subTitle: string, requestId: string, file: any}[]>([]);
+
+    const groupedLightboxImages = useMemo(() => {
+        const groups: { requestId: string; subTitle: string; images: any[] }[] = [];
+        lightboxImages.forEach((img, idx) => {
+            const lastGroup = groups[groups.length - 1];
+            if (lastGroup && lastGroup.requestId === img.requestId) {
+                lastGroup.images.push({ ...img, originalIndex: idx });
+            } else {
+                groups.push({ 
+                    requestId: img.requestId, 
+                    subTitle: img.subTitle,
+                    images: [{ ...img, originalIndex: idx }] 
+                });
+            }
+        });
+        return groups;
+    }, [lightboxImages]);
+
+    const [isTechnicianModalOpen, setIsTechnicianModalOpen] = useState(false);
+
+    const lightboxCurrentRequest = useMemo(() => {
+        if (selectedImageIndex === null || !lightboxImages[selectedImageIndex]) return null;
+        const rId = lightboxImages[selectedImageIndex].requestId;
+        // Search in filteredRequests first, if not there search in all/fetch? filteredRequests is fine because images are shown from it.
+        // Actually, if we are in the upload modal, selectedRequest is accurate.
+        if (selectedRequest && selectedRequest.id === rId) return selectedRequest;
+        return filteredRequests.find(r => r.id === rId) || null;
+    }, [selectedImageIndex, lightboxImages, filteredRequests, selectedRequest]);
+
+    const assignedTechsGrouped = useMemo(() => {
+        if (!lightboxCurrentRequest?.technician_assignments) return [];
+        
+        const colorStyles = [
+            { bg: 'bg-blue-50 dark:bg-blue-900/20', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800', muted: 'text-blue-500 dark:text-blue-400' },
+            { bg: 'bg-emerald-50 dark:bg-emerald-900/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', muted: 'text-emerald-600 dark:text-emerald-500' },
+            { bg: 'bg-purple-50 dark:bg-purple-900/20', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800', muted: 'text-purple-500 dark:text-purple-400' },
+            { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', muted: 'text-amber-600 dark:text-amber-500' },
+            { bg: 'bg-rose-50 dark:bg-rose-900/20', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800', muted: 'text-rose-500 dark:text-rose-400' },
+            { bg: 'bg-cyan-50 dark:bg-cyan-900/20', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-800', muted: 'text-cyan-600 dark:text-cyan-500' },
+        ];
+
+        const result: { categoryName: string; names: string[]; style: typeof colorStyles[0] }[] = [];
+        let colorIdx = 0;
+        
+        Object.entries(lightboxCurrentRequest.technician_assignments).forEach(([catId, assignedIds]) => {
+            if (!assignedIds || assignedIds.length === 0) return;
+            const category = customFindingCategories.find(c => c.id === catId);
+            const catName = category ? category.name : catId;
+            
+            const techNames = technicians.filter(t => assignedIds.includes(t.id)).map(t => t.name);
+            const empNames = employees.filter(e => assignedIds.includes(e.id)).map(e => e.name);
+            const allNames = [...techNames, ...empNames];
+            
+            if (allNames.length > 0) {
+                result.push({ 
+                    categoryName: catName, 
+                    names: allNames,
+                    style: colorStyles[colorIdx % colorStyles.length]
+                });
+                colorIdx++;
+            }
+        });
+        return result;
+    }, [lightboxCurrentRequest, customFindingCategories, technicians, employees]);
 
     const openLightbox = (images: {url: string, title: string, subTitle: string, requestId: string, file: any}[], index: number) => {
         setLightboxImages(images);
@@ -1353,12 +1445,38 @@ const PaperArchive: React.FC = () => {
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                     {displayedImages.map((file, idx) => (
                                         <div key={file.data || idx} className="relative group rounded-lg overflow-hidden border dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm aspect-[3/4]">
-                                            <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
-                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                <a href={file.data} target="_blank" rel="noopener noreferrer" className="p-2 bg-white rounded-lg text-slate-800 hover:bg-blue-50 transition-colors">
+                                            <div onClick={() => {
+                                                if (selectedRequest) {
+                                                    const reqClient = clients.find(c => c.id === selectedRequest.client_id);
+                                                    const lightboxData = displayedImages.map((img, i) => ({
+                                                        url: img.data,
+                                                        title: `الصفحة ${i + 1} - ${img.name}`,
+                                                        subTitle: reqClient?.name || 'طلب بدون اسم',
+                                                        requestId: selectedRequest.id,
+                                                        file: img
+                                                    }));
+                                                    openLightbox(lightboxData, idx);
+                                                }
+                                            }} className="w-full h-full cursor-pointer">
+                                                <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
+                                            </div>
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
+                                                <button onClick={() => {
+                                                    if (selectedRequest) {
+                                                        const reqClient = clients.find(c => c.id === selectedRequest.client_id);
+                                                        const lightboxData = displayedImages.map((img, i) => ({
+                                                            url: img.data,
+                                                            title: `الصفحة ${i + 1} - ${img.name}`,
+                                                            subTitle: reqClient?.name || 'طلب بدون اسم',
+                                                            requestId: selectedRequest.id,
+                                                            file: img
+                                                        }));
+                                                        openLightbox(lightboxData, idx);
+                                                    }
+                                                }} className="p-2 bg-white rounded-lg text-slate-800 hover:bg-blue-50 transition-colors pointer-events-auto">
                                                     <Icon name="eye" className="w-4 h-4" />
-                                                </a>
-                                                <button onClick={() => initiateDelete(file)} className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 transition-colors">
+                                                </button>
+                                                <button onClick={() => initiateDelete(file)} className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 transition-colors pointer-events-auto">
                                                     <TrashIcon className="w-4 h-4" />
                                                 </button>
                                             </div>
@@ -1456,6 +1574,57 @@ const PaperArchive: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* Small screen assigned technicians bar */}
+                    <div className="md:hidden flex items-center overflow-x-auto py-2 px-4 bg-black/40 backdrop-blur-md border-b border-white/10 scrollbar-hide gap-2 z-40">
+                        <Button 
+                            variant="secondary" 
+                            onClick={() => setIsTechnicianModalOpen(true)} 
+                            size="sm" 
+                            className="bg-white/10 text-white border-white/20 hover:bg-white/20 flex-shrink-0 shadow-sm"
+                        >
+                            <UserCircleIcon className="w-4 h-4" />
+                            <span className="ms-1 font-bold text-xs">الفنيين</span>
+                        </Button>
+                        {assignedTechsGrouped.length > 0 ? (
+                            assignedTechsGrouped.map((group, idx) => (
+                                <div key={idx} className={`flex items-center gap-1 ${group.style.bg} px-2.5 py-1.5 rounded-full border ${group.style.border} whitespace-nowrap shadow-sm`}>
+                                    <span className={`text-[10px] font-bold ${group.style.muted}`}>{group.categoryName}:</span>
+                                    <span className={`text-xs font-semibold ${group.style.text}`}>{group.names.join('، ')}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <span className="text-xs font-medium text-white/50 ms-2 whitespace-nowrap">لم يتم تعيين فنيين</span>
+                        )}
+                    </div>
+                    
+                    {/* Desktop Floating Technicians Card */}
+                    <div className="absolute top-24 right-8 z-[60] hidden lg:flex flex-col gap-2 p-4 bg-black/60 backdrop-blur-md rounded-2xl shadow-2xl border border-white/10 select-none hover:scale-105 transition-transform max-w-[280px]">
+                        <div className="flex items-center justify-between mb-1 pb-2 border-b border-white/10">
+                            <div className="flex items-center gap-2 text-white/70">
+                                <UserCircleIcon className="w-4 h-4" />
+                                <span className="text-xs font-black uppercase tracking-widest">فريق العمل</span>
+                            </div>
+                            <button onClick={() => setIsTechnicianModalOpen(true)} className="p-1.5 hover:bg-white/10 rounded-lg text-white transition-colors" title="إدارة الفنيين">
+                                <Icon name="plus" className="w-4 h-4" />
+                            </button>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto w-full custom-scrollbar pe-1">
+                            {assignedTechsGrouped.length > 0 ? (
+                                assignedTechsGrouped.map((group, idx) => (
+                                    <div key={idx} className={`${group.style.bg} rounded-lg p-2 border ${group.style.border}`}>
+                                        <div className={`text-[10px] font-bold ${group.style.muted} mb-1`}>{group.categoryName}</div>
+                                        <div className={`text-xs font-semibold ${group.style.text} leading-relaxed`}>
+                                            {group.names.join('، ')}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-xs text-center text-white/50 py-4 font-medium bg-white/5 rounded-lg border border-dashed border-white/10">لم يتم تعيين فنيين</div>
+                            )}
+                        </div>
+                    </div>
+
                     {/* Main Image Area */}
                     <div className="flex-1 relative bg-slate-950 overflow-auto scrollbar-hide">
                         {/* Navigation Arrows - Using fixed position to stay visible during scroll */}
@@ -1528,16 +1697,36 @@ const PaperArchive: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Thumbnails Section */}
-                    <div className="h-24 bg-black/40 backdrop-blur-sm p-2 flex gap-2 overflow-x-auto no-scrollbar scroll-smooth flex-shrink-0">
-                        {lightboxImages.map((img, idx) => (
-                            <button
-                                key={img.url + idx}
-                                onClick={() => setSelectedImageIndex(idx)}
-                                className={`h-full aspect-[3/4] flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${idx === selectedImageIndex ? 'border-blue-500 scale-105 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-transparent opacity-50 hover:opacity-80'}`}
+                    {/* Thumbnails Section grouped by Request */}
+                    <div className="h-28 bg-black/60 backdrop-blur-md p-3 flex gap-4 overflow-x-auto no-scrollbar scroll-smooth flex-shrink-0 border-t border-white/10 items-center">
+                        {groupedLightboxImages.map((group, gIdx) => (
+                            <div 
+                                key={group.requestId + gIdx} 
+                                className={`flex gap-2 p-2 rounded-xl transition-all relative ${
+                                    group.images.some(img => img.originalIndex === selectedImageIndex)
+                                    ? 'bg-blue-500/10 border border-blue-500/30 ring-1 ring-blue-500/20' 
+                                    : 'bg-white/5 border border-white/10'
+                                }`}
                             >
-                                <img src={img.url} alt="" className="w-full h-full object-cover" />
-                            </button>
+                                {/* Optional: Request Badge for the group */}
+                                <div className="absolute -top-2.5 right-3 px-1.5 py-0.5 bg-black/80 border border-white/10 rounded text-[8px] font-black text-white/50 uppercase tracking-tighter truncate max-w-[80px]">
+                                    {group.subTitle}
+                                </div>
+
+                                {group.images.map((img) => (
+                                    <button
+                                        key={img.url + img.originalIndex}
+                                        onClick={() => setSelectedImageIndex(img.originalIndex)}
+                                        className={`h-16 aspect-[3/4] flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
+                                            img.originalIndex === selectedImageIndex 
+                                            ? 'border-blue-500 scale-110 shadow-lg z-10' 
+                                            : 'border-transparent opacity-40 hover:opacity-100'
+                                        }`}
+                                    >
+                                        <img src={img.url} alt="" className="w-full h-full object-cover" />
+                                    </button>
+                                ))}
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -1612,6 +1801,14 @@ const PaperArchive: React.FC = () => {
                     )}
                 </div>
             </Modal>
+            
+            <TechnicianSelectionModal 
+                isOpen={isTechnicianModalOpen} 
+                onClose={() => setIsTechnicianModalOpen(false)} 
+                request={lightboxCurrentRequest || undefined} 
+                categoryId="ALL" 
+                categoryName="تعيين الفنيين" 
+            />
         </div>
     );
 };

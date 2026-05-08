@@ -396,7 +396,7 @@ export const useDataScope = (
     const fetchPaperArchiveRequests = useCallback(async (startDate: string, endDate: string): Promise<InspectionRequest[]> => {
         // Fetches ALL requests in a date range for archiving purposes
         const { data, error } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
             .gte('created_at', startDate)
             .lte('created_at', endDate)
             .order('created_at', { ascending: false });
@@ -441,7 +441,7 @@ export const useDataScope = (
     const fetchAllPaperArchiveRequests = useCallback(async (): Promise<InspectionRequest[]> => {
         // Fetches ALL requests up to a limit for archiving purposes
         const { data, error } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
             .order('created_at', { ascending: false })
             .limit(500);
 
