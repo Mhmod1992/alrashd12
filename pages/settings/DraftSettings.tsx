@@ -78,7 +78,10 @@ const DraftPreview: React.FC<{ settings: DraftSettingsType }> = ({ settings }) =
                          <div className="flex gap-6 items-end text-sm">
                              {settings.signatureFields.map(field => (
                                  <div key={field.id} className="flex items-baseline gap-2">
-                                     <span className="font-bold" style={{ fontSize: field.fontSize ? `${field.fontSize}px` : '14px' }}>{field.label}</span>
+                                     <span className="font-bold" style={{ 
+                                         fontSize: field.fontSize ? `${field.fontSize}px` : '14px',
+                                         color: field.textColor || '#000000'
+                                     }}>{field.label}</span>
                                      <span className="text-gray-400">.......................</span>
                                  </div>
                              ))}
@@ -207,12 +210,13 @@ const DraftSettings: React.FC = () => {
             id: Date.now().toString(),
             label: '',
             fontSize: 14,
+            textColor: '#000000',
             applicableInspectionTypeIds: []
         };
         handleSettingChange('signatureFields', [...(localDraftSettings.signatureFields || []), newField]);
     };
 
-    const handleUpdateSignatureField = (id: string, updates: Partial<{ label: string; fontSize: number; applicableInspectionTypeIds: string[] }>) => {
+    const handleUpdateSignatureField = (id: string, updates: Partial<{ label: string; fontSize: number; textColor: string; applicableInspectionTypeIds: string[] }>) => {
         const updatedFields = (localDraftSettings.signatureFields || []).map(f => 
             f.id === id ? { ...f, ...updates } : f
         );
@@ -475,6 +479,15 @@ const DraftSettings: React.FC = () => {
                                                     className="w-16 p-1 text-sm border rounded dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-1 focus:ring-blue-500 text-center"
                                                 />
                                                 <span className="text-xs text-slate-400">px</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <label className="text-xs text-slate-500 whitespace-nowrap font-bold">اللون:</label>
+                                                <input 
+                                                    type="color" 
+                                                    value={field.textColor || '#000000'}
+                                                    onChange={(e) => handleUpdateSignatureField(field.id, { textColor: e.target.value })}
+                                                    className="w-10 h-8 p-0 border-0 bg-transparent cursor-pointer rounded overflow-hidden"
+                                                />
                                             </div>
                                         </div>
 

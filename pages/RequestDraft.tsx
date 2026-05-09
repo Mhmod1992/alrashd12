@@ -183,7 +183,10 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                         <div className="flex gap-6 items-end text-sm">
                             {visibleSignatures.map(field => (
                                 <div key={field.id} className="flex items-baseline gap-2">
-                                    <span className="font-bold" style={{ fontSize: field.fontSize ? `${field.fontSize}px` : '14px' }}>{field.label}</span>
+                                    <span className="font-bold" style={{ 
+                                        fontSize: field.fontSize ? `${field.fontSize}px` : '14px',
+                                        color: field.textColor || '#000000'
+                                    }}>{field.label}</span>
                                     <span className="text-gray-400">.......................</span>
                                 </div>
                             ))}
@@ -284,47 +287,60 @@ const RequestDraft: React.FC = () => {
 
     // Image Preloading Logic
     useEffect(() => {
-        // If there's a custom image in settings, we must wait for it to load
-        const imageUrl = settings.draftSettings?.customImageUrl;
+        // Collect all potential image URLs that need to be loaded
+        const urlsToLoad = [
+            settings.logoUrl,
+            carMake?.logo_url,
+            settings.draftSettings?.customImageUrl
+        ].filter(Boolean) as string[];
         
-        if (imageUrl) {
+        if (urlsToLoad.length > 0) {
             setIsContentReady(false);
-            const img = new Image();
-            img.src = imageUrl;
             
-            // Success handler
-            img.onload = () => {
-                setIsContentReady(true);
-            };
+            let loadedCount = 0;
+            const total = urlsToLoad.length;
             
-            // Error handler (don't block the page if image fails)
-            img.onerror = () => {
-                console.warn("Failed to preload draft background image.");
-                setIsContentReady(true);
+            const handleImageLoad = () => {
+                loadedCount++;
+                if (loadedCount >= total) {
+                    // Small additional buffer to ensure browser rendering cycle is ready
+                    setTimeout(() => setIsContentReady(true), 300);
+                }
             };
 
-            // Fail-safe timeout (e.g., 3 seconds) in case onload never fires
+            urlsToLoad.forEach(url => {
+                const img = new Image();
+                img.src = url;
+                img.onload = handleImageLoad;
+                img.onerror = () => {
+                    console.warn(`Failed to preload image: ${url}`);
+                    handleImageLoad();
+                };
+            });
+
+            // Fail-safe timeout (7 seconds) to not keep the user stuck forever if an image is very slow
             const timeout = setTimeout(() => {
                 setIsContentReady(true);
-            }, 3000);
+            }, 7000);
 
             return () => clearTimeout(timeout);
         } else {
-            // No image to load, ready immediately
-            setIsContentReady(true);
+            // No images to load, wait for a tick to ensure data is stable
+            const timer = setTimeout(() => setIsContentReady(true), 100);
+            return () => clearTimeout(timer);
         }
-    }, [settings.draftSettings?.customImageUrl]);
+    }, [settings.logoUrl, carMake?.logo_url, settings.draftSettings?.customImageUrl]);
 
     // Printing Logic (Only when content is ready AND data is available)
     React.useEffect(() => {
         if (shouldPrintDraft && isContentReady && !isDataMissing && !isFetchingRequest && !isRefreshing) {
-            // Short delay to allow DOM render after isContentReady becomes true
+            // Delay to allow DOM render after isContentReady becomes true
             const timer = setTimeout(() => {
                 window.print();
                 window.sessionStorage.setItem('skipScrollRestoration', 'true');
                 setShouldPrintDraft(false); 
                 goBack(); 
-            }, 1000); // 1 second delay to ensure everything is rendered correctly
+            }, 800); // Trigger print once ready
 
             return () => clearTimeout(timer);
         }
@@ -332,12 +348,25 @@ const RequestDraft: React.FC = () => {
 
     if (isDataMissing || !isContentReady || isFetchingRequest) {
         return (
-             <div className="flex flex-col items-center justify-center h-screen text-center p-8">
-                <RefreshCwIcon className="w-12 h-12 text-blue-500 animate-spin mb-4" />
-                <p className="text-lg text-gray-700 dark:text-gray-300 font-semibold">
-                    {(!isContentReady) ? 'جاري تجهيز المسودة والصور...' : (isFetchingRequest || isRefreshing) ? 'جاري جلب البيانات من الخادم...' : 'جاري تحميل بيانات الطلب...'}
+             <div className="flex flex-col items-center justify-center h-screen text-center p-8 bg-slate-50 dark:bg-slate-900">
+                <div className="relative">
+                    <RefreshCwIcon className="w-16 h-16 text-blue-500 animate-spin mb-4" />
+                    {!isContentReady && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <Icon name="image" className="w-6 h-6 text-blue-400 animate-pulse" />
+                        </div>
+                    )}
+                </div>
+                <p className="text-xl text-gray-800 dark:text-gray-200 font-bold mb-2">
+                    {(!isContentReady) ? 'جاري تحميل الصور والشعار...' : (isFetchingRequest || isRefreshing) ? 'جاري جلب البيانات من الخادم...' : 'جاري معالجة الطلب...'}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">يرجى الانتظار قليلاً لضمان جودة الطباعة.</p>
+                <div className="max-w-md">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {(!isContentReady) 
+                            ? 'يرجى الانتظار، نقوم بالتأكد من تحميل كافة المكونات (الشعار، صورة السيارة، والرسوم) لضمان طباعة سليمة واحترافية.' 
+                            : 'سيتم نقلك فوراً إلى نافذة الطباعة بمجرد جاهزية البيانات.'}
+                    </p>
+                </div>
                 
                 {/* Allow aborting if stuck too long */}
                 {(!request && isContentReady && !isFetchingRequest && !isRefreshing) && (
@@ -424,11 +453,7 @@ const RequestDraft: React.FC = () => {
                     border-radius: 0 !important;
                     width: 100%;
                     height: 100vh; /* Fill the page */
-                    color: black !important;
-                }
-                .printable-content * {
-                    color: black !important;
-                    border-color: black !important;
+                    color: black;
                 }
                 .printable-content header {
                     display: flex !important;

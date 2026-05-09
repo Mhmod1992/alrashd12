@@ -713,7 +713,7 @@ const FormattedPlate = ({ plateNumber, plateCharacters, borderColor }: { plateNu
       </View>
 
       {/* Numbers */}
-      <View style={[styles.plateBox, { borderRightWidth: 1, borderRightColor: borderColor, paddingRight: 8, marginRight: 8 }]}>
+      <View style={[styles.plateBox, { borderRightWidth: 1, borderRightColor: borderColor, paddingRight: 8, marginRight: 8, flexDirection: 'row' }]}>
         {numberChars.map((num, i) => (
           <View key={i} style={styles.plateChar}>
             <Text style={styles.plateCharAr}>{num}</Text>

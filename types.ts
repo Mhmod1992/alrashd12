@@ -444,7 +444,7 @@ export interface DraftSettings {
   showImageForInspectionTypeIds: string[];
   imageStyle?: 'absolute' | 'float';
   customFields?: DraftCustomField[];
-  signatureFields?: { id: string; label: string; fontSize?: number; applicableInspectionTypeIds?: string[] }[];
+  signatureFields?: { id: string; label: string; fontSize?: number; textColor?: string; applicableInspectionTypeIds?: string[] }[];
   defaultPrintAsDraft?: boolean;
 }
 
