@@ -200,8 +200,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [isCarScannerOpen, setIsCarScannerOpen] = useState(false);
 
     // --- POPULATE FOR EDIT MODE ---
+    const populatedIdRef = useRef<string | null>(null);
+
     useEffect(() => {
-        if (initialData) {
+        if (initialData && populatedIdRef.current !== initialData.id) {
             const req = initialData;
             // Client
             const existingClient = clients.find(c => c.id === req.client_id);
@@ -285,8 +287,11 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 setBrokerId(req.broker.id);
                 setBrokerCommission(req.broker.commission);
             }
+
+            // Mark as populated for this ID
+            populatedIdRef.current = req.id;
         }
-    }, [initialData, clients, cars, contextCarMakes, contextCarModels]);
+    }, [initialData, clients, cars, contextCarMakes, contextCarModels, inspectionTypes]);
 
 
     useEffect(() => {
@@ -1142,7 +1147,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const handleTypeSelection = (type: InspectionType) => {
         setInspectionTypeId(type.id);
         setInspectionTypeSearchTerm(type.name);
-        setInspectionPrice(type.price);
+        // Removed setInspectionPrice(type.price) to prevent overwriting user-entered price
         setIsTypeDropdownOpen(false);
         setErrors(prev => ({ ...prev, inspectionType: false }));
         priceInputRef.current?.focus();
