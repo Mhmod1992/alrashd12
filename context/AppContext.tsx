@@ -529,9 +529,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         localStorage.setItem('cached_authUser', JSON.stringify(employeeProfile));
                         localStorage.setItem('lastActiveTime', Date.now().toString());
                         
-                        const todayStr = new Date().toLocaleDateString('en-CA');
-                        if (localStorage.getItem('loginDate') !== todayStr) {
-                             localStorage.setItem('loginDate', todayStr);
+                        const shiftDate = new Date(Date.now() - 4 * 3600 * 1000).toLocaleDateString('en-CA');
+                        if (localStorage.getItem('loginDate') !== shiftDate) {
+                             localStorage.setItem('loginDate', shiftDate);
                         }
                     }
                 }
@@ -599,11 +599,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
         checkInactivity();
         const checkMidnight = () => {
-            const storedDate = localStorage.getItem('loginDate');
-            const todayStr = new Date().toLocaleDateString('en-CA');
-            if (storedDate && storedDate !== todayStr && authUserRef.current) {
+            // Only apply auto-logout at 4 AM for desktop devices
+            const isDesktop = window.matchMedia('(min-width: 1024px) and (pointer: fine)').matches;
+            if (!isDesktop) return;
+
+            const storedShiftDate = localStorage.getItem('loginDate');
+            const currentShiftDate = new Date(Date.now() - 4 * 3600 * 1000).toLocaleDateString('en-CA');
+
+            // If the shift date has changed (i.e. we crossed the 4:00 AM boundary)
+            if (storedShiftDate && storedShiftDate !== currentShiftDate && authUserRef.current) {
                 logout();
-                addNotification({ title: 'يوم جديد', message: 'انتهى اليوم، يرجى تسجيل الدخول من جديد.', type: 'info' });
+                addNotification({ 
+                    title: 'وردية جديدة', 
+                    message: 'تم تسجيل الخروج التلقائي لبداية يوم عمل جديد (4 فجراً). يرجى تسجيل الدخول من جديد.', 
+                    type: 'info' 
+                });
             }
         };
         checkMidnight();
@@ -1326,7 +1336,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 // Cache user immediately on successful login
                 setAuthUser(employeeProfile);
                 localStorage.setItem('cached_authUser', JSON.stringify(employeeProfile));
-                localStorage.setItem('loginDate', new Date().toLocaleDateString('en-CA'));
+                localStorage.setItem('loginDate', new Date(Date.now() - 4 * 3600 * 1000).toLocaleDateString('en-CA'));
                 localStorage.setItem('lastActiveTime', Date.now().toString());
                 
                 await sendSystemNotification({ 
