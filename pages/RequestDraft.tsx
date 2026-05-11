@@ -353,7 +353,7 @@ const RequestDraft: React.FC = () => {
                     <RefreshCwIcon className="w-16 h-16 text-blue-500 animate-spin mb-4" />
                     {!isContentReady && (
                         <div className="absolute inset-0 flex items-center justify-center">
-                            <Icon name="image" className="w-6 h-6 text-blue-400 animate-pulse" />
+                            <Icon name="gallery" className="w-6 h-6 text-blue-400 animate-pulse" />
                         </div>
                     )}
                 </div>

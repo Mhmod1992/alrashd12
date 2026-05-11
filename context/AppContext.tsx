@@ -1466,7 +1466,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fetchServerFinancials = useCallback(async (startDate: string, endDate: string, includeCompletedOnly: boolean): Promise<FinancialStats> => {
         let query = supabase.from('inspection_requests').select(`
             id, request_number, client_id, car_id, car_snapshot, price, status, payment_type, 
-            split_payment_details, payment_note, broker, created_at,
+            split_payment_details, payment_note, broker, created_at, activity_log, technician_assignments, general_notes,
             cars:car_id (
                 make:make_id (name_ar, name_en),
                 model:model_id (name_ar, name_en)
