@@ -49,13 +49,13 @@ const QuickActions: React.FC<{
             action: () => { setInitialRequestModalState('new'); setPage('requests'); } 
         },
         { 
-            label: 'بحث سريع', 
+            label: 'البحث عن عميل', 
             icon: <SearchIcon className="w-5 h-5" />, 
             color: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300', 
             action: onOpenSearchClient 
         },
         { 
-            label: 'تاريخ مركبة', 
+            label: 'بحث عن سيارة فحصت سابقا', 
             icon: <CarIcon className="w-5 h-5" />, 
             color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300', 
             action: onOpenVehicleHistorySearch 
