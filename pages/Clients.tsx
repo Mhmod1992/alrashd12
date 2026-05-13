@@ -21,6 +21,14 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import TrendingUpIcon from '../components/icons/TrendingUpIcon';
 import HistoryIcon from '../components/icons/HistoryIcon';
 
+const formatPhone = (val?: string) => {
+    if (!val) return '';
+    const digits = val.replace(/\D/g, '');
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+};
+
 const Clients: React.FC = () => {
     const { 
         searchClientsPage, cars, carMakes, carModels, requests, 
@@ -678,7 +686,7 @@ const Clients: React.FC = () => {
                                                         {client.is_vip && <Icon name="sparkles" className="w-3.5 h-3.5 text-yellow-500" />}
                                                         {client.is_system_default && <span className="text-[10px] bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400 px-1.5 rounded-md">✨ عام</span>}
                                                     </div>
-                                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{client.phone}</p>
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{formatPhone(client.phone)}</p>
                                                 </div>
                                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shadow-sm shadow-black/5 ${selectedClientId === client.id ? 'bg-blue-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
                                                     {client.name.charAt(0)}
@@ -733,7 +741,7 @@ const Clients: React.FC = () => {
                                                   <div className="flex items-center gap-4 mt-3">
                                                       <div className="flex items-center gap-2 group cursor-pointer">
                                                           <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 group-hover:bg-blue-500 group-hover:text-white transition-all"><PhoneIcon className="w-4 h-4"/></div>
-                                                          <span className="text-slate-600 dark:text-slate-400 font-mono text-sm">{selectedClient.phone}</span>
+                                                          <span className="text-slate-600 dark:text-slate-400 font-mono text-sm">{formatPhone(selectedClient.phone)}</span>
                                                       </div>
                                                       <button onClick={handleOpenWhatsappChat} className="flex items-center gap-2 px-4 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all rounded-full text-xs font-bold border border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800 font-sans">
                                                           <WhatsappIcon className="w-4 h-4"/>
@@ -1032,7 +1040,7 @@ const Clients: React.FC = () => {
                     </div>
                     <div>
                         <label className="block text-sm font-medium">رقم الهاتف</label>
-                        <input type="tel" value={currentClient.phone || ''} onChange={e => setCurrentClient(p => ({...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10)}))} className={formInputClasses} required placeholder="05xxxxxxxx" style={{ direction: 'ltr', textAlign: 'right' }}/>
+                        <input type="tel" value={formatPhone(currentClient.phone)} onChange={e => setCurrentClient(p => ({...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10)}))} className={formInputClasses} required placeholder="xxx-xxx-xxxx" maxLength={12} style={{ direction: 'ltr', textAlign: 'right' }}/>
                     </div>
                     <div>
                         <label className="flex items-center gap-2">

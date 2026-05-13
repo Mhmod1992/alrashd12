@@ -765,8 +765,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         setIsRefreshing(true);
 
+        const cleanQuery = query.replace(/\s/g, '');
+        const isTenDigits = /^\d{10}$/.test(cleanQuery) || /^05\d{8}$/.test(cleanQuery);
+        const isFourDigits = /^\d{4}$/.test(cleanQuery) || /^\d{1,4}$/.test(cleanQuery);
+        const isNumericQuery = /^\d+$/.test(cleanQuery);
+        const searchTokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+        const yearTokens = searchTokens.filter(t => /^(19|20)\d{2}$/.test(t));
+        const textTokens = searchTokens.filter(t => !/^(19|20)\d{2}$/.test(t));
+        // A model and year query must have at least one text token (like كامري) and one year token (like 2012)
+        // Also it must not be just a single number
+        const isModelAndYear = yearTokens.length > 0 && textTokens.length > 0;
+
         // --- STEP 0: LOCAL SEARCH (FOR SPEED) ---
-        const isNumericQuery = /^\d+$/.test(query);
         let localResults: InspectionRequest[] = [];
 
         if (exactOnly) {
@@ -775,15 +785,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const queryNum = Number(query);
                 localResults = requests.filter(r => r.request_number === queryNum);
             } else {
-                // If exactOnly is requested but query is not numeric, we can't find an order ID
                 setSearchedRequests([]);
                 setIsRefreshing(false);
                 return;
             }
         } else {
-            // GENERAL COMPREHENSIVE SEARCH
+            // SMART COMPREHENSIVE SEARCH
             const lowerQuery = query.toLowerCase();
-            const searchTokens = lowerQuery.split(/\s+/).filter(t => t.length > 0);
 
             localResults = requests.filter(r => {
                 const client = clients.find(c => c.id === r.client_id);
@@ -791,21 +799,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const make = carMakes.find(m => m.id === car?.make_id);
                 const model = carModels.find(m => m.id === car?.model_id);
 
-                // For plate searching, compare without spaces
+                if (isTenDigits) {
+                    return client?.phone?.includes(cleanQuery);
+                }
+
+                if (isNumericQuery && cleanQuery.length <= 4 && !isModelAndYear) {
+                     const isOrder = r.request_number === Number(cleanQuery);
+                     const plateNormalized = car?.plate_number?.replace(/\s/g, '').toLowerCase() || '';
+                     const plateEnNormalized = car?.plate_number_en?.replace(/\s/g, '').toLowerCase() || '';
+                     const isPlate = plateNormalized.includes(cleanQuery) || plateEnNormalized.includes(cleanQuery);
+                     return isOrder || isPlate;
+                }
+
+                if (isModelAndYear) {
+                    const searchableText = `${make?.name_ar} ${make?.name_en} ${model?.name_ar} ${model?.name_en}`.toLowerCase();
+                    const textMatches = textTokens.every(t => searchableText.includes(t));
+                    const yearMatches = yearTokens.includes(String(car?.year));
+                    return textMatches && yearMatches;
+                }
+
+                // Fallback for general mixed text:
                 const plateNormalized = car?.plate_number?.replace(/\s/g, '').toLowerCase();
                 const plateEnNormalized = car?.plate_number_en?.replace(/\s/g, '').toLowerCase();
-                const queryNormalized = query.replace(/\s/g, '').toLowerCase();
+                if (plateNormalized && plateNormalized.includes(cleanQuery.toLowerCase())) return true;
+                if (plateEnNormalized && plateEnNormalized.includes(cleanQuery.toLowerCase())) return true;
 
-                if (plateNormalized && plateNormalized.includes(queryNormalized)) return true;
-                if (plateEnNormalized && plateEnNormalized.includes(queryNormalized)) return true;
-
-                // Create a comprehensive string block for this request
                 const searchableBlock = [
                     r.request_number,
                     client?.name,
                     client?.phone,
-                    car?.plate_number,
-                    car?.plate_number_en,
                     car?.vin,
                     car?.year,
                     make?.name_ar,
@@ -814,149 +836,141 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     model?.name_en
                 ].filter(Boolean).join(' ').toLowerCase();
 
-                // Check if ALL tokens are present in the searchable block
                 return searchTokens.every(token => searchableBlock.includes(token));
             });
         }
 
         // Show local results immediately if found
         if (localResults.length > 0) {
-            setSearchedRequests(localResults);
+            setSearchedRequests([...localResults]); // Ensure a new array reference
         }
 
         try {
             let requestsByNumber: InspectionRequest[] = [];
 
-            // 1. If exactOnly, search by Request Number ONLY
-            if (exactOnly && isNumericQuery) {
+            // 1. Order ID Search
+            if ((exactOnly && isNumericQuery) || (!exactOnly && isNumericQuery && cleanQuery.length <= 8 && !isTenDigits)) {
                 const { data, error } = await supabase
                     .from('inspection_requests')
                     .select('*')
-                    .eq('request_number', Number(query))
+                    .eq('request_number', Number(cleanQuery))
                     .order('created_at', { ascending: false });
                 
                 if (!error && data) {
                     requestsByNumber = data;
                 }
 
-                // Merge with local results to ensure we don't lose anything (though DB is source of truth)
-                const merged = [...requestsByNumber];
-                localResults.forEach(lr => {
-                    if (lr.request_number === Number(query) && !merged.some(m => m.id === lr.id)) {
-                        merged.push(lr);
-                    }
-                });
-
-                setSearchedRequests(merged);
-                await ensureEntitiesLoaded(merged);
-                setIsRefreshing(false);
-                return;
+                if (exactOnly) {
+                    const merged = [...requestsByNumber];
+                    localResults.forEach(lr => {
+                        if (lr.request_number === Number(cleanQuery) && !merged.some(m => m.id === lr.id)) {
+                            merged.push(lr);
+                        }
+                    });
+                    setSearchedRequests(merged);
+                    await ensureEntitiesLoaded(merged);
+                    setIsRefreshing(false);
+                    return;
+                }
             }
 
             // 2. Search Clients by Phone (if numeric) or Name
             let clientIds: string[] = [];
-            const searchTokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+            
+            // Only search clients if it's not strictly a plate search (4 digits) and not a model+year search
+            const shouldSearchClients = !isModelAndYear && !(isNumericQuery && cleanQuery.length <= 4);
 
-            if (isNumericQuery) {
-                 // Search by Phone specifically
-                 const { data: foundClients } = await supabase
-                    .from('clients')
-                    .select('id')
-                    .ilike('phone', `%${query}%`)
-                    .limit(50);
-                 clientIds = foundClients?.map(c => c.id) || [];
-            } else {
-                 // Search by Name or Phone (mixed) - using tokens for smarter search
-                 // Only search name if tokens are significant (2+ chars) to avoid single-letter junk results
-                 let clientQuery = supabase.from('clients').select('id');
-                 
-                 const significantTokens = searchTokens.filter(t => t.length >= 2);
-                 const clientOrConditions: string[] = [];
-                 
-                 if (significantTokens.length > 0) {
-                     significantTokens.forEach(token => {
-                        clientOrConditions.push(`name.ilike.%${token}%`);
-                        clientOrConditions.push(`phone.ilike.%${token}%`);
-                     });
-                 } else if (searchTokens.length > 0) {
-                     // Fallback to searching the whole query if only short tokens exist, but as a single string
-                     clientOrConditions.push(`name.ilike.%${query}%`);
-                     clientOrConditions.push(`phone.ilike.%${query}%`);
-                 }
-                 
-                 if (clientOrConditions.length > 0) {
-                     clientQuery = clientQuery.or(clientOrConditions.join(','));
-                     const { data: foundClients } = await clientQuery.limit(50);
+            if (shouldSearchClients) {
+                if (isTenDigits || (isNumericQuery && cleanQuery.length >= 6)) {
+                     // Search by Phone specifically
+                     const { data: foundClients } = await supabase
+                        .from('clients')
+                        .select('id')
+                        .ilike('phone', `%${cleanQuery}%`)
+                        .limit(50);
                      clientIds = foundClients?.map(c => c.id) || [];
-                 }
+                } else if (!isNumericQuery) {
+                     // Search by Name or Phone
+                     let clientQuery = supabase.from('clients').select('id');
+                     const significantTokens = searchTokens.filter(t => t.length >= 2);
+                     const clientOrConditions: string[] = [];
+                     
+                     if (significantTokens.length > 0) {
+                         significantTokens.forEach(token => {
+                            clientOrConditions.push(`name.ilike.%${token}%`);
+                            clientOrConditions.push(`phone.ilike.%${token}%`);
+                         });
+                     } else if (searchTokens.length > 0) {
+                         clientOrConditions.push(`name.ilike.%${query}%`);
+                         clientOrConditions.push(`phone.ilike.%${query}%`);
+                     }
+                     
+                     if (clientOrConditions.length > 0) {
+                         clientQuery = clientQuery.or(clientOrConditions.join(','));
+                         const { data: foundClients } = await clientQuery.limit(50);
+                         clientIds = foundClients?.map(c => c.id) || [];
+                     }
+                }
             }
 
             // 3. Search Cars (Plate, VIN, Year)
-            const cleanQuery = query.replace(/\s/g, '');
-            // For plate search, we want to be extremely flexible with spaces.
-            // If the user typed " د ب ع 1234 ", we should search for "دبع1234" and variants.
+            let carIds: string[] = [];
             
-            const variations = new Set<string>();
-            variations.add(query.trim());
-            variations.add(cleanQuery);
-            
-            // Extract letters and numbers to create even more variants
-            const letters = query.replace(/[0-9\s]/g, '');
-            const numbers = query.replace(/[^0-9]/g, '');
-            
-            if (letters && numbers) {
-                // If input was "A B C 123" -> try "ABC123", "ABC 123", "123ABC", etc.
-                variations.add(`${letters}${numbers}`);
-                variations.add(`${letters} ${numbers}`);
+            if (!isTenDigits && !isModelAndYear) {
+                const variations = new Set<string>();
+                variations.add(query.trim());
+                variations.add(cleanQuery);
                 
-                // Also handle reverse order (123 ABC)
-                variations.add(`${numbers}${letters}`);
-                variations.add(`${numbers} ${letters}`);
+                const letters = query.replace(/[0-9\s]/g, '');
+                const numbers = query.replace(/[^0-9]/g, '');
+                
+                if (letters && numbers) {
+                    variations.add(`${letters}${numbers}`);
+                    variations.add(`${letters} ${numbers}`);
+                    variations.add(`${numbers}${letters}`);
+                    variations.add(`${numbers} ${letters}`);
 
-                // Handle common Saudi format (3 letters then 4 numbers)
-                if (letters.length === 3 && numbers.length > 0) {
-                    const spacedLetters = letters.split('').join(' ');
-                    variations.add(`${spacedLetters} ${numbers}`);
-                    variations.add(`${spacedLetters}${numbers}`);
+                    if (letters.length === 3 && numbers.length > 0) {
+                        const spacedLetters = letters.split('').join(' ');
+                        variations.add(`${spacedLetters} ${numbers}`);
+                        variations.add(`${spacedLetters}${numbers}`);
+                    }
+                }
+                
+                const uniqueVariations = Array.from(variations).filter(v => v.length > 1);
+                const orConditions: string[] = [];
+                
+                if (uniqueVariations.length > 0) {
+                    uniqueVariations.forEach(v => {
+                        orConditions.push(`plate_number.ilike.%${v}%`);
+                        orConditions.push(`plate_number_en.ilike.%${v}%`);
+                    });
+                }
+                
+                if (cleanQuery.length > 4 && !isNumericQuery) {
+                    orConditions.push(`vin.ilike.%${cleanQuery}%`);
+                }
+                
+                if (!isModelAndYear && yearTokens.length > 0) {
+                    yearTokens.forEach(year => {
+                        orConditions.push(`year.eq.${year}`);
+                    });
+                }
+
+                if (orConditions.length > 0) {
+                    const { data: carsByPlate } = await supabase
+                        .from('cars')
+                        .select('id')
+                        .or(orConditions.join(','))
+                        .limit(50);
+                    carIds = carsByPlate?.map(c => c.id) || [];
                 }
             }
-            
-            const uniqueVariations = Array.from(variations).filter(v => v.length > 1);
-            const orConditions: string[] = [];
-            
-            if (uniqueVariations.length > 0) {
-                uniqueVariations.forEach(v => {
-                    // Search both Arabic and English plate columns with each variation
-                    orConditions.push(`plate_number.ilike.%${v}%`);
-                    orConditions.push(`plate_number_en.ilike.%${v}%`);
-                });
-            }
-            
-            // If it's a long string, it might be a VIN
-            if (cleanQuery.length > 4) {
-                orConditions.push(`vin.ilike.%${cleanQuery}%`);
-            }
-            
-            // Add year search if any token looks like a year
-            const yearTokens = searchTokens.filter(t => /^(19|20)\d{2}$/.test(t));
-            yearTokens.forEach(year => {
-                orConditions.push(`year.eq.${year}`);
-            });
-
-            const orString = orConditions.join(',');
-
-            const { data: carsByPlate } = await supabase
-                .from('cars')
-                .select('id')
-                .or(orString)
-                .limit(50);
-
-            let carIds = carsByPlate?.map(c => c.id) || [];
 
             // 4. Search Makes/Models
-            if (!isNumericQuery) {
-                // Search makes using tokens
-                const makeOrConditions = searchTokens.flatMap(token => [
+            if (!isNumericQuery || isModelAndYear) {
+                // Search makes
+                const makeOrConditions = textTokens.flatMap(token => [
                     `name_ar.ilike.%${token}%`,
                     `name_en.ilike.%${token}%`
                 ]);
@@ -968,8 +982,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const { data: makes } = await makesQuery;
                 const makeIds = makes?.map(m => m.id) || [];
 
-                // Search models using tokens
-                const modelOrConditions = searchTokens.flatMap(token => [
+                // Search models
+                const modelOrConditions = textTokens.flatMap(token => [
                     `name_ar.ilike.%${token}%`,
                     `name_en.ilike.%${token}%`
                 ]);
@@ -978,8 +992,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (modelOrConditions.length > 0) {
                     modelsQuery = modelsQuery.or(modelOrConditions.join(','));
                 }
-                
-                // Fallback to original table name if the above fails due to case sensitivity
                 const { data: models, error: modelsError } = await modelsQuery;
                 let finalModels = models;
                 
@@ -991,34 +1003,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     const { data: fallbackModels } = await fallbackQuery;
                     finalModels = fallbackModels;
                 }
-
                 const modelIds = finalModels?.map(m => m.id) || [];
 
                 if (makeIds.length > 0 || modelIds.length > 0 || yearTokens.length > 0) {
                     let carQuery = supabase.from('cars').select('id');
-                    
-                    // If we have make/model AND year, we want to find cars that match BOTH
-                    // e.g., "Patrol 2014" -> make/model matches "Patrol", year matches "2014"
-                    
                     let makeModelOrConditions: string[] = [];
+                    
                     if (makeIds.length > 0) makeModelOrConditions.push(`make_id.in.(${makeIds.join(',')})`);
                     if (modelIds.length > 0) makeModelOrConditions.push(`model_id.in.(${modelIds.join(',')})`);
                     
                     if (makeModelOrConditions.length > 0 && yearTokens.length > 0) {
-                        // Match (Make OR Model) AND Year
+                        // (Make OR Model) AND Year
                         const yearConditions = yearTokens.map(y => `year.eq.${y}`).join(',');
                         carQuery = carQuery.or(makeModelOrConditions.join(',')).or(yearConditions);
                     } else if (makeModelOrConditions.length > 0) {
-                        // Match Make OR Model
                         carQuery = carQuery.or(makeModelOrConditions.join(','));
                     } else if (yearTokens.length > 0) {
-                        // Match Year only (already handled in step 3, but safe to include here)
                         const yearConditions = yearTokens.map(y => `year.eq.${y}`).join(',');
                         carQuery = carQuery.or(yearConditions);
                     }
 
                     const { data: carsByMakeModel } = await carQuery.limit(100);
-
                     const newCarIds = carsByMakeModel?.map(c => c.id) || [];
                     carIds = [...new Set([...carIds, ...newCarIds])];
                 }
@@ -1040,7 +1045,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     .limit(50);
 
                 if (!reqError && relatedRequests) {
-                    // Merge and remove duplicates
                     const existingIds = new Set(finalRequests.map(r => r.id));
                     relatedRequests.forEach(req => {
                         if (!existingIds.has(req.id)) {

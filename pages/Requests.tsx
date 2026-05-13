@@ -554,15 +554,15 @@ const Requests: React.FC = () => {
     const handleRequestNumberQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value.replace(/\D/g, '');
         setRequestNumberQuery(term);
-        // Independent: No longer clearing comprehensiveQuery
-        executeSearch(term, undefined);
+        if (term) setComprehensiveQuery('');
+        executeSearch(term, term ? '' : undefined);
     };
 
     const handleComprehensiveQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;
         setComprehensiveQuery(term);
-        // Independent: No longer clearing requestNumberQuery
-        executeSearch(undefined, term);
+        if (term) setRequestNumberQuery('');
+        executeSearch(term ? '' : undefined, term);
     };
 
     const searchInitialized = useRef(false);

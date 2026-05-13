@@ -43,6 +43,14 @@ const StepClient: React.FC<StepClientProps> = (props) => {
         return props.unpaidDebtAlert.reduce((sum, req) => sum + (Number(req.price) || 0), 0);
     }, [props.unpaidDebtAlert]);
 
+    const formatPhone = (val: string) => {
+        if (!val) return '';
+        const digits = val.replace(/\D/g, '');
+        if (digits.length <= 3) return digits;
+        if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+        return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+    };
+
     return (
         <fieldset className="bg-white dark:bg-slate-800/50 p-4 sm:p-6 rounded-lg shadow-sm">
             <legend className="text-lg font-semibold mb-4 text-slate-700 dark:text-slate-200 flex items-center justify-between w-full">
@@ -92,7 +100,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                                     onMouseOver={() => props.setNameSuggestionIndex(index)}
                                     className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.nameSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
                                 >
-                                    {client.name} - <span className="text-slate-500 dark:text-slate-400">{client.phone}</span>
+                                    {client.name} - <span className="text-slate-500 dark:text-slate-400" style={{ direction: 'ltr', display: 'inline-block' }}>{formatPhone(client.phone)}</span>
                                 </li>
                             ))}
                         </ul>
@@ -104,13 +112,13 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                         <input
                             ref={props.phoneInputRef}
                             type="tel"
-                            value={props.clientPhone}
+                            value={formatPhone(props.clientPhone)}
                             onChange={props.onPhoneChange}
                             onFocus={props.onPhoneFocus}
                             onKeyDown={(e) => props.onKeyDown(e, 'phone')}
                             required={!props.isReservationMode}
-                            placeholder="05xxxxxxxx"
-                            maxLength={10}
+                            placeholder="xxx-xxx-xxxx"
+                            maxLength={12}
                             style={{ direction: 'ltr', textAlign: 'right' }}
                             className={props.getInputClass('clientPhone')}
                             autoFocus
@@ -131,7 +139,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                                     onMouseOver={() => props.setPhoneSuggestionIndex(index)}
                                     className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.phoneSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
                                 >
-                                    <span style={{ direction: 'ltr', display: 'inline-block' }}>{client.phone}</span> ({client.name})
+                                    <span style={{ direction: 'ltr', display: 'inline-block' }}>{formatPhone(client.phone)}</span> ({client.name})
                                 </li>
                             ))}
                         </ul>
