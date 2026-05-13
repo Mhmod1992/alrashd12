@@ -1108,11 +1108,6 @@ const PrintReport: React.FC = () => {
             const blob = await generateNativePdfBlob();
             if (!blob) return;
 
-            // Also upload to storage if it doesn't exist yet to keep archive in sync
-            if (!originalRequest?.report_url) {
-                await uploadReportToStorage(blob);
-            }
-
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -1122,7 +1117,7 @@ const PrintReport: React.FC = () => {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
-            addNotification({ title: 'تم بنجاح', message: 'تم تحميل التقرير وأرشفته في السيرفر.', type: 'success' });
+            addNotification({ title: 'تم بنجاح', message: 'تم تحميل التقرير محلياً بنجاح.', type: 'success' });
         } catch (error) {
             console.error('Download error:', error);
             addNotification({ title: 'خطأ', message: 'فشل تحميل التقرير.', type: 'error' });

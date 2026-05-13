@@ -117,6 +117,15 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
                     text-align: right;
                     direction: ltr;
                 }
+                .custom-datepicker-container .react-datepicker__close-icon {
+                    right: auto;
+                    left: 0;
+                    padding-left: 0.75rem;
+                    padding-right: 0;
+                }
+                .custom-datepicker-container .react-datepicker__close-icon::after {
+                    background-color: #3b82f6;
+                }
                 .dark .custom-datepicker-container .react-datepicker {
                     background-color: #1e293b;
                     color: #f1f5f9;
@@ -152,6 +161,19 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
                 disabled={disabled}
                 isClearable={!disabled}
                 locale="ar"
+                renderCustomHeader={({ date, decreaseMonth, increaseMonth }) => (
+                    <div className="flex justify-between items-center px-4 pb-2">
+                        <button onClick={decreaseMonth} type="button" className="text-slate-400 hover:text-blue-500 transition-colors">
+                            <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                        <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">
+                            {('0' + (date.getMonth() + 1)).slice(-2)} / {date.getFullYear()}
+                        </span>
+                        <button onClick={increaseMonth} type="button" className="text-slate-400 hover:text-blue-500 transition-colors">
+                            <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                        </button>
+                    </div>
+                )}
             />
         </div>
     );

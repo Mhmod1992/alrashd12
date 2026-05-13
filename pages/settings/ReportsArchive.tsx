@@ -9,6 +9,7 @@ import DownloadIcon from '../../components/icons/DownloadIcon';
 import SearchIcon from '../../components/icons/SearchIcon';
 import TrashIcon from '../../components/icons/TrashIcon';
 import ExternalLinkIcon from '../../components/icons/ExternalLinkIcon';
+import FilterIcon from '../../components/icons/FilterIcon';
 
 interface StorageFile {
     name: string;
@@ -27,44 +28,54 @@ const ReportsArchive: React.FC = () => {
     const [files, setFiles] = useState<StorageFile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [page, setPage] = useState(0);
-    const [pageSize] = useState(50);
-    const [totalCount, setTotalCount] = useState(0);
+    const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday' | 'this_month'>('all');
+    const [isDeletingAll, setIsDeletingAll] = useState(false);
 
     const fetchFiles = useCallback(async () => {
         setIsLoading(true);
         try {
             console.log('Fetching files from bucket: reports');
             
-            // Supabase Storage list API
-            const { data, error } = await supabase.storage
-                .from('reports')
-                .list('', {
-                    limit: pageSize,
-                    offset: page * pageSize,
-                    sortBy: { column: 'created_at', order: 'desc' }
-                });
+            // Supabase Storage list API - fetching all to allow local filtering
+            let allFiles: any[] = [];
+            let currentOffset = 0;
+            const limit = 100; // Increased limit
+            let hasMore = true;
 
-            if (error) {
-                console.error('Supabase list error:', error);
-                throw error;
+            while (hasMore) {
+                const { data, error } = await supabase.storage
+                    .from('reports')
+                    .list('', {
+                        limit: limit,
+                        offset: currentOffset,
+                        sortBy: { column: 'created_at', order: 'desc' }
+                    });
+
+                if (error) {
+                    console.error('Supabase list error:', error);
+                    throw error;
+                }
+
+                if (data && data.length > 0) {
+                    allFiles = [...allFiles, ...data];
+                    currentOffset += limit;
+                    // If we got fewer than the limit, we're done
+                    if (data.length < limit) {
+                        hasMore = false;
+                    }
+                } else {
+                    hasMore = false;
+                }
             }
 
             // Filter out folders and system placeholder files
-            const fileList = (data || []).filter(item => 
+            const fileList = allFiles.filter(item => 
                 item.metadata !== null && 
                 item.name !== '.emptyFolderPlaceholder'
             );
             
             console.log('Files received:', fileList);
             setFiles(fileList as any);
-            
-            if (data && data.length === pageSize) {
-                setTotalCount((page + 2) * pageSize);
-            } else {
-                setTotalCount((page * pageSize) + (data?.length || 0));
-            }
-
         } catch (error: any) {
             console.error('Error fetching reports:', error);
             addNotification({ 
@@ -75,18 +86,45 @@ const ReportsArchive: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [page, pageSize, addNotification]);
+    }, [addNotification]);
 
     useEffect(() => {
         fetchFiles();
     }, [fetchFiles]);
 
     const filteredFiles = useMemo(() => {
-        if (!searchQuery) return files;
-        return files.filter(file => 
-            file.name.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-    }, [files, searchQuery]);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        let filtered = files;
+
+        if (dateFilter !== 'all') {
+            filtered = filtered.filter(file => {
+                const fileDate = new Date(file.created_at);
+                if (dateFilter === 'today') {
+                    return fileDate >= today;
+                }
+                if (dateFilter === 'yesterday') {
+                    return fileDate >= yesterday && fileDate < today;
+                }
+                if (dateFilter === 'this_month') {
+                    return fileDate >= startOfMonth;
+                }
+                return true;
+            });
+        }
+
+        if (searchQuery) {
+            filtered = filtered.filter(file => 
+                file.name.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+        }
+
+        return filtered;
+    }, [files, searchQuery, dateFilter]);
 
     const handleDeleteFile = (fileName: string) => {
         showConfirmModal({
@@ -105,6 +143,37 @@ const ReportsArchive: React.FC = () => {
                 } catch (error: any) {
                     console.error('Delete error:', error);
                     addNotification({ title: 'خطأ', message: 'فشل حذف الملف.', type: 'error' });
+                }
+            }
+        });
+    };
+
+    const handleDeleteAll = () => {
+        showConfirmModal({
+            title: 'حذف جميع الملفات الظاهرة',
+            message: `هل أنت متأكد من حذف جميع الملفات المعروضة حالياً وعددها (${filteredFiles.length}) نهائياً من السيرفر؟ لا يمكن التراجع عن هذا الإجراء!`,
+            onConfirm: async () => {
+                setIsDeletingAll(true);
+                try {
+                    const fileNames = filteredFiles.map(f => f.name);
+                    // Supabase supports removing multiple files
+                    // We need to batch them if there are too many
+                    const batchSize = 100;
+                    for (let i = 0; i < fileNames.length; i += batchSize) {
+                        const batch = fileNames.slice(i, i + batchSize);
+                        const { error } = await supabase.storage
+                            .from('reports')
+                            .remove(batch);
+                        if (error) throw error;
+                    }
+
+                    addNotification({ title: 'نجاح', message: 'تم حذف الملفات بنجاح.', type: 'success' });
+                    fetchFiles();
+                } catch (error: any) {
+                    console.error('Delete all error:', error);
+                    addNotification({ title: 'خطأ', message: 'فشل حذف بعض أو جميع الملفات.', type: 'error' });
+                } finally {
+                    setIsDeletingAll(false);
                 }
             }
         });
@@ -157,19 +226,30 @@ const ReportsArchive: React.FC = () => {
                     <p className="text-sm text-slate-500 dark:text-slate-400">إدارة ملفات PDF المرفوعة في حاوية التقارير.</p>
                     <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 font-bold">ملاحظة: تظهر هنا فقط التقارير التي تم "مشاركتها عبر الواتساب" أو "تحميلها كـ PDF" من صفحة التقرير.</p>
                 </div>
-                <Button 
-                    onClick={fetchFiles} 
-                    variant="secondary" 
-                    size="sm" 
-                    leftIcon={<RefreshCwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />}
-                >
-                    تحديث القائمة
-                </Button>
+                <div className="flex gap-2">
+                    <Button 
+                        onClick={handleDeleteAll} 
+                        variant="danger" 
+                        size="sm"
+                        disabled={isLoading || isDeletingAll || filteredFiles.length === 0}
+                        leftIcon={<TrashIcon className="w-4 h-4" />}
+                    >
+                        {isDeletingAll ? 'جاري الحذف...' : 'حذف الكل'}
+                    </Button>
+                    <Button 
+                        onClick={fetchFiles} 
+                        variant="secondary" 
+                        size="sm" 
+                        leftIcon={<RefreshCwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />}
+                    >
+                        تحديث القائمة
+                    </Button>
+                </div>
             </div>
 
-            {/* Search & Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2 relative">
+            {/* Search, Filter & Stats */}
+            <div className="flex flex-col md:flex-row gap-4 items-center">
+                <div className="relative flex-grow min-w-0 w-full md:w-auto">
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
                         <SearchIcon className="w-5 h-5" />
                     </div>
@@ -181,25 +261,42 @@ const ReportsArchive: React.FC = () => {
                         className="block w-full pr-10 p-3 border border-slate-300 dark:border-slate-600 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 transition-all"
                     />
                 </div>
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
-                    <span className="text-sm text-blue-700 dark:text-blue-300">إجمالي الملفات المعروضة:</span>
+                
+                <div className="relative w-full md:w-64 shrink-0">
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                        <FilterIcon className="w-5 h-5" />
+                    </div>
+                    <select
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value as any)}
+                        className="block w-full pr-10 p-3 border border-slate-300 dark:border-slate-600 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 transition-all appearance-none"
+                    >
+                        <option value="all">كل الأوقات</option>
+                        <option value="today">اليوم</option>
+                        <option value="yesterday">أمس</option>
+                        <option value="this_month">هذا الشهر</option>
+                    </select>
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 flex items-center justify-between min-w-[200px] w-full md:w-auto shrink-0">
+                    <span className="text-sm text-blue-700 dark:text-blue-300">الملفات المعروضة:</span>
                     <span className="font-bold text-blue-800 dark:text-blue-200">{filteredFiles.length}</span>
                 </div>
             </div>
 
             {/* Table */}
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-h-[60vh]">
                     <table className="w-full text-sm text-right">
-                        <thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-900/50 dark:text-slate-400 border-b dark:border-slate-700">
+                        <thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-900/50 dark:text-slate-400 border-b dark:border-slate-700 sticky top-0 z-10 shadow-sm">
                             <tr>
-                                <th className="px-6 py-4">اسم الملف</th>
-                                <th className="px-6 py-4">الحجم</th>
-                                <th className="px-6 py-4">تاريخ الرفع</th>
-                                <th className="px-6 py-4 text-center">الإجراءات</th>
+                                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-right">اسم الملف</th>
+                                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-right">الحجم</th>
+                                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-right">تاريخ الرفع</th>
+                                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-center">الإجراءات</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y dark:divide-slate-700">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                             {isLoading ? (
                                 Array.from({ length: 5 }).map((_, i) => (
                                     <tr key={i} className="animate-pulse">
@@ -213,17 +310,17 @@ const ReportsArchive: React.FC = () => {
                                 filteredFiles.map((file) => (
                                     <tr key={file.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <Icon name="report" className="w-4 h-4 text-red-500" />
-                                                <span className="font-medium text-slate-700 dark:text-slate-200 truncate max-w-xs" title={file.name}>
+                                            <div className="flex items-center gap-2 max-w-[150px] sm:max-w-xs md:max-w-md lg:max-w-lg">
+                                                <Icon name="report" className="w-4 h-4 text-red-500 flex-shrink-0" />
+                                                <span className="font-medium text-slate-700 dark:text-slate-200 truncate" title={file.name} dir="ltr">
                                                     {file.name}
                                                 </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-xs">
+                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-xs whitespace-nowrap">
                                             {formatBytes(file.metadata.size)}
                                         </td>
-                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 text-xs">
+                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap" dir="ltr">
                                             {new Date(file.created_at).toLocaleString('ar-SA')}
                                         </td>
                                         <td className="px-6 py-4">
@@ -256,37 +353,12 @@ const ReportsArchive: React.FC = () => {
                             ) : (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
-                                        {searchQuery ? 'لا توجد ملفات تطابق البحث.' : 'لا توجد ملفات في هذا المجلد.'}
+                                        {searchQuery || dateFilter !== 'all' ? 'لا توجد ملفات تطابق الفرز والبحث.' : 'لا توجد ملفات في هذا المجلد.'}
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
-                </div>
-
-                {/* Pagination */}
-                <div className="p-4 border-t dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between">
-                    <div className="text-xs text-slate-500">
-                        عرض الصفحة {page + 1}
-                    </div>
-                    <div className="flex gap-2">
-                        <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            disabled={page === 0 || isLoading}
-                            onClick={() => setPage(p => p - 1)}
-                        >
-                            السابق
-                        </Button>
-                        <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            disabled={files.length < pageSize || isLoading}
-                            onClick={() => setPage(p => p + 1)}
-                        >
-                            التالي
-                        </Button>
-                    </div>
                 </div>
             </div>
         </div>
