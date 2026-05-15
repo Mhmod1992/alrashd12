@@ -16,6 +16,7 @@ import CalendarIcon from '../components/icons/HistoryIcon';
 import DollarSignIcon from '../components/icons/DollarSignIcon';
 import WhatsappIcon from '../components/icons/WhatsappIcon';
 import { uuidv4 } from '../lib/utils';
+import SmartPhoneInput from '../components/SmartPhoneInput';
 import { Skeleton, SkeletonTable } from '../components/Skeleton';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import TrendingUpIcon from '../components/icons/TrendingUpIcon';
@@ -1040,7 +1041,12 @@ const Clients: React.FC = () => {
                     </div>
                     <div>
                         <label className="block text-sm font-medium">رقم الهاتف</label>
-                        <input type="tel" value={formatPhone(currentClient.phone)} onChange={e => setCurrentClient(p => ({...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10)}))} className={formInputClasses} required placeholder="xxx-xxx-xxxx" maxLength={12} style={{ direction: 'ltr', textAlign: 'right' }}/>
+                        <SmartPhoneInput
+                            value={currentClient.phone || ''}
+                            onChange={(val) => setCurrentClient(p => ({ ...p, phone: val }))}
+                            className="mt-1"
+                            required
+                        />
                     </div>
                     <div>
                         <label className="flex items-center gap-2">

@@ -1,0 +1,118 @@
+
+import React, { useRef, useState } from 'react';
+
+interface SmartPhoneInputProps {
+    value: string; // digits only (e.g. "0512345678")
+    onChange: (value: string) => void;
+    autoFocus?: boolean;
+    required?: boolean;
+    className?: string;
+    id?: string;
+    onFocus?: () => void;
+    onBlur?: () => void;
+}
+
+const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>(({
+    value = '',
+    onChange,
+    autoFocus = false,
+    required = false,
+    className = '',
+    id,
+    onFocus,
+    onBlur
+}, ref) => {
+    const [isFocused, setIsFocused] = useState(false);
+    const internalRef = useRef<HTMLInputElement>(null);
+    const combinedRef = (ref as React.RefObject<HTMLInputElement>) || internalRef;
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+        onChange(val);
+    };
+
+    const handleContainerClick = () => {
+        combinedRef.current?.focus();
+    };
+
+    const renderVisual = () => {
+        const digits = value.split('');
+        const template = '05xxxxxxxx'.split('');
+
+        return (
+            <div className="flex items-center font-mono select-none pointer-events-none" style={{ direction: 'ltr' }}>
+                {template.map((tChar, i) => {
+                    const digit = digits[i];
+                    const isFilled = digit !== undefined;
+                    const isCurrent = i === value.length;
+                    
+                    return (
+                        <React.Fragment key={i}>
+                            {/* Hyphens at specific positions */}
+                            {(i === 3 || i === 6) && (
+                                <span className="text-slate-400 mx-0.5 tracking-tighter font-bold font-sans">-</span>
+                            )}
+                            
+                            <div className="relative flex items-center justify-center w-[0.85em]">
+                                {/* Integrated Smart Cursor */}
+                                {isFocused && isCurrent && (
+                                    <div className="absolute inset-y-1 -left-0.5 w-[2px] bg-blue-500 animate-pulse rounded-full z-10" />
+                                )}
+                                
+                                {/* Case for cursor at the very end (mask full) */}
+                                {isFocused && i === 9 && value.length === 10 && (
+                                    <div className="absolute inset-y-1 -right-0.5 w-[2px] bg-blue-500 animate-pulse rounded-full z-10" />
+                                )}
+
+                                <span className={`transition-all duration-200 ${
+                                    isFilled 
+                                        ? 'text-slate-900 dark:text-slate-100 font-bold text-lg' 
+                                        : 'text-slate-300 dark:text-slate-600/40 text-sm'
+                                } ${!isFilled && tChar === 'x' ? 'italic' : ''}`}>
+                                    {isFilled ? digit : tChar}
+                                </span>
+                            </div>
+                        </React.Fragment>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    return (
+        <div 
+            className={`relative flex items-center justify-start h-[52px] px-4 rounded-xl border-2 transition-all duration-200 cursor-text bg-white dark:bg-slate-800 ${
+                isFocused 
+                    ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg' 
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+            } ${className}`}
+            onClick={handleContainerClick}
+        >
+            {/* Visual Template Layer */}
+            <div className="z-0">
+                {renderVisual()}
+            </div>
+
+            {/* Hidden Interaction Layer */}
+            <input
+                id={id}
+                ref={combinedRef}
+                type="tel"
+                value={value}
+                onChange={handleChange}
+                onFocus={() => { setIsFocused(true); onFocus?.(); }}
+                onBlur={() => { setIsFocused(false); onBlur?.(); }}
+                autoFocus={autoFocus}
+                required={required}
+                maxLength={10}
+                className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-text"
+                autoComplete="off"
+                style={{ direction: 'ltr' }}
+            />
+        </div>
+    );
+});
+
+SmartPhoneInput.displayName = 'SmartPhoneInput';
+
+export default SmartPhoneInput;

@@ -4,6 +4,7 @@ import RefreshCwIcon from '../icons/RefreshCwIcon';
 import AlertTriangleIcon from '../icons/AlertTriangleIcon';
 import UserCircleIcon from '../icons/UserCircleIcon';
 import HistoryIcon from '../icons/HistoryIcon';
+import SmartPhoneInput from '../SmartPhoneInput';
 import { Client } from '../../types';
 
 interface StepClientProps {
@@ -109,23 +110,21 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                 <div className="relative">
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">رقم الهاتف</label>
                     <div className="relative">
-                        <input
+                        <SmartPhoneInput
                             ref={props.phoneInputRef}
-                            type="tel"
-                            value={formatPhone(props.clientPhone)}
-                            onChange={props.onPhoneChange}
+                            id="clientPhone"
+                            value={props.clientPhone}
+                            onChange={(val) => {
+                                const e = { target: { value: val } } as React.ChangeEvent<HTMLInputElement>;
+                                props.onPhoneChange(e);
+                            }}
                             onFocus={props.onPhoneFocus}
-                            onKeyDown={(e) => props.onKeyDown(e, 'phone')}
+                            onBlur={() => {}} // Placeholder or keep current logic
                             required={!props.isReservationMode}
-                            placeholder="xxx-xxx-xxxx"
-                            maxLength={12}
-                            style={{ direction: 'ltr', textAlign: 'right' }}
-                            className={props.getInputClass('clientPhone')}
-                            autoFocus
-                            autoComplete="off"
+                            autoFocus={true}
                         />
                         {props.isSearchingClientPhone && (
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-20">
                                 <RefreshCwIcon className="h-5 w-5 animate-spin text-blue-500" />
                             </div>
                         )}
