@@ -34,6 +34,31 @@ import {
 } from 'lucide-react';
 
 // --- Quick Actions Component ---
+// --- Safe LocalStorage Helper ---
+const safeSetItem = (key: string, value: string) => {
+    try {
+        localStorage.setItem(key, value);
+    } catch (e) {
+        if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+            console.warn('Storage quota exceeded, clearing dashboard cache to free space');
+            // Clear all dashboard related caches to free up space
+            Object.keys(localStorage).forEach(k => {
+                if (k.startsWith('dashboard_')) {
+                    localStorage.removeItem(k);
+                }
+            });
+            // Try setting again after clearing
+            try {
+                localStorage.setItem(key, value);
+            } catch (retryError) {
+                console.error('Failed to set item even after clearing cache', retryError);
+            }
+        } else {
+            console.error('LocalStorage error', e);
+        }
+    }
+};
+
 const QuickActions: React.FC<{
     onOpenSearchClient: () => void;
     onOpenVehicleHistorySearch: () => void;
@@ -762,16 +787,16 @@ const Dashboard: React.FC = () => {
 
           const cStats = { total: totalClientsCount, new: newClientsCount, prevNew: prevNewClientsCount, returning: returningClientsCount };
           setClientStats(cStats);
-          localStorage.setItem('dashboard_client_stats_cache', JSON.stringify(cStats));
+          safeSetItem('dashboard_client_stats_cache', JSON.stringify(cStats));
 
           setStats(currentStats);
           setPrevStats(previousStats);
-          localStorage.setItem('dashboard_main_stats_cache', JSON.stringify({ timestamp: Date.now(), data: currentStats }));
+          safeSetItem('dashboard_main_stats_cache', JSON.stringify({ timestamp: Date.now(), data: currentStats }));
 
           let finalPulse: FinancialStats;
           if (shouldFetchFullPulse && fullPulseStats) {
               finalPulse = fullPulseStats;
-              localStorage.setItem(CACHE_KEY, JSON.stringify({
+              safeSetItem(CACHE_KEY, JSON.stringify({
                   timestamp: Date.now(),
                   data: fullPulseStats
               }));
@@ -823,11 +848,11 @@ const Dashboard: React.FC = () => {
               });
           }
           setForecastData(forecast);
-          localStorage.setItem('dashboard_forecast_cache', JSON.stringify(forecast));
+          safeSetItem('dashboard_forecast_cache', JSON.stringify(forecast));
 
           setMonthStats(currentMonthStatsData);
           setPrevMonthStats(prevMonthStatsData);
-          localStorage.setItem('dashboard_month_stats_cache', JSON.stringify({ timestamp: Date.now(), data: currentMonthStatsData }));
+          safeSetItem('dashboard_month_stats_cache', JSON.stringify({ timestamp: Date.now(), data: currentMonthStatsData }));
           setLastRefreshed(new Date());
 
       } catch (error) {
@@ -874,11 +899,11 @@ const Dashboard: React.FC = () => {
           
           if (modelsData) {
               setAllCarModels(modelsData);
-              localStorage.setItem('dashboard_car_models_cache', JSON.stringify(modelsData));
+              safeSetItem('dashboard_car_models_cache', JSON.stringify(modelsData));
           }
           
           setCarStats(stats);
-          localStorage.setItem('dashboard_car_stats_cache', JSON.stringify({ timestamp: Date.now(), data: stats }));
+          safeSetItem('dashboard_car_stats_cache', JSON.stringify({ timestamp: Date.now(), data: stats }));
       } catch (error) {
           console.error("Car Data Load Error", error);
       } finally {

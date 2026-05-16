@@ -287,6 +287,8 @@ const PrintReport: React.FC = () => {
     const [isSourceChoiceModalOpen, setIsSourceChoiceModalOpen] = useState(false);
     const [currentUploadType, setCurrentUploadType] = useState<'manual_paper' | 'internal_draft'>('manual_paper');
     const [isExtractingPdf, setIsExtractingPdf] = useState(false);
+    const [isProcessingFiles, setIsProcessingFiles] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const pdfInputRef = useRef<HTMLInputElement>(null);
 
@@ -394,6 +396,7 @@ const PrintReport: React.FC = () => {
 
     const processFiles = async (files: File[], type: string, source: 'image' | 'pdf' = 'image') => {
         if (!originalRequest) return;
+        setIsProcessingFiles(true);
         setIsUploading(true);
         setUploadStats(null);
         let totalOriginalSize = 0;
@@ -471,6 +474,7 @@ const PrintReport: React.FC = () => {
             addNotification({ title: 'خطأ', message: `فشل رفع الصور: ${error.message}`, type: 'error' });
         } finally {
             setIsUploading(false);
+            setIsProcessingFiles(false);
         }
     };
     
@@ -519,10 +523,10 @@ const PrintReport: React.FC = () => {
         }
     };
 
-    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || !originalRequest) return;
-        const files: File[] = Array.from(e.target.files);
-
+    const handleFiles = async (files: File[], uploadType: 'manual_paper' | 'internal_draft' = 'manual_paper') => {
+        if (!originalRequest) return;
+        setIsProcessingFiles(true);
+        
         // Check if there's a PDF file
         const pdfFiles = files.filter(f => f.type === 'application/pdf');
         const imageFiles = files.filter(f => f.type.startsWith('image/'));
@@ -537,13 +541,13 @@ const PrintReport: React.FC = () => {
                 }
                 
                 if (allExtractedImages.length > 0) {
-                    processFiles(allExtractedImages, currentUploadType, 'pdf');
+                    await processFiles(allExtractedImages, uploadType, 'pdf');
                 }
             } catch (error) {
                 addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء استخراج صفحات PDF.', type: 'error' });
+                setIsProcessingFiles(false);
             } finally {
                 setIsExtractingPdf(false);
-                e.target.value = ''; // Reset input
             }
             return;
         }
@@ -552,15 +556,24 @@ const PrintReport: React.FC = () => {
         if (imageFiles.length === 1) {
              setScannerFile(imageFiles[0]);
              setIsScannerOpen(true);
-             e.target.value = '';
+             setCurrentUploadType(uploadType);
+             setIsProcessingFiles(false); // Reset here as it's waiting for user action in scanner
              return;
         }
 
         // Multiple files processed directly
         if (imageFiles.length > 0) {
-            processFiles(imageFiles, currentUploadType);
+            await processFiles(imageFiles, uploadType);
+        } else {
+            setIsProcessingFiles(false);
         }
-        e.target.value = '';
+    };
+
+    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || !originalRequest) return;
+        const files: File[] = Array.from(e.target.files);
+        await handleFiles(files, currentUploadType);
+        e.target.value = ''; // Reset input
     };
 
     const handleCameraCapture = (file: File) => {
@@ -1162,6 +1175,40 @@ const PrintReport: React.FC = () => {
         return result;
     }, [originalRequest, customFindingCategories, technicians, employees]);
 
+    useEffect(() => {
+        const handleWindowDragOver = (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragging(true);
+        };
+
+        const handleWindowDrop = (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragging(false);
+            const files = Array.from(e.dataTransfer?.files || []);
+            if (files.length > 0) {
+                handleFiles(files);
+            }
+        };
+
+        const handleWindowDragLeave = (e: DragEvent) => {
+            if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+                setIsDragging(false);
+            }
+        };
+
+        window.addEventListener('dragover', handleWindowDragOver);
+        window.addEventListener('dragleave', handleWindowDragLeave);
+        window.addEventListener('drop', handleWindowDrop);
+
+        return () => {
+            window.removeEventListener('dragover', handleWindowDragOver);
+            window.removeEventListener('dragleave', handleWindowDragLeave);
+            window.removeEventListener('drop', handleWindowDrop);
+        };
+    }, [originalRequest]); // Re-bind if request changes
+
     if (!request || !isDataReady) {
         return (
             <div className="flex flex-col items-center justify-center h-screen text-center p-4">
@@ -1179,7 +1226,63 @@ const PrintReport: React.FC = () => {
     }
 
     return (
-        <div className="bg-white dark:bg-gray-900 min-h-screen flex flex-col print:!bg-white print:!min-h-0 print:!border-none">
+        <div className="bg-white dark:bg-gray-900 min-h-screen flex flex-col print:!bg-white print:!min-h-0 print:!border-none relative">
+            {/* Drag and Drop Overlay */}
+            <AnimatePresence>
+                {isDragging && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-blue-600/20 backdrop-blur-sm border-4 border-dashed border-blue-500 m-4 rounded-3xl flex flex-col items-center justify-center pointer-events-none"
+                    >
+                        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-4 scale-110">
+                            <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center animate-bounce">
+                                <UploadIcon className="w-10 h-10 text-blue-600" />
+                            </div>
+                            <div className="text-center">
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2">أفلت الملفات هنا</h3>
+                                <p className="text-slate-600 dark:text-slate-400 font-bold">لرفع ملفات PDF أو الصور تلقائياً للمرفقات</p>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Processing Files Overlay */}
+            <AnimatePresence>
+                {isProcessingFiles && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center"
+                    >
+                        <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-6 max-w-sm w-full mx-4 border border-white/20">
+                            <div className="relative">
+                                <div className="w-20 h-20 border-4 border-blue-100 dark:border-blue-900/30 rounded-full"></div>
+                                <div className="w-20 h-20 border-4 border-blue-600 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+                                <UploadIcon className="w-8 h-8 text-blue-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                            </div>
+                            <div className="text-center">
+                                <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">جاري المعالجة والإرفاق</h3>
+                                <p className="text-slate-600 dark:text-slate-400 font-bold text-sm">
+                                    {isExtractingPdf ? 'جاري استخراج صفحات PDF وتنسيقها...' : 'جاري ضغط الصور ورفعها للأرشيف...'}
+                                </p>
+                            </div>
+                            <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                <motion.div 
+                                    className="bg-blue-600 h-full"
+                                    animate={{ 
+                                        width: ["0%", "100%"],
+                                        transition: { duration: 2, repeat: Infinity, ease: "easeInOut" }
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
             <header className="no-print bg-white dark:bg-slate-800 p-2 sm:p-4 shadow-md sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-3">
                     <div className="flex items-center justify-between w-full md:w-auto md:min-w-[150px]">

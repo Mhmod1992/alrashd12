@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'flex-start',
     alignItems: 'center',
-    gap: layoutSettings.customer.spacing.gap,
+    flexWrap: 'wrap',
   },
   clientDataRow: {
     flexDirection: 'row-reverse',
@@ -355,8 +355,9 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     textAlign: 'center',
-    padding: 4,
-    borderRadius: 3,
+    padding: 6,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
     fontSize: layoutSettings.sections.fontSize.mainHeader,
     fontWeight: 'bold',
     marginBottom: 6,
@@ -372,6 +373,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: layoutSettings.sections.fontSize.title,
     fontWeight: 'bold',
+    borderTopLeftRadius: 11, // Match container radius inner
+    borderTopRightRadius: 11,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
@@ -440,37 +443,41 @@ const styles = StyleSheet.create({
     width: '18.5%',
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 6,
-    marginBottom: 4,
-    overflow: 'hidden',
+    borderRadius: 8,
+    marginBottom: 8,
     backgroundColor: '#ffffff',
+    flexDirection: 'column',
+    overflow: 'hidden', // Ensure background of content doesn't bleed
+    minHeight: 120,
   },
   findingImage: {
-    height: 60,
+    height: 80,
     width: '100%',
     objectFit: 'contain',
-    backgroundColor: '#ffffff',
-    padding: 3,
+    backgroundColor: 'transparent',
+    padding: 4,
   },
   findingContent: {
-    padding: 3,
     backgroundColor: '#f8fafc',
-    flexGrow: 1,
-    justifyContent: 'center',
+    padding: 6,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2,
   },
   findingName: {
-    fontSize: layoutSettings.sections.fontSize.findingName,
+    fontSize: 9,
     fontWeight: 'bold',
     textAlign: 'center',
     color: '#1e293b',
   },
   findingValue: {
-    fontSize: layoutSettings.sections.fontSize.findingValue,
-    color: '#64748b',
+    fontSize: 9,
+    fontWeight: 'normal', // Standard text as in preview
+    color: '#475569',
     textAlign: 'center',
-    marginTop: 1,
   },
   notesSection: {
     marginTop: layoutSettings.notes.container.marginTop,
@@ -661,6 +668,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#94a3b8',
     fontFamily: 'Tajawal',
+  },
+  miniHeader: {
+    position: 'absolute',
+    top: 5,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    borderBottomWidth: 2,
+    borderBottomColor: '#e2e8f0',
+    paddingBottom: 5,
+  },
+  miniHeaderLogoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  miniHeaderLogo: {
+    height: 20,
+    width: 'auto',
+    objectFit: 'contain',
+  },
+  miniHeaderTitle: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  miniHeaderCenter: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#475569',
+  },
+  miniHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  miniHeaderRequestNumber: {
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  miniHeaderDate: {
+    fontSize: 9,
+    color: '#475569',
   },
 });
 
@@ -856,16 +907,16 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
           <View style={[styles.clientDataDivider, { backgroundColor: reportSettings.borderColor }]} />
 
           <View style={styles.clientDataBody}>
-            <View style={styles.clientDataRow}>
+            <View style={[styles.clientDataRow, { width: reportSettings.showPriceOnReport ? '32%' : '49%' }]}>
               <Text style={styles.clientDataLabel}>{reportDirection === 'ltr' ? 'Name:' : 'الاسم:'}</Text>
               <Text style={styles.clientDataValue}>{client.name}</Text>
             </View>
-            <View style={styles.clientDataRow}>
+            <View style={[styles.clientDataRow, { width: reportSettings.showPriceOnReport ? '32%' : '49%' }]}>
               <Text style={styles.clientDataLabel}>{reportDirection === 'ltr' ? 'Phone:' : 'الجوال:'}</Text>
               <Text style={styles.clientDataValue}>{client.phone}</Text>
             </View>
             {reportSettings.showPriceOnReport && (
-              <View style={styles.clientDataRow}>
+              <View style={[styles.clientDataRow, { width: reportSettings.showPriceOnReport ? '32%' : '49%' }]}>
                 <Text style={styles.clientDataLabel}>{reportDirection === 'ltr' ? 'Total:' : 'المبلغ:'}</Text>
                 <Text style={styles.clientDataValue}>{request.price} {reportDirection === 'ltr' ? 'SAR' : 'ريال'}</Text>
               </View>
