@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase } from '../lib/supabaseClient';
 import { InspectionRequest, RequestStatus, Client, Car, CarMake, CarModel, InspectionType, Employee, PaymentType } from '../types';
 import { useAppContext } from '../context/AppContext';
 import EditIcon from './icons/EditIcon';
@@ -24,6 +25,92 @@ import XIcon from './icons/XIcon';
 import UserXIcon from './icons/UserXIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import ClientHistoryModal from './ClientHistoryModal';
+
+const SmartRowWrapper: React.FC<{
+    request: InspectionRequest;
+    client: Client | undefined;
+    car: Car | undefined;
+    initialHasClientHistory: boolean;
+    initialHasCarHistory: boolean;
+    children: (hasClientHistory: boolean, hasCarHistory: boolean) => React.ReactNode;
+}> = ({ request, client, car, initialHasClientHistory, initialHasCarHistory, children }) => {
+    const [dynamicClientHistory, setDynamicClientHistory] = useState<boolean | null>(null);
+    const [dynamicCarHistory, setDynamicCarHistory] = useState<boolean | null>(null);
+
+    useEffect(() => {
+        let isMounted = true;
+        
+        const checkClient = async () => {
+            if (initialHasClientHistory || client?.is_system_default) return;
+            try {
+                const { count, error } = await supabase
+                    .from('inspection_requests')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('client_id', request.client_id);
+                
+                if (error) console.error("Error checking client history:", error);
+                
+                if (isMounted && count && count > 1) {
+                    setDynamicClientHistory(true);
+                }
+            } catch (e) { console.error(e); }
+        };
+
+        const checkCar = async () => {
+            if (initialHasCarHistory || !car) return;
+            try {
+                 let carIds: string[] = [car.id];
+                 
+                 if (car.vin || car.plate_number || car.plate_number_en) {
+                     let q = supabase.from('cars').select('id');
+                     if (car.vin) {
+                         q = q.eq('vin', car.vin.trim());
+                     } else {
+                         // Or conditions must be properly formatted string
+                         const conditions = [];
+                         if (car.plate_number) conditions.push(`plate_number.eq."${car.plate_number.trim()}"`, `plate_number_en.eq."${car.plate_number.trim()}"`);
+                         if (car.plate_number_en) conditions.push(`plate_number_en.eq."${car.plate_number_en.trim()}"`, `plate_number.eq."${car.plate_number_en.trim()}"`);
+                         
+                         if (conditions.length > 0) {
+                             q = q.or(conditions.join(','));
+                         }
+                     }
+                     const { data, error } = await q;
+                     if (data) {
+                         const uniqueIds = Array.from(new Set(data.map(c => c.id)));
+                         carIds = uniqueIds.length > 0 ? uniqueIds : carIds;
+                     }
+                 }
+                 
+                 const { count, error } = await supabase
+                    .from('inspection_requests')
+                    .select('id', { count: 'exact', head: true })
+                    .in('car_id', carIds);
+                    
+                if (isMounted && count && count > 1) {
+                    setDynamicCarHistory(true);
+                }
+            } catch (e) { console.error(e); }
+        };
+
+        const timer = setTimeout(() => {
+            if (isMounted) {
+                checkClient();
+                checkCar();
+            }
+        }, 300); // 300ms delay to prevent hammering during render
+
+        return () => { 
+            isMounted = false; 
+            clearTimeout(timer);
+        };
+    }, [request.id, request.client_id, request.car_id, initialHasClientHistory, initialHasCarHistory, car, client]);
+
+    const finalClientHistory = dynamicClientHistory !== null ? dynamicClientHistory : initialHasClientHistory;
+    const finalCarHistory = dynamicCarHistory !== null ? dynamicCarHistory : initialHasCarHistory;
+
+    return <>{children(finalClientHistory, finalCarHistory)}</>;
+};
 
 interface RequestTableProps {
   requests: InspectionRequest[];
@@ -703,83 +790,91 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                         }
 
                         return (
-                            <motion.tr 
-                                layout
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ 
-                                    layout: { type: "spring", stiffness: 500, damping: 50, mass: 1 },
-                                    opacity: { duration: 0.2 } 
-                                }}
+                            <SmartRowWrapper 
                                 key={request.id} 
-                                id={`request-row-${request.id}`} 
-                                className={rowClass}
+                                request={request} 
+                                client={client} 
+                                car={car} 
+                                initialHasClientHistory={hasHistory} 
+                                initialHasCarHistory={hasCarHistory || false}
                             >
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex items-center gap-2">
-                                        {(request.reservation_id || request.payment_note?.includes('[WA-RES]')) && (
-                                            <WhatsappIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
-                                        )}
-                                        <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">
-                                            #<HighlightText text={request.request_number} tokens={expandedSearchTokens} />
-                                        </span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div 
-                                        className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors group/client"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (client && !client.is_system_default) {
-                                                setSelectedClientForHistory(client);
-                                            } else {
-                                                const searchKey = client?.is_system_default ? 'عميل عام' : clientInfo.phone;
-                                                const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(searchKey)}`;
-                                                window.open(url, '_blank');
-                                            }
+                                {(lazyHasClientHistory, lazyHasCarHistory) => (
+                                    <motion.tr 
+                                        layout
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ 
+                                            layout: { type: "spring", stiffness: 500, damping: 50, mass: 1 },
+                                            opacity: { duration: 0.2 } 
                                         }}
-                                        title={client?.is_system_default ? "عرض كل طلبات العميل العام" : "اضغط لعرض سجل طلبات العميل"}
+                                        id={`request-row-${request.id}`} 
+                                        className={rowClass}
                                     >
-                                        {client?.is_system_default ? (
-                                            <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-black">
-                                                <span>✨</span>
-                                                <span>عميل عام</span>
-                                            </span>
-                                        ) : (
-                                            <HighlightText text={clientInfo.name} tokens={expandedSearchTokens} />
-                                        )}
-                                        {hasHistory && !client?.is_system_default && (
-                                            <span 
-                                                className="inline-flex items-center justify-center p-1 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 opacity-80 group-hover/client:opacity-100 transition-opacity"
-                                                title="عميل سابق (لديه طلبات أخرى)"
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center gap-2">
+                                                {(request.reservation_id || request.payment_note?.includes('[WA-RES]')) && (
+                                                    <WhatsappIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
+                                                )}
+                                                <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">
+                                                    #<HighlightText text={request.request_number} tokens={expandedSearchTokens} />
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div 
+                                                className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors group/client"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (client && !client.is_system_default) {
+                                                        setSelectedClientForHistory(client);
+                                                    } else {
+                                                        const searchKey = client?.is_system_default ? 'عميل عام' : clientInfo.phone;
+                                                        const url = `${window.location.origin}${window.location.pathname}?page=requests&search=${encodeURIComponent(searchKey)}`;
+                                                        window.open(url, '_blank');
+                                                    }
+                                                }}
+                                                title={client?.is_system_default ? "عرض كل طلبات العميل العام" : "اضغط لعرض سجل طلبات العميل"}
                                             >
-                                                <UserCheckIcon className="w-3.5 h-3.5" />
-                                            </span>
-                                        )}
-                                    </div>
-                                    {!client?.is_system_default && (
-                                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                            <HighlightText text={clientInfo.phone} tokens={expandedSearchTokens} />
-                                        </div>
-                                    )}
-                                    {creator && (
-                                        <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                                            بواسطة: {creator.name}
-                                        </div>
-                                    )}
-                                </td>
-                                <td className={`px-6 py-4 sticky right-0 md:static z-10 shadow-sm md:shadow-none transition-colors duration-150 ${request.payment_type === PaymentType.Unpaid ? 'bg-rose-50 dark:bg-rose-900/20' : request.payment_type === PaymentType.Transfer ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30'}`}>
-                                    <div className="flex items-center gap-2">
-                                        {hasCarHistory && onHistoryClick && (
-                                            <button
-                                                onClick={(e) => onHistoryClick(e, request.car_id, carDisplayName)}
-                                                className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-800 transition-all hover:scale-110 shadow-sm border border-amber-200 dark:border-amber-800"
-                                                title="عرض سجل الفحص لهذه السيارة"
-                                            >
-                                                <HistoryIcon className="w-5 h-5" />
-                                            </button>
-                                        )}
+                                                {client?.is_system_default ? (
+                                                    <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-black">
+                                                        <span>✨</span>
+                                                        <span>عميل عام</span>
+                                                    </span>
+                                                ) : (
+                                                    <HighlightText text={clientInfo.name} tokens={expandedSearchTokens} />
+                                                )}
+                                                {lazyHasClientHistory && !client?.is_system_default && (
+                                                    <span 
+                                                        className="inline-flex items-center justify-center p-1 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 opacity-80 group-hover/client:opacity-100 transition-opacity"
+                                                        title="عميل سابق (لديه طلبات أخرى)"
+                                                    >
+                                                        <UserCheckIcon className="w-3.5 h-3.5" />
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {!client?.is_system_default && (
+                                                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                                    <HighlightText text={clientInfo.phone} tokens={expandedSearchTokens} />
+                                                </div>
+                                            )}
+                                            {creator && (
+                                                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                                                    بواسطة: {creator.name}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className={`px-6 py-4 sticky right-0 md:static z-10 shadow-sm md:shadow-none transition-colors duration-150 ${request.payment_type === PaymentType.Unpaid ? 'bg-rose-50 dark:bg-rose-900/20' : request.payment_type === PaymentType.Transfer ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30'}`}>
+                                            <div className="flex items-center gap-2">
+                                                {lazyHasCarHistory && onHistoryClick && (
+                                                    <button
+                                                        onClick={(e) => onHistoryClick(e, request.car_id, carDisplayName)}
+                                                        className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-800 transition-all hover:scale-110 shadow-sm border border-amber-200 dark:border-amber-800"
+                                                        title="عرض سجل الفحص لهذه السيارة"
+                                                    >
+                                                        <HistoryIcon className="w-5 h-5" />
+                                                    </button>
+                                                )}
                                         <div>
                                             <div 
                                                 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -1067,6 +1162,8 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                     </div>
                                 </td>
                             </motion.tr>
+                        )}
+                        </SmartRowWrapper>
                         )
                     })) : (
                         <motion.tr

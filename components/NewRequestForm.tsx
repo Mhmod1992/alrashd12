@@ -1637,6 +1637,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             isReservationMode={isReservationMode}
                             onMagicFill={handleMagicFill}
                             hasDefaultClient={initialClients.some(c => c.is_system_default)}
+                            isMobile={isMobile}
                         />
                     )}
                 </div>

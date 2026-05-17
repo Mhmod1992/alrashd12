@@ -89,7 +89,8 @@ export const FillRequest: React.FC = () => {
 
     // View Modes
     const [findingsViewMode, setFindingsViewMode] = useState<'grid' | 'list'>('grid');
-    const [isGroupedView, setIsGroupedView] = useState(false);
+    const [isGroupedView, setIsGroupedView] = useState(true);
+    const [isFloatingInfoVisible, setIsFloatingInfoVisible] = useState(true);
     // Main Accordion Control
     const [isFindingsSectionOpen, setIsFindingsSectionOpen] = useState(true);
 
@@ -312,18 +313,33 @@ export const FillRequest: React.FC = () => {
 
     // --- Persist State to Local Storage on Change ---
     useEffect(() => {
-        if (request && isInitialDataLoaded) {
-            const dataToSave = {
-                generalNotes,
-                categoryNotes,
-                structuredFindings,
-                voiceMemos,
-                activityLog, // Optional to save locally, but good for restoring state
-                updatedAt: new Date().toISOString()
-            };
-            localStorage.setItem(getDraftKey(request.id), JSON.stringify(dataToSave));
+        if (!request || !isInitialDataLoaded) return;
+        
+        if (isLocked) {
+            // إذا كان الطلب مكتمل (مقفل)، لا نحتاج لحفظه محلياً. 
+            // بل نقوم بحذفه إن وجد لتفريغ مساحة التخزين في المتصفح.
+            try {
+                localStorage.removeItem(getDraftKey(request.id));
+            } catch (e) {
+                console.warn('Failed to clear draft for locked request', e);
+            }
+            return;
         }
-    }, [generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog, request, isInitialDataLoaded, getDraftKey]);
+
+        const dataToSave = {
+            generalNotes,
+            categoryNotes,
+            structuredFindings,
+            // مسح تخزين الملاحظات الصوتية (Base64) محلياً لمنع امتلاء الذاكرة
+            activityLog, 
+            updatedAt: new Date().toISOString()
+        };
+        try {
+            localStorage.setItem(getDraftKey(request.id), JSON.stringify(dataToSave));
+        } catch (e) {
+            console.warn('Storage quota exceeded when saving draft', e);
+        }
+    }, [generalNotes, categoryNotes, structuredFindings, activityLog, request, isInitialDataLoaded, isLocked, getDraftKey]);
 
     // Scroll to Bottom Helper
     const scrollToBottom = useCallback(() => {
@@ -331,19 +347,20 @@ export const FillRequest: React.FC = () => {
             // Use a small timeout to ensure DOM has updated and layout is stable
             setTimeout(() => {
                 if (contentRef.current) {
+                    const scrollHeight = contentRef.current.scrollHeight;
+                    const clientHeight = contentRef.current.clientHeight;
+                    // Add a small extra offset (30px) to ensure the very last item is fully visible
                     contentRef.current.scrollTo({
-                        top: contentRef.current.scrollHeight,
+                        top: scrollHeight - clientHeight + 30, 
                         behavior: 'smooth',
                     });
                 }
-            }, 150);
+            }, 100);
         }
     }, []);
 
-    // Auto-scroll when content changes
-    useEffect(() => {
-        scrollToBottom();
-    }, [generalNotes.length, categoryNotes[activeTab]?.length, structuredFindings.length, activeTab, scrollToBottom]);
+    // Auto-scroll logic removed to prevent jumping during deletions and bulk updates.
+    // Manual scrollToBottom is still called in handleAddNote.
 
 
     useEffect(() => {
@@ -1519,6 +1536,14 @@ export const FillRequest: React.FC = () => {
         setActivityLog(newLogArray);
         try {
             await performSave(true, RequestStatus.COMPLETE, { activityLog: newLogArray });
+            
+            // حذف الملاحظات المحلية من المتصفح فقط
+            try {
+                localStorage.removeItem(getDraftKey(request.id));
+            } catch (e) {
+                console.warn('Failed to clear local storage draft', e);
+            }
+
             addNotification({ title: 'نجاح', message: 'تم تحديد الطلب كمكتمل.', type: 'success' });
             
             // Set flag to skip scroll restoration when returning to requests page after completion
@@ -1978,7 +2003,7 @@ export const FillRequest: React.FC = () => {
     }, [customFindingCategories, setActiveTab]);
 
     if (!request) {
-        if (isFetchingRequest) {
+        if (isFetchingRequest || (selectedRequestId && fetchAttemptedRef.current !== selectedRequestId)) {
             return (
                 <div className="flex justify-center items-center h-full p-12">
                     <RefreshCwIcon className="w-8 h-8 animate-spin text-blue-500" />
@@ -2242,7 +2267,7 @@ export const FillRequest: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl border-slate-200 dark:border-slate-700/50 h-auto custom-scrollbar overflow-x-hidden">
+                        <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl border-slate-200 dark:border-slate-700/50 h-auto custom-scrollbar overflow-x-hidden pb-12">
                             {currentCategoryNotes.length > 0 ? (
                                 <ul className="space-y-3">
                                     {renderNotes(currentCategoryNotes, categoryId)}
@@ -2329,6 +2354,51 @@ export const FillRequest: React.FC = () => {
     return (
         <div className="flex flex-col h-full relative">
 
+            {/* Desktop Floating Info Card */}
+            {request && isFloatingInfoVisible && (
+                <div className="hidden lg:flex fixed left-6 top-32 z-50 flex-col gap-3 pointer-events-none">
+                    <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-2xl animate-floating-pulse pointer-events-auto min-w-[180px] max-w-[220px] relative overflow-hidden group text-center">
+                        {/* Close Button */}
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setIsFloatingInfoVisible(false); }}
+                            className="absolute top-1 right-1 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors z-10"
+                            title="إخفاء البطاقة"
+                        >
+                            <Icon name="close" className="w-4 h-4" />
+                        </button>
+
+                        <div className="flex flex-col gap-4">
+                            <div>
+                                <p className="text-[9px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest mb-0.5 opacity-70">رقم الطلب</p>
+                                <p className="text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">
+                                    {request.request_number || request.id.slice(0, 8)}
+                                </p>
+                            </div>
+                            
+                            <div className="h-px bg-slate-100 dark:bg-slate-700/50 w-full"></div>
+
+                            <div className="space-y-3">
+                                <div>
+                                    <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">السيارة</p>
+                                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight">
+                                        {carDetails.makeNameEn} <br/>
+                                        <span className="text-slate-600 dark:text-slate-400 text-xs">{carDetails.modelNameEn} {carDetails.year}</span>
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">العميل</p>
+                                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate px-2">{client?.name || 'Unknown'}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Decorative background accent */}
+                        <div className="absolute -bottom-6 -right-6 w-16 h-16 bg-blue-500/5 rounded-full blur-2xl"></div>
+                    </div>
+                </div>
+            )}
+
             <FillRequestHeader
                 request={request}
                 carDetails={carDetails}
@@ -2397,7 +2467,7 @@ export const FillRequest: React.FC = () => {
                 ref={contentRef}
                 onScroll={handleScroll} // Added Scroll Handler
                 className="flex-1 overflow-y-auto bg-[#f8fafc] dark:bg-slate-800 p-4 sm:p-6 pb-4 relative scroll-smooth overflow-x-hidden"
-                style={{ paddingBottom: `${footerHeight + 120}px` }}
+                style={{ paddingBottom: `${footerHeight + 180}px` }}
             >
                 {isLoadingTab ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500"><RefreshCwIcon className={`w-10 h-10 animate-spin text-${themeColor}-500 mb-4`} /><p>جاري تحميل البيانات...</p></div>
@@ -2416,7 +2486,7 @@ export const FillRequest: React.FC = () => {
                                         )}
                                     </div>
                                 </div>
-                                <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl h-auto custom-scrollbar">
+                                <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl h-auto custom-scrollbar pb-12">
                                     {generalNotes.length > 0 ? (
                                         <ul className="space-y-3 mt-4">
                                             {renderNotes(generalNotes, 'general')}
@@ -2434,7 +2504,7 @@ export const FillRequest: React.FC = () => {
             {showScrollTop && (
                 <button
                     onClick={scrollToTop}
-                    className={`fixed bottom-[180px] sm:bottom-36 left-4 sm:right-4 sm:left-auto z-50 p-3 bg-${themeColor}-600 text-white rounded-full shadow-lg hover:bg-${themeColor}-700 transition-all animate-scale-in`}
+                    className={`fixed bottom-[220px] sm:bottom-48 left-4 sm:right-4 sm:left-auto z-50 p-3 bg-${themeColor}-600 text-white rounded-full shadow-lg hover:bg-${themeColor}-700 transition-all animate-scale-in`}
                     title="للأعلى"
                 >
                     <ChevronDownIcon className="w-6 h-6 transform rotate-180" />

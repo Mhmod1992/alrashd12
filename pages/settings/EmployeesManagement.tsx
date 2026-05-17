@@ -13,6 +13,7 @@ import EditIcon from '../../components/icons/EditIcon';
 import TrashIcon from '../../components/icons/TrashIcon';
 import CheckCircleIcon from '../../components/icons/CheckCircleIcon';
 import DollarSignIcon from '../../components/icons/DollarSignIcon'; // Import Dollar Icon
+import WhatsappIcon from '../../components/icons/WhatsappIcon';
 import EmployeeFinancialsModal from '../../components/EmployeeFinancialsModal'; // Import the new modal
 
 const roleNames: Record<Role, string> = {
@@ -297,6 +298,7 @@ const EmployeesManagement: React.FC = () => {
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                                 <button onClick={() => handleOpenFinancials(emp)} className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-xl transition-colors hover:bg-green-100"><DollarSignIcon className="w-3.5 h-3.5" />مالية</button>
+                                {emp.phone && <button onClick={() => window.open(`https://wa.me/${emp.phone.replace(/\D/g, '')}`, '_blank')} className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-[#25D366]/10 text-[#25D366] rounded-xl transition-colors hover:bg-[#25D366]/20"><WhatsappIcon className="w-3.5 h-3.5" />واتساب</button>}
                                 <button onClick={() => handleEdit(emp)} className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl transition-colors hover:bg-blue-100"><EditIcon className="w-3.5 h-3.5" />تعديل</button>
                                 {emp.is_active ? (
                                     <button onClick={() => handleToggleStatus(emp, false)} className="col-span-2 flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl transition-colors hover:bg-red-100"><UserXIcon className="w-3.5 h-3.5" />تعطيل الحساب</button>
@@ -339,6 +341,7 @@ const EmployeesManagement: React.FC = () => {
                                     <td className="px-5 py-4"><StatusBadge active={emp.is_active} /></td>
                                     <td className="px-5 py-4 text-left">
                                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            {emp.phone && <button onClick={() => window.open(`https://wa.me/${emp.phone.replace(/\D/g, '')}`, '_blank')} className="p-2 text-[#25D366] hover:bg-[#25D366]/10 rounded-xl transition-colors" title="واتساب"><WhatsappIcon className="w-4 h-4" /></button>}
                                             <button onClick={() => handleOpenFinancials(emp)} className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-xl transition-colors" title="الملف المالي"><DollarSignIcon className="w-4 h-4" /></button>
                                             <button onClick={() => handleEdit(emp)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-colors" title="تعديل"><EditIcon className="w-4 h-4" /></button>
                                             {emp.is_active ? (
@@ -363,6 +366,7 @@ const EmployeesManagement: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label className="block text-xs font-bold mb-1">الاسم</label><input type="text" value={currentEmployee.name || ''} onChange={e => setCurrentEmployee(p => ({ ...p, name: e.target.value }))} className={formInputClasses} /></div>
                         <div><label className="block text-xs font-bold mb-1">البريد الإلكتروني</label><input type="email" value={currentEmployee.email || ''} onChange={e => setCurrentEmployee(p => ({ ...p, email: e.target.value }))} className={formInputClasses} disabled={isEditing} style={{ direction: 'ltr' }} /></div>
+                        <div><label className="block text-xs font-bold mb-1">رقم الهاتف</label><input type="tel" value={currentEmployee.phone || ''} onChange={e => setCurrentEmployee(p => ({ ...p, phone: e.target.value }))} className={formInputClasses} style={{ direction: 'ltr', textAlign: 'right' }} /></div>
                     </div>
 
                     <div>

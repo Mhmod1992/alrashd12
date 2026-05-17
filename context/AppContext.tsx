@@ -1900,12 +1900,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     success = true;
                     setWhatsappApiStatus('connected');
                 } else {
-                    console.error('WhatsApp API Error:', await response.text());
+                    // console.error('WhatsApp API Error:', await response.text());
                     addNotification({ title: 'فشل الإرسال التلقائي', message: 'تعذر الإرسال عبر الخادم، سيتم فتح الواتساب اليدوي', type: 'warning' });
                     setWhatsappApiStatus('disconnected');
                 }
             } catch (error) {
-                console.error('WhatsApp API Connection Error:', error);
+                // console.error('WhatsApp API Connection Error:', error);
                 addNotification({ title: 'فشل الاتصال بالخادم', message: 'تعذر الاتصال بخادم الواتساب، سيتم فتح الواتساب اليدوي', type: 'warning' });
                 setWhatsappApiStatus('disconnected');
             }
@@ -1988,9 +1988,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Log as a warning instead of error to avoid red noise in console
             // only if it's a fetch/network error
             if (error instanceof Error && (error.message.includes('fetch') || error.message.includes('NetworkError'))) {
-                console.warn('WhatsApp API connectivity check failed (API may be offline):', error.message);
+                // console.warn('WhatsApp API connectivity check failed (API may be offline):', error.message);
             } else {
-                console.error('WhatsApp Status Check Error:', error);
+                // console.error('WhatsApp Status Check Error:', error);
             }
         }
     }, [settings.whatsappMode, settings.whatsappApiUrl, settings.whatsappApiKey]);

@@ -20,6 +20,7 @@ import TrashIcon from '../components/icons/TrashIcon';
 import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import UserCircleIcon from '../components/icons/UserCircleIcon';
 import TechnicianSelectionModal from '../components/TechnicianSelectionModal';
+import WhatsAppRecipientModal from '../components/WhatsAppRecipientModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { pdf } from '@react-pdf/renderer';
 import OrderPdf from '../components/reports/OrderPdf';
@@ -303,6 +304,7 @@ const PrintReport: React.FC = () => {
     const [isDataReady, setIsDataReady] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+    const [isWhatsAppRecipientModalOpen, setIsWhatsAppRecipientModalOpen] = useState(false);
     const [loadingState, setLoadingState] = useState('');
     const [previewScale, setPreviewScale] = useState(1);
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
@@ -1035,35 +1037,31 @@ const PrintReport: React.FC = () => {
         return publicUrl;
     };
 
-    const handleWhatsAppShare = async () => {
-        if (!client?.phone) { addNotification({ title: 'بيانات ناقصة', message: 'رقم هاتف العميل غير متوفر.', type: 'warning' }); return; }
+    const handleWhatsAppShare = () => {
+        setIsWhatsAppRecipientModalOpen(true);
+    };
+
+    const handleSendWhatsAppToRecipient = async (recipientPhone: string, recipientName: string) => {
+        if (!recipientPhone) { addNotification({ title: 'بيانات ناقصة', message: 'رقم الهاتف غير متوفر.', type: 'warning' }); return; }
         if (isSendingWhatsApp) return;
 
         setIsSendingWhatsApp(true);
         try {
             // --- OPTIMIZATION: Check if we can reuse an existing report ---
-            // Only reuse if:
-            // 1. We have a report_url and report_generated_at
-            // 2. We are NOT in translation mode (translated reports are temporary/different)
-            // 3. The report was generated AFTER the last update to the request
             if (originalRequest?.report_url && originalRequest?.report_generated_at && !translatedRequest) {
                 const generatedAt = new Date(originalRequest.report_generated_at).getTime();
                 const updatedAt = originalRequest.updated_at ? new Date(originalRequest.updated_at).getTime() : 0;
                 
-                // If generated after last update, verify the link is still valid
                 if (generatedAt > updatedAt) {
                     try {
-                        // Attempt a HEAD request to check if the file exists
                         const response = await fetch(originalRequest.report_url, { method: 'HEAD' });
                         if (response.ok) {
-                            // File exists, reuse the link
-                            await openWhatsapp(`${originalRequest.report_url}?t=${Date.now()}`);
+                            await openWhatsapp(`${originalRequest.report_url}?t=${Date.now()}`, recipientPhone, recipientName);
                             return;
                         } else {
                             console.log("Existing report URL returned non-OK status. Generating a new one.");
                         }
                     } catch (fetchError) {
-                        // If fetch fails (e.g., CORS, network error, or file deleted), assume it's invalid and generate a new one
                         console.log("Could not verify existing report URL. Generating a new one.", fetchError);
                     }
                 }
@@ -1074,7 +1072,7 @@ const PrintReport: React.FC = () => {
             if (!blob) return;
             
             const publicUrl = await uploadReportToStorage(blob);
-            await openWhatsapp(`${publicUrl}?t=${Date.now()}`);
+            await openWhatsapp(`${publicUrl}?t=${Date.now()}`, recipientPhone, recipientName);
         } catch (error: any) { 
             console.error('WhatsApp Share Error:', error);
             addNotification({ title: 'خطأ', message: 'فشل الإرسال.', type: 'error' }); 
@@ -1084,11 +1082,12 @@ const PrintReport: React.FC = () => {
         }
     };
 
-    const openWhatsapp = async (link: string) => {
-        let phone = client?.phone.replace(/\D/g, '') || ''; 
+    const openWhatsapp = async (link: string, recipientPhone: string, recipientName: string) => {
+        let phone = recipientPhone.replace(/\D/g, '') || ''; 
         if (phone.startsWith('05')) phone = '966' + phone.substring(1);
         else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
 
+        // Message is still formatted for the client as requested
         const clientNameRaw = client?.name || 'العميل';
         const clientNameFormatted = `*${clientNameRaw}*`;
         
@@ -1108,7 +1107,7 @@ const PrintReport: React.FC = () => {
         const reportInstruction = settings.whatsappMode === 'api' ? '' : ' يمكنكم استعراض التفاصيل الكاملة من خلال الرابط:';
         const message = `تحية طيبة، السيد/ة ${clientNameFormatted} المحترم/ة،\n\nنود إفادتكم بصدور تقرير الفحص الفني لمركبتكم ${carDisplay}.${reportInstruction}\n🔗 ${link}\n\nنسعى دوماً لتقديم أفضل تجربة لعملائنا، لذا تهمنا مشاركتكم لتقييم الخدمة عبر الرابط التالي:\n⭐ ${reviewLink}\n\nمع خالص التقدير، إدارة وفريق ${workshopName}`;
         
-        await sendWhatsAppMessage(phone, message, clientNameRaw);
+        await sendWhatsAppMessage(phone, message, recipientName);
     };
 
     const handleDownloadPdf = async () => {
@@ -1823,6 +1822,15 @@ const PrintReport: React.FC = () => {
                 request={originalRequest} 
                 categoryId="ALL" 
                 categoryName="تعيين الفنيين" 
+            />
+
+            <WhatsAppRecipientModal
+                isOpen={isWhatsAppRecipientModalOpen}
+                onClose={() => setIsWhatsAppRecipientModalOpen(false)}
+                client={client}
+                employees={employees}
+                technicians={technicians}
+                onSelect={handleSendWhatsAppToRecipient}
             />
         </div>
     );

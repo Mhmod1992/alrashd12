@@ -6,6 +6,7 @@ import Modal from '../../components/Modal';
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
 import DollarSignIcon from '../../components/icons/DollarSignIcon';
+import WhatsappIcon from '../../components/icons/WhatsappIcon';
 import EmployeeFinancialsModal from '../../components/EmployeeFinancialsModal';
 
 const TechniciansManagement: React.FC = () => {
@@ -97,6 +98,7 @@ const TechniciansManagement: React.FC = () => {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 flex gap-2">
+                                    {tech.phone && <Button size="sm" variant="whatsapp" onClick={() => window.open(`https://wa.me/${tech.phone?.replace(/\D/g, '')}`, '_blank')} title="واتساب"><WhatsappIcon className="w-4 h-4"/></Button>}
                                     <Button size="sm" onClick={() => handleOpenFinancials(tech)} className="bg-green-600 hover:bg-green-700 text-white"><DollarSignIcon className="w-4 h-4"/></Button>
                                     <Button size="sm" variant="secondary" onClick={() => handleEdit(tech)}><Icon name="edit" className="w-4 h-4"/></Button>
                                     <Button size="sm" variant="danger" onClick={() => handleDelete(tech)}><Icon name="delete" className="w-4 h-4"/></Button>
@@ -120,9 +122,13 @@ const TechniciansManagement: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">الاسم</label>
                         <input type="text" value={currentTechnician.name || ''} onChange={e => setCurrentTechnician(p => ({...p, name: e.target.value}))} className={formInputClasses} placeholder="اسم الفني" />
                     </div>
-                     <div>
+                    <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">المسمى الوظيفي</label>
                         <input type="text" value={currentTechnician.title || ''} onChange={e => setCurrentTechnician(p => ({...p, title: e.target.value}))} className={formInputClasses} placeholder="مثال: فني ميكانيك، فاحص بودي" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">رقم الهاتف</label>
+                        <input type="tel" value={currentTechnician.phone || ''} onChange={e => setCurrentTechnician(p => ({...p, phone: e.target.value}))} className={formInputClasses} placeholder="رقم واتساب" style={{ direction: 'ltr', textAlign: 'right' }} />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">الراتب الأساسي</label>

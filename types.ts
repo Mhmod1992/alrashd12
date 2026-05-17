@@ -199,6 +199,7 @@ export interface Technician {
   title: string;
   is_active: boolean;
   salary?: number;
+  phone?: string;
 }
 
 export type HighlightColor = 'yellow' | 'red' | 'green' | 'blue';
@@ -501,6 +502,7 @@ export interface Employee {
   preferences?: UserPreferences;
   salary?: number;
   title?: string;
+  phone?: string;
 }
 
 export interface Notification {

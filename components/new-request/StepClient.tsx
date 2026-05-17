@@ -34,6 +34,7 @@ interface StepClientProps {
     isReservationMode?: boolean;
     onMagicFill?: () => void;
     hasDefaultClient?: boolean;
+    isMobile?: boolean;
 }
 
 const StepClient: React.FC<StepClientProps> = (props) => {
@@ -121,7 +122,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                             onFocus={props.onPhoneFocus}
                             onBlur={() => {}} // Placeholder or keep current logic
                             required={!props.isReservationMode}
-                            autoFocus={true}
+                            autoFocus={!props.isMobile}
                         />
                         {props.isSearchingClientPhone && (
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-20">

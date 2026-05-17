@@ -175,9 +175,13 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
         return () => { isMounted.current = false; }
     }, []);
 
-    // NEW: Auto-focus textarea when tab changes
+    // NEW: Auto-focus textarea when tab changes (Disabled on mobile to prevent layout jumping/keyboard pop-up)
     useEffect(() => {
         if (!isLocked && canManageNotes && textareaRef.current) {
+            // Check if mobile (screen width < 768px)
+            const isMobile = window.innerWidth < 768;
+            if (isMobile) return;
+
             const timer = setTimeout(() => {
                 textareaRef.current?.focus();
             }, 100);
@@ -465,7 +469,7 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                                         onClick={handleStampClick}
                                         className={`
                                             flex items-center justify-center gap-2 rounded-full transition-all duration-300 transform shadow-xl sm:shadow-md p-3 sm:p-2 sm:mx-2
-                                            fixed bottom-36 right-4 z-50 sm:static sm:z-auto sm:bottom-auto sm:right-auto
+                                            fixed bottom-[200px] sm:bottom-40 right-4 z-50 sm:static sm:z-auto sm:bottom-auto sm:right-auto
                                             ${isStamped
                                                 ? 'bg-red-600 text-white ring-4 ring-red-400/50 scale-110 rotate-12'
                                                 : 'bg-white dark:bg-slate-800 border-2 border-red-200 dark:border-red-900/30 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
