@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Modal from './Modal';
 import Button from './Button';
 import { useAppContext } from '../context/AppContext';
 import { InspectionRequest, CustomFindingCategory } from '../types';
 import UserCircleIcon from './icons/UserCircleIcon';
 import BriefcaseIcon from './icons/BriefcaseIcon';
+import SparklesIcon from './icons/SparklesIcon';
 import Icon from './Icon';
 
 interface TechnicianSelectionModalProps {
@@ -26,7 +27,7 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
     const { technicians, employees, updateRequest, addNotification, inspectionTypes, customFindingCategories } = useAppContext();
     const [isSaving, setIsSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedTitleFilter, setSelectedTitleFilter] = useState<string | null>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     // --- NEW STATE FOR TABBED INTERFACE ---
     const [activeTabId, setActiveTabId] = useState<string>('');
@@ -58,14 +59,11 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
 
     const filteredStaff = useMemo(() => {
         let result = allStaff;
-        if (selectedTitleFilter) {
-            result = result.filter(s => s.parsedTitles.includes(selectedTitleFilter));
-        }
         if (searchTerm) {
             result = result.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
         }
         return result;
-    }, [allStaff, searchTerm, selectedTitleFilter]);
+    }, [allStaff, searchTerm]);
 
     const uniqueTitles = useMemo(() => {
         const titles = new Set<string>();
@@ -86,8 +84,11 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
 
     useEffect(() => {
         setSearchTerm('');
-        setSelectedTitleFilter(null);
-    }, [activeTabId]);
+        // Focus search input when tab changes or modal opens
+        setTimeout(() => {
+            searchInputRef.current?.focus();
+        }, 50);
+    }, [activeTabId, isOpen]);
 
     // Initialize selection from request data when modal opens
     useEffect(() => {
@@ -105,6 +106,18 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
     const selectedIdsForCurrentTab = useMemo(() => {
         return new Set(draftAssignments[activeTabId] || []);
     }, [draftAssignments, activeTabId]);
+
+    // --- NEW: Suggested Staff (assigned to other tabs in this request) ---
+    const suggestedStaff = useMemo(() => {
+        const otherTabsIds = new Set<string>();
+        Object.entries(draftAssignments).forEach(([tabId, staffIds]) => {
+            if (tabId !== activeTabId) {
+                staffIds.forEach(id => otherTabsIds.add(id));
+            }
+        });
+        
+        return allStaff.filter(s => otherTabsIds.has(s.id) && !selectedIdsForCurrentTab.has(s.id));
+    }, [allStaff, draftAssignments, activeTabId, selectedIdsForCurrentTab]);
 
     const handleToggle = (personId: string) => {
         setDraftAssignments(prev => {
@@ -175,6 +188,7 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
                 <div className="relative mb-4 flex-shrink-0">
                     <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/>
                     <input 
+                        ref={searchInputRef}
                         type="text" 
                         placeholder="ابحث عن اسم..." 
                         value={searchTerm}
@@ -183,40 +197,38 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
                     />
                 </div>
 
-                <div className="flex flex-wrap gap-2 mb-4">
-                    <button
-                        onClick={() => setSelectedTitleFilter(null)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                            selectedTitleFilter === null
-                                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                        }`}
-                    >
-                        الكل
-                    </button>
-                    {uniqueTitles.map(title => (
-                        <button
-                            key={title}
-                            onClick={() => setSelectedTitleFilter(title)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                                selectedTitleFilter === title
-                                    ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                            }`}
-                        >
-                            {title}
-                        </button>
-                    ))}
-                </div>
-                
-                <div className="flex-1 overflow-y-auto border rounded-lg dark:border-gray-700 custom-scrollbar bg-slate-50/50 dark:bg-slate-900/50 p-2">
+                <div className="flex-1 overflow-y-auto border rounded-xl dark:border-gray-700 custom-scrollbar bg-slate-50/50 dark:bg-slate-900/50 p-2 sm:p-4">
+                    {/* --- Suggested Section --- */}
+                    {suggestedStaff.length > 0 && !searchTerm && (
+                        <div className="mb-8 p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                            <h3 className="px-3 py-1 text-[10px] font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <SparklesIcon className="w-3 h-3" />
+                                مقترح (مشاركون في أقسام أخرى)
+                            </h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                                {suggestedStaff.map(person => (
+                                    <button 
+                                        key={person.id + '-suggested'} 
+                                        onClick={() => handleToggle(person.id)}
+                                        className="flex flex-col items-center gap-1 p-2 rounded-xl border border-white dark:border-slate-800 bg-white/60 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 hover:border-blue-400 hover:bg-white text-center transition-all transform active:scale-[0.98] shadow-sm"
+                                    >
+                                        <div className="flex-shrink-0 p-1.5 rounded-lg bg-blue-100 text-blue-600">
+                                            {person.type === 'emp' ? <UserCircleIcon className="w-5 h-5"/> : <BriefcaseIcon className="w-5 h-5"/>}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-black text-[11px] leading-tight truncate w-full">{person.name}</p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {filteredStaff.length > 0 ? (
                         Object.entries(
                             filteredStaff.reduce((acc, person) => {
-                                // If a title filter is active, only group by that title
-                                // Otherwise group by all parsed titles
-                                const titlesToGroup = selectedTitleFilter ? [selectedTitleFilter] : person.parsedTitles;
-                                titlesToGroup.forEach(t => {
+                                // Group by all parsed titles
+                                person.parsedTitles.forEach(t => {
                                     if (!acc[t]) acc[t] = [];
                                     if (!acc[t].find(p => p.id === person.id)) {
                                         acc[t].push(person);
@@ -225,33 +237,51 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
                                 return acc;
                             }, {} as Record<string, typeof filteredStaff>)
                         ).map(([title, staff]) => (
-                            <div key={title} className="mb-4 last:mb-0">
-                                <h3 className="px-3 py-1 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 rounded-md mb-1">{title}</h3>
-                                <div className="flex flex-col gap-1">
-                                    {staff.map(person => (
-                                        <label key={person.id + '-' + title} className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors ${selectedIdsForCurrentTab.has(person.id) ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : 'bg-transparent border-transparent dark:border-transparent'}`}>
-                                            <div className="flex items-center gap-3">
-                                                <div className={`p-1.5 rounded-full ${person.type === 'emp' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                                                    {person.type === 'emp' ? <UserCircleIcon className="w-4 h-4"/> : <BriefcaseIcon className="w-4 h-4"/>}
+                            <div key={title} className="mb-6 last:mb-0">
+                                <h3 className="px-3 py-1 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 border-r-2 border-slate-300 dark:border-slate-600 pr-2">{title}</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                                    {staff.map(person => {
+                                        const isSelected = selectedIdsForCurrentTab.has(person.id);
+                                        return (
+                                            <button 
+                                                key={person.id + '-' + title} 
+                                                onClick={() => handleToggle(person.id)}
+                                                className={`flex flex-col items-center gap-1 p-2 rounded-xl border text-center transition-all transform active:scale-[0.98] ${
+                                                    isSelected 
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20 translate-y-[-2px]' 
+                                                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-blue-400 hover:bg-blue-50/30'
+                                                }`}
+                                            >
+                                                <div className={`flex-shrink-0 p-1.5 rounded-lg transition-colors relative ${
+                                                    isSelected 
+                                                        ? 'bg-white/20 text-white' 
+                                                        : (person.type === 'emp' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600')
+                                                }`}>
+                                                    {person.type === 'emp' ? <UserCircleIcon className="w-5 h-5"/> : <BriefcaseIcon className="w-5 h-5"/>}
+                                                    {isSelected && (
+                                                        <div className="bg-white text-blue-600 rounded-full p-0.5 shadow-sm absolute -top-1 -right-1">
+                                                            <Icon name="check-circle" className="w-3 h-3" />
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div>
-                                                    <p className="font-bold text-sm text-gray-900 dark:text-white">{person.name}</p>
+                                                <div className="flex-1 min-w-0 w-full">
+                                                    <p className={`font-black text-[11px] leading-tight truncate ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                                                        {person.name}
+                                                    </p>
                                                 </div>
-                                            </div>
-                                            <input 
-                                                type="checkbox" 
-                                                checked={selectedIdsForCurrentTab.has(person.id)} 
-                                                onChange={() => handleToggle(person.id)}
-                                                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                            />
-                                        </label>
-                                    ))}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))
                     ) : (
-                        <div className="p-4 text-center text-gray-500 text-sm">
-                            لا توجد نتائج مطابقة. تأكد من إضافة فنيين أو تفعيل خيار "فني" للموظفين من الإعدادات.
+                        <div className="flex flex-col items-center justify-center p-12 text-center text-gray-500">
+                            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                                <Icon name="search" className="w-8 h-8 opacity-20" />
+                            </div>
+                            <p className="text-sm font-bold">لا توجد نتائج مطابقة</p>
+                            <p className="text-xs opacity-60">تأكد من إضافة فنيين أو تفعيل خيار "فني" للموظفين</p>
                         </div>
                     )}
                 </div>
