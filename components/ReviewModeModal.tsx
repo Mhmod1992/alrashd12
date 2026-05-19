@@ -59,35 +59,24 @@ const highlightColors: Record<HighlightColor, { name: string; bg: string; ring: 
     blue: { name: 'معلومات', bg: 'bg-blue-500', ring: 'ring-blue-600' },
 };
 
-const AnimatedText: React.FC<{ text: string; isActive: boolean; isTitle?: boolean }> = ({ text, isActive, isTitle = false }) => {
-    if (!text) return isTitle ? null : <span className="italic opacity-50">لا يوجد محتوى...</span>;
-    
+const ActiveAnimatedText: React.FC<{ text: string; isTitle: boolean }> = ({ text, isTitle }) => {
     const words = useMemo(() => text.split(' ').filter(w => w.length > 0), [text]);
     const [highlightCount, setHighlightCount] = useState(0);
 
     useEffect(() => {
-        let intervalId: number | undefined;
+        setHighlightCount(0);
+        let intervalId = window.setInterval(() => {
+            setHighlightCount(prevCount => {
+                if (prevCount >= words.length) {
+                    clearInterval(intervalId);
+                    return prevCount;
+                }
+                return prevCount + 1;
+            });
+        }, 80);
 
-        if (isActive && words.length > 0) {
-            setHighlightCount(0);
-            
-            intervalId = window.setInterval(() => {
-                setHighlightCount(prevCount => {
-                    if (prevCount >= words.length) {
-                        clearInterval(intervalId);
-                        return prevCount;
-                    }
-                    return prevCount + 1;
-                });
-            }, 150);
-        } else {
-            setHighlightCount(0);
-        }
-
-        return () => {
-            if (intervalId) clearInterval(intervalId);
-        };
-    }, [isActive, words]);
+        return () => clearInterval(intervalId);
+    }, [words]);
 
     return (
         <span className={`leading-relaxed dir-rtl break-words ${isTitle ? 'block' : ''}`}>
@@ -108,6 +97,101 @@ const AnimatedText: React.FC<{ text: string; isActive: boolean; isTitle?: boolea
     );
 };
 
+const AnimatedText: React.FC<{ text: string; isActive: boolean; isTitle?: boolean }> = React.memo(({ text, isActive, isTitle = false }) => {
+    if (!text) return isTitle ? null : <span className="italic opacity-50">لا يوجد محتوى...</span>;
+    if (!isActive) return <span className={`leading-relaxed dir-rtl break-words ${isTitle ? 'block' : ''}`}>{text}</span>;
+    return <ActiveAnimatedText text={text} isTitle={isTitle} />;
+});
+
+// Memo comparison function
+const areRowPropsEqual = (prev: any, next: any) => {
+    return prev.item.uniqueKey === next.item.uniqueKey &&
+           prev.item.content === next.item.content &&
+           prev.item.title === next.item.title &&
+           prev.item.highlightColor === next.item.highlightColor &&
+           prev.item.severity === next.item.severity &&
+           prev.isActive === next.isActive &&
+           prev.isEditing === next.isEditing &&
+           prev.apiKey === next.apiKey &&
+           (prev.isEditing ? (prev.editValue === next.editValue && prev.editColor === next.editColor) : true);
+};
+
+const ReviewItemRow = React.memo(({
+    item, index, isActive, isEditing, editValue, editColor, apiKey,
+    onStartEdit, onDelete, onSave, onCancelEdit,
+    setEditValue, setEditColor, setActiveIndex, setItemRef
+}: any) => {
+    const [isPolishing, setIsPolishing] = useState(false);
+
+    const handleAiPolish = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!apiKey || !editValue.trim()) return;
+        setIsPolishing(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey });
+            const prompt = `أعد صياغة نص تقرير فحص السيارة التالي ليكون احترافياً وموجزاً باللغة العربية، مع تصحيح الأخطاء الإملائية. لا تضف أي مقدمات أو خاتمة. النص: "${editValue}"`;
+            const response = await ai.models.generateContent({ model: 'gemini-flash-lite-latest', contents: prompt });
+            if (response.text) setEditValue(response.text.trim());
+        } catch (error) {
+            console.error("AI Polish Error", error);
+        } finally {
+            setIsPolishing(false);
+        }
+    };
+
+    let severityColor = 'blue';
+    if (item.severity === 'bad') severityColor = 'red';
+    else if (item.severity === 'good') severityColor = 'green';
+    const noteBg = !isEditing && item.highlightColor ? `bg-${item.highlightColor}-500/10` : 'bg-slate-800/40';
+    const activeStyles = isActive ? `scale-100 z-20 opacity-100 ring-2 ring-${severityColor}-500 shadow-[0_0_40px_-10px_rgba(var(--tw-shadow-color),0.4)] shadow-${severityColor}-500` : 'scale-95 z-0 opacity-40 blur-[1px] grayscale-[50%] hover:opacity-80 hover:blur-[0px] hover:grayscale-0';
+
+    return (
+        <div ref={(el) => setItemRef(item.uniqueKey, el)} onClick={() => setActiveIndex(index)} className={`relative rounded-2xl overflow-hidden border border-white/10 ${noteBg} transition-all duration-300 ease-out group cursor-pointer ${activeStyles}`}>
+            <div className="px-6 py-5 flex justify-between items-start gap-4 bg-white/5">
+                <div className="flex items-center gap-5 flex-1 min-w-0">
+                    {item.image ? (<img src={item.image} className="w-20 h-20 rounded-xl object-cover border border-white/10 flex-shrink-0 shadow-lg" alt="thumbnail" loading="lazy" />) : (<div className={`w-20 h-20 rounded-xl flex items-center justify-center bg-slate-700/50 text-${severityColor}-400`}><Icon name={item.type === 'note' ? 'document-report' : 'findings'} className="w-10 h-10" /></div>)}
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 flex items-center gap-2">
+                            <span className={`bg-${severityColor}-500/20 text-${severityColor}-400 px-2 py-0.5 rounded-md`}>{item.categoryName}</span>
+                            {isActive && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>}
+                        </p>
+                        <h3 className="text-xl font-bold text-white truncate"><AnimatedText text={item.title} isActive={isActive} isTitle={true} /></h3>
+                    </div>
+                </div>
+                <div className={`flex items-center gap-2 transition-opacity duration-300 pointer-events-auto ${isActive ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100`}>
+                    <button onClick={(e) => { e.stopPropagation(); onStartEdit(); }} className="p-2.5 bg-slate-700 hover:bg-blue-600 text-slate-200 rounded-xl shadow-lg transition-all"><EditIcon className="w-5 h-5" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2.5 bg-slate-700 hover:bg-red-600 text-slate-200 rounded-xl shadow-lg transition-all"><TrashIcon className="w-5 h-5" /></button>
+                </div>
+            </div>
+            <div className="px-6 pb-6 pt-2">
+                {isEditing ? (
+                    <div className="animate-fade-in bg-slate-900/50 p-4 rounded-xl border border-white/10 shadow-inner" onClick={e => e.stopPropagation()}>
+                        <div className="space-y-4">
+                            <div className="relative">
+                                <textarea value={editValue} onChange={e => setEditValue(e.target.value)} className="w-full p-4 bg-slate-800 border border-slate-600 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[120px] text-lg" autoFocus />
+                                {apiKey && (<button onClick={handleAiPolish} disabled={isPolishing} className="absolute bottom-3 left-3 p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-xl transition-all disabled:opacity-50">{isPolishing ? <RefreshCwIcon className="w-5 h-5 animate-spin"/> : <SparklesIcon className="w-5 h-5"/>}</button>)}
+                            </div>
+                            {item.type === 'note' && (
+                                <div className="flex items-center gap-3 p-2 bg-white/5 rounded-lg border border-white/5">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">تلوين الملاحظة:</span>
+                                    <div className="flex gap-2">
+                                        {(Object.keys(highlightColors) as HighlightColor[]).map(color => (<button key={color} type="button" onClick={() => setEditColor((c: any) => c === color ? undefined : color)} className={`w-6 h-6 rounded-full transition-all ${highlightColors[color].bg} ${editColor === color ? 'ring-2 ring-offset-2 ring-offset-slate-900 ring-white scale-110' : 'opacity-60 hover:opacity-100'}`} title={highlightColors[color].name} />))}
+                                        <button onClick={() => setEditColor(undefined)} className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-white/40 hover:text-white" title="بدون لون"><XIcon className="w-3 h-3" /></button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-3 mt-4">
+                            <button onClick={onCancelEdit} className="px-4 py-2 text-slate-400 font-bold hover:text-white transition-colors">إلغاء</button>
+                            <Button onClick={onSave} size="sm">حفظ التغيير</Button>
+                        </div>
+                    </div>
+                ) : (<div onClick={(e) => { e.stopPropagation(); onStartEdit(); }} className="py-2"><p className={`text-2xl transition-all duration-300 leading-relaxed ${isActive ? 'text-white' : 'text-slate-400'}`}><AnimatedText text={item.content} isActive={isActive} /></p></div>)}
+            </div>
+        </div>
+    );
+}, areRowPropsEqual);
+
 const ReviewModeModal: React.FC<ReviewModeModalProps> = ({ 
     isOpen, 
     onClose, 
@@ -125,7 +209,6 @@ const ReviewModeModal: React.FC<ReviewModeModalProps> = ({
     const [editValue, setEditValue] = useState('');
     const [editColor, setEditColor] = useState<HighlightColor | undefined>(undefined);
     const [activeIndex, setActiveIndex] = useState(0);
-    const [isPolishing, setIsPolishing] = useState(false);
     const [isFullReviewing, setIsFullReviewing] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<AiSuggestion[] | null>(null);
     
@@ -253,43 +336,10 @@ const ReviewModeModal: React.FC<ReviewModeModalProps> = ({
         }
     };
 
-    const handleStartEdit = (item: ReviewItem) => {
-        setEditingId(item.uniqueKey);
-        setEditValue(item.content);
-        setEditColor(item.highlightColor);
-        const idx = displayedItems.findIndex(i => i.uniqueKey === item.uniqueKey);
-        if (idx !== -1) setActiveIndex(idx);
-    };
-
-    const handleSaveEdit = (item: ReviewItem) => {
-        if (item.type === 'note') {
-            const noteUpdate = { 
-                id: item.id, 
-                text: editValue, 
-                image: item.isImageRef ? undefined : item.image,
-                highlightColor: editColor
-            } as Note;
-            onUpdateNote(noteUpdate, item.categoryId);
-        } else if (item.type === 'finding') { // Explicitly handle finding
-            onUpdateFinding(item.id, editValue);
-        }
-        setEditingId(null);
-    };
-
-    const handleAiPolish = async () => {
-        if (!apiKey || !editValue.trim()) return;
-        setIsPolishing(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey });
-            const prompt = `أعد صياغة نص تقرير فحص السيارة التالي ليكون احترافياً وموجزاً باللغة العربية، مع تصحيح الأخطاء الإملائية. لا تضف أي مقدمات أو خاتمة. النص: "${editValue}"`;
-            const response = await ai.models.generateContent({ model: 'gemini-flash-lite-latest', contents: prompt });
-            if (response.text) setEditValue(response.text.trim());
-        } catch (error) {
-            console.error("AI Polish Error", error);
-        } finally {
-            setIsPolishing(false);
-        }
-    };
+    const setItemRef = React.useCallback((key: string, el: HTMLDivElement | null) => {
+        if (el) itemRefs.current.set(key, el);
+        else itemRefs.current.delete(key);
+    }, []);
 
     const handleFullAiReview = async () => {
         if (!apiKey || displayedItems.length === 0) return;
@@ -477,58 +527,43 @@ const ReviewModeModal: React.FC<ReviewModeModalProps> = ({
                         displayedItems.map((item, index) => {
                             const isEditing = editingId === item.uniqueKey;
                             const isActive = index === activeIndex;
-                            let severityColor = 'blue';
-                            if (item.severity === 'bad') severityColor = 'red';
-                            else if (item.severity === 'good') severityColor = 'green';
-                            const noteBg = !isEditing && item.highlightColor ? `bg-${item.highlightColor}-500/10` : 'bg-slate-800/40';
-                            const activeStyles = isActive ? `scale-100 z-20 opacity-100 ring-2 ring-${severityColor}-500 shadow-[0_0_40px_-10px_rgba(var(--tw-shadow-color),0.4)] shadow-${severityColor}-500` : 'scale-95 z-0 opacity-40 blur-[1px] grayscale-[50%]';
 
                             return (
-                                <div key={item.uniqueKey} ref={(el) => { if (el) itemRefs.current.set(item.uniqueKey, el); }} onClick={() => setActiveIndex(index)} className={`relative rounded-2xl overflow-hidden border border-white/10 ${noteBg} transition-all duration-500 ease-out group cursor-pointer ${activeStyles}`}>
-                                    <div className="px-6 py-5 flex justify-between items-start gap-4 bg-white/5">
-                                        <div className="flex items-center gap-5 flex-1 min-w-0">
-                                            {item.image ? (<img src={item.image} className="w-20 h-20 rounded-xl object-cover border border-white/10 flex-shrink-0 shadow-2xl" alt="thumbnail" />) : (<div className={`w-20 h-20 rounded-xl flex items-center justify-center bg-slate-700/50 text-${severityColor}-400`}><Icon name={item.type === 'note' ? 'document-report' : 'findings'} className="w-10 h-10" /></div>)}
-                                            <div className="min-w-0">
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 flex items-center gap-2">
-                                                    <span className={`bg-${severityColor}-500/20 text-${severityColor}-400 px-2 py-0.5 rounded-md`}>{item.categoryName}</span>
-                                                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>}
-                                                </p>
-                                                <h3 className="text-xl font-bold text-white truncate"><AnimatedText text={item.title} isActive={isActive} isTitle={true} /></h3>
-                                            </div>
-                                        </div>
-                                        <div className={`flex items-center gap-2 transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-0'}`}>
-                                            <button onClick={(e) => { e.stopPropagation(); handleStartEdit(item); }} className="p-2.5 bg-slate-700 hover:bg-blue-600 text-slate-200 rounded-xl shadow-lg transition-all"><EditIcon className="w-5 h-5" /></button>
-                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteWithConfirmation(item); }} className="p-2.5 bg-slate-700 hover:bg-red-600 text-slate-200 rounded-xl shadow-lg transition-all"><TrashIcon className="w-5 h-5" /></button>
-                                        </div>
-                                    </div>
-                                    <div className="px-6 pb-6 pt-2">
-                                        {isEditing ? (
-                                            <div className="animate-fade-in bg-slate-900/50 p-4 rounded-xl border border-white/10 shadow-inner">
-                                                {/* MODIFIED: Always use textarea for findings as well */}
-                                                <div className="space-y-4">
-                                                    <div className="relative">
-                                                        <textarea value={editValue} onChange={e => setEditValue(e.target.value)} className="w-full p-4 bg-slate-800 border border-slate-600 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[120px] text-lg" autoFocus />
-                                                        {apiKey && (<button onClick={handleAiPolish} disabled={isPolishing} className="absolute bottom-3 left-3 p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-xl transition-all disabled:opacity-50">{isPolishing ? <RefreshCwIcon className="w-5 h-5 animate-spin"/> : <SparklesIcon className="w-5 h-5"/>}</button>)}
-                                                    </div>
-                                                    {/* Color Picker for Notes (only applies to type='note') */}
-                                                    {item.type === 'note' && (
-                                                        <div className="flex items-center gap-3 p-2 bg-white/5 rounded-lg border border-white/5">
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase">تلوين الملاحظة:</span>
-                                                            <div className="flex gap-2">
-                                                                {(Object.keys(highlightColors) as HighlightColor[]).map(color => (<button key={color} type="button" onClick={() => setEditColor(c => c === color ? undefined : color)} className={`w-6 h-6 rounded-full transition-all ${highlightColors[color].bg} ${editColor === color ? 'ring-2 ring-offset-2 ring-offset-slate-900 ring-white scale-110' : 'opacity-60 hover:opacity-100'}`} title={highlightColors[color].name} />))}
-                                                                <button onClick={() => setEditColor(undefined)} className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-white/40 hover:text-white" title="بدون لون"><XIcon className="w-3 h-3" /></button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex justify-end gap-3 mt-4">
-                                                    <button onClick={() => setEditingId(null)} className="px-4 py-2 text-slate-400 font-bold hover:text-white transition-colors">إلغاء</button>
-                                                    <Button onClick={() => handleSaveEdit(item)} size="sm">حفظ التغيير</Button>
-                                                </div>
-                                            </div>
-                                        ) : (<div onClick={(e) => { e.stopPropagation(); handleStartEdit(item); }} className="py-2"><p className={`text-2xl transition-all duration-500 leading-relaxed ${isActive ? 'text-white' : 'text-slate-500'}`}><AnimatedText text={item.content} isActive={isActive} /></p></div>)}
-                                    </div>
-                                </div>
+                                <ReviewItemRow
+                                    key={item.uniqueKey}
+                                    item={item}
+                                    index={index}
+                                    isActive={isActive}
+                                    isEditing={isEditing}
+                                    editValue={editValue}
+                                    editColor={editColor}
+                                    apiKey={apiKey}
+                                    onStartEdit={() => {
+                                        setEditingId(item.uniqueKey);
+                                        setEditValue(item.content);
+                                        setEditColor(item.highlightColor);
+                                        setActiveIndex(index);
+                                    }}
+                                    onDelete={() => handleDeleteWithConfirmation(item)}
+                                    onSave={() => {
+                                        if (item.type === 'note') {
+                                            onUpdateNote({ 
+                                                id: item.id, 
+                                                text: editValue,
+                                                image: item.isImageRef ? undefined : item.image,
+                                                highlightColor: editColor
+                                            } as Note, item.categoryId);
+                                        } else if (item.type === 'finding') {
+                                            onUpdateFinding(item.id, editValue);
+                                        }
+                                        setEditingId(null);
+                                    }}
+                                    onCancelEdit={() => setEditingId(null)}
+                                    setEditValue={setEditValue}
+                                    setEditColor={setEditColor}
+                                    setActiveIndex={setActiveIndex}
+                                    setItemRef={setItemRef}
+                                />
                             );
                         })
                     )}

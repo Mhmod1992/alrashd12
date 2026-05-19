@@ -431,6 +431,8 @@ const Financials: React.FC = () => {
     const [filterType, setFilterType] = useState<'today' | 'yesterday' | 'month' | 'last_month' | 'range'>('today');
     const [customStartDate, setCustomStartDate] = useState<string>('');
     const [customEndDate, setCustomEndDate] = useState<string>('');
+    const [appliedStartDate, setAppliedStartDate] = useState<string>('');
+    const [appliedEndDate, setAppliedEndDate] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [activeModal, setActiveModal] = useState<string | null>(null);
     const [calculationMode, setCalculationMode] = useState<'all' | 'completed'>('all');
@@ -466,9 +468,9 @@ const Financials: React.FC = () => {
                     prevStart = startOfMonth(subDays(currentStart, 1)); prevEnd = endOfMonth(subDays(currentStart, 1));
                     break;
                 case 'range':
-                    if (customStartDate && customEndDate) {
-                        currentStart = startOfDay(new Date(customStartDate));
-                        currentEnd = endOfDay(new Date(customEndDate));
+                    if (appliedStartDate && appliedEndDate) {
+                        currentStart = startOfDay(new Date(appliedStartDate));
+                        currentEnd = endOfDay(new Date(appliedEndDate));
                         const diff = currentEnd.getTime() - currentStart.getTime();
                         prevEnd = new Date(currentStart.getTime() - 1);
                         prevStart = new Date(prevEnd.getTime() - diff);
@@ -496,7 +498,7 @@ const Financials: React.FC = () => {
 
     useEffect(() => {
         loadData();
-    }, [filterType, customStartDate, customEndDate, calculationMode]);
+    }, [filterType, appliedStartDate, appliedEndDate, calculationMode]);
 
     const cashInDrawer = useMemo(() => {
         if (!stats) return 0;
@@ -531,9 +533,9 @@ const Financials: React.FC = () => {
 
         if (filterType === 'month' || filterType === 'last_month') {
             daysInFilter = 30; periodLabel = 'الشهر';
-        } else if (filterType === 'range' && customStartDate && customEndDate) {
-            const start = new Date(customStartDate);
-            const end = new Date(customEndDate);
+        } else if (filterType === 'range' && appliedStartDate && appliedEndDate) {
+            const start = new Date(appliedStartDate);
+            const end = new Date(appliedEndDate);
             const diffTime = Math.abs(end.getTime() - start.getTime());
             daysInFilter = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
             periodLabel = 'الفترة';
@@ -545,7 +547,7 @@ const Financials: React.FC = () => {
         const previous = prevStats?.grandTotal || (target * 0.65);
 
         return { target, previous, periodLabel };
-    }, [filterType, customStartDate, customEndDate, prevStats]);
+    }, [filterType, appliedStartDate, appliedEndDate, prevStats]);
 
     const chartData = useMemo(() => {
         if (!stats || !prevStats) return { comparisonSeries: [] };
@@ -594,10 +596,10 @@ const Financials: React.FC = () => {
                     previousCount: prevDayReqs.length
                 });
             }
-        } else if (filterType === 'range' && customStartDate && customEndDate) {
+        } else if (filterType === 'range' && appliedStartDate && appliedEndDate) {
             const currentInterval = eachDayOfInterval({ 
-                start: startOfDay(new Date(customStartDate)), 
-                end: endOfDay(new Date(customEndDate)) 
+                start: startOfDay(new Date(appliedStartDate)), 
+                end: endOfDay(new Date(appliedEndDate)) 
             });
             
             // Build map of dates for current
@@ -642,7 +644,7 @@ const Financials: React.FC = () => {
         }
 
         return { comparisonSeries: series };
-    }, [stats, prevStats, filterType, customStartDate, customEndDate]);
+    }, [stats, prevStats, filterType, appliedStartDate, appliedEndDate]);
 
     const displayedRequests = useMemo(() => {
         if (!stats) return [];
@@ -1143,6 +1145,17 @@ const Financials: React.FC = () => {
                                 placeholder="إلى"
                                 className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border-none text-xs font-bold w-32" 
                             />
+                            <Button 
+                                size="sm" 
+                                onClick={() => {
+                                    setAppliedStartDate(customStartDate);
+                                    setAppliedEndDate(customEndDate);
+                                }}
+                                disabled={!customStartDate || !customEndDate}
+                                className="h-8 px-4 text-xs whitespace-nowrap"
+                            >
+                                تطبيق البحث
+                            </Button>
                         </motion.div>
                     )}
                 </AnimatePresence>
