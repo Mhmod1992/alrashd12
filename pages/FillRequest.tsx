@@ -29,6 +29,7 @@ import AlertTriangleIcon from '../components/icons/AlertTriangleIcon';
 import WifiOffIcon from '../components/icons/WifiOffIcon';
 import ClipboardListIcon from '../components/icons/ClipboardListIcon';
 import WhatsappIcon from '../components/icons/WhatsappIcon';
+import TrashIcon from '../components/icons/TrashIcon';
 
 
 // Imported Components (Refactored)
@@ -98,6 +99,7 @@ export const FillRequest: React.FC = () => {
     const isMounted = useRef(true);
     // Ref to track last user interaction time (prevents sync wars)
     const lastInteractionRef = useRef<number>(0);
+    const isClearingLogsRef = useRef<boolean>(false);
 
     // Refs for new layout
     const contentRef = useRef<HTMLDivElement>(null);
@@ -192,7 +194,7 @@ export const FillRequest: React.FC = () => {
     }, [selectedRequestId, request, fetchAndUpdateSingleRequest]);
 
     // LOCKED STATE CHECK
-    const isLocked = request?.status === RequestStatus.COMPLETE;
+    const isLockedByStatus = request?.status === RequestStatus.COMPLETE;
 
     const [generalNotes, setGeneralNotes] = useState<Note[]>([]);
     const [structuredFindings, setStructuredFindings] = useState<StructuredFinding[]>([]);
@@ -219,6 +221,80 @@ export const FillRequest: React.FC = () => {
 
     const [activeFindingGroup, setActiveFindingGroup] = useState<string | null>(null);
     const [categorySubTab, setCategorySubTab] = useState<'main' | 'voice'>('main');
+
+    const visibleGeneralNotes = useMemo(() => {
+        return generalNotes.filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+    }, [generalNotes]);
+
+    const isHandwrittenChecked = useMemo(() => {
+        return generalNotes.some(n => n.text === '__HANDWRITTEN_REPORT_TRUE__');
+    }, [generalNotes]);
+
+    const isLocked = isLockedByStatus || isHandwrittenChecked;
+
+    const handleToggleHandwritten = async (checked: boolean) => {
+        if (!request || isLockedByStatus) return;
+        if (checked) {
+            if (!generalNotes.some(n => n.text === '__HANDWRITTEN_REPORT_TRUE__')) {
+                const newNote: Note = {
+                    id: 'sys-handwritten-' + Date.now(),
+                    text: '__HANDWRITTEN_REPORT_TRUE__',
+                    authorId: authUser?.id || 'sys',
+                    authorName: authUser?.name || 'System',
+                    status: 'saved'
+                };
+                const updatedNotes = [...generalNotes, newNote];
+                
+                const newLog = createActivityLog('تفعيل التقرير اليدوي', 'تم تفعيل خيار تقديم التقرير كتابة يدوية (مسودة ورقية)');
+                const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
+
+                const updatedRequest: Partial<InspectionRequest> & { id: string } = {
+                    id: request.id,
+                    general_notes: updatedNotes,
+                    activity_log: newActivityLog,
+                    updated_at: new Date().toISOString()
+                };
+
+                try {
+                    trackDataTransfer(estimateObjectSize(updatedRequest));
+                    await updateRequest(updatedRequest);
+                    if (isMounted.current) {
+                        setGeneralNotes(updatedNotes);
+                        setActivityLog(newActivityLog);
+                    }
+                    addNotification({ title: 'نجاح', message: 'تم تفعيل تسليم التقرير كتابة يدوية، وتم قفل نموذج الكتابة.', type: 'success' });
+                } catch (err) {
+                    console.error('Failed to toggle handwritten status:', err);
+                    addNotification({ title: 'خطأ', message: 'فشل تفعيل التقرير اليدوي.', type: 'error' });
+                }
+            }
+        } else {
+            const updatedNotes = generalNotes.filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+            
+            const newLog = createActivityLog('إلغاء التقرير اليدوي', 'تم إلغاء خيار التقرير اليدوي وإعادة تفعيل نموذج الكتابة الإلكتروني');
+            const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
+
+            const updatedRequest: Partial<InspectionRequest> & { id: string } = {
+                id: request.id,
+                general_notes: updatedNotes,
+                activity_log: newActivityLog,
+                updated_at: new Date().toISOString()
+            };
+
+            try {
+                trackDataTransfer(estimateObjectSize(updatedRequest));
+                await updateRequest(updatedRequest);
+                if (isMounted.current) {
+                    setGeneralNotes(updatedNotes);
+                    setActivityLog(newActivityLog);
+                }
+                addNotification({ title: 'نجاح', message: 'تم إلغاء التقرير اليدوي، وتمت إتاحة الكتابة في النموذج مجدداً.', type: 'success' });
+            } catch (err) {
+                console.error('Failed to untoggle handwritten status:', err);
+                addNotification({ title: 'خطأ', message: 'فشل إلغاء التقرير اليدوي.', type: 'error' });
+            }
+        }
+    };
 
     const inspectionType = useMemo(() => request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined, [request, inspectionTypes]);
 
@@ -810,6 +886,14 @@ export const FillRequest: React.FC = () => {
         // 4. Activity Log
         const serverActivityLog = serverRequest.activity_log || [];
         setActivityLog(prev => {
+            if (isClearingLogsRef.current) {
+                // If we are actively clearing, only keep the server-side logs
+                // Once the server has our "Cleared" action, we can turn off the flag
+                if (serverActivityLog.some(l => l.action === 'مسح سجل النشاط')) {
+                    isClearingLogsRef.current = false;
+                }
+                return serverActivityLog;
+            }
             const combined = [...serverActivityLog];
             prev.forEach(l => {
                 if (!combined.find(sl => sl.id === l.id)) combined.push(l);
@@ -1093,7 +1177,8 @@ export const FillRequest: React.FC = () => {
 
     const handleDeleteAllGeneralNotes = () => {
         if (isLocked) return;
-        if (generalNotes.length === 0) return;
+        const visibleNotes = generalNotes.filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+        if (visibleNotes.length === 0) return;
         showConfirmModal({
             title: 'حذف جميع الملاحظات العامة',
             message: 'هل أنت متأكد من حذف جميع الملاحظات العامة؟ لا يمكن التراجع عن هذا الإجراء.',
@@ -1105,9 +1190,10 @@ export const FillRequest: React.FC = () => {
                 const newLog = createActivityLog('حذف جماعي', 'تم حذف جميع الملاحظات العامة');
                 const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
 
+                const sysNotes = generalNotes.filter(n => n.text === '__HANDWRITTEN_REPORT_TRUE__');
                 const updatedRequest: Partial<InspectionRequest> & { id: string } = {
                     id: request.id,
-                    general_notes: [],
+                    general_notes: sysNotes,
                     activity_log: newActivityLog,
                     updated_at: new Date().toISOString()
                 };
@@ -1116,7 +1202,7 @@ export const FillRequest: React.FC = () => {
                     trackDataTransfer(estimateObjectSize(updatedRequest));
                     await updateRequest(updatedRequest);
                     if (isMounted.current) {
-                        setGeneralNotes([]);
+                        setGeneralNotes(sysNotes);
                         setActivityLog(newActivityLog);
                     }
                     addNotification({ title: 'نجاح', message: 'تم حذف جميع الملاحظات العامة.', type: 'success' });
@@ -1563,6 +1649,10 @@ export const FillRequest: React.FC = () => {
                 setIsProcessingWhatsApp(false);
             }
             
+            sessionStorage.setItem('requests_date_filter', '"today"');
+            sessionStorage.setItem('requests_status_filter', '"الكل"');
+            sessionStorage.setItem('requests_payment_filter', '"الكل"');
+            sessionStorage.setItem('requests_employee_filter', '"الكل"');
             setPage('requests');
         } catch (error) {
             console.error('Completion error:', error);
@@ -2002,6 +2092,44 @@ export const FillRequest: React.FC = () => {
         }
     }, [customFindingCategories, setActiveTab]);
 
+    const handleClearActivityLog = useCallback(() => {
+        if (!can('delete_activity_log')) {
+            addNotification({ title: 'تنبيه', message: 'ليس لديك صلاحية لمسح سجل النشاط.', type: 'warning' });
+            return;
+        }
+
+        showConfirmModal({
+            title: 'مسح سجل النشاط',
+            message: 'هل أنت متأكد من رغبتك في مسح سجل النشاط بالكامل لهذا الطلب؟ سيؤدي ذلك إلى حذف سجل الحركات الطويل وتسريع تصفح وأداء الطلب بشكل ملحوظ لسهولة معالجته. لا يمكن التراجع عن هذا الإجراء.',
+            onConfirm: async () => {
+                if (!request) return;
+
+                lastInteractionRef.current = Date.now(); // Mark interaction
+                isClearingLogsRef.current = true; // Set clearing flag
+
+                // Create a single log entry specifying that the log was cleared
+                const newLog = createActivityLog('مسح سجل النشاط', `تم مسح سجل النشاط القديم بالكامل بواسطة ${authUser?.name || 'المستخدم'} للحد من استهلاك الذاكرة وتسريع أداء التطبيق.`);
+                const newActivityLog = newLog ? [newLog] : [];
+
+                const updatedRequest: Partial<InspectionRequest> & { id: string } = {
+                    id: request.id,
+                    activity_log: newActivityLog,
+                    updated_at: new Date().toISOString()
+                };
+
+                try {
+                    await updateRequest(updatedRequest);
+                    setActivityLog(newActivityLog);
+                    addNotification({ title: 'نجاح', message: 'تم مسح سجل النشاط القديم بنجاح وتحسين سرعة أداء الطلب.', type: 'success' });
+                } catch (err) {
+                    console.error("Failed to clear activity log:", err);
+                    isClearingLogsRef.current = false; // Reset if failed
+                    addNotification({ title: 'خطأ', message: 'فشل مسح سجل النشاط.', type: 'error' });
+                }
+            }
+        });
+    }, [request, authUser, createActivityLog, updateRequest, setActivityLog, showConfirmModal, addNotification, can]);
+
     if (!request) {
         if (isFetchingRequest || (selectedRequestId && fetchAttemptedRef.current !== selectedRequestId)) {
             return (
@@ -2074,7 +2202,8 @@ export const FillRequest: React.FC = () => {
     };
 
     const renderNotes = (notesArray: Note[], categoryId: string | 'general') => {
-        return notesArray.map((note) => {
+        const filteredArray = notesArray.filter(note => note.text !== '__HANDWRITTEN_REPORT_TRUE__');
+        return filteredArray.map((note) => {
             const isDeleting = deletingNoteIds.has(note.id);
             const colorStyle = note.highlightColor ? highlightColors[note.highlightColor] : null;
 
@@ -2161,24 +2290,44 @@ export const FillRequest: React.FC = () => {
                         {/* We could add subtabs here if voice memos are needed per category */}
                     </div>
 
-                    <button
-                        onClick={() => {
-                            if (!isLocked) {
-                                setTechnicianModalTarget({ id: categoryId, name: activeCategory.name });
-                                setIsTechnicianModalOpen(true);
-                            }
-                        }}
-                        disabled={isLocked}
-                        className={`flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 ${!isLocked ? `hover:text-${themeColor}-600 dark:hover:text-${themeColor}-400 bg-slate-100 dark:bg-slate-700/50 cursor-pointer hover:border-${themeColor}-200 dark:hover:border-${themeColor}-800` : 'bg-transparent text-slate-500 cursor-default'} px-3 py-1.5 rounded-full transition-colors border border-transparent self-end sm:self-center whitespace-nowrap overflow-hidden max-w-full sm:max-w-md`}
-                        title={assignedNames}
-                    >
-                        <UserCircleIcon className={`w-4 h-4 shrink-0 ${assignedTechs.length > 0 ? 'text-blue-500' : ''}`} />
-                        <span className="truncate">
-                            {assignedTechs.length > 0
-                                ? <span className="font-medium"><span className="text-xs text-slate-400 font-normal ml-1">بواسطة:</span><span className="text-blue-600 dark:text-blue-400">{assignedNames}</span></span>
-                                : 'تحديد الفنيين'}
-                        </span>
-                    </button>
+                    <div className="flex items-center gap-3 self-end sm:self-center">
+                        {/* Handwritten Mode Toggle Switch */}
+                        {!isLockedByStatus && (
+                            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700 px-3 py-1.5 rounded-full shadow-sm text-xs select-none">
+                                <span className="font-bold text-slate-600 dark:text-slate-300">تقرير يدوي:</span>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={isHandwrittenChecked} 
+                                        onChange={(e) => handleToggleHandwritten(e.target.checked)} 
+                                        className="sr-only peer" 
+                                        disabled={isLockedByStatus}
+                                    />
+                                    <div className="w-10 h-5 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-amber-500"></div>
+                                </label>
+                            </div>
+                        )}
+
+                        {/* Technician Button */}
+                        <button
+                            onClick={() => {
+                                if (!isLocked) {
+                                    setTechnicianModalTarget({ id: categoryId, name: activeCategory.name });
+                                    setIsTechnicianModalOpen(true);
+                                }
+                            }}
+                            disabled={isLocked}
+                            className={`flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 ${!isLocked ? `hover:text-${themeColor}-600 dark:hover:text-${themeColor}-400 bg-slate-100 dark:bg-slate-700/50 cursor-pointer hover:border-${themeColor}-200 dark:hover:border-${themeColor}-800` : 'bg-transparent text-slate-500 cursor-default'} px-3 py-1.5 rounded-full transition-colors border border-transparent whitespace-nowrap overflow-hidden max-w-full sm:max-w-md`}
+                            title={assignedNames}
+                        >
+                            <UserCircleIcon className={`w-4 h-4 shrink-0 ${assignedTechs.length > 0 ? 'text-blue-500' : ''}`} />
+                            <span className="truncate">
+                                {assignedTechs.length > 0
+                                    ? <span className="font-medium"><span className="text-xs text-slate-400 font-normal ml-1">بواسطة:</span><span className="text-blue-600 dark:text-blue-400">{assignedNames}</span></span>
+                                    : 'تحديد الفنيين'}
+                            </span>
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -2453,7 +2602,7 @@ export const FillRequest: React.FC = () => {
                         })}
                         <button key="general-notes" onClick={() => handleTabSwitch('general-notes')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-4 rounded-lg font-semibold text-sm transition-all duration-200 ${activeTab === 'general-notes' ? `bg-${themeColor}-600 text-white shadow-md transform scale-105 animate-active-tab` : 'bg-white border border-slate-200 dark:border-slate-600 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'}`}>
                             <span>ملاحظات عامة</span>
-                            {generalNotes.length > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === 'general-notes' ? `bg-white text-${themeColor}-600` : 'bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-400'}`}>{generalNotes.length}</span>}
+                            {visibleGeneralNotes.length > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === 'general-notes' ? `bg-white text-${themeColor}-600` : 'bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-400'}`}>{visibleGeneralNotes.length}</span>}
                         </button>
                         <button key="gallery" onClick={() => handleTabSwitch('gallery')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-4 rounded-lg font-semibold text-sm transition-all duration-200 ${activeTab === 'gallery' ? `bg-${themeColor}-600 text-white shadow-md transform scale-105 animate-active-tab` : 'bg-white border border-slate-200 dark:border-slate-600 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'}`}>
                             <span>المعرض</span>
@@ -2478,8 +2627,8 @@ export const FillRequest: React.FC = () => {
                             <div className="flex flex-col h-auto">
                                 <div className="flex justify-between items-center p-3 bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-t-xl shadow-sm">
                                     <div className="flex items-center gap-3">
-                                        <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200">الملاحظات العامة ({generalNotes.length})</h4>
-                                        {generalNotes.length > 0 && can('manage_notes') && !isLocked && (
+                                        <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200">الملاحظات العامة ({visibleGeneralNotes.length})</h4>
+                                        {visibleGeneralNotes.length > 0 && can('manage_notes') && !isLocked && (
                                             <>
                                                 <button onClick={handleDeleteAllGeneralNotes} className="text-red-500"><Icon name="delete" className="w-5 h-5" /></button>
                                             </>
@@ -2487,7 +2636,7 @@ export const FillRequest: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl h-auto custom-scrollbar pb-12">
-                                    {generalNotes.length > 0 ? (
+                                    {visibleGeneralNotes.length > 0 ? (
                                         <ul className="space-y-3 mt-4">
                                             {renderNotes(generalNotes, 'general')}
                                         </ul>
@@ -2529,7 +2678,7 @@ export const FillRequest: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                ) : isLocked ? (
+                ) : isLockedByStatus ? (
                     <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-t dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.2)] p-4 sm:p-6 transition-all duration-300">
                         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                             <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
@@ -2564,7 +2713,8 @@ export const FillRequest: React.FC = () => {
                         activeTabId={activeTab}
                         customFindingCategories={customFindingCategories}
                         canManageNotes={can('manage_notes')}
-                        isLocked={isLocked}
+                        isLocked={isLockedByStatus}
+                        isHandwritten={isHandwrittenChecked}
                         focusRingClass={focusRingClass}
                         openImagePreview={openImagePreview}
                         onReview={() => setIsReviewModalOpen(true)}
@@ -2573,7 +2723,7 @@ export const FillRequest: React.FC = () => {
                         isCompleting={isCompleting}
                         onToggleStamp={handleToggleStamp}
                         reportStamps={request?.report_stamps}
-                        canChangeStatus={!isLocked && can('change_request_status')}
+                        canChangeStatus={!isLockedByStatus && can('change_request_status')}
                         canPrint={can('print_request')}
                         allTabsInOrder={allTabsInOrder}
                         onNextTab={handleNextTab}
@@ -2804,7 +2954,21 @@ export const FillRequest: React.FC = () => {
             <Drawer
                 isOpen={isActivityDrawerOpen}
                 onClose={() => setIsActivityDrawerOpen(false)}
-                title={<span className="font-bold text-lg">سجل النشاط</span>}
+                title={
+                    <div className="flex items-center gap-3">
+                        <span className="font-bold text-lg">سجل النشاط</span>
+                        {can('delete_activity_log') && activityLog.length > 0 && (
+                            <button
+                                onClick={handleClearActivityLog}
+                                className="text-xs font-bold py-1 px-2.5 rounded-lg bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors flex items-center gap-1 cursor-pointer"
+                                title="مسح سجل النشاط بالكامل لتسريع الصفحة"
+                            >
+                                <TrashIcon className="w-3.5 h-3.5" />
+                                <span>مسح السجل</span>
+                            </button>
+                        )}
+                    </div>
+                }
             >
                 <div className="flex flex-col gap-3 w-full mb-6 border-b dark:border-slate-700 pb-4">
                     <div className="flex items-center justify-between gap-4">

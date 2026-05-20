@@ -47,6 +47,7 @@ export const PERMISSIONS = {
   manage_notes: 'إدارة الملاحظات (إضافة/تعديل/حذف)',
   manage_findings: 'إدارة بنود الفحص (إضافة/تعديل/حذف)',
   view_activity_log: 'عرض سجل النشاط',
+  delete_activity_log: 'حذف سجل النشاط',
   view_financials: 'عرض البيانات المالية',
   manage_expenses: 'إدارة المصروفات (إضافة/تعديل)',
   manage_revenues: 'إدارة الإيرادات الأخرى',

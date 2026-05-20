@@ -349,6 +349,10 @@ const PrintReport: React.FC = () => {
     const reportSettings = translatedSettings || settings.reportSettings;
     const effectiveCategories = translatedCategories || customFindingCategories;
 
+    const isHandwritten = useMemo(() => {
+        return originalRequest?.general_notes?.some(n => n.text === '__HANDWRITTEN_REPORT_TRUE__') || false;
+    }, [originalRequest]);
+
     const paperImages = useMemo(() => {
         return originalRequest?.attached_files?.filter(f => f.type === 'manual_paper' || f.type === 'internal_draft') || [];
     }, [originalRequest]);
@@ -653,8 +657,11 @@ const PrintReport: React.FC = () => {
                     
                     addNotification({ title: 'نجاح', message: 'تم تحديد الطلب كمكتمل بنجاح.', type: 'success' });
                     
-                    // Set flags for Requests page to reset filters and scroll to top
                     window.sessionStorage.setItem('skipScrollRestoration', 'true');
+                    window.sessionStorage.setItem('requests_date_filter', '"today"');
+                    window.sessionStorage.setItem('requests_status_filter', '"الكل"');
+                    window.sessionStorage.setItem('requests_payment_filter', '"الكل"');
+                    window.sessionStorage.setItem('requests_employee_filter', '"الكل"');
                     
                     setPage('requests');
                     window.scrollTo(0, 0); // Reset scroll position to top
@@ -706,6 +713,48 @@ const PrintReport: React.FC = () => {
             await ensureLibraries();
             setLoadingState('جاري تحميل الخطوط...');
             await ensureFonts();
+
+            if (isHandwritten) {
+                if (paperImages.length === 0) {
+                    addNotification({ title: 'خطأ', message: 'يرجى رفع صور أو صفحات التقرير اليدوي أولاً من قسم المرفقات.', type: 'error' });
+                    return null;
+                }
+
+                setLoadingState('جاري إنشاء ملف PDF للتقرير اليدوي...');
+                const { jsPDF } = (window as any).jspdf;
+                const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+                for (let i = 0; i < paperImages.length; i++) {
+                    const file = paperImages[i];
+                    try {
+                        setLoadingState(`جاري ضغط ومعالجة صفحة المسودة (${i + 1} من ${paperImages.length})...`);
+                        const imgBase64 = await urlToBase64(file.data, true);
+
+                        if (i > 0) {
+                            pdf.addPage([210, 297], 'p');
+                        }
+
+                        const imgProps = pdf.getImageProperties(imgBase64);
+                        const pdfPageWidth = 210;
+                        const pdfPageHeight = 297;
+
+                        const widthRatio = pdfPageWidth / imgProps.width;
+                        const heightRatio = pdfPageHeight / imgProps.height;
+                        const ratio = Math.min(widthRatio, heightRatio);
+
+                        const finalW = imgProps.width * ratio;
+                        const finalH = imgProps.height * ratio;
+
+                        const x = (pdfPageWidth - finalW) / 2;
+                        const y = (pdfPageHeight - finalH) / 2;
+
+                        pdf.addImage(imgBase64, 'JPEG', x, y, finalW, finalH, undefined, 'FAST');
+                    } catch (err) {
+                        console.error('Handwritten single page insertion failed:', err);
+                    }
+                }
+                return pdf;
+            }
 
             setLoadingState('جاري معالجة الصور...');
 
@@ -903,6 +952,14 @@ const PrintReport: React.FC = () => {
         setLoadingState('جاري تجهيز البيانات...');
 
         try {
+            if (isHandwritten) {
+                const pdfInstance = await generatePdfInstance();
+                if (pdfInstance) {
+                    return pdfInstance.output('blob');
+                }
+                return null;
+            }
+
             // 1. Capture QR Code if exists
             let qrCodeBase64 = undefined;
             const qrCanvas = document.querySelector('.target-qr canvas') as HTMLCanvasElement;
@@ -944,7 +1001,8 @@ const PrintReport: React.FC = () => {
             }));
             
             // Process note images
-            const processedGeneralNotes = await Promise.all(((request.general_notes as Note[]) || []).map(async n => {
+            const filteredGeneralNotes = ((request.general_notes as Note[]) || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+            const processedGeneralNotes = await Promise.all(filteredGeneralNotes.map(async n => {
                 if (n.image) {
                     const base64 = await processImage(n.image, true);
                     return { ...n, image: base64 };
@@ -1288,6 +1346,7 @@ const PrintReport: React.FC = () => {
                         <h2 className="text-base sm:text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 whitespace-nowrap">
                             معاينة التقرير
                             {translatedRequest && <span className="hidden sm:inline-block text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200">مترجم</span>}
+                            {isHandwritten && <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/35 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">تقرير يدوي / مسودة ورق</span>}
                         </h2>
                         <div className="md:hidden">
                             {/* Mobile specific shortcuts if needed */}
@@ -1452,36 +1511,63 @@ const PrintReport: React.FC = () => {
                     <div className="origin-top transition-transform duration-200 print:transform-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!overflow-visible print:!h-auto print:!w-full" style={{ transform: `scale(${previewScale})`, marginBottom: `-${(1 - previewScale) * 100}%` }}>
                         <div className="report-wrapper bg-white shadow-2xl print:shadow-none mx-auto overflow-hidden print:!overflow-visible print:!h-auto print:!min-h-0 print:!w-full print:!max-w-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!ring-0" style={{ width: '210mm', minHeight: '297mm' }}>
                             { client && car && inspectionType ?
-                                <>
-                                    <InspectionReport
-                                        ref={reportRef}
-                                        request={request}
-                                        client={client}
-                                        car={car}
-                                        carMake={carMake}
-                                        carModel={carModel}
-                                        inspectionType={inspectionType}
-                                        customFindingCategories={effectiveCategories}
-                                        predefinedFindings={predefinedFindings}
-                                        settings={{ ...settings, reportSettings: reportSettings }}
-                                        isPrintView={true}
-                                        reportDirection={reportDirection}
-                                    />
-                                    {publicImages.length > 0 && (
-                                        <div className="w-full mt-4 print:mt-0 p-4 print:p-0">
-                                            <h3 className="text-xl font-bold mb-4 text-slate-800 print:hidden" style={{ fontFamily: reportSettings.fontFamily }}>
-                                                المرفقات ({publicImages.length})
-                                            </h3>
+                                isHandwritten ? (
+                                    <div className="w-full flex flex-col bg-white" ref={reportRef}>
+                                        {paperImages.length > 0 ? (
                                             <div className="flex flex-col gap-4 print:gap-0 print:block">
-                                                {publicImages.map((file, idx) => (
+                                                {paperImages.map((file, idx) => (
                                                     <div key={idx} className="w-full print:break-before-page print:mb-0 mb-4 flex print:items-center print:justify-center print:h-[270mm] print:overflow-hidden relative">
-                                                        <img src={file.data} alt={`Attachment ${idx + 1}`} className="max-w-full h-auto object-contain print:border-none print:rounded-none border rounded-lg mx-auto print:max-h-[260mm] print:max-w-[190mm]" style={{ pageBreakInside: 'avoid' }} />
+                                                        <img 
+                                                            src={file.data} 
+                                                            alt={`Scanned Draft Page ${idx + 1}`} 
+                                                            className="max-w-full h-auto object-contain print:border-none print:rounded-none border rounded-lg mx-auto print:max-h-[260mm] print:max-w-[190mm]" 
+                                                            style={{ pageBreakInside: 'avoid' }} 
+                                                        />
                                                     </div>
                                                 ))}
                                             </div>
-                                        </div>
-                                    )}
-                                </>
+                                        ) : (
+                                            <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-4">
+                                                <div className="p-4 bg-amber-50 rounded-full text-amber-500">
+                                                    <Icon name="edit" className="w-12 h-12 animate-pulse" />
+                                                </div>
+                                                <h3 className="text-xl font-bold">التقرير يدوي، لكن لا توجد أوراق مرفوعة!</h3>
+                                                <p className="text-sm text-slate-400 max-w-md">يرجى الضغط على زر "المرفقات" بالأسفل ورفع صفحات التقرير اليدوي الـ (PDF أو الصور) لكي تظهر هنا ويتم إنشاء التقرير بشكل صحيح.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <InspectionReport
+                                            ref={reportRef}
+                                            request={request}
+                                            client={client}
+                                            car={car}
+                                            carMake={carMake}
+                                            carModel={carModel}
+                                            inspectionType={inspectionType}
+                                            customFindingCategories={effectiveCategories}
+                                            predefinedFindings={predefinedFindings}
+                                            settings={{ ...settings, reportSettings: reportSettings }}
+                                            isPrintView={true}
+                                            reportDirection={reportDirection}
+                                        />
+                                        {publicImages.length > 0 && (
+                                            <div className="w-full mt-4 print:mt-0 p-4 print:p-0">
+                                                <h3 className="text-xl font-bold mb-4 text-slate-800 print:hidden" style={{ fontFamily: reportSettings.fontFamily }}>
+                                                    المرفقات ({publicImages.length})
+                                                </h3>
+                                                <div className="flex flex-col gap-4 print:gap-0 print:block">
+                                                    {publicImages.map((file, idx) => (
+                                                        <div key={idx} className="w-full print:break-before-page print:mb-0 mb-4 flex print:items-center print:justify-center print:h-[270mm] print:overflow-hidden relative">
+                                                            <img src={file.data} alt={`Attachment ${idx + 1}`} className="max-w-full h-auto object-contain print:border-none print:rounded-none border rounded-lg mx-auto print:max-h-[260mm] print:max-w-[190mm]" style={{ pageBreakInside: 'avoid' }} />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                )
                                  : <div className="p-8 text-center">جاري تحميل البيانات...</div>
                             }
                         </div>

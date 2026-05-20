@@ -22,6 +22,7 @@ interface StickyNoteInputProps {
     customFindingCategories: CustomFindingCategory[];
     canManageNotes: boolean;
     isLocked: boolean;
+    isHandwritten?: boolean;
     focusRingClass: string;
     openImagePreview: (url: string) => void;
     onReview?: () => void;
@@ -128,6 +129,7 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
     customFindingCategories,
     canManageNotes,
     isLocked,
+    isHandwritten = false,
     focusRingClass,
     openImagePreview,
     onReview,
@@ -499,7 +501,7 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                                  <button
                                      key={idx}
                                      onClick={() => handleQuickNote(qn)}
-                                     disabled={isSubmitting}
+                                     disabled={isSubmitting || isHandwritten}
                                      title={qn.text}
                                      className={`
                                          flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all active:scale-95 border shadow-sm
@@ -529,14 +531,15 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                          {/* Color Palette Button */}
                          <div className="relative" ref={colorMenuRef}>
                             <button 
-                              onClick={() => setIsColorMenuOpen(!isColorMenuOpen)}
+                              onClick={() => !isHandwritten && setIsColorMenuOpen(!isColorMenuOpen)}
+                              disabled={isHandwritten}
                               className={`color-menu-trigger p-3 rounded-full transition-all duration-300 ${highlightColor ? highlightColors[highlightColor].bg + ' text-white ring-2 ring-offset-2 ring-' + highlightColors[highlightColor].ring.split('-')[1] : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                               title="لون الملاحظة"
                             >
                                 <PaintBrushIcon className="w-5 h-5" />
                             </button>
                             {/* Popover for Colors */}
-                            {isColorMenuOpen && (
+                            {isColorMenuOpen && !isHandwritten && (
                                 <div className="absolute bottom-full mb-2 right-0 bg-white dark:bg-slate-800 p-2 rounded-xl shadow-xl border dark:border-slate-700 flex flex-col gap-2 z-50 animate-scale-in origin-bottom-right min-w-[40px]">
                                     {(Object.keys(highlightColors) as HighlightColor[]).map(c => (
                                         <button key={c} onClick={() => { setHighlightColor(c); setIsColorMenuOpen(false); }} className={`w-8 h-8 rounded-full ${highlightColors[c].bg} border-2 border-white dark:border-slate-600 hover:scale-110 transition-transform`} title={highlightColors[c].name} />
@@ -557,7 +560,8 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
 
                              <textarea
                                 ref={textareaRef}
-                                value={note.text}
+                                value={isHandwritten ? "" : note.text}
+                                 disabled={isHandwritten}
                                 onChange={e => {
                                     setNote(prev => ({ ...prev, text: e.target.value.toUpperCase() }));
                                     e.target.style.height = 'auto';
@@ -585,26 +589,26 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                                         }
                                     }
                                 }}
-                                className="w-full bg-transparent border-none focus:ring-0 outline-none py-3 pr-4 pl-28 min-h-[48px] max-h-[120px] resize-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400 font-medium text-center"
-                                placeholder={placeholder}
+                                className={`w-full bg-transparent border-none focus:ring-0 outline-none py-3 pr-4 pl-28 min-h-[48px] max-h-[120px] resize-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400 font-medium text-center ${isHandwritten ? 'cursor-not-allowed opacity-60' : ''}`}
+                                placeholder={isHandwritten ? "تم تفعيل خيار التقرير اليدوي (الكتابة الإلكترونية مغلقة)" : placeholder}
                                 rows={1}
                              />
                              
                              {/* Icons Inside Input (Left Side RTL) */}
                              <div className="absolute left-2 bottom-1.5 flex items-center gap-1">
                                 {/* Bulk Add */}
-                                <button onClick={() => setIsBulkModalOpen(true)} className={`p-1.5 rounded-full transition-colors text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700/50`} title="إضافة نص متعدد">
+                                <button onClick={() => !isHandwritten && setIsBulkModalOpen(true)} disabled={isHandwritten} className={`p-1.5 rounded-full transition-colors text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700/50`} title="إضافة نص متعدد">
                                     <ClipboardListIcon className="w-5 h-5" />
                                 </button>
                                 {/* Mic */}
                                 {isSpeechRecognitionSupported && (
-                                    <button onClick={handleToggleListening} className={`p-1.5 rounded-full transition-colors ${isListening ? 'text-red-500 bg-red-100 animate-pulse' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700/50'}`}>
+                                    <button onClick={() => !isHandwritten && handleToggleListening()} disabled={isHandwritten} className={`p-1.5 rounded-full transition-colors ${isListening ? 'text-red-500 bg-red-100 animate-pulse' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700/50'}`}>
                                         <Icon name="microphone" className="w-5 h-5" />
                                     </button>
                                 )}
                                 {/* Camera/Gallery */}
                                 <div className="relative" ref={dropdownRef}>
-                                    <button onClick={() => setDropdownOpen(!isDropdownOpen)} className={`p-1.5 rounded-full transition-colors ${note.image ? 'text-blue-600 bg-blue-100' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700/50'}`}>
+                                    <button onClick={() => !isHandwritten && setDropdownOpen(!isDropdownOpen)} disabled={isHandwritten} className={`p-1.5 rounded-full transition-colors ${note.image ? 'text-blue-600 bg-blue-100' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700/50'}`}>
                                         <Icon name="camera" className="w-5 h-5" />
                                     </button>
                                     {isDropdownOpen && (
@@ -631,8 +635,8 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                          {/* Send Button */}
                          <button 
                             onClick={handleAdd}
-                            disabled={isSubmitting || (!note.text.trim() && !noteFile)}
-                            className={`p-3 rounded-full shadow-lg transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed ${note.text.trim() || noteFile ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:from-blue-500 hover:to-blue-400 hover:rotate-[-45deg]' : 'bg-slate-200 text-slate-400 dark:bg-slate-700 dark:text-slate-500'}`}
+                            disabled={isSubmitting || isHandwritten || (!note.text.trim() && !noteFile)}
+                            className={`p-3 rounded-full shadow-lg transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed ${isHandwritten ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600' : note.text.trim() || noteFile ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:from-blue-500 hover:to-blue-400 hover:rotate-[-45deg]' : 'bg-slate-200 text-slate-400 dark:bg-slate-700 dark:text-slate-500'}`}
                          >
                             {isSubmitting ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <SendIcon className="w-5 h-5 rtl:rotate-180" />}
                          </button>

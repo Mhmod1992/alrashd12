@@ -77,9 +77,9 @@ const Requests: React.FC = () => {
         lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations
     } = useAppContext();
 
-    const [requestNumberQuery, setRequestNumberQuery] = useSessionStorage('requests_number_query', '');
-    const [comprehensiveQuery, setComprehensiveQuery] = useSessionStorage('requests_comprehensive_query', '');
-    const [waitingSearchTerm, setWaitingSearchTerm] = useSessionStorage('requests_waiting_search', '');
+    const [requestNumberQuery, setRequestNumberQuery] = useState('');
+    const [comprehensiveQuery, setComprehensiveQuery] = useState('');
+    const [waitingSearchTerm, setWaitingSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useSessionStorage<RequestStatus | 'الكل' | 'active'>('requests_status_filter', 'الكل');
     const [employeeFilter, setEmployeeFilter] = useSessionStorage<string>('requests_employee_filter', 'الكل');
     const [paymentFilter, setPaymentFilter] = useSessionStorage<PaymentType | 'الكل'>('requests_payment_filter', 'الكل');
@@ -186,8 +186,28 @@ const Requests: React.FC = () => {
     // --- INITIALIZATION EFFECT ---
     useEffect(() => {
         if (isFirstMount.current) {
-            // NOTE: We do NOT clear searchedRequests here anymore to allow Header search to persist.
-            // Clearing should be handled by the navigation source (Sidebar/Dashboard).
+            const enteredFromSearch = window.sessionStorage.getItem('entered_from_request_number_search');
+            if (enteredFromSearch === 'true') {
+                window.sessionStorage.removeItem('entered_from_request_number_search');
+                if (clearSearchedRequests) {
+                    clearSearchedRequests();
+                }
+                if (setSearchQuery) {
+                    setSearchQuery('');
+                }
+                setRequestNumberQuery('');
+                setComprehensiveQuery('');
+                setDateFilter('today');
+            } else {
+                // Clearing searched requests explicitly to fulfill the strict reset requirement 
+                // when returning to the Requests page from forms/reports.
+                if (clearSearchedRequests) {
+                    clearSearchedRequests();
+                }
+                if (setSearchQuery) {
+                    setSearchQuery('');
+                }
+            }
             isFirstMount.current = false;
         }
 
@@ -197,7 +217,7 @@ const Requests: React.FC = () => {
             }
             setInitialRequestModalState(null);
         }
-    }, [initialRequestModalState, setInitialRequestModalState, can]);
+    }, [initialRequestModalState, setInitialRequestModalState, can, clearSearchedRequests, setSearchQuery, setDateFilter]);
 
     const handleProcessing = () => {
         setIsModalOpen(false);
@@ -743,6 +763,11 @@ const Requests: React.FC = () => {
     };
 
     const handleRowClick = (requestId: string) => {
+        if (requestNumberQuery.trim().length > 0) {
+            window.sessionStorage.setItem('entered_from_request_number_search', 'true');
+        } else {
+            window.sessionStorage.removeItem('entered_from_request_number_search');
+        }
         setSelectedRequestId(requestId);
         setPage('fill-request');
     };

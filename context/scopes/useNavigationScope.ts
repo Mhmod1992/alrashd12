@@ -32,18 +32,24 @@ export const useNavigationScope = () => {
             // Clear irrelevant parameters based on the new page
             if (page === 'dashboard') {
                 params.delete('search');
+                params.delete('order_id');
                 params.delete('requestId');
                 params.delete('id');
             } else if (page === 'requests' || page === 'waiting-requests') {
                 params.delete('requestId');
                 params.delete('id');
-                // Keep search if it's already there (e.g. deep link to search results)
-            } else if (page === 'fill-request' || page === 'print-report') {
-                // Solution 2: Clear search when viewing a specific request to avoid interference
+                // We deliberately delete 'order_id' and 'search' when navigating back to requests
+                // so that the search state is fresh, per the requirements.
                 params.delete('search');
+                params.delete('order_id');
+            } else if (page === 'fill-request' || page === 'print-report') {
+                // Clear search when viewing a specific request to avoid interference
+                params.delete('search');
+                params.delete('order_id');
             } else {
                 // For all other pages, clear everything
                 params.delete('search');
+                params.delete('order_id');
                 params.delete('requestId');
                 params.delete('id');
             }
