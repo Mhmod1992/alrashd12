@@ -1583,21 +1583,21 @@ export const FillRequest: React.FC = () => {
                 title: 'تحديد الفنيين مطلوب',
                 message: `لم يتم تحديد فنيين للأقسام التالية: ${categoriesWithNoTechs.map(c => c.name).join('، ')}. هل تود المتابعة للطباعة بأي حال؟`,
                 onConfirm: async () => {
-                    if (!isLocked) await handleSave();
+                    if (!isLockedByStatus) await handleSave();
                     setPage('print-report');
                 }
             });
             return;
         }
 
-        if (!isLocked) {
+        if (!isLockedByStatus) {
             await handleSave();
         }
         setPage('print-report');
     };
 
     const handleComplete = async () => {
-        if (isLocked) return;
+        if (isLockedByStatus) return;
         
         if (settings.enableReviewPrompt) {
             if (settings.whatsappReviewMode === 'silent') {
@@ -2565,11 +2565,19 @@ export const FillRequest: React.FC = () => {
             />
 
             {/* Top Alerts */}
-            {isLocked && (
+            {isLockedByStatus && (
                 <div className="w-full bg-green-500 text-white text-center py-2 font-bold shadow-md z-30">
                     <div className="flex items-center justify-center gap-2">
                         <CheckCircleIcon className="w-5 h-5" />
                         هذا الطلب مكتمل ولا يمكن تعديله
+                    </div>
+                </div>
+            )}
+            {isLocked && !isLockedByStatus && (
+                 <div className="w-full bg-orange-500 text-white text-center py-2 font-bold shadow-md z-30">
+                    <div className="flex items-center justify-center gap-2">
+                        <AlertTriangleIcon className="w-5 h-5" />
+                        تنبيه: تم تفعيل (تقرير يدوي)، التعديل الإلكتروني مقفل
                     </div>
                 </div>
             )}
