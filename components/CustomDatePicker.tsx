@@ -22,7 +22,7 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
     placeholder = 'اختر التاريخ',
     className = '',
     minDate,
-    maxDate,
+    maxDate = new Date(), // يمنع اختيار تواريخ مستقبلية كوضع افتراضي
     disabled = false,
     id
 }) => {
@@ -97,6 +97,12 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
                     background-color: #eff6ff;
                     color: #2563eb;
                 }
+                .custom-datepicker-container .react-datepicker__day--disabled {
+                    color: #cbd5e1 !important;
+                    cursor: not-allowed;
+                    background-color: transparent !important;
+                    opacity: 0.5;
+                }
                 .custom-datepicker-container .react-datepicker__day--outside-month {
                     color: #cbd5e1;
                     font-weight: 400;
@@ -143,6 +149,10 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
                 }
                 .dark .custom-datepicker-container .react-datepicker__day:hover {
                     background-color: #334155;
+                }
+                .dark .custom-datepicker-container .react-datepicker__day--disabled {
+                    color: #475569 !important;
+                    background-color: transparent !important;
                 }
                 .dark .custom-datepicker-container .react-datepicker__day--outside-month {
                     color: #475569;

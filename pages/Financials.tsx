@@ -287,15 +287,6 @@ const DonutChart: React.FC<{ data: { label: string; value: number; color: string
 };
 
 const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ data, isLoading }) => {
-    if (isLoading) return (
-        <div className="h-60 flex items-center justify-center bg-slate-50 dark:bg-slate-900/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 animate-pulse">
-            <div className="flex flex-col items-center gap-2">
-                <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
-                <span className="text-xs font-bold text-slate-400">جاري تحميل البيانات...</span>
-            </div>
-        </div>
-    );
-
     if (data.length === 0) return (
         <div className="h-60 flex items-center justify-center text-slate-400 font-bold text-sm bg-slate-50 dark:bg-slate-900/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
             لا تتوفر بيانات كافية للمقارنة
@@ -442,9 +433,15 @@ const Financials: React.FC = () => {
     const [prevStats, setPrevStats] = useState<FinancialStats | null>(null);
 
     const loadData = async () => {
+        if (filterType === 'range' && (!appliedStartDate || !appliedEndDate)) {
+            return;
+        }
         setIsLoading(true);
         try {
-            const now = new Date();
+            const nowRaw = new Date();
+            const now = new Date(nowRaw);
+            if (now.getHours() < 4) now.setDate(now.getDate() - 1);
+
             let currentStart = startOfMonth(now);
             let currentEnd = endOfMonth(now);
             let prevStart = startOfMonth(subDays(currentStart, 1));
@@ -452,12 +449,16 @@ const Financials: React.FC = () => {
 
             switch (filterType) {
                 case 'today': 
-                    currentStart = startOfDay(now); currentEnd = endOfDay(now);
-                    prevStart = startOfDay(subDays(currentStart, 1)); prevEnd = endOfDay(subDays(currentStart, 1));
+                    currentStart = startOfDay(now); currentStart.setHours(4,0,0,0);
+                    currentEnd = new Date(currentStart); currentEnd.setDate(currentEnd.getDate() + 1); currentEnd.setMilliseconds(-1);
+                    prevStart = new Date(currentStart); prevStart.setDate(prevStart.getDate() - 1);
+                    prevEnd = new Date(currentEnd); prevEnd.setDate(prevEnd.getDate() - 1);
                     break;
                 case 'yesterday': 
-                    currentStart = startOfDay(subDays(now, 1)); currentEnd = endOfDay(subDays(now, 1));
-                    prevStart = startOfDay(subDays(currentStart, 1)); prevEnd = endOfDay(subDays(currentStart, 1));
+                    currentStart = startOfDay(subDays(now, 1)); currentStart.setHours(4,0,0,0);
+                    currentEnd = new Date(currentStart); currentEnd.setDate(currentEnd.getDate() + 1); currentEnd.setMilliseconds(-1);
+                    prevStart = new Date(currentStart); prevStart.setDate(prevStart.getDate() - 1);
+                    prevEnd = new Date(currentEnd); prevEnd.setDate(prevEnd.getDate() - 1);
                     break;
                 case 'month': 
                     currentStart = startOfMonth(now); currentEnd = endOfMonth(now);
@@ -648,15 +649,19 @@ const Financials: React.FC = () => {
 
     const displayedRequests = useMemo(() => {
         if (!stats) return [];
-        if (paymentStatusFilter === 'all') return stats.filteredRequests;
-        if (paymentStatusFilter === 'unpaid') return stats.filteredRequests.filter(r => r.payment_type === PaymentType.Unpaid);
-        if (paymentStatusFilter === PaymentType.Cash) {
-            return stats.filteredRequests.filter(r => r.payment_type === PaymentType.Cash || (r.payment_type === PaymentType.Split && (r.split_payment_details?.cash || 0) > 0));
+        let reqs = stats.filteredRequests;
+        if (paymentStatusFilter !== 'all') {
+            if (paymentStatusFilter === 'unpaid') {
+                reqs = reqs.filter(r => r.payment_type === PaymentType.Unpaid);
+            } else if (paymentStatusFilter === PaymentType.Cash) {
+                reqs = reqs.filter(r => r.payment_type === PaymentType.Cash || (r.payment_type === PaymentType.Split && (r.split_payment_details?.cash || 0) > 0));
+            } else if (paymentStatusFilter === PaymentType.Card) {
+                reqs = reqs.filter(r => r.payment_type === PaymentType.Card || (r.payment_type === PaymentType.Split && (r.split_payment_details?.card || 0) > 0));
+            } else {
+                reqs = reqs.filter(r => r.payment_type === paymentStatusFilter);
+            }
         }
-        if (paymentStatusFilter === PaymentType.Card) {
-            return stats.filteredRequests.filter(r => r.payment_type === PaymentType.Card || (r.payment_type === PaymentType.Split && (r.split_payment_details?.card || 0) > 0));
-        }
-        return stats.filteredRequests.filter(r => r.payment_type === paymentStatusFilter);
+        return [...reqs].sort((a, b) => b.request_number - a.request_number);
     }, [stats, paymentStatusFilter]);
 
     const activeFilterClass = "bg-blue-600 text-white shadow-md";
@@ -995,16 +1000,6 @@ const Financials: React.FC = () => {
 
     if (!can('view_financials')) return <div className="p-8 text-center text-red-500">ليس لديك صلاحية.</div>;
 
-    if (!stats && isLoading) return (
-        <div className="container mx-auto p-8 space-y-8 animate-pulse">
-            <div className="h-10 bg-slate-200 dark:bg-slate-700 w-1/4 rounded-lg mb-8" />
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 print:grid-cols-2 print:gap-4">
-                {[...Array(4)].map((_, i) => <div key={i} className="h-32 bg-slate-200 dark:bg-slate-700 rounded-3xl" />)}
-            </div>
-            <div className="h-80 bg-slate-200 dark:bg-slate-700 rounded-3xl" />
-        </div>
-    );
-
     return (
         <div className="container mx-auto space-y-8 pb-24 print-container print:p-0 print:pb-0 print:m-0 print:w-full print:max-w-none print:space-y-6">
             
@@ -1136,6 +1131,7 @@ const Financials: React.FC = () => {
                                 value={customStartDate} 
                                 onChange={setCustomStartDate} 
                                 placeholder="من"
+                                maxDate={new Date()}
                                 className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border-none text-xs font-bold w-32" 
                             />
                             <div className="w-2 h-px bg-slate-300" />
@@ -1143,6 +1139,7 @@ const Financials: React.FC = () => {
                                 value={customEndDate} 
                                 onChange={setCustomEndDate} 
                                 placeholder="إلى"
+                                maxDate={new Date()}
                                 className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border-none text-xs font-bold w-32" 
                             />
                             <Button 
@@ -1160,6 +1157,16 @@ const Financials: React.FC = () => {
                     )}
                 </AnimatePresence>
             </div>
+
+            {isLoading && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm transition-all duration-300">
+                    <div className="flex flex-col items-center justify-center p-8 bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700">
+                        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                        <p className="text-lg font-black text-slate-800 dark:text-white mb-1">جاري تحميل البيانات...</p>
+                        <p className="text-xs font-bold text-slate-500">يرجى الانتظار لحظات</p>
+                    </div>
+                </div>
+            )}
 
             {/* --- BENTO GRID STATS --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6 items-stretch print:hidden">

@@ -476,7 +476,11 @@ const Expenses: React.FC = () => {
                                 {filteredExpenses.map(expense => (
                                     <tr key={expense.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
                                         <td className="px-6 py-4 text-slate-600 dark:text-slate-300 whitespace-nowrap font-mono text-xs">
-                                            {new Date(expense.date).toLocaleDateString('en-GB')}
+                                            {(() => {
+                                                const d = new Date(expense.date);
+                                                if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+                                                return d.toLocaleDateString('en-GB');
+                                            })()}
                                         </td>
                                         <td className="px-6 py-4">
                                             <CategoryBadge category={expense.category} />

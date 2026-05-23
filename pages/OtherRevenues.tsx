@@ -331,7 +331,11 @@ const OtherRevenues: React.FC = () => {
                                 {filteredRevenues.map(rev => (
                                     <tr key={rev.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
                                         <td className="px-6 py-4 text-slate-600 dark:text-slate-300 whitespace-nowrap font-mono text-xs font-numeric">
-                                            {new Date(rev.date).toLocaleDateString('en-GB')}
+                                            {(() => {
+                                                const d = new Date(rev.date);
+                                                if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+                                                return d.toLocaleDateString('en-GB');
+                                            })()}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 px-2 py-1 rounded text-xs font-bold border border-green-100 dark:border-green-800">

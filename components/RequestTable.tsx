@@ -908,19 +908,26 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                  <td className="px-6 py-4">
                                     <StatusBadge status={request.status} />
                                 </td>
-                                {!isWaitingTable &&
-                                    <td className="px-6 py-4">
-                                        <div className="text-slate-700 dark:text-slate-300">
-                                            {new Date(request.created_at).toLocaleDateString('en-GB')}
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
-                                            {new Date(request.created_at).toLocaleDateString('ar-SA', { weekday: 'long' })}
-                                        </div>
-                                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                                            {new Date(request.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                                        </div>
-                                    </td>
-                                }
+                                {!isWaitingTable && (
+                                    (() => {
+                                        const reqDate = new Date(request.created_at);
+                                        const busDate = new Date(reqDate);
+                                        if (busDate.getHours() < 4) busDate.setDate(busDate.getDate() - 1);
+                                        return (
+                                        <td className="px-6 py-4">
+                                            <div className="text-slate-700 dark:text-slate-300">
+                                                {busDate.toLocaleDateString('en-GB')}
+                                            </div>
+                                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
+                                                {busDate.toLocaleDateString('ar-SA', { weekday: 'long' })}
+                                            </div>
+                                            <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5" dir="ltr">
+                                                {reqDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                            </div>
+                                        </td>
+                                        );
+                                    })()
+                                )}
                                 {!isWaitingTable && can('view_requests_price_column') &&
                                      <td className="px-6 py-4">
                                         <div className="relative">

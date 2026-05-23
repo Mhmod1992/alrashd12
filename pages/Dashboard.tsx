@@ -186,14 +186,10 @@ const ExecutiveKpiCard: React.FC<{
             
             <div className="relative z-10">
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{title}</p>
-                {isLoading ? (
-                    <div className="h-8 w-24 bg-slate-100/50 dark:bg-slate-700/50 rounded-lg animate-pulse"></div>
-                ) : (
-                    <>
-                        <h3 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white font-numeric tracking-tight">{value}</h3>
-                        {subtitle && <div className="mt-1">{subtitle}</div>}
-                    </>
-                )}
+                <>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white font-numeric tracking-tight">{value}</h3>
+                    {subtitle && <div className="mt-1">{subtitle}</div>}
+                </>
             </div>
         </div>
     );
@@ -208,8 +204,6 @@ const PerformanceCard: React.FC<{
     isLoading: boolean;
     mainCountLabel: string;
 }> = ({ title, icon, headerBg, badgeLabel, data, isLoading, mainCountLabel }) => {
-    if (isLoading) return <Skeleton className="h-44 w-full rounded-2xl" />;
-
     const staffCount = data.length;
 
     return (
@@ -422,7 +416,13 @@ const VehicleHistorySearchModal: React.FC<{ onClose: () => void }> = ({ onClose 
                                             <div key={req.id} className="p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl flex justify-between items-center group hover:border-blue-300 transition-colors">
                                                 <div>
                                                     <p className="font-bold text-xs text-slate-700 dark:text-slate-200 mb-0.5">#{req.request_number}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{new Date(req.created_at).toLocaleDateString('ar-SA')}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">
+                                                        {(() => {
+                                                            const d = new Date(req.created_at);
+                                                            if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+                                                            return d.toLocaleDateString('ar-SA');
+                                                        })()}
+                                                    </p>
                                                 </div>
                                                 <Button 
                                                     variant="secondary" size="sm" 
@@ -618,7 +618,6 @@ const QuickExpenseModal: React.FC<{ onClose: () => void; onSuccess?: () => void 
 
 const RecentActivity: React.FC<{ logs: ActivityLog[], isLoading: boolean }> = ({ logs, isLoading }) => {
     const { setPage, setSelectedRequestId } = useAppContext();
-    if (isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
 
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden h-[400px] flex flex-col">
@@ -705,15 +704,18 @@ const Dashboard: React.FC = () => {
   const loadData = async () => {
       setIsLoading(true);
       try {
-          const now = new Date();
-          let start = new Date();
-          let end = new Date();
-          let prevStart = new Date();
-          let prevEnd = new Date();
+          const nowRaw = new Date();
+          const now = new Date(nowRaw);
+          if (now.getHours() < 4) now.setDate(now.getDate() - 1);
+
+          let start = new Date(now);
+          let end = new Date(now);
+          let prevStart = new Date(now);
+          let prevEnd = new Date(now);
 
           if (activePeriod === 'today') {
-              start.setHours(0, 0, 0, 0);
-              end.setHours(23, 59, 59, 999);
+              start.setHours(4, 0, 0, 0);
+              end = new Date(start); end.setDate(end.getDate() + 1); end.setMilliseconds(-1);
               prevStart = new Date(start); prevStart.setDate(prevStart.getDate() - 1);
               prevEnd = new Date(end); prevEnd.setDate(prevEnd.getDate() - 1);
           } else if (activePeriod === 'week') {
@@ -1448,10 +1450,9 @@ const Dashboard: React.FC = () => {
                      </div>
                  </div>
                  <div className="w-full h-72 sm:h-96 relative z-10 overflow-x-auto pb-2 custom-scrollbar">
-                     {isLoading ? <Skeleton className="min-w-[700px] w-full h-full rounded-2xl" /> : (
-                         <div className="min-w-[700px] w-full h-full">
-                             <ResponsiveContainer width="100%" height="100%">
-                                 <BarChart data={monthlyRequestsComparisonData} margin={{ top: 20, right: 10, bottom: 5, left: 10 }}>
+                     <div className="min-w-[700px] w-full h-full">
+                         <ResponsiveContainer width="100%" height="100%">
+                             <BarChart data={monthlyRequestsComparisonData} margin={{ top: 20, right: 10, bottom: 5, left: 10 }}>
                                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} opacity={0.3} />
                                      <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                                      <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
@@ -1466,7 +1467,6 @@ const Dashboard: React.FC = () => {
                                  </BarChart>
                              </ResponsiveContainer>
                          </div>
-                     )}
                  </div>
              </div>
 

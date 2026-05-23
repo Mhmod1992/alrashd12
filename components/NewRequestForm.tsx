@@ -1415,11 +1415,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
             } else {
-                // Custom Date Logic: If before 4 AM, count as previous day
                 const requestDate = new Date();
-                if (requestDate.getHours() < 4) {
-                    requestDate.setDate(requestDate.getDate() - 1);
-                }
 
                 const newAddedRequest = await addRequestOptimized({
                     clientName,

@@ -1800,7 +1800,12 @@ const Requests: React.FC = () => {
                         <div className="flex justify-between items-center">
                             <span className="text-slate-500 dark:text-slate-400">تاريخ الإنشاء:</span>
                             <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                {paymentRequest ? new Date(paymentRequest.created_at).toLocaleDateString('en-GB') : ''}
+                                {paymentRequest ? (() => {
+                                    const rd = new Date(paymentRequest.created_at);
+                                    const bd = new Date(rd);
+                                    if (bd.getHours() < 4) bd.setDate(bd.getDate() - 1);
+                                    return bd.toLocaleDateString('en-GB');
+                                })() : ''}
                             </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -1904,7 +1909,12 @@ const Requests: React.FC = () => {
                                         <p className="font-bold text-slate-800 dark:text-slate-200">#{req.request_number}</p>
                                         <div className="flex flex-col gap-0.5 mt-1">
                                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                                                {new Date(req.created_at).toLocaleDateString('en-GB')} - {req.status}
+                                                {(() => {
+                                                    const rd = new Date(req.created_at);
+                                                    const bd = new Date(rd);
+                                                    if (bd.getHours() < 4) bd.setDate(bd.getDate() - 1);
+                                                    return bd.toLocaleDateString('en-GB');
+                                                })()} - {req.status}
                                             </p>
                                             <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded w-fit">
                                                 {timeAgo(req.created_at)}
