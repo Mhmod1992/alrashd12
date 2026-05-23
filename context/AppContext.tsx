@@ -600,8 +600,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         checkInactivity();
         const checkMidnight = () => {
             // Only apply auto-logout at 4 AM for desktop devices
-            const isDesktop = window.matchMedia('(min-width: 1024px) and (pointer: fine)').matches;
-            if (!isDesktop) return;
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024;
+            if (isMobile) return;
 
             const storedShiftDate = localStorage.getItem('loginDate');
             const currentShiftDate = new Date(Date.now() - 4 * 3600 * 1000).toLocaleDateString('en-CA');
