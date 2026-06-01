@@ -71,7 +71,15 @@ interface StepCarProps {
     modelListRef: React.RefObject<HTMLUListElement>;
     setIsScannerOpen: (val: boolean) => void;
     setIsCarScannerOpen: (val: boolean) => void;
-    foundHistory: { car: Car; previousRequests: InspectionRequest[]; lastClient?: Client } | null;
+    foundHistory: { 
+        car: Car; 
+        previousRequests: InspectionRequest[]; 
+        lastClient?: Client;
+        make_name_ar?: string;
+        make_name_en?: string;
+        model_name_ar?: string;
+        model_name_en?: string;
+    } | null;
     handleViewPreviousReport: (id: string) => void;
     handleViewCarHistory: () => void;
     handleFillCarData: () => void;
@@ -237,8 +245,17 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                                         : 'بيانات السيارة محفوظة، لكن لا توجد طلبات فحص سابقة.'
                                     }
                                 </p>
+                                {(props.foundHistory.make_name_ar || props.foundHistory.model_name_ar || props.foundHistory.car?.year) && (
+                                    <p className="text-xs text-amber-800 dark:text-amber-200 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 bg-amber-100/40 dark:bg-amber-800/10 px-2.5 py-1.5 rounded-md border border-amber-200/50 dark:border-amber-700/30">
+                                        <span><strong>السيارة:</strong> {props.foundHistory.make_name_ar || props.foundHistory.make_name_en || '-'}</span>
+                                        <span className="text-amber-300 dark:text-amber-700">|</span>
+                                        <span><strong>الموديل:</strong> {props.foundHistory.model_name_ar || props.foundHistory.model_name_en || '-'}</span>
+                                        <span className="text-amber-300 dark:text-amber-700">|</span>
+                                        <span><strong>سنة الصنع:</strong> {props.foundHistory.car?.year || '-'}</span>
+                                    </p>
+                                )}
                                 {props.foundHistory.lastClient && (
-                                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
                                         آخر عميل: <span className="font-semibold">{props.foundHistory.lastClient.name}</span> ({props.foundHistory.lastClient.phone})
                                     </p>
                                 )}

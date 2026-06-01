@@ -1301,7 +1301,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     const { data: clientData } = await supabase.from('clients').select('*, inspection_requests(count)').eq('id', requestHistory[0].client_id).single();
                     if (clientData) lastClient = clientData;
                 }
-                return { car: foundCar, previousRequests: requestHistory || [], lastClient };
+
+                let make_name_ar = '';
+                let make_name_en = '';
+                let model_name_ar = '';
+                let model_name_en = '';
+
+                if (foundCar.make_id) {
+                    const { data: makeData } = await supabase
+                        .from('car_makes')
+                        .select('name_ar, name_en')
+                        .eq('id', foundCar.make_id)
+                        .maybeSingle();
+                    if (makeData) {
+                        make_name_ar = makeData.name_ar;
+                        make_name_en = makeData.name_en;
+                    }
+                }
+
+                if (foundCar.model_id) {
+                    const { data: modelData } = await supabase
+                        .from('car_models')
+                        .select('name_ar, name_en')
+                        .eq('id', foundCar.model_id)
+                        .maybeSingle();
+                    if (modelData) {
+                        model_name_ar = modelData.name_ar;
+                        model_name_en = modelData.name_en;
+                    }
+                }
+
+                return { 
+                    car: foundCar, 
+                    previousRequests: requestHistory || [], 
+                    lastClient,
+                    make_name_ar,
+                    make_name_en,
+                    model_name_ar,
+                    model_name_en
+                };
             }
         } catch (e) {
             console.error("Exception in checkCarHistory:", e);

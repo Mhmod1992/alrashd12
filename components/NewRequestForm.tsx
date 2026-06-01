@@ -164,7 +164,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
     // History Logic
     const [isCheckingHistory, setIsCheckingHistory] = useState(false);
-    const [foundHistory, setFoundHistory] = useState<{ car: Car; previousRequests: InspectionRequest[]; lastClient?: Client } | null>(null);
+    const [foundHistory, setFoundHistory] = useState<{ car: Car; previousRequests: InspectionRequest[]; lastClient?: Client; make_name_ar?: string; make_name_en?: string; model_name_ar?: string; model_name_en?: string; } | null>(null);
     const historyDebounceRef = useRef<number | null>(null);
 
     // Debt Logic & Existing Client Info

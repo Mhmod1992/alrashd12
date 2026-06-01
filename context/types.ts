@@ -11,6 +11,10 @@ export interface CarHistoryResult {
     car: Car;
     previousRequests: InspectionRequest[];
     lastClient?: Client;
+    make_name_ar?: string;
+    make_name_en?: string;
+    model_name_ar?: string;
+    model_name_en?: string;
 }
 
 export interface AppContextType {
