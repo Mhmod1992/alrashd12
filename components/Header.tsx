@@ -258,38 +258,57 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
             </button>
         </div>
 
-        <div className="relative">
+        <div className="relative flex items-center gap-1.5">
+            {settings.whatsappMode === 'api' && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-all duration-300 ${
+                    whatsappApiStatus === 'connected'
+                        ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/40 border border-emerald-200/40 dark:border-emerald-800/20'
+                        : whatsappApiStatus === 'checking'
+                        ? 'text-yellow-600 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-950/40 border border-yellow-200/40 dark:border-yellow-800/20 animate-pulse'
+                        : 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/40 border border-red-200/40 dark:border-red-800/20'
+                }`}>
+                    {whatsappApiStatus === 'connected' ? 'متصل' : whatsappApiStatus === 'checking' ? 'جاري التحقق...' : 'غير متصل'}
+                </span>
+            )}
             <button 
                 onClick={() => setPage('whatsapp-inbox')} 
-                className={`p-2 rounded-full transition-all focus:outline-none ${unreadWhatsAppCount > 0 ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30' : 'text-slate-500 hover:text-emerald-600 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-slate-700'}`}
-                title="رسائل الواتساب"
+                className={`p-2 rounded-full transition-all duration-300 focus:outline-none relative flex items-center justify-center ${
+                    settings.whatsappMode === 'api'
+                        ? whatsappApiStatus === 'connected'
+                            ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 dark:text-emerald-400'
+                            : whatsappApiStatus === 'checking'
+                            ? 'bg-yellow-500/10 text-yellow-500 dark:text-yellow-400'
+                            : 'bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 font-bold'
+                        : unreadWhatsAppCount > 0
+                        ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30'
+                        : 'text-slate-500 hover:text-emerald-600 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-slate-700'
+                }`}
+                title={
+                    settings.whatsappMode === 'api'
+                        ? whatsappApiStatus === 'connected'
+                            ? 'خدمة الواتساب متصلة (تلقائي)'
+                            : whatsappApiStatus === 'checking'
+                            ? 'جاري التحقق من اتصال الواتساب...'
+                            : 'خدمة الواتساب غير متصلة! (انقر لفتح الوارد)'
+                        : 'رسائل الواتساب'
+                }
             >
-                <WhatsappIcon className="h-6 w-6" />
+                <WhatsappIcon 
+                    className={`h-6 w-6 transition-all duration-300 ${
+                        settings.whatsappMode === 'api'
+                            ? whatsappApiStatus === 'connected'
+                                ? '[filter:drop-shadow(0_0_6px_rgba(16,185,129,0.8))] text-emerald-500 dark:text-emerald-400'
+                                : whatsappApiStatus === 'checking'
+                                ? '[filter:drop-shadow(0_0_4px_rgba(234,179,8,0.6))] text-yellow-500 dark:text-yellow-400 animate-pulse'
+                                : '[filter:drop-shadow(0_0_8px_rgba(239,68,68,0.8))] text-red-500 dark:text-red-400 animate-pulse'
+                            : ''
+                    }`} 
+                />
                 {unreadWhatsAppCount > 0 && (
                     <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-800 animate-ping"></span>
                 )}
                 {unreadWhatsAppCount > 0 && (
                     <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-800"></span>
-                )}
-                
-                {/* WhatsApp API Status Indicator */}
-                {settings.whatsappMode === 'api' && (
-                    <div 
-                        className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-slate-800 flex items-center justify-center transition-all shadow-sm ${
-                            whatsappApiStatus === 'connected' ? 'bg-emerald-500' : 
-                            whatsappApiStatus === 'checking' ? 'bg-yellow-400' : 
-                            'bg-red-500 animate-pulse'
-                        }`}
-                        title={
-                            whatsappApiStatus === 'connected' ? 'خدمة الواتساب متصلة' : 
-                            whatsappApiStatus === 'checking' ? 'جاري التحقق من الخدمة...' : 
-                            'خدمة الواتساب غير متصلة!'
-                        }
-                    >
-                        {whatsappApiStatus === 'disconnected' && (
-                            <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-75"></span>
-                        )}
-                    </div>
                 )}
             </button>
 

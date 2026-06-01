@@ -128,12 +128,12 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">قيمة الفحص (ريال)</label>
                     <input
                         ref={props.priceInputRef}
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
                         value={props.inspectionPrice}
                         onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, '');
+                            const val = e.target.value;
                             props.setInspectionPrice(val === '' ? '' : Number(val));
                         }}
                         required={!props.isReservationMode}

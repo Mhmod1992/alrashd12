@@ -1873,6 +1873,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const apiUrl = settings.whatsappApiUrl;
         let success = false;
 
+        // Clean and format phone number to international Saudi standard without a leading plus or zero
+        let cleanPhone = phone.replace(/\D/g, '');
+        if (cleanPhone.startsWith('00966')) {
+            cleanPhone = cleanPhone.substring(2);
+        } else if (cleanPhone.startsWith('0')) {
+            cleanPhone = '966' + cleanPhone.substring(1);
+        } else if (cleanPhone.startsWith('5') && cleanPhone.length === 9) {
+            cleanPhone = '966' + cleanPhone;
+        }
+
         if (mode === 'api' && apiUrl) {
             try {
                 const response = await fetch(`${apiUrl.replace(/\/$/, '')}/api/send`, {
@@ -1882,11 +1892,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         'ngrok-skip-browser-warning': 'true',
                         'Authorization': `Bearer ${settings.whatsappApiKey || ''}`,
                     },
-                    body: JSON.stringify({ phone, message: text }),
+                    body: JSON.stringify({ phone: cleanPhone, message: text }),
                 });
 
                 if (response.ok) {
-                    console.log('WhatsApp API Success for:', phone);
+                    console.log('WhatsApp API Success for:', cleanPhone);
                     const finalClientName = clientName || 'عميل';
                     if (options?.suppressModal) {
                         addNotification({
@@ -1895,7 +1905,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             type: 'success'
                         });
                     } else {
-                        showWhatsAppSuccessModal(finalClientName, phone);
+                        showWhatsAppSuccessModal(finalClientName, cleanPhone);
                     }
                     success = true;
                     setWhatsappApiStatus('connected');
@@ -1913,16 +1923,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (!success) {
             // Fallback to manual mode
-            const formattedPhone = phone.replace(/\D/g, '');
             const encodedText = encodeURIComponent(text);
-            window.open(`https://wa.me/${formattedPhone}?text=${encodedText}`, '_blank');
+            window.open(`https://wa.me/${cleanPhone}?text=${encodedText}`, '_blank');
             success = true;
         }
 
         // Save to database regardless of mode (so it shows in history)
         try {
             const { data, error } = await supabase.from('whatsapp_messages').insert({
-                phone,
+                phone: cleanPhone,
                 message: text,
                 name: clientName || null,
                 direction: 'outgoing',

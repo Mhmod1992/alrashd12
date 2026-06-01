@@ -139,6 +139,20 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                         <div className="space-y-4">
                             <div className="flex items-center gap-2 relative">
                                 <input
+                                    ref={props.plateNumInputRef}
+                                    type="text"
+                                    placeholder="أرقام"
+                                    value={props.plateNums}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                        props.setPlateNums(val.split('').join(' '));
+                                    }}
+                                    required={!props.isReservationMode}
+                                    className={`${props.getInputClass('plateNums')} text-center font-bold text-lg`}
+                                    style={{ direction: 'ltr' }}
+                                    autoComplete="off"
+                                />
+                                <input
                                     ref={props.plateCharInputRef}
                                     type="text"
                                     placeholder="الأحرف"
@@ -159,20 +173,6 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                                     required={!props.isReservationMode}
                                     className={`${props.getInputClass('plateChars')} text-center font-bold text-lg`}
                                     style={{ direction: /[\u0600-\u06FF]/.test(props.plateChars) ? 'rtl' : 'ltr' }}
-                                    autoComplete="off"
-                                />
-                                <input
-                                    ref={props.plateNumInputRef}
-                                    type="text"
-                                    placeholder="أرقام"
-                                    value={props.plateNums}
-                                    onChange={(e) => {
-                                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                                        props.setPlateNums(val.split('').join(' '));
-                                    }}
-                                    required={!props.isReservationMode}
-                                    className={`${props.getInputClass('plateNums')} text-center font-bold text-lg`}
-                                    style={{ direction: 'ltr' }}
                                     autoComplete="off"
                                 />
                                 <Button type="button" variant="secondary" onClick={() => props.setIsScannerOpen(true)} className="p-3" title="مسح اللوحة بالكاميرا">

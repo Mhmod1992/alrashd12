@@ -307,7 +307,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
     const hasAnyFindings = useMemo(() => {
         const { structured_findings, general_notes, category_notes } = request;
-        const filteredGeneralNotes = (general_notes || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+        const filteredGeneralNotes = (general_notes || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل'));
         if (structured_findings && structured_findings.length > 0) return true;
         if (filteredGeneralNotes.length > 0) return true;
         if (category_notes && Object.values(category_notes).some(notes => notes && (notes as Note[]).length > 0)) return true;
@@ -323,11 +323,11 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                 imageNotes.forEach(note => collectedNotes.push({ note, categoryName: category.name }));
             }
         });
-        ((request.general_notes as Note[]) || []).filter(note => !!note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__').forEach(note => collectedNotes.push({ note, categoryName: reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة' }));
+        ((request.general_notes as Note[]) || []).filter(note => !!note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل')).forEach(note => collectedNotes.push({ note, categoryName: reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة' }));
         return collectedNotes;
     }, [request.category_notes, request.general_notes, visibleCategoryIds, customFindingCategories, reportDirection]);
 
-    const generalTextOnlyNotes = ((request.general_notes as Note[]) || []).filter(note => !note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__');
+    const generalTextOnlyNotes = ((request.general_notes as Note[]) || []).filter(note => !note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل'));
 
     // Updated Logic: Get Technicians (Workers) AND Employees (System Users marked as Technicians)
     const getAssignedTechnicians = (categoryId: string) => {

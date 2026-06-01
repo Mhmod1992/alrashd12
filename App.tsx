@@ -19,6 +19,7 @@ import RefreshCwIcon from './components/icons/RefreshCwIcon'; // Import Refresh 
 import LogOutIcon from './components/icons/LogOutIcon'; // Import LogOut Icon
 import WifiOffIcon from './components/icons/WifiOffIcon'; // Import WifiOff Icon
 import IncomingRequestNotifier from './components/IncomingRequestNotifier'; // Import the new notifier
+import { KeyboardLayoutCorrector } from './components/KeyboardLayoutCorrector';
 const WhatsAppInbox = lazy(() => import('./pages/WhatsAppInbox'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Requests = lazy(() => import('./pages/Requests'));
@@ -263,6 +264,7 @@ const AppContent: React.FC = () => {
         />
         <ConfirmModal />
         <IncomingRequestNotifier />
+        <KeyboardLayoutCorrector />
       </div>
     );
   }
@@ -290,7 +292,7 @@ const AppContent: React.FC = () => {
         {!isFocusMode && <Sidebar isSidebarOpen={isSidebarOpen} setSidebarOpen={setSidebarOpen} />}
         <div className="flex-1 flex flex-col overflow-hidden">
           {!isFocusMode && <Header toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />}
-          {!isFocusMode && <WhatsAppTicker />}
+          {!isFocusMode && (page === 'dashboard' || page === 'requests' || page === 'financials') && <WhatsAppTicker />}
           <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-slate-100/80 dark:bg-slate-900/80 ${isFocusMode ? '' : 'p-4 sm:p-6'}`}>
             <Suspense fallback={<PageLoader />}>
               {mainContent()}
@@ -319,6 +321,7 @@ const AppContent: React.FC = () => {
       />
       <InstallPwaBanner />
       <IncomingRequestNotifier />
+      <KeyboardLayoutCorrector />
 
       {/* Global Loading Overlay for Request Creation */}
       {isCreatingRequest && (

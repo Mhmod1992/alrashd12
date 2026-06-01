@@ -61,7 +61,7 @@ export const FillRequest: React.FC = () => {
         deleteImage, can, settings, goBack, showConfirmModal, createActivityLog,
         fetchRequestTabContent, fetchFullRequestForSave, setIsFocusMode,
         hasUnsavedChanges, setHasUnsavedChanges, unreadMessagesCount, setIsMailboxOpen, technicians, employees,
-        fetchAndUpdateSingleRequest, sendWhatsAppMessage
+        fetchAndUpdateSingleRequest, sendWhatsAppMessage, whatsappApiStatus
     } = useAppContext();
 
     const focusRingClass = `focus:ring-${settings.design === 'classic' ? 'teal' : settings.design === 'glass' ? 'indigo' : 'blue'}-500`;
@@ -1635,7 +1635,7 @@ export const FillRequest: React.FC = () => {
             // Set flag to skip scroll restoration when returning to requests page after completion
             window.sessionStorage.setItem('skipScrollRestoration', 'true');
 
-            if (sendReview && client?.phone && settings.reviewMessage && settings.reviewLink) {
+            if (sendReview && whatsappApiStatus === 'connected' && client?.phone && settings.reviewMessage && settings.reviewLink) {
                 setIsProcessingWhatsApp(true);
                 const message = settings.reviewMessage.replace('{review_link}', settings.reviewLink);
                 let phone = client.phone.replace(/\D/g, '');
@@ -1816,6 +1816,33 @@ export const FillRequest: React.FC = () => {
             handleTabSwitch(allTabsInOrder[allTabsInOrder.length - 1]); // Wrap
         }
     }, [activeTab, allTabsInOrder]);
+
+    // Globals back/forward prevention and section navigation using Alt + Arrow keys
+    useEffect(() => {
+        const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                // ALWAYS prevent default to block browser back/forward history navigation!
+                e.preventDefault();
+
+                // If the currently focused element is NOT an active text input/textarea
+                const active = document.activeElement;
+                const isWritingInInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+
+                if (!isWritingInInput) {
+                    if (e.key === 'ArrowLeft') {
+                        // In RTL, Left is "Next"
+                        handleNextTab();
+                    } else if (e.key === 'ArrowRight') {
+                        // In RTL, Right is "Previous"
+                        handlePrevTab();
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
+    }, [handleNextTab, handlePrevTab]);
 
     const handleModalFindingToggle = (findingId: string) => setSelectedFindingsInModal(prev => { const newSet = new Set(prev); if (newSet.has(findingId)) newSet.delete(findingId); else newSet.add(findingId); return newSet; });
 

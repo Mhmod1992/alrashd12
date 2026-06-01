@@ -33,13 +33,13 @@ const IncomingRequestNotifier: React.FC = () => {
         const client = clients.find(c => c.id === incomingRequest.client_id);
         const car = cars.find(c => c.id === incomingRequest.car_id);
         
-        let carName = 'سيارة غير معروفة';
+        let carName = 'Unknown Car';
         if (incomingRequest.car_snapshot) {
-            carName = `${incomingRequest.car_snapshot.make_ar} ${incomingRequest.car_snapshot.model_ar}`;
+            carName = `${incomingRequest.car_snapshot.make_en || incomingRequest.car_snapshot.make_ar || ''} ${incomingRequest.car_snapshot.model_en || incomingRequest.car_snapshot.model_ar || ''}`.trim() || 'Unknown Car';
         } else if (car) {
             const make = carMakes.find(m => m.id === car.make_id);
             const model = carModels.find(m => m.id === car.model_id);
-            carName = `${make?.name_ar || ''} ${model?.name_ar || ''}`;
+            carName = `${make?.name_en || make?.name_ar || ''} ${model?.name_en || model?.name_ar || ''}`.trim() || 'Unknown Car';
         }
 
         return {
@@ -64,7 +64,7 @@ const IncomingRequestNotifier: React.FC = () => {
 
     return (
         <div 
-            className="fixed bottom-6 left-6 z-[105] w-full max-w-sm animate-slide-in-from-left"
+            className="fixed bottom-6 left-6 z-[105] w-full max-w-sm animate-slide-in-from-left print:hidden"
             role="alert"
             aria-live="assertive"
         >

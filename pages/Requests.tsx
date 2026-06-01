@@ -70,7 +70,7 @@ const Requests: React.FC = () => {
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests, searchQuery, setSearchQuery,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
-        page, setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage,
+        page, setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage, whatsappApiStatus,
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
@@ -116,6 +116,7 @@ const Requests: React.FC = () => {
     const [dbTotalCount, setDbTotalCount] = useState<number | null>(null);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isCustomDateMode, setIsCustomDateMode] = useState(false);
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
     const [requestToUpdate, setRequestToUpdate] = useState<InspectionRequest | null>(null);
     const [plateDisplayLanguage, setPlateDisplayLanguage] = useSessionStorage<'ar' | 'en'>('requests_plate_lang', 'ar');
@@ -137,6 +138,7 @@ const Requests: React.FC = () => {
     const [paymentMethod, setPaymentMethod] = useState<PaymentType>(PaymentType.Cash);
     const [splitCashAmount, setSplitCashAmount] = useState<number>(0);
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
+    const [sendWhatsAppStartNotify, setSendWhatsAppStartNotify] = useState<boolean>(true);
 
     const [isReservationsAccordionOpen, setIsReservationsAccordionOpen] = useState(false);
     const [reservationMiniSearchTerm, setReservationMiniSearchTerm] = useState('');
@@ -902,9 +904,27 @@ const Requests: React.FC = () => {
                 payment_type: paymentMethod,
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined
             });
+
+            if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected') {
+                const client = clients.find(c => c.id === paymentRequest.client_id);
+                if (client && client.phone) {
+                    const message = `حياكم الله ${client.name || ''}،
+
+تم تأكيد استلام مركبتكم *${paymentRequest.car_snapshot?.make_en || ''} ${paymentRequest.car_snapshot?.model_en || ''} ${paymentRequest.car_snapshot?.year || ''}*
+وبدء إجراءات الفحص الفني في مركزنا.
+
+نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة، وسيتم إشعاركم فور الجاهزية.
+
+شكراً لاختياركم مركزنا.
+*ادارة مركز الراشد*`;
+                    await sendWhatsAppMessage(client.phone, message, client.name, { suppressModal: true });
+                }
+            }
+
             addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب.', type: 'success' });
             setIsPaymentModalOpen(false);
             setPaymentRequest(null);
+            setSendWhatsAppStartNotify(true);
         } catch (error) {
             addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع.', type: 'error' });
         }
@@ -1207,12 +1227,12 @@ const Requests: React.FC = () => {
 
     return (
         <div className="container mx-auto">
-            <div className="flex flex-col md:grid md:grid-cols-3 items-center justify-between mb-8 gap-4">
+            <div className="flex flex-col md:grid md:grid-cols-3 items-center w-full mb-8 gap-4">
                 {/* 1. Page Title (Right) */}
-                <div className="text-center md:text-right order-1 relative" ref={actionsMenuRef}>
+                <div className="text-center md:text-right w-full relative" ref={actionsMenuRef}>
                     <button 
                         onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
-                        className="flex items-center justify-center md:justify-start gap-2 w-full md:w-auto hover:opacity-80 transition-opacity"
+                        className="flex items-center justify-center md:justify-start gap-2 w-full hover:opacity-80 transition-opacity"
                     >
                         <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200">إدارة الطلبات</h2>
                         {can('create_requests') && (
@@ -1241,22 +1261,38 @@ const Requests: React.FC = () => {
                 </div>
 
                 {/* 2. Main Actions (Center) */}
-                <div className="flex items-center justify-center gap-3 order-3 md:order-2 w-full">
-                    {can('create_requests') && (
-                        <div className="flex gap-2">
+                {can('create_requests') && (
+                    <div className="flex flex-row gap-3 justify-center items-center flex-wrap w-full md:col-start-2">
+                        <Button 
+                            onClick={() => {
+                                setIsCustomDateMode(false);
+                                setIsModalOpen(true);
+                            }} 
+                            leftIcon={<PlusIcon className="w-5 h-5" />}
+                            className="shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-1 transition-all px-6 py-2.5 font-bold text-base whitespace-nowrap"
+                        >
+                            إنشاء طلب جديد
+                        </Button>
+
+                        {can('create_custom_date_request') && (
                             <Button 
-                                onClick={() => setIsModalOpen(true)} 
-                                leftIcon={<PlusIcon className="w-5 h-5" />}
-                                className="shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-1 transition-all px-8 py-2.5 font-bold text-lg"
+                                onClick={() => {
+                                    setIsCustomDateMode(true);
+                                    setIsModalOpen(true);
+                                }} 
+                                leftIcon={
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                }
+                                className="shadow-lg shadow-amber-500/10 hover:shadow-amber-500/30 hover:-translate-y-1 transition-all px-5 py-2.5 font-bold text-base bg-amber-500 hover:bg-amber-600 border border-transparent text-white dark:bg-amber-600 dark:hover:bg-amber-700 whitespace-nowrap"
                             >
-                                إنشاء طلب جديد
+                                إنشاء طلب بتاريخ مخصص
                             </Button>
-                        </div>
-                    )}
-                </div>
-                
-                {/* 3. Empty Spacer for Balance (Left) */}
-                <div className="hidden md:block order-3"></div>
+                        )}
+                    </div>
+                )}
+
+                {/* 3. Empty Spacer for Grid Balance (Left) */}
+                <div className="hidden md:block"></div>
             </div>
 
             {/* The Hybrid Hub: Reservations Accordion */}
@@ -1727,7 +1763,7 @@ const Requests: React.FC = () => {
             )}
 
             {isModalOpen && (
-                <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setPrefilledReservation(null); }} title="إنشاء طلب جديد" size="5xl">
+                <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setPrefilledReservation(null); }} title={isCustomDateMode ? "إنشاء طلب جديد بتاريخ مخصص" : "إنشاء طلب جديد"} size="5xl">
                     <NewRequestForm
                         clients={clients}
                         carMakes={carMakes}
@@ -1737,6 +1773,7 @@ const Requests: React.FC = () => {
                         onCancel={() => { setIsModalOpen(false); setPrefilledReservation(null); }}
                         onSuccess={handleSuccess}
                         initialReservationData={prefilledReservation || undefined}
+                        forceCustomDate={isCustomDateMode}
                     />
                 </Modal>
             )}
@@ -1862,6 +1899,22 @@ const Requests: React.FC = () => {
                                     className="w-full p-2 text-sm border rounded bg-slate-100 dark:bg-slate-600 dark:border-slate-500 text-slate-500 cursor-not-allowed"
                                 />
                             </div>
+                        </div>
+                    )}
+
+                     {paymentMethod !== PaymentType.Unpaid && whatsappApiStatus === 'connected' && (
+                        <div className="pt-2 border-t dark:border-slate-700">
+                            <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={sendWhatsAppStartNotify}
+                                    onChange={(e) => setSendWhatsAppStartNotify(e.target.checked)}
+                                    className="w-4 h-4 text-green-500 border-slate-300 rounded focus:ring-green-500"
+                                />
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                    إرسال إشعار للعميل عبر واتساب (بدء الفحص)
+                                </span>
+                            </label>
                         </div>
                     )}
                 </div>

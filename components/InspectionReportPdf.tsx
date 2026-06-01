@@ -380,11 +380,11 @@ const InspectionReportPdf: React.FC<InspectionReportPdfProps> = ({
         imageNotes.forEach(note => collectedNotes.push({ note, categoryName: category.name }));
       }
     });
-    ((request.general_notes as Note[]) || []).filter(note => !!note.image).forEach(note => collectedNotes.push({ note, categoryName: isRtl ? 'ملاحظات عامة' : 'General Notes' }));
+    ((request.general_notes as Note[]) || []).filter(note => !!note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل')).forEach(note => collectedNotes.push({ note, categoryName: isRtl ? 'ملاحظات عامة' : 'General Notes' }));
     return collectedNotes;
   })();
 
-  const generalTextOnlyNotes = ((request.general_notes as Note[]) || []).filter(note => !note.image);
+  const generalTextOnlyNotes = ((request.general_notes as Note[]) || []).filter(note => !note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل'));
 
   const validAttachments = (request.attached_files || []).filter(f => f.type !== 'internal_draft');
 

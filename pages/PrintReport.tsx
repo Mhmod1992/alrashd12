@@ -261,7 +261,7 @@ const PrintReport: React.FC = () => {
         carModels, inspectionTypes, setPage, predefinedFindings, 
         customFindingCategories, settings, addNotification, goBack,
         fetchAndUpdateSingleRequest, updateRequest, uploadImage, deleteImage, authUser, technicians, employees, sendWhatsAppMessage,
-        showConfirmModal, createActivityLog
+        showConfirmModal, createActivityLog, whatsappApiStatus
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
@@ -346,6 +346,12 @@ const PrintReport: React.FC = () => {
 
     // Effective Data (Original OR Translated)
     const request = translatedRequest || originalRequest;
+    
+    const sentCount = useMemo(() => {
+        if (!originalRequest?.general_notes) return 0;
+        return originalRequest.general_notes.filter(n => n.text && (n.text.includes("__REPORT_READY_NOTIF_SENT__") || n.text.includes("إشعار جاهزية التقرير للعميل"))).length;
+    }, [originalRequest?.general_notes]);
+
     const reportSettings = translatedSettings || settings.reportSettings;
     const effectiveCategories = translatedCategories || customFindingCategories;
 
@@ -1001,7 +1007,7 @@ const PrintReport: React.FC = () => {
             }));
             
             // Process note images
-            const filteredGeneralNotes = ((request.general_notes as Note[]) || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+            const filteredGeneralNotes = ((request.general_notes as Note[]) || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل'));
             const processedGeneralNotes = await Promise.all(filteredGeneralNotes.map(async n => {
                 if (n.image) {
                     const base64 = await processImage(n.image, true);
@@ -1097,6 +1103,82 @@ const PrintReport: React.FC = () => {
 
     const handleWhatsAppShare = () => {
         setIsWhatsAppRecipientModalOpen(true);
+    };
+
+    const handleSendReportReadyNotification = async () => {
+        if (!originalRequest) return;
+        
+        // Safety guard: Max 2 sends
+        const existingCount = (originalRequest.general_notes || []).filter(n => n.text && (n.text.includes("__REPORT_READY_NOTIF_SENT__") || n.text.includes("إشعار جاهزية التقرير للعميل"))).length;
+        if (existingCount >= 2) {
+            addNotification({ title: 'تنبيه', message: 'تم إرسال إشعار الجاهزية للعميل مرتين بالفعل (الحد الأقصى المسموح به).', type: 'warning' });
+            return;
+        }
+
+        const phoneRaw = client?.phone;
+        if (!phoneRaw) {
+            addNotification({ title: 'خطأ', message: 'لا يوجد رقم هاتف مسجل لهذا العميل.', type: 'error' });
+            return;
+        }
+
+        // Format phone number
+        let phone = phoneRaw.replace(/\D/g, '');
+        if (phone.startsWith('05')) {
+            phone = '966' + phone.substring(1);
+        } else if (phone.startsWith('5')) {
+            phone = '966' + phone;
+        }
+
+        try {
+            setIsSendingWhatsApp(true);
+            
+            const clientName = client?.name || 'العميل';
+            const makeEn = originalRequest.car_snapshot?.make_en || carMake?.name_en || originalRequest.car_snapshot?.make_ar || carMake?.name_ar || '';
+            const modelEn = originalRequest.car_snapshot?.model_en || carModel?.name_en || originalRequest.car_snapshot?.model_ar || carModel?.name_ar || '';
+            const carYear = originalRequest.car_snapshot?.year || car?.year || '';
+            const carDetailsFormatted = `*${makeEn} ${modelEn} ${carYear}*`.trim();
+            const reviewLink = settings.reviewLink || settings.googleMapsLink || '';
+
+            const notifMessage = `حياكم الله *${clientName}*،
+
+تم الانتهاء من فحص مركبتكم ${carDetailsFormatted}، ويمكنكم التوجه إلى المكتب لاستلام التقرير.
+
+⭐⭐⭐⭐⭐ نتشرف بتقييمكم لنا على Google ومشاركة تجربتكم مع مركزنا.
+${reviewLink}
+
+شكراً لثقتكم ونسعد بخدمتكم دائماً.
+*إدارة مركز الراشد*`;
+
+            const success = await sendWhatsAppMessage(phone, notifMessage, clientName);
+            if (success) {
+                // Record the notification in the general_notes with hidden system tag
+                const updatedNotes = [...(originalRequest.general_notes || [])];
+                const count = updatedNotes.filter(n => n.text && (n.text.includes("__REPORT_READY_NOTIF_SENT__") || n.text.includes("إشعار جاهزية التقرير للعميل"))).length + 1;
+                const noteText = `__REPORT_READY_NOTIF_SENT__ (المرة ${count === 1 ? 'الأولى' : count === 2 ? 'الثانية' : count > 2 ? `الـ ${count}` : count})`;
+
+                const newNote: Note = {
+                    id: `notif-${Date.now()}`,
+                    text: noteText,
+                    authorId: authUser?.id || 'system',
+                    authorName: authUser?.name || 'النظام'
+                };
+                updatedNotes.push(newNote);
+
+                await updateRequest({
+                    id: originalRequest.id,
+                    general_notes: updatedNotes
+                });
+
+                addNotification({ title: 'نجاح', message: 'تم إرسال إشعار جاهزية التقرير بنجاح.', type: 'success' });
+            } else {
+                addNotification({ title: 'خطأ', message: 'فشل إرسال إشعار جاهزية التقرير عبر واتساب.', type: 'error' });
+            }
+        } catch (error) {
+            console.error('Ready notification error:', error);
+            addNotification({ title: 'خطأ', message: 'حدث خطأ غير متوقع أثناء إرسال الإشعار.', type: 'error' });
+        } finally {
+            setIsSendingWhatsApp(false);
+        }
     };
 
     const handleSendWhatsAppToRecipient = async (recipientPhone: string, recipientName: string) => {
@@ -1457,6 +1539,22 @@ const PrintReport: React.FC = () => {
                                 )}
                                 <span className="hidden sm:inline ms-1">{isSendingWhatsApp ? 'جاري الإرسال...' : 'إرسال واتساب'}</span>
                             </Button>
+                            
+                            {whatsappApiStatus === 'connected' && (
+                                <Button 
+                                    onClick={handleSendReportReadyNotification} 
+                                    variant="whatsapp" 
+                                    size="sm" 
+                                    className="lg:hidden flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white border-emerald-700"
+                                    disabled={isSendingWhatsApp || sentCount >= 2}
+                                >
+                                    <WhatsappIcon className="w-4 h-4" />
+                                    <span className="hidden sm:inline ms-1">إشعار الجاهزية</span>
+                                    <span className="ms-1 bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded-full text-[9px] font-bold">
+                                        {sentCount === 0 ? '0/2' : sentCount === 1 ? '1/2' : '2/2'}
+                                    </span>
+                                </Button>
+                            )}
                             <Button variant="secondary" onClick={handlePrint} size="sm" className="flex-shrink-0" disabled={isGenerating || isSendingWhatsApp}>
                                 <Icon name="print" className="w-4 h-4" />
                                 <span className="hidden sm:inline ms-1">طباعة</span>
@@ -1864,6 +1962,45 @@ const PrintReport: React.FC = () => {
                     </div>
                 </motion.div>
             </AnimatePresence>
+            
+            {/* Desktop Floating Report Ready Notification Card */}
+            {whatsappApiStatus === 'connected' && (
+                <AnimatePresence>
+                    <motion.div 
+                        initial={{ opacity: 0, x: -50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
+                        className="fixed top-[20rem] left-8 z-[60] hidden lg:flex flex-col items-center gap-2.5 p-4 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/50 dark:border-slate-700/50 print:hidden select-none hover:scale-105 transition-transform w-[160px]"
+                    >
+                        <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+                            <WhatsappIcon className="w-4 h-4 text-emerald-500" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">إشعار جاهزية</span>
+                        </div>
+                        
+                        <button 
+                            onClick={handleSendReportReadyNotification}
+                            disabled={isSendingWhatsApp || sentCount >= 2}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none text-white text-xs font-bold py-2 px-3 rounded-xl w-full flex items-center justify-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all text-center leading-tight cursor-pointer disabled:cursor-not-allowed"
+                        >
+                            {isSendingWhatsApp ? 'جاري الإرسال...' : sentCount >= 2 ? 'مكتمل (مرتان)' : 'إرسال الإشعار'}
+                        </button>
+                        
+                        <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent my-0.5" />
+                        
+                        <div className="flex flex-col items-center gap-0.5 text-center">
+                            <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full ${
+                                sentCount === 2 ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400' :
+                                sentCount === 1 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
+                                'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                            }`}>
+                                {sentCount === 0 ? 'بانتظار الإرسال (0/2)' : 
+                                 sentCount === 1 ? 'أرسل مرة (1/2)' : 
+                                 'أرسل مرتين (2/2)'}
+                            </span>
+                        </div>
+                    </motion.div>
+                </AnimatePresence>
+            )}
             
             {/* Desktop Floating Technicians Card */}
             <AnimatePresence>

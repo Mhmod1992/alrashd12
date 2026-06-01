@@ -582,11 +582,12 @@ export const useActionsScope = (
 
 
     // --- RESERVATIONS ---
-    const addReservation = useCallback(async (reservation: Omit<Reservation, 'id' | 'created_at' | 'status'>) => {
+    const addReservation = useCallback(async (reservation: Omit<Reservation, 'id' | 'created_at' | 'status'>): Promise<Reservation> => {
         const { data, error } = await supabase.from('reservations').insert({ ...reservation, status: 'new' }).select().single();
         if (error) throw error;
         setReservations(prev => [data as Reservation, ...prev]);
         addNotification({ title: 'نجاح', message: 'تمت إضافة الحجز.', type: 'success' });
+        return data as Reservation;
     }, [addNotification, setReservations]);
 
     const updateReservationStatus = useCallback(async (id: string, status: 'new' | 'confirmed' | 'converted' | 'cancelled') => {

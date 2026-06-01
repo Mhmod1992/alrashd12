@@ -1195,7 +1195,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
         })}
 
         {/* General Notes */}
-        {((request.general_notes as Note[]) || []).filter(n => !n.image).length > 0 && (
+        {((request.general_notes as Note[]) || []).filter(n => !n.image && n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل')).length > 0 && (
           <View style={[styles.categorySection, { borderColor: reportSettings.borderColor }]}>
             <Text
               style={[styles.categoryTitle, { backgroundColor: reportSettings.findingsHeaderBackgroundColor, color: reportSettings.findingsHeaderFontColor, borderBottomColor: reportSettings.borderColor }]}
@@ -1211,7 +1211,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                 ))}
               </View>
               <View style={styles.notesSection}>
-                {((request.general_notes as Note[]) || []).filter(n => !n.image).map(note => {
+                {((request.general_notes as Note[]) || []).filter(n => !n.image && n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل')).map(note => {
                   const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang])
                     ? note.translations[note.displayTranslation.lang]
                     : note.text;

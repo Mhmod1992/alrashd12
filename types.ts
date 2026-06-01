@@ -31,6 +31,7 @@ export const PERMISSIONS = {
   view_login_notifications: 'عرض إشعارات تسجيل الدخول',
   send_internal_messages: 'إرسال رسائل داخلية',
   create_requests: 'إنشاء طلبات',
+  create_custom_date_request: 'إنشاء طلبات بتاريخ مخصص (يدوي)',
   view_completed_requests: 'عرض الطلبات المكتملة',
   view_waiting_requests: 'عرض الطلبات بانتظار الدفع',
   update_requests_data: 'تحديث بيانات الطلب الأساسية',

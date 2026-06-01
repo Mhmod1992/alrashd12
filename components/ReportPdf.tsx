@@ -325,12 +325,12 @@ const ReportPdf: React.FC<ReportPdfProps> = ({
         })}
 
         {/* General Notes */}
-        {((request.general_notes as Note[]) || []).filter(n => !n.image).length > 0 && (
+        {((request.general_notes as Note[]) || []).filter(n => !n.image && n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل')).length > 0 && (
           <View style={styles.section} wrap={false}>
             <Text style={[styles.categoryTitle, { backgroundColor: reportSettings.findingsHeaderBackgroundColor, color: reportSettings.findingsHeaderFontColor }]}>
               {isLtr ? 'General Notes' : 'ملاحظات عامة'}
             </Text>
-            {((request.general_notes as Note[]) || []).filter(n => !n.image).map(note => (
+            {((request.general_notes as Note[]) || []).filter(n => !n.image && n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل')).map(note => (
               <View key={note.id} style={[styles.noteItem, { flexDirection: isLtr ? 'row' : 'row-reverse' }]}>
                 <View style={[styles.noteBullet, { marginLeft: isLtr ? 0 : 6, marginRight: isLtr ? 6 : 0 }]} />
                 <Text style={[styles.noteText, { textAlign: isLtr ? 'left' : 'right' }]}>{note.text}</Text>

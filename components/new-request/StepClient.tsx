@@ -35,6 +35,11 @@ interface StepClientProps {
     onMagicFill?: () => void;
     hasDefaultClient?: boolean;
     isMobile?: boolean;
+    whatsappApiStatus?: 'connected' | 'disconnected' | 'checking';
+    sendWhatsAppStartNotify?: boolean;
+    setSendWhatsAppStartNotify?: (val: boolean) => void;
+    sendWhatsAppReservationConfirm?: boolean;
+    setSendWhatsAppReservationConfirm?: (val: boolean) => void;
 }
 
 const StepClient: React.FC<StepClientProps> = (props) => {
@@ -72,6 +77,49 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                     </button>
                 )}
             </legend>
+            
+            {props.whatsappApiStatus === 'connected' && props.setSendWhatsAppStartNotify && !props.isReservationMode && (
+                <div className="mb-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 p-3.5 rounded-xl flex items-center gap-3 transition-all duration-200 shadow-sm animate-fade-in w-full">
+                    <label className="flex items-center gap-3 cursor-pointer w-full select-none">
+                        <input
+                            type="checkbox"
+                            checked={props.sendWhatsAppStartNotify}
+                            onChange={(e) => props.setSendWhatsAppStartNotify!(e.target.checked)}
+                            className="w-5 h-5 text-emerald-600 dark:text-emerald-500 border-slate-300 dark:border-slate-600 rounded focus:ring-emerald-500 bg-white dark:bg-slate-700 transition cursor-pointer"
+                        />
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                رسالة ترحيبية للعميل
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                سيتم إرسال رسالة ترحيب وتأكيد بدء الفحص بشكل تلقائي عند إنشاء هذا الطلب
+                            </span>
+                        </div>
+                    </label>
+                </div>
+            )}
+
+            {props.whatsappApiStatus === 'connected' && props.isReservationMode && props.setSendWhatsAppReservationConfirm && (
+                <div className="mb-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 p-3.5 rounded-xl flex items-center gap-3 transition-all duration-200 shadow-sm animate-fade-in w-full">
+                    <label className="flex items-center gap-3 cursor-pointer w-full select-none shadow-sm">
+                        <input
+                            type="checkbox"
+                            checked={props.sendWhatsAppReservationConfirm}
+                            onChange={(e) => props.setSendWhatsAppReservationConfirm!(e.target.checked)}
+                            className="w-5 h-5 text-emerald-600 dark:text-emerald-500 border-slate-300 dark:border-slate-600 rounded focus:ring-emerald-500 bg-white dark:bg-slate-700 transition cursor-pointer"
+                        />
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                إرسال رسالة تأكيد الحجز للمركبة تلقائياً عبر واتساب
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                سيتم إرسال رسالة ترحيب وتأكيد الحجز برقم الموعد وقيمة الفحص للعميل بمجرد حفظ الحجز
+                            </span>
+                        </div>
+                    </label>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative">
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">اسم العميل</label>

@@ -18,6 +18,7 @@ import StepBroker from './new-request/StepBroker';
 import ClientWelcomeCard from './new-request/ClientWelcomeCard';
 import ClientHistoryModal from './ClientHistoryModal';
 import CarHistoryModal from './CarHistoryModal';
+import CustomDatePicker from './CustomDatePicker';
 
 interface NewRequestFormProps {
     clients: Client[];
@@ -31,6 +32,7 @@ interface NewRequestFormProps {
     initialData?: InspectionRequest; // For Edit Mode
     isReservationMode?: boolean;
     forceWhatsApp?: boolean;
+    forceCustomDate?: boolean;
 }
 
 const NewRequestForm: React.FC<NewRequestFormProps> = ({
@@ -44,7 +46,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     initialReservationData,
     initialData,
     isReservationMode = false,
-    forceWhatsApp = false
+    forceWhatsApp = false,
+    forceCustomDate = false
 }) => {
     const {
         settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addNotification,
@@ -53,17 +56,26 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
-        fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation, page
+        fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation, page,
+        sendWhatsAppMessage, whatsappApiStatus
     } = useAppContext();
 
     // Responsive Logic
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [currentStep, setCurrentStep] = useState(1);
+    const [customDate, setCustomDate] = useState<string>(() => {
+        const now = new Date();
+        const tzOffset = now.getTimezoneOffset() * 60000;
+        return new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+    });
+    const [sendWhatsAppStartNotify, setSendWhatsAppStartNotify] = useState<boolean>(true);
+    const [sendWhatsAppReservationConfirm, setSendWhatsAppReservationConfirm] = useState<boolean>(true);
 
     // Determine Role & Mode
     const isReceptionistRole = authUser?.role === 'receptionist';
     const isReceptionistMode = isReceptionistRole || page === 'waiting-requests';
     const isEditMode = !!initialData;
+    const shouldShowWhatsAppCheckbox = !isReservationMode && !isEditMode && (!!initialReservationData || !isReceptionistMode);
     const TOTAL_STEPS = (isReceptionistMode || isReservationMode) ? 3 : 4;
 
     useEffect(() => {
@@ -1287,7 +1299,35 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 await updateReservation(initialReservationData.id, reservationData);
                 addNotification({ title: 'تم التحديث', message: 'تم تحديث بيانات الحجز بنجاح.', type: 'success' });
             } else {
-                await addReservation(reservationData);
+                const savedReservation = await addReservation(reservationData);
+                
+                if (sendWhatsAppReservationConfirm && whatsappApiStatus === 'connected' && clientPhone) {
+                    try {
+                        const cleanPhone = clientPhone.replace(/\D/g, '');
+                        const phoneWithCode = cleanPhone.startsWith('966') ? cleanPhone : `966${cleanPhone.startsWith('0') ? cleanPhone.substring(1) : cleanPhone}`;
+                        
+                        const customer_name = clientName;
+                        const car_name = make && model ? `${make.name_en} ${model.name_en} ${carYear}` : car_details;
+                        const booking_no = savedReservation.reservation_number ? `RSV-${String(savedReservation.reservation_number).padStart(4, '0')}` : '---';
+                        const priceVal = Number(inspectionPrice) || 0;
+                        const priceLine = priceVal > 0 ? `\nقيمة الفحص: ${priceVal} ريال` : '';
+
+                        const whatsAppMessage = `أهلاً بك ${customer_name}،
+
+يسعدنا تأكيد حجز موعد فحص مركبتكم بنجاح في مركزنا.
+
+السيارة: ${car_name}
+رقم الحجز: ${booking_no}${priceLine}
+
+يرجى إبراز رقم الحجز عند الوصول للمركز.
+
+يسعد فريقنا بخدمتكم في الموعد المحدد، ونتطلع لاستقبالكم.`;
+
+                        await sendWhatsAppMessage(phoneWithCode, whatsAppMessage, customer_name, { suppressModal: true });
+                    } catch (wsErr) {
+                        console.error("Failed to send reservation confirmation whatsapp message", wsErr);
+                    }
+                }
             }
 
             onSuccess();
@@ -1415,7 +1455,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
             } else {
-                const requestDate = new Date();
+                const requestDate = forceCustomDate && customDate ? new Date(customDate) : new Date();
 
                 const newAddedRequest = await addRequestOptimized({
                     clientName,
@@ -1440,6 +1480,19 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 });
 
                 if (newAddedRequest) {
+                    if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected' && newStatus !== RequestStatus.WAITING_PAYMENT && finalPaymentType !== PaymentType.Unpaid) {
+                        const message = `حياكم الله ${clientName}،
+
+تم تأكيد استلام مركبتكم *${carSnapshot.make_en || ''} ${carSnapshot.model_en || ''} ${carYear || ''}*
+وبدء إجراءات الفحص الفني في مركزنا.
+
+نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة، وسيتم إشعاركم فور الجاهزية.
+
+شكراً لاختياركم مركزنا.
+*ادارة مركز الراشد*`;
+                        await sendWhatsAppMessage(clientPhone, message, clientName, { suppressModal: true });
+                    }
+
                     showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number, forceWhatsApp);
                     onSuccess(newAddedRequest);
                 }
@@ -1573,6 +1626,42 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
             <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 pb-20 md:pb-0">
 
+                {forceCustomDate && (
+                    <div className="bg-amber-500/10 dark:bg-amber-500/5 p-4 rounded-xl border border-amber-500/20 shadow-sm animate-fade-in">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <h4 className="text-sm font-bold text-amber-800 dark:text-amber-400 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-amber-600 dark:text-amber-500"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                    <span>إنشاء طلب جديد بتاريخ مخصص</span>
+                                </h4>
+                                <p className="text-xs text-amber-650 dark:text-amber-500/80">
+                                    أنت تقوم بإنشاء هذا الطلب بتاريخ قديم أو مخصص يدوياً.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <CustomDatePicker
+                                    value={customDate.split('T')[0]}
+                                    onChange={(dateVal) => {
+                                        const timePart = customDate.includes('T') ? customDate.split('T')[1] : '12:00';
+                                        setCustomDate(`${dateVal}T${timePart}`);
+                                    }}
+                                    maxDate={null}
+                                    className="p-2.5 bg-white dark:bg-slate-900 border border-amber-500/30 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                                />
+                                <input
+                                    type="time"
+                                    value={customDate.includes('T') ? customDate.split('T')[1].slice(0, 5) : '12:00'}
+                                    onChange={(e) => {
+                                        const datePart = customDate.split('T')[0];
+                                        setCustomDate(`${datePart}T${e.target.value || '12:00'}`);
+                                    }}
+                                    className="p-2.5 bg-white dark:bg-slate-900 border border-amber-500/30 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-mono w-28"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Toggles for display - ONLY in Reservation Mode */}
                 {isReservationMode && (
                     <div className="flex flex-wrap gap-4 mb-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border dark:border-slate-700 shadow-sm">
@@ -1634,6 +1723,11 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             onMagicFill={handleMagicFill}
                             hasDefaultClient={initialClients.some(c => c.is_system_default)}
                             isMobile={isMobile}
+                            whatsappApiStatus={(shouldShowWhatsAppCheckbox || (isReservationMode && (!initialReservationData || !initialReservationData.id))) ? whatsappApiStatus : undefined}
+                            sendWhatsAppStartNotify={sendWhatsAppStartNotify}
+                            setSendWhatsAppStartNotify={setSendWhatsAppStartNotify}
+                            sendWhatsAppReservationConfirm={sendWhatsAppReservationConfirm}
+                            setSendWhatsAppReservationConfirm={setSendWhatsAppReservationConfirm}
                         />
                     )}
                 </div>

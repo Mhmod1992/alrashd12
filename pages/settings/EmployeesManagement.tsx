@@ -26,7 +26,7 @@ const roleNames: Record<Role, string> = {
 const defaultPermissionsByRole: Record<Role, Permission[]> = {
     general_manager: Object.keys(PERMISSIONS) as Permission[],
     manager: [
-        'view_dashboard', 'view_financials', 'manage_clients', 'create_requests', 'view_completed_requests',
+        'view_dashboard', 'view_financials', 'manage_clients', 'create_requests', 'create_custom_date_request', 'view_completed_requests',
         'fill_requests', 'update_requests_data', 'delete_requests', 'view_request_info', 'print_request',
         'view_activity_log', 'delete_activity_log', 'view_archive', 'manage_notes', 'manage_findings', 'change_request_status', 'mark_request_complete', 'manage_brokers',
         'add_broker_commission', 'pay_broker_commission',
@@ -47,7 +47,7 @@ const categorizedPermissions: Record<string, Permission[]> = {
     'المالية والتقارير': ['view_financials', 'manage_revenues', 'manage_expenses'],
     'الإدارة والإعدادات': ['manage_employees', 'manage_brokers', 'add_broker_commission', 'pay_broker_commission', 'view_settings'],
     'شؤون الموظفين': ['view_hr_page', 'view_hr_global_directory', 'view_hr_salaries_payrolls', 'view_hr_performance_record'],
-    'إجراءات الطلبات والعمليات': ['create_requests', 'fill_requests', 'update_requests_data', 'change_request_status', 'mark_request_complete', 'delete_requests', 'print_request', 'view_request_info', 'view_car_history_on_create', 'manage_notes', 'manage_findings', 'view_activity_log', 'delete_activity_log', 'resend_whatsapp_report'],
+    'إجراءات الطلبات والعمليات': ['create_requests', 'create_custom_date_request', 'fill_requests', 'update_requests_data', 'change_request_status', 'mark_request_complete', 'delete_requests', 'print_request', 'view_request_info', 'view_car_history_on_create', 'manage_notes', 'manage_findings', 'view_activity_log', 'delete_activity_log', 'resend_whatsapp_report'],
     'إجراءات أخرى وإعدادات تفصيلية': ['send_internal_messages', 'view_login_notifications', 'export_data', 'edit_request_price', 'process_payment', 'delete_expenses', 'delete_whatsapp_messages', 'manage_settings_general', 'manage_settings_technical', 'manage_appearance', 'manage_api_keys']
 };
 

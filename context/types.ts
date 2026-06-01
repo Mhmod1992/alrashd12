@@ -235,7 +235,7 @@ export interface AppContextType {
     // --- Reservations ---
     reservations: Reservation[];
     fetchReservations: () => Promise<void>;
-    addReservation: (reservation: Omit<Reservation, 'id' | 'created_at' | 'status'>) => Promise<void>;
+    addReservation: (reservation: Omit<Reservation, 'id' | 'created_at' | 'status'>) => Promise<Reservation>;
     updateReservationStatus: (id: string, status: 'new' | 'confirmed' | 'converted' | 'cancelled') => Promise<void>;
     updateReservation: (id: string, data: Partial<Omit<Reservation, 'id' | 'created_at'>>) => Promise<void>;
     deleteReservation: (id: string) => Promise<void>;
