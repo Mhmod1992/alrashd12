@@ -556,22 +556,46 @@ const Financials: React.FC = () => {
         let series: { label: string, currentRevenue: number, currentCount: number, previousRevenue: number, previousCount: number }[] = [];
 
         if (filterType === 'today' || filterType === 'yesterday') {
-            // Group by hour - Start from 7 AM as per working hours
-            for (let i = 7; i <= 23; i++) {
-                const hour = i % 12 || 12;
-                const ampm = i < 12 ? 'AM' : 'PM';
-                const hourLabel = `${hour}${ampm}`;
+            // Helper to get index relative to shift starting at 4:00 AM
+            const getShiftHourIndex = (date: Date) => {
+                const hours = date.getHours();
+                if (hours >= 4) {
+                    return hours - 4;
+                } else {
+                    return hours + 20;
+                }
+            };
+
+            const currentIndices = stats.filteredRequests.map(r => getShiftHourIndex(new Date(r.created_at)));
+            const prevIndices = prevStats.filteredRequests.map(r => getShiftHourIndex(new Date(r.created_at)));
+            const allIndices = [...currentIndices, ...prevIndices];
+
+            let minHourIndex = 3; // default starts at 7 AM (7 - 4 = 3)
+            let maxHourIndex = 19; // default ends at 11 PM (23 - 4 = 19)
+
+            if (allIndices.length > 0) {
+                minHourIndex = Math.min(...allIndices);
+                maxHourIndex = Math.max(...allIndices);
+                
+                // Add 1 hour buffer on each end for a cleaner visual look, within shift bounds [0, 23]
+                minHourIndex = Math.max(0, minHourIndex - 1);
+                maxHourIndex = Math.min(23, maxHourIndex + 1);
+            }
+
+            for (let i = minHourIndex; i <= maxHourIndex; i++) {
+                const actualHour = (i + 4) % 24;
+                const h = actualHour % 12 || 12;
+                const ampm = actualHour < 12 ? 'AM' : 'PM';
+                const hourLabel = `${h}${ampm}`;
                 
                 const currentHourReqs = stats.filteredRequests.filter(r => {
                     const date = new Date(r.created_at);
-                    if (i === 7) return date.getHours() === 7 && date.getMinutes() >= 30;
-                    return date.getHours() === i;
+                    return getShiftHourIndex(date) === i;
                 });
                 
                 const prevHourReqs = prevStats.filteredRequests.filter(r => {
                     const date = new Date(r.created_at);
-                    if (i === 7) return date.getHours() === 7 && date.getMinutes() >= 30;
-                    return date.getHours() === i;
+                    return getShiftHourIndex(date) === i;
                 });
                 
                 series.push({ 
