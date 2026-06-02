@@ -16,7 +16,7 @@ const ExpensesPrintTable: React.FC<ExpensesPrintTableProps> = ({ expenses }) => 
       <table className="w-full border-collapse border border-black text-[8.5pt] leading-tight">
         <thead>
           <tr className="bg-rose-50 italic">
-             <th colSpan={4} className="border border-black p-1.5 text-right font-black bg-rose-100 text-rose-900 uppercase tracking-widest">
+             <th colSpan={5} className="border border-black p-1.5 text-right font-black bg-rose-100 text-rose-900 uppercase tracking-widest">
                 بيان المصروفات التفصيلي للفترة المحددة
              </th>
           </tr>
@@ -24,6 +24,7 @@ const ExpensesPrintTable: React.FC<ExpensesPrintTableProps> = ({ expenses }) => 
             <th className="border border-black p-1 text-center font-bold w-32">التاريخ</th>
             <th className="border border-black p-1 text-right font-bold w-48">الفئة</th>
             <th className="border border-black p-1 text-right font-bold">الوصف / البيان</th>
+            <th className="border border-black p-1 text-right font-bold w-40">بواسطة (الموظف)</th>
             <th className="border border-black p-1 text-center font-bold w-32">المبلغ (ريال)</th>
           </tr>
         </thead>
@@ -35,6 +36,7 @@ const ExpensesPrintTable: React.FC<ExpensesPrintTableProps> = ({ expenses }) => 
               </td>
               <td className="border border-black p-1 text-right font-bold text-[8pt]">{expense.category}</td>
               <td className="border border-black p-1 text-right text-[8pt]">{expense.description}</td>
+              <td className="border border-black p-1 text-right text-[8pt] font-medium text-slate-700">{expense.employeeName || 'النظام'}</td>
               <td className="border border-black p-1 text-center font-black text-[9pt] bg-rose-50/20 text-rose-700">
                 {expense.amount.toLocaleString()}
               </td>
@@ -42,7 +44,7 @@ const ExpensesPrintTable: React.FC<ExpensesPrintTableProps> = ({ expenses }) => 
           ))}
           
           <tr className="bg-rose-100 font-black border-t-2 border-black">
-            <td colSpan={3} className="border border-black p-2 text-center text-sm">إجمالي المصروفات</td>
+            <td colSpan={4} className="border border-black p-2 text-center text-sm">إجمالي المصروفات</td>
             <td className="border border-black p-2 text-center text-[10pt] text-rose-900 bg-rose-200">
                 {total.toLocaleString()} ر.س
             </td>
@@ -52,7 +54,7 @@ const ExpensesPrintTable: React.FC<ExpensesPrintTableProps> = ({ expenses }) => 
 
       <div className="mt-4 p-3 border border-dashed border-rose-300 rounded-xl bg-rose-50/30 print:bg-transparent">
         <p className="text-[7.5pt] font-bold text-rose-800">
-            * تم قيد هذه المصروفات بمعرفة: {expenses.length > 0 ? expenses[0].employeeName : 'النظام'}
+            * قُيدت المصروفات بمعرفة موظفي المركز وموثقة بالأسماء بالبيان أعلاه لكل حركة بشكل فردي.
         </p>
       </div>
     </div>

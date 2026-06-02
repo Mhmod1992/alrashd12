@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
     DollarSign, 
     TrendingUp, 
@@ -293,6 +294,43 @@ const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ da
         </div>
     );
 
+    const lastRequestIndex = React.useMemo(() => {
+        for (let i = data.length - 1; i >= 0; i--) {
+            if (data[i] && data[i].currentCount > 0) {
+                return i;
+            }
+        }
+        return -1;
+    }, [data]);
+
+    const renderCurrentRevenueDot = (dotProps: any) => {
+        const { cx, cy, index } = dotProps;
+        if (index === lastRequestIndex) {
+            return (
+                <g key={`dot-last-${index}`}>
+                    <circle 
+                        cx={cx} 
+                        cy={cy} 
+                        r={9} 
+                        fill="#ef4444" 
+                        className="animate-ping" 
+                        style={{ transformOrigin: `${cx}px ${cy}px` }} 
+                        opacity={0.5}
+                    />
+                    <circle 
+                        cx={cx} 
+                        cy={cy} 
+                        r={5} 
+                        fill="#ef4444" 
+                        stroke="#ffffff" 
+                        strokeWidth={1.5} 
+                    />
+                </g>
+            );
+        }
+        return null;
+    };
+
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
             return (
@@ -392,6 +430,7 @@ const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ da
                         fillOpacity={1}
                         fill="url(#colorCurrent)"
                         animationDuration={1500}
+                        dot={renderCurrentRevenueDot}
                     />
 
                     {/* Hidden lines for counts just to have them in tooltip */}
@@ -555,7 +594,10 @@ const Financials: React.FC = () => {
         
         let series: { label: string, currentRevenue: number, currentCount: number, previousRevenue: number, previousCount: number }[] = [];
 
-        if (filterType === 'today' || filterType === 'yesterday') {
+        // Check if filterType is custom range spanning a single day
+        const isSingleDayRange = filterType === 'range' && appliedStartDate && appliedEndDate && isSameDay(new Date(appliedStartDate), new Date(appliedEndDate));
+
+        if (filterType === 'today' || filterType === 'yesterday' || isSingleDayRange) {
             // Helper to get index relative to shift starting at 4:00 AM
             const getShiftHourIndex = (date: Date) => {
                 const hours = date.getHours();
@@ -756,7 +798,13 @@ const Financials: React.FC = () => {
                         <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
                             <table className="w-full text-sm text-right">
                                 <thead className="bg-gray-50 dark:bg-slate-700 text-xs font-bold text-gray-500 uppercase">
-                                    <tr><th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th><th className="px-4 py-3 border-b dark:border-slate-600">الفئة</th><th className="px-4 py-3 border-b dark:border-slate-600">الوصف</th><th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th></tr>
+                                    <tr>
+                                        <th className="px-4 py-3 border-b dark:border-slate-600">التاريخ</th>
+                                        <th className="px-4 py-3 border-b dark:border-slate-600">الفئة</th>
+                                        <th className="px-4 py-3 border-b dark:border-slate-600">الوصف</th>
+                                        <th className="px-4 py-3 border-b dark:border-slate-600">بواسطة</th>
+                                        <th className="px-4 py-3 border-b dark:border-slate-600">المبلغ</th>
+                                    </tr>
                                 </thead>
                                 <tbody className="divide-y dark:divide-slate-600 bg-white dark:bg-slate-800">
                                     {visibleExpenses.map(exp => (
@@ -764,10 +812,11 @@ const Financials: React.FC = () => {
                                             <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300 font-numeric">{new Date(exp.date).toLocaleDateString('en-GB')}</td>
                                             <td className="px-4 py-3"><span className="bg-slate-100 dark:bg-slate-600 px-2 py-0.5 rounded text-xs font-bold text-slate-700 dark:text-slate-200">{exp.category}</span></td>
                                             <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{exp.description}</td>
+                                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-bold text-xs">{exp.employeeName || 'النظام'}</td>
                                             <td className="px-4 py-3 font-bold text-red-600 font-numeric">{exp.amount.toLocaleString('en-US')}</td>
                                         </tr>
                                     ))}
-                                    {visibleExpenses.length === 0 && <tr><td colSpan={4} className="text-center py-6 text-slate-400">لا توجد مصروفات</td></tr>}
+                                    {visibleExpenses.length === 0 && <tr><td colSpan={5} className="text-center py-6 text-slate-400">لا توجد مصروفات</td></tr>}
                                 </tbody>
                             </table>
                         </div>
@@ -1182,14 +1231,15 @@ const Financials: React.FC = () => {
                 </AnimatePresence>
             </div>
 
-            {isLoading && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm transition-all duration-300">
+            {isLoading && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm transition-all duration-300 pointer-events-auto">
                     <div className="flex flex-col items-center justify-center p-8 bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700">
                         <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                         <p className="text-lg font-black text-slate-800 dark:text-white mb-1">جاري تحميل البيانات...</p>
                         <p className="text-xs font-bold text-slate-500">يرجى الانتظار لحظات</p>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* --- BENTO GRID STATS --- */}
@@ -1332,7 +1382,12 @@ const Financials: React.FC = () => {
             <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl rounded-[40px] border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm print:bg-white print:border-[0.5px] print:border-slate-900 print:rounded-3xl print:shadow-none print:overflow-visible">
                 <div className="p-8 border-b dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-6 print:py-4 print:px-6">
                     <div>
-                        <h3 className="text-2xl font-black text-slate-800 dark:text-white print:text-lg">جدول العمليات التفصيلي</h3>
+                        <div className="flex items-center gap-3">
+                            <h3 className="text-2xl font-black text-slate-800 dark:text-white print:text-lg">جدول العمليات التفصيلي</h3>
+                            <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-3 py-1 text-xs font-black rounded-xl border border-blue-100 dark:border-blue-900/30">
+                                {displayedRequests.length} {displayedRequests.length === 1 ? 'طلب' : displayedRequests.length > 10 ? 'طلبًا' : 'طلبات'}
+                            </span>
+                        </div>
                         <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest print:hidden">عرض وتصفية جميع طلبات الفحص للفترة المختارة</p>
                     </div>
 

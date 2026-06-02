@@ -104,35 +104,50 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
 
   const getGlassClasses = () => {
       const intensity = settings.glassmorphismIntensity || 5;
-      const opacity = 1.0 - (intensity * 0.065);
-      const darkOpacity = 1.0 - (intensity * 0.05);
       const blurLevels: { [key: number]: string } = {1: 'sm', 2: 'sm', 3: '', 4: '', 5: 'md', 6: 'md', 7: 'lg', 8: 'lg', 9: 'xl', 10: 'xl' };
       const blur = blurLevels[intensity] || 'md';
       const blurClass = `backdrop-blur${blur ? `-${blur}` : ''}`;
-      const glassBg = `bg-white/[${opacity.toFixed(2)}] dark:bg-slate-800/[${darkOpacity.toFixed(2)}] ${blurClass}`;
 
       return {
-          header: `${glassBg} border-b border-white/20 dark:border-slate-700/50`,
-          dropdown: `bg-white/[${(opacity + 0.3).toFixed(2)}] dark:bg-slate-800/[${(darkOpacity + 0.2).toFixed(2)}] backdrop-blur-lg border dark:border-slate-700`,
+          header: `${blurClass} border-b border-white/20 dark:border-slate-700/50`,
+          dropdown: `backdrop-blur-lg border dark:border-slate-700`,
       };
   };
 
-  const { headerClasses, menuDropdownClasses } = useMemo(() => {
-      const headerStyle = settings.headerStyle || 'default';
+  const { headerClasses, menuDropdownClasses, headerStyleValue, dropdownStyleValue } = useMemo(() => {
+      const headerStylePref = settings.headerStyle || 'default';
+      const intensity = settings.glassmorphismIntensity || 5;
+      const opacity = Math.max(0, 1.0 - (intensity * 0.065));
+      const darkOpacity = Math.max(0, 1.0 - (intensity * 0.05));
 
       if (design === 'glass') {
           const classes = getGlassClasses();
-          const elevatedShadow = headerStyle === 'elevated' ? 'shadow-xl' : 'shadow-lg';
-          return { headerClasses: `${classes.header} ${elevatedShadow}`, menuDropdownClasses: classes.dropdown };
+          const elevatedShadow = headerStylePref === 'elevated' ? 'shadow-xl' : 'shadow-lg';
+          return { 
+              headerClasses: `${classes.header} ${elevatedShadow}`, 
+              menuDropdownClasses: classes.dropdown,
+              headerStyleValue: {
+                  backgroundColor: theme === 'light' 
+                      ? `rgba(255, 255, 255, ${opacity.toFixed(2)})` 
+                      : `rgba(15, 23, 42, ${darkOpacity.toFixed(2)})`
+              },
+              dropdownStyleValue: {
+                  backgroundColor: theme === 'light'
+                      ? `rgba(255, 255, 255, ${Math.min(1.0, opacity + 0.3).toFixed(2)})`
+                      : `rgba(15, 23, 42, ${Math.min(1.0, darkOpacity + 0.2).toFixed(2)})`
+              }
+          };
       }
       
-      const elevatedShadow = headerStyle === 'elevated' ? 'shadow-lg' : 'shadow-sm';
+      const elevatedShadow = headerStylePref === 'elevated' ? 'shadow-lg' : 'shadow-sm';
 
       return {
           headerClasses: `bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 ${elevatedShadow}`,
-          menuDropdownClasses: 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700'
+          menuDropdownClasses: 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700',
+          headerStyleValue: {},
+          dropdownStyleValue: {}
       };
-  }, [design, settings.glassmorphismIntensity, settings.headerStyle]);
+  }, [design, settings.glassmorphismIntensity, settings.headerStyle, theme]);
 
   // Filtering Logic: 
   // If tab is 'unread', strictly filter out read items.
@@ -181,7 +196,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   }, [latestWhatsAppMessage, setLatestWhatsAppMessage]);
 
   return (
-    <header className={`relative flex items-center justify-between h-20 px-6 gap-6 z-40 no-print ${headerClasses}`}>
+    <header className={`relative flex items-center justify-between h-20 px-6 gap-6 z-40 no-print ${headerClasses}`} style={headerStyleValue}>
       
       {/* Left Side: Mobile/Tablet Toggle & Search */}
       <div className="flex items-center flex-1 max-w-2xl">
@@ -372,11 +387,14 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
             </button>
 
             {isNotificationsOpen && (
-                <div className={`
-                    fixed left-4 right-4 top-20 w-auto md:absolute md:inset-auto md:left-0 md:top-full md:mt-3 md:w-96
-                    rounded-2xl shadow-2xl z-50 overflow-hidden transform origin-top transition-all duration-200 animate-slide-in-down 
-                    ${menuDropdownClasses}
-                `}>
+                <div 
+                    className={`
+                        fixed left-4 right-4 top-20 w-auto md:absolute md:inset-auto md:left-0 md:top-full md:mt-3 md:w-96
+                        rounded-2xl shadow-2xl z-50 overflow-hidden transform origin-top transition-all duration-200 animate-slide-in-down 
+                        ${menuDropdownClasses}
+                    `}
+                    style={dropdownStyleValue}
+                >
                     <div className="px-4 py-3 border-b dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-md flex justify-between items-center">
                         <h3 className="font-bold text-slate-800 dark:text-slate-100">الإشعارات</h3>
                         {unreadCount > 0 && (
@@ -524,7 +542,10 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
             </button>
             
             {isMenuOpen && (
-              <div className={`absolute left-0 mt-3 w-56 rounded-xl shadow-xl z-50 animate-slide-in-down overflow-hidden ${menuDropdownClasses}`}>
+              <div 
+                className={`absolute left-0 mt-3 w-56 rounded-xl shadow-xl z-50 animate-slide-in-down overflow-hidden ${menuDropdownClasses}`}
+                style={dropdownStyleValue}
+              >
                 <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
                     <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{authUser.name}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{authUser.email}</p>
