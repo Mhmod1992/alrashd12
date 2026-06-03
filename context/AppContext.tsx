@@ -1291,10 +1291,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                 const { data: requestHistory } = await supabase
                     .from('inspection_requests')
-                    .select('*')
+                    .select('*, client:clients(*)')
                     .in('car_id', carIds)
                     .order('created_at', { ascending: false })
-                    .limit(5);
+                    .limit(10);
 
                 let lastClient: Client | undefined;
                 if (requestHistory && requestHistory.length > 0) {

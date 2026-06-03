@@ -582,36 +582,83 @@ const VehicleHistorySearchModal: React.FC<{ onClose: () => void }> = ({
                     الزيارات الأخيرة
                   </p>
                   <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2">
-                    {foundResult.previousRequests.map((req) => (
-                      <div
-                        key={req.id}
-                        className="p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl flex justify-between items-center group hover:border-blue-300 transition-colors"
-                      >
-                        <div>
-                          <p className="font-bold text-xs text-slate-700 dark:text-slate-200 mb-0.5">
-                            #{req.request_number}
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">
-                            {(() => {
-                              const d = new Date(req.created_at);
-                              if (d.getHours() < 4) d.setDate(d.getDate() - 1);
-                              return d.toLocaleDateString("ar-SA");
-                            })()}
-                          </p>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${req.id}&from=print`;
-                            window.open(url, "_blank");
-                          }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity px-2.5 py-1 text-xs"
+                    {foundResult.previousRequests.map((req: any) => {
+                      const d = new Date(req.created_at);
+                      if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+                      
+                      const dStart = new Date(d);
+                      dStart.setHours(0, 0, 0, 0);
+
+                      const now = new Date();
+                      if (now.getHours() < 4) now.setDate(now.getDate() - 1);
+                      now.setHours(0, 0, 0, 0);
+
+                      const diffTime = Math.abs(now.getTime() - dStart.getTime());
+                      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                      
+                      let relativeFormat = `منذ ${diffDays} يوماً`;
+                      if (diffDays === 0) relativeFormat = "اليوم";
+                      else if (diffDays === 1) relativeFormat = "منذ يوم";
+                      else if (diffDays === 2) relativeFormat = "منذ يومين";
+                      else if (diffDays >= 3 && diffDays <= 10) relativeFormat = `منذ ${diffDays} أيام`;
+
+                      const englishDate = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+                      const dayName = d.toLocaleDateString("ar-SA", { weekday: 'long' });
+
+                      const cName = req.client?.name || foundResult.lastClient?.name || "غير معروف";
+                      const cPhone = req.client?.phone || foundResult.lastClient?.phone || "غير متوفر";
+
+                      return (
+                        <div
+                          key={req.id}
+                          className="px-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl flex items-center justify-between group hover:border-blue-300 transition-colors"
                         >
-                          معاينة
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="flex flex-1 items-center justify-between pl-4 gap-2">
+                            {/* Column 1: Order & Date */}
+                            <div className="flex flex-col gap-1 min-w-[70px]">
+                              <span className="font-bold text-xs text-slate-700 dark:text-slate-200">
+                                #{req.request_number}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono text-left" dir="ltr">
+                                {englishDate}
+                              </span>
+                            </div>
+
+                            {/* Column 2: Day & Relative */}
+                            <div className="flex flex-col gap-1 min-w-[80px]">
+                              <span className="font-bold text-xs text-slate-700 dark:text-slate-200">
+                                {dayName}
+                              </span>
+                              <span className="text-[10px] text-emerald-600 font-medium whitespace-nowrap">
+                                {relativeFormat}
+                              </span>
+                            </div>
+
+                            {/* Column 3: Client Info */}
+                            <div className="flex flex-col gap-1 min-w-[100px] text-right">
+                              <span className="font-bold text-xs text-slate-700 dark:text-slate-200 truncate max-w-[120px]">
+                                {cName}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono" dir="ltr">
+                                {cPhone}
+                              </span>
+                            </div>
+                          </div>
+
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${req.id}&from=print`;
+                              window.open(url, "_blank");
+                            }}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 px-3 py-1.5 text-[11px] font-bold rounded-lg transition-colors whitespace-nowrap"
+                          >
+                            عرض التقرير
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </>
