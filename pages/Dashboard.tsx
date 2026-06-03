@@ -596,11 +596,33 @@ const VehicleHistorySearchModal: React.FC<{ onClose: () => void }> = ({
                       const diffTime = Math.abs(now.getTime() - dStart.getTime());
                       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                       
-                      let relativeFormat = `منذ ${diffDays} يوماً`;
-                      if (diffDays === 0) relativeFormat = "اليوم";
-                      else if (diffDays === 1) relativeFormat = "منذ يوم";
-                      else if (diffDays === 2) relativeFormat = "منذ يومين";
-                      else if (diffDays >= 3 && diffDays <= 10) relativeFormat = `منذ ${diffDays} أيام`;
+                      let relativeFormat = "";
+                      if (diffDays === 0) {
+                        relativeFormat = "اليوم";
+                      } else if (diffDays === 1) {
+                        relativeFormat = "منذ يوم";
+                      } else if (diffDays === 2) {
+                        relativeFormat = "منذ يومين";
+                      } else if (diffDays < 7) {
+                        relativeFormat = `منذ ${diffDays} أيام`;
+                      } else if (diffDays < 30) {
+                        const weeks = Math.floor(diffDays / 7);
+                        if (weeks === 1) relativeFormat = "منذ أسبوع";
+                        else if (weeks === 2) relativeFormat = "منذ أسبوعين";
+                        else relativeFormat = `منذ ${weeks} أسابيع`;
+                      } else if (diffDays < 365) {
+                        const months = Math.floor(diffDays / 30);
+                        if (months === 1) relativeFormat = "منذ شهر";
+                        else if (months === 2) relativeFormat = "منذ شهرين";
+                        else if (months >= 3 && months <= 10) relativeFormat = `منذ ${months} أشهر`;
+                        else relativeFormat = `منذ ${months} شهراً`;
+                      } else {
+                        const years = Math.floor(diffDays / 365);
+                        if (years === 1) relativeFormat = "منذ سنة";
+                        else if (years === 2) relativeFormat = "منذ سنتين";
+                        else if (years >= 3 && years <= 10) relativeFormat = `منذ ${years} سنوات`;
+                        else relativeFormat = `منذ ${years} سنة`;
+                      }
 
                       const englishDate = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
                       const dayName = d.toLocaleDateString("ar-SA", { weekday: 'long' });
