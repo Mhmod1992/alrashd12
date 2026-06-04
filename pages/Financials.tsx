@@ -415,7 +415,11 @@ const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ da
                         align="right" 
                         height={36}
                         iconType="circle"
-                        formatter={(value) => <span className="text-[10px] font-bold text-slate-500 mx-2">{value === 'currentRevenue' ? 'الدخل الحالي' : 'الدخل السابق'}</span>}
+                        formatter={(value) => {
+                            if (value === 'currentRevenue') return <span className="text-[10px] font-bold text-slate-500 mx-2">الدخل الحالي</span>;
+                            if (value === 'previousRevenue') return <span className="text-[10px] font-bold text-slate-500 mx-2">الدخل السابق</span>;
+                            return null;
+                        }}
                     />
                     
                     {/* Previous Period Revenue */}
@@ -443,8 +447,8 @@ const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ da
                     />
 
                     {/* Hidden lines for counts just to have them in tooltip */}
-                    <ReChartAreaLine type="monotone" dataKey="currentCount" stroke="transparent" fill="transparent" />
-                    <ReChartAreaLine type="monotone" dataKey="previousCount" stroke="transparent" fill="transparent" />
+                    <ReChartAreaLine type="monotone" dataKey="currentCount" stroke="transparent" fill="transparent" legendType="none" />
+                    <ReChartAreaLine type="monotone" dataKey="previousCount" stroke="transparent" fill="transparent" legendType="none" />
                 </ReChartArea>
             </ResponsiveContainer>
         </div>
@@ -628,9 +632,9 @@ const Financials: React.FC = () => {
                 minHourIndex = Math.min(...allIndices);
                 maxHourIndex = Math.max(...allIndices);
                 
-                // Add 1 hour buffer on each end for a cleaner visual look, within shift bounds [0, 23]
-                minHourIndex = Math.max(0, minHourIndex - 1);
-                maxHourIndex = Math.min(23, maxHourIndex + 1);
+                // Keep 0 hour buffer at start, and 2 hours buffer at the end
+                minHourIndex = Math.max(0, minHourIndex);
+                maxHourIndex = Math.min(23, maxHourIndex + 2);
             }
 
             for (let i = minHourIndex; i <= maxHourIndex; i++) {
