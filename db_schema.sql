@@ -149,6 +149,10 @@ CREATE TABLE IF NOT EXISTS clients (
     phone TEXT NOT NULL,
     is_vip BOOLEAN DEFAULT false,
     is_system_default BOOLEAN DEFAULT false,
+    loyalty_points NUMERIC DEFAULT 0,
+    total_spent NUMERIC DEFAULT 0,
+    email TEXT,
+    address TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -209,6 +213,7 @@ CREATE TABLE IF NOT EXISTS technicians (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     title TEXT,
+    phone TEXT,
     is_active BOOLEAN DEFAULT true,
     salary NUMERIC DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT now()
@@ -265,6 +270,8 @@ CREATE TABLE IF NOT EXISTS employees (
     email TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     role TEXT NOT NULL,
+    title TEXT,
+    phone TEXT,
     permissions TEXT[],
     is_active BOOLEAN DEFAULT true,
     password TEXT,

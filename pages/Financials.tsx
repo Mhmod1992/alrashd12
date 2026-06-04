@@ -303,11 +303,20 @@ const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ da
         return -1;
     }, [data]);
 
+    const firstRequestIndex = React.useMemo(() => {
+        for (let i = 0; i < data.length; i++) {
+            if (data[i] && (data[i].currentCount > 0 || data[i].currentRevenue > 0)) {
+                return i;
+            }
+        }
+        return -1;
+    }, [data]);
+
     const renderCurrentRevenueDot = (dotProps: any) => {
         const { cx, cy, index } = dotProps;
-        if (index === lastRequestIndex) {
+        if (index === lastRequestIndex || index === firstRequestIndex) {
             return (
-                <g key={`dot-last-${index}`}>
+                <g key={`dot-${index === lastRequestIndex ? 'last' : 'first'}-${index}`}>
                     <circle 
                         cx={cx} 
                         cy={cy} 
