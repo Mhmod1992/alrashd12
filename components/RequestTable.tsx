@@ -25,6 +25,7 @@ import XIcon from './icons/XIcon';
 import UserXIcon from './icons/UserXIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import ClientHistoryModal from './ClientHistoryModal';
+import { Banknote, CreditCard, ArrowRightLeft, Clock } from 'lucide-react';
 
 const SmartRowWrapper: React.FC<{
     request: InspectionRequest;
@@ -781,7 +782,20 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                             (car.vin && carsWithHistory.has(car.vin.trim()))
                         );
 
-                        // Price column extras
+                        // Price column payment icons & suffixes
+                        let paymentIcon = null;
+                        if (request.payment_type === PaymentType.Cash) {
+                            paymentIcon = <Banknote className="w-3.5 h-3.5 text-emerald-500 mx-1" title="نقدي" />;
+                        } else if (request.payment_type === PaymentType.Card) {
+                            paymentIcon = <CreditCard className="w-3.5 h-3.5 text-blue-500 mx-1" title="بطاقة" />;
+                        } else if (request.payment_type === PaymentType.Transfer) {
+                            paymentIcon = <ArrowRightLeft className="w-3.5 h-3.5 text-amber-500 mx-1" title="تحويل" />;
+                        } else if (request.payment_type === PaymentType.Split) {
+                            paymentIcon = <div className="flex -space-x-1 mx-1"><Banknote className="w-3.5 h-3.5 text-emerald-500" /><CreditCard className="w-3.5 h-3.5 text-blue-500" /></div>;
+                        } else if (request.payment_type === PaymentType.Unpaid) {
+                            paymentIcon = <Clock className="w-3.5 h-3.5 text-rose-500 mx-1 animate-pulse" title="آجل" />;
+                        }
+
                         let priceSuffix = null;
                         if (request.payment_type === PaymentType.Unpaid) {
                             priceSuffix = <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold bg-rose-100 dark:bg-rose-900/50 px-1.5 py-0.5 rounded mr-1">(آجل)</span>;
@@ -944,6 +958,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                     <div className="flex items-center gap-1">
                                                         {request.price.toLocaleString('en-US')} 
                                                         <span className="text-xs font-normal text-slate-500">ريال</span>
+                                                        {paymentIcon}
                                                         {priceSuffix}
                                                     </div>
                                                     {request.broker?.id && (
@@ -1144,6 +1159,27 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                 title="عرض المسودة"
                                             >
                                                 <FileTextIcon className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        
+                                        {request.payment_type === PaymentType.Unpaid && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const message = `مرحباً بك عميلنا العزيز ${clientInfo.name}،\nنفيدكم بأن هناك مبلغ متبقي لدفع الفحص الخاص بكم بمقدار ${request.price} ريال.\nالرجاء السداد في أقرب وقت.\nشكراً لتعاملكم معنا.`;
+                                                    
+                                                    // Ensure phone starts with country code or standard prefix
+                                                    let safePhone = clientInfo.phone || '';
+                                                    if (safePhone.startsWith('05')) safePhone = '966' + safePhone.slice(1);
+                                                    else if (!safePhone.startsWith('966')) safePhone = '966' + safePhone;
+                                                    
+                                                    const url = `https://wa.me/${safePhone}?text=${encodeURIComponent(message)}`;
+                                                    window.open(url, '_blank');
+                                                }}
+                                                className="p-2 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all"
+                                                title="تذكير بالدفع - آجل"
+                                            >
+                                                <WhatsappIcon className="w-4 h-4" />
                                             </button>
                                         )}
                                         
