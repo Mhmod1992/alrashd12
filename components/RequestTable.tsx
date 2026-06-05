@@ -212,6 +212,27 @@ const StatusBadge: React.FC<{ status: RequestStatus }> = ({ status }) => {
     }
 };
 
+const getTypeGlowColor = (name: string) => {
+    if (!name || name === 'غير معروف') {
+        return "text-slate-600 dark:text-slate-400";
+    }
+    const colors = [
+        "text-blue-600 dark:text-blue-400 drop-shadow-[0_0_6px_rgba(37,99,235,0.6)] dark:drop-shadow-[0_0_6px_rgba(96,165,250,0.8)]",
+        "text-emerald-600 dark:text-emerald-400 drop-shadow-[0_0_6px_rgba(5,150,105,0.6)] dark:drop-shadow-[0_0_6px_rgba(52,211,153,0.8)]",
+        "text-violet-600 dark:text-violet-400 drop-shadow-[0_0_6px_rgba(124,58,237,0.6)] dark:drop-shadow-[0_0_6px_rgba(167,139,250,0.8)]",
+        "text-amber-500 dark:text-amber-400 drop-shadow-[0_0_6px_rgba(217,119,6,0.6)] dark:drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]",
+        "text-pink-600 dark:text-pink-400 drop-shadow-[0_0_6px_rgba(219,39,119,0.6)] dark:drop-shadow-[0_0_6px_rgba(244,114,182,0.8)]",
+        "text-cyan-600 dark:text-cyan-400 drop-shadow-[0_0_6px_rgba(8,145,178,0.6)] dark:drop-shadow-[0_0_6px_rgba(34,211,238,0.8)]",
+        "text-rose-600 dark:text-rose-400 drop-shadow-[0_0_6px_rgba(225,29,72,0.6)] dark:drop-shadow-[0_0_6px_rgba(251,113,133,0.8)]",
+        "text-fuchsia-600 dark:text-fuchsia-400 drop-shadow-[0_0_6px_rgba(192,38,211,0.6)] dark:drop-shadow-[0_0_6px_rgba(232,121,249,0.8)]"
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+};
+
 const RequestTable: React.FC<RequestTableProps> = React.memo(({ 
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
   title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
@@ -915,7 +936,13 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                     </div>
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    <span 
+                                        className={`text-sm font-bold ${!inspectionType?.color ? getTypeGlowColor(inspectionType?.name || 'غير معروف') : ''}`}
+                                        style={inspectionType?.color ? { 
+                                            color: inspectionType.color,
+                                            filter: `drop-shadow(0 0 6px ${inspectionType.color}99)`
+                                        } : {}}
+                                    >
                                         {inspectionType?.name || 'غير معروف'}
                                     </span>
                                 </td>

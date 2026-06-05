@@ -181,6 +181,7 @@ export interface InspectionType {
   id: string;
   name: string;
   price: number;
+  color?: string;
   finding_category_ids: string[];
   fill_tab_order_ids?: string[];
 }

@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS inspection_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     price NUMERIC DEFAULT 0,
+    color TEXT,
     finding_category_ids TEXT[], -- Array of UUIDs as strings
     fill_tab_order_ids TEXT[],
     created_at TIMESTAMPTZ DEFAULT now()
@@ -580,3 +581,5 @@ ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_messages;
 -- ===============================================================
 -- End of Schema
 -- ===============================================================
+
+ALTER TABLE inspection_types ADD COLUMN IF NOT EXISTS color TEXT;

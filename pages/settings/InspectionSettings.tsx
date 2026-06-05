@@ -399,11 +399,19 @@ const InspectionSettingsTab: React.FC = () => {
                                 >
                                     <div className="flex justify-between items-center">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                            <div 
+                                                className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                                                style={type.color ? { backgroundColor: `${type.color}20`, color: type.color } : {}}
+                                            >
                                                     <Icon name="document-report" className="w-5 h-5" />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{type.name}</p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{type.name}</p>
+                                                    {type.color && (
+                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: type.color, boxShadow: `0 0 4px ${type.color}80` }}></div>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs font-bold text-green-600 dark:text-green-400">{type.price} ريال</p>
                                             </div>
                                         </div>
@@ -714,6 +722,7 @@ const TypeForm: React.FC<{ type?: InspectionType, onClose: () => void, onSave: (
     const { customFindingCategories } = useAppContext();
     const [name, setName] = useState(type?.name || '');
     const [price, setPrice] = useState<number | ''>(type?.price !== undefined ? type.price : '');
+    const [color, setColor] = useState(type?.color || '');
     const [selectedCategories, setSelectedCategories] = useState<string[]>(type?.finding_category_ids || []);
     const [fillTabOrder, setFillTabOrder] = useState<string[]>(type?.fill_tab_order_ids || type?.finding_category_ids || []);
     const [activeOrderTab, setActiveOrderTab] = useState<'report' | 'fill'>('report');
@@ -784,6 +793,7 @@ const TypeForm: React.FC<{ type?: InspectionType, onClose: () => void, onSave: (
         onSave({ 
             name, 
             price: Number(price), 
+            color,
             finding_category_ids: selectedCategories,
             fill_tab_order_ids: fillTabOrder 
         });
@@ -792,7 +802,7 @@ const TypeForm: React.FC<{ type?: InspectionType, onClose: () => void, onSave: (
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
                 <div>
                     <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">اسم نوع الفحص</label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"/>
@@ -807,6 +817,43 @@ const TypeForm: React.FC<{ type?: InspectionType, onClose: () => void, onSave: (
                         placeholder="0"
                         className="w-full p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                     />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">اللون المميز (معاينة)</label>
+                    <div className="flex items-center gap-2 border border-slate-200 dark:border-slate-700 rounded-md p-1.5 bg-slate-50 dark:bg-slate-800/50 min-h-[44px]">
+                        <input 
+                            type="color" 
+                            value={color || '#64748b'} 
+                            onChange={e => setColor(e.target.value)}
+                            className="h-8 w-10 p-0 border-0 bg-transparent rounded cursor-pointer shrink-0"
+                        />
+                        <div className="flex-1 flex items-center justify-center px-2">
+                            {color ? (
+                                <span 
+                                    className="text-sm font-bold text-center leading-tight"
+                                    style={{ 
+                                        color: color,
+                                        filter: `drop-shadow(0 0 6px ${color}99)`
+                                    }}
+                                >
+                                    {name || 'اسم الفحص'}
+                                </span>
+                            ) : (
+                                <span className="text-sm font-bold text-center leading-tight text-slate-500">
+                                    {name || 'اسم الفحص'}
+                                </span>
+                            )}
+                        </div>
+                        {color && (
+                            <button 
+                                type="button" 
+                                onClick={() => setColor('')}
+                                className="text-xs text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 px-2 py-1 rounded transition-colors shrink-0"
+                            >
+                                إزالة
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
