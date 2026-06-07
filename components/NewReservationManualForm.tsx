@@ -16,10 +16,21 @@ const NewReservationManualForm: React.FC<NewReservationManualFormProps> = ({ onC
         carMakes, 
         carModels, 
         inspectionTypes, 
+        requests,
         addReservation, 
         addNotification,
         fetchCarModelsByMake
     } = useAppContext();
+
+    const sortedInspectionTypes = React.useMemo(() => {
+        const counts: Record<string, number> = {};
+        requests.forEach(r => {
+            if (r.inspection_type_id) {
+                counts[r.inspection_type_id] = (counts[r.inspection_type_id] || 0) + 1;
+            }
+        });
+        return [...inspectionTypes].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+    }, [inspectionTypes, requests]);
 
     // LocalStorage keys
     const STORAGE_KEY_CLIENT = 'reservation_show_client_fields';
@@ -235,7 +246,7 @@ const NewReservationManualForm: React.FC<NewReservationManualFormProps> = ({ onC
                             }`}
                         >
                             <option value="">اختر نوع الفحص...</option>
-                            {inspectionTypes.map(t => (
+                            {sortedInspectionTypes.map(t => (
                                 <option key={t.id} value={t.id}>{t.name}</option>
                             ))}
                         </select>

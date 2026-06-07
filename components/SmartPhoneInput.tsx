@@ -10,6 +10,7 @@ interface SmartPhoneInputProps {
     id?: string;
     onFocus?: () => void;
     onBlur?: () => void;
+    onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>(({
@@ -20,11 +21,22 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
     className = '',
     id,
     onFocus,
-    onBlur
+    onBlur,
+    onKeyDown
 }, ref) => {
     const [isFocused, setIsFocused] = useState(false);
+    const [selectionRange, setSelectionRange] = useState<[number, number] | null>(null);
     const internalRef = useRef<HTMLInputElement>(null);
     const combinedRef = (ref as React.RefObject<HTMLInputElement>) || internalRef;
+
+    const handleSelect = (e: React.SyntheticEvent<HTMLInputElement>) => {
+        const target = e.target as HTMLInputElement;
+        if (target.selectionStart !== null && target.selectionEnd !== null && target.selectionStart !== target.selectionEnd) {
+            setSelectionRange([target.selectionStart, target.selectionEnd]);
+        } else {
+            setSelectionRange(null);
+        }
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -55,16 +67,21 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
                             
                             <div className="relative flex items-center justify-center w-[0.85em]">
                                 {/* Integrated Smart Cursor */}
-                                {isFocused && isCurrent && (
+                                {isFocused && isCurrent && !selectionRange && (
                                     <div className="absolute inset-y-1 -left-0.5 w-[2px] bg-blue-500 animate-pulse rounded-full z-10" />
                                 )}
                                 
                                 {/* Case for cursor at the very end (mask full) */}
-                                {isFocused && i === 9 && value.length === 10 && (
+                                {isFocused && i === 9 && value.length === 10 && !selectionRange && (
                                     <div className="absolute inset-y-1 -right-0.5 w-[2px] bg-blue-500 animate-pulse rounded-full z-10" />
                                 )}
 
-                                <span className={`transition-all duration-200 ${
+                                {/* Selection Background Highlight */}
+                                {selectionRange && i >= selectionRange[0] && i < selectionRange[1] && (
+                                    <div className="absolute inset-0 bg-blue-200/50 dark:bg-blue-500/40 z-0 rounded-sm" />
+                                )}
+
+                                <span className={`transition-all duration-200 z-10 relative ${
                                     isFilled 
                                         ? 'text-slate-900 dark:text-slate-100 font-bold text-lg' 
                                         : 'text-slate-300 dark:text-slate-600/40 text-sm'
@@ -100,12 +117,16 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
                 type="tel"
                 value={value}
                 onChange={handleChange}
-                onFocus={() => { setIsFocused(true); onFocus?.(); }}
-                onBlur={() => { setIsFocused(false); onBlur?.(); }}
+                onSelect={handleSelect}
+                onKeyDown={onKeyDown}
+                onKeyUp={handleSelect}
+                onMouseUp={handleSelect}
+                onFocus={(e) => { setIsFocused(true); handleSelect(e); onFocus?.(); }}
+                onBlur={(e) => { setIsFocused(false); handleSelect(e); onBlur?.(); }}
                 autoFocus={autoFocus}
                 required={required}
                 maxLength={10}
-                className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-text"
+                className="absolute inset-0 w-full h-full bg-transparent text-transparent z-10 cursor-text selection:bg-transparent dark:selection:bg-transparent caret-transparent focus:outline-none"
                 autoComplete="off"
                 style={{ direction: 'ltr' }}
             />

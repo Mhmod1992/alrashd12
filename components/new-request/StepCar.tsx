@@ -331,6 +331,7 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                             {(props.displayMakes).map((make, index) => (
                                 <li
                                     key={make.id}
+                                    id={`suggestion-make-${index}`}
                                     onMouseDown={() => props.handleMakeSelection(make)}
                                     onMouseOver={() => props.setMakeSuggestionIndex(index)}
                                     className={`px-4 py-2 cursor-pointer ${index === props.makeSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
@@ -379,6 +380,7 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                             {props.displayModels.map((model, index) => (
                                 <li
                                     key={model.id}
+                                    id={`suggestion-model-${index}`}
                                     onMouseDown={() => props.handleModelSelection(model)}
                                     onMouseOver={() => props.setModelSuggestionIndex(index)}
                                     className={`px-4 py-2 cursor-pointer ${index === props.modelSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}

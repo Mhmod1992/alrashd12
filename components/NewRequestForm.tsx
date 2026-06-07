@@ -57,7 +57,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
         fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation, page,
-        sendWhatsAppMessage, whatsappApiStatus
+        sendWhatsAppMessage, whatsappApiStatus, requests
     } = useAppContext();
 
     // Responsive Logic
@@ -761,7 +761,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         clientObj: exactClient
                     });
                     
-                    setIsWelcomeCardVisible(true); // Show Floating Card
+                    // DO NOT automatically show welcome card here, wait for selection or blur
+                    // setIsWelcomeCardVisible(true); 
 
                     // Filter Debts
                     const debts = history.filter(r => 
@@ -1043,11 +1044,19 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
-                setIndex((prev: number) => (prev + 1) % suggestions.length);
+                setIndex((prev: number) => {
+                    const next = (prev + 1) % suggestions.length;
+                    document.getElementById(`suggestion-${type}-${next}`)?.scrollIntoView({ block: 'nearest' });
+                    return next;
+                });
                 break;
             case 'ArrowUp':
                 e.preventDefault();
-                setIndex((prev: number) => (prev - 1 + suggestions.length) % suggestions.length);
+                setIndex((prev: number) => {
+                    const next = (prev - 1 + suggestions.length) % suggestions.length;
+                    document.getElementById(`suggestion-${type}-${next}`)?.scrollIntoView({ block: 'nearest' });
+                    return next;
+                });
                 break;
             case 'Enter':
                 e.preventDefault();
@@ -1166,12 +1175,21 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const displayInspectionTypes = useMemo(() => {
+        const counts: Record<string, number> = {};
+        requests.forEach(r => {
+            if (r.inspection_type_id) {
+                counts[r.inspection_type_id] = (counts[r.inspection_type_id] || 0) + 1;
+            }
+        });
+        
+        let types = [...inspectionTypes].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+        
         const term = inspectionTypeSearchTerm.trim().toLowerCase();
         if (term) {
-            return inspectionTypes.filter(t => t.name.toLowerCase().includes(term));
+            return types.filter(t => t.name.toLowerCase().includes(term));
         }
-        return inspectionTypes;
-    }, [inspectionTypeSearchTerm, inspectionTypes]);
+        return types;
+    }, [inspectionTypeSearchTerm, inspectionTypes, requests]);
 
     const validateStep = (step: number) => {
         const newErrors: Record<string, boolean> = {};

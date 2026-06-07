@@ -146,6 +146,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                             {props.nameSuggestions.map((client, index) => (
                                 <li
                                     key={client.id}
+                                    id={`suggestion-name-${index}`}
                                     onMouseDown={() => props.onClientSelection(client, props.phoneInputRef.current!)}
                                     onMouseOver={() => props.setNameSuggestionIndex(index)}
                                     className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.nameSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
@@ -167,6 +168,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                                 const e = { target: { value: val } } as React.ChangeEvent<HTMLInputElement>;
                                 props.onPhoneChange(e);
                             }}
+                            onKeyDown={(e) => props.onKeyDown(e, 'phone')}
                             onFocus={props.onPhoneFocus}
                             onBlur={() => {}} // Placeholder or keep current logic
                             required={!props.isReservationMode}
@@ -183,6 +185,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                             {props.phoneSuggestions.map((client, index) => (
                                 <li
                                     key={client.id}
+                                    id={`suggestion-phone-${index}`}
                                     onMouseDown={() => props.onClientSelection(client)}
                                     onMouseOver={() => props.setPhoneSuggestionIndex(index)}
                                     className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.phoneSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}

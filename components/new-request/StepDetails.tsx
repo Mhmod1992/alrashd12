@@ -108,6 +108,7 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
                             {props.displayInspectionTypes.map((type, index) => (
                                 <li
                                     key={type.id}
+                                    id={`suggestion-inspectionType-${index}`}
                                     onMouseDown={() => props.handleTypeSelection && props.handleTypeSelection(type)}
                                     onMouseOver={() => props.setTypeSuggestionIndex && props.setTypeSuggestionIndex(index)}
                                     className={`px-4 py-2 cursor-pointer ${index === props.typeSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}

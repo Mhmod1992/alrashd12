@@ -60,8 +60,7 @@ export const KeyboardLayoutCorrector: React.FC = () => {
   // Update position based on viewport bounds (fixed layout coordinates)
   const updatePosition = (el: HTMLElement) => {
     const rect = el.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const shouldAbove = spaceBelow < 110; // place above if viewport height is small below
+    const shouldAbove = rect.top > 60; // Always prefer above to avoid covering dropdowns, unless no space
     
     setPlaceAbove(shouldAbove);
     setPosition({
