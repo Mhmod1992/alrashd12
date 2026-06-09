@@ -347,6 +347,7 @@ CREATE TABLE IF NOT EXISTS customer_display_queue (
     plate_en TEXT,
     car_logo TEXT,
     status TEXT,
+    ready_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 

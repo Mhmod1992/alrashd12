@@ -59,7 +59,7 @@ export const useActionsScope = (
 
     const syncToTvDisplay = useCallback(async (request: InspectionRequest) => {
         try {
-            const tvData = {
+            const tvData: any = {
                 request_id: request.id,
                 request_number: request.request_number,
                 car_name_ar: `${request.car_snapshot?.make_ar || ''} ${request.car_snapshot?.model_ar || ''}`.trim(),
@@ -67,8 +67,7 @@ export const useActionsScope = (
                 plate_ar: request.car_snapshot ? (request as any).plate_number : '', // Falling back if needed
                 plate_en: request.car_snapshot ? (request as any).plate_number_en : '',
                 status: request.status,
-                // We'll fetch the logo separately if needed, or just send a placeholder for now
-                // Ideally, car_snapshot would include it or we join later
+                ready_at: request.status === 'Completed' ? new Date().toISOString() : null,
             };
 
             // If we have access to the car data directly from state or need to fetch it
