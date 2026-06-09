@@ -336,6 +336,20 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     link_page TEXT
 );
 
+-- Customer Display Queue Table (for TV)
+CREATE TABLE IF NOT EXISTS customer_display_queue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id UUID REFERENCES inspection_requests(id) ON DELETE CASCADE,
+    request_number INTEGER,
+    car_name_ar TEXT,
+    car_name_en TEXT,
+    plate_ar TEXT,
+    plate_en TEXT,
+    car_logo TEXT,
+    status TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Expenses Table
 CREATE TABLE IF NOT EXISTS expenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -443,6 +457,7 @@ ALTER TABLE other_revenues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE internal_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_display_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 
 -- Create "Allow All" policies for authenticated users (Simplified for initial setup)
@@ -456,6 +471,9 @@ BEGIN
         EXECUTE format('CREATE POLICY "Allow all for authenticated users" ON %I FOR ALL USING (auth.role() = ''authenticated'') WITH CHECK (auth.role() = ''authenticated'');', t);
     END LOOP;
 END $$;
+
+-- Specific Policies for Customer Display Table
+CREATE POLICY "Public Read Access for Customer Display" ON customer_display_queue FOR SELECT USING (true);
 
 -- Specific Policies for Notifications Table
 -- 1. تفعيل نظام حماية الأسطر (RLS) لجدول التنبيهات

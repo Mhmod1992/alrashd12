@@ -57,6 +57,40 @@ export const useActionsScope = (
         }
     }, [authUser]);
 
+    const syncToTvDisplay = useCallback(async (request: InspectionRequest) => {
+        try {
+            const tvData = {
+                request_id: request.id,
+                request_number: request.request_number,
+                car_name_ar: `${request.car_snapshot?.make_ar || ''} ${request.car_snapshot?.model_ar || ''}`.trim(),
+                car_name_en: `${request.car_snapshot?.make_en || ''} ${request.car_snapshot?.model_en || ''}`.trim(),
+                plate_ar: request.car_snapshot ? (request as any).plate_number : '', // Falling back if needed
+                plate_en: request.car_snapshot ? (request as any).plate_number_en : '',
+                status: request.status,
+                // We'll fetch the logo separately if needed, or just send a placeholder for now
+                // Ideally, car_snapshot would include it or we join later
+            };
+
+            // If we have access to the car data directly from state or need to fetch it
+            const { data: carData } = await supabase.from('cars').select('plate_number, plate_number_en, make_id').eq('id', request.car_id).single();
+            if (carData) {
+                tvData.plate_ar = carData.plate_number;
+                tvData.plate_en = carData.plate_number_en;
+                
+                // Try to get the logo URL from car_makes
+                const { data: makeData } = await supabase.from('car_makes').select('logo_url').eq('id', carData.make_id).single();
+                if (makeData) {
+                    tvData.car_logo = makeData.logo_url;
+                }
+            }
+
+            const { error } = await supabase.from('customer_display_queue').upsert(tvData, { onConflict: 'request_id' });
+            if (error) throw error;
+        } catch (e) {
+            console.error("Failed to sync to TV display:", e);
+        }
+    }, []);
+
     // --- REQUESTS ---
     const updateRequest = useCallback(async (updatedRequest: Partial<InspectionRequest> & { id: string }): Promise<void> => {
         setRequests(prev => prev.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } : r));
@@ -66,7 +100,13 @@ export const useActionsScope = (
         });
         const { error } = await supabase.from('inspection_requests').update(updatedRequest).eq('id', updatedRequest.id);
         if (error) throw error;
-    }, [setRequests, setSearchedRequests]);
+
+        // Sync to TV after update
+        const fullRequest = requests.find(r => r.id === updatedRequest.id);
+        if (fullRequest) {
+            syncToTvDisplay({ ...fullRequest, ...updatedRequest });
+        }
+    }, [setRequests, setSearchedRequests, requests, syncToTvDisplay]);
 
     const updateRequestAndAssociatedData = useCallback(async (payload: { originalRequest: InspectionRequest; formData: { client_id: string; car: Partial<Omit<Car, 'id'>>; request: any; } }) => {
         const { originalRequest, formData } = payload;
@@ -122,9 +162,13 @@ export const useActionsScope = (
         const { data, error } = await supabase.from('inspection_requests').insert(requestData).select().single();
         if (error) throw error;
         await fetchRequests();
+        
+        // Sync to TV after creation
+        if (data) syncToTvDisplay(data as InspectionRequest);
+        
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return data;
-    }, [sendSystemNotification, fetchRequests, addNotification]);
+    }, [sendSystemNotification, fetchRequests, addNotification, syncToTvDisplay]);
 
     const addRequestOptimized = useCallback(async (payload: {
         clientName: string;
@@ -177,10 +221,13 @@ export const useActionsScope = (
         
         // Trigger a background fetch to update clients and other metadata (like history counts)
         fetchRequests().catch(console.error);
+
+        // Sync to TV after creation
+        syncToTvDisplay(newRequest);
         
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return newRequest;
-    }, [setRequests, addNotification, fetchRequests]);
+    }, [setRequests, addNotification, fetchRequests, syncToTvDisplay]);
 
 
     // --- CLIENTS ---
