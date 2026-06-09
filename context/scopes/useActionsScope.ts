@@ -5,7 +5,8 @@ import {
     InspectionRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Expense, Revenue,
     InternalMessage, Technician, Reservation, ActivityLog, Employee,
-    AppNotification, Notification, PaymentType, Page, WhatsAppMessage
+    AppNotification, Notification, PaymentType, Page, WhatsAppMessage,
+    RequestStatus
 } from '../../types';
 
 export const useActionsScope = (
@@ -67,7 +68,7 @@ export const useActionsScope = (
                 plate_ar: request.car_snapshot ? (request as any).plate_number : '', // Falling back if needed
                 plate_en: request.car_snapshot ? (request as any).plate_number_en : '',
                 status: request.status,
-                ready_at: request.status === 'Completed' ? new Date().toISOString() : null,
+                ready_at: request.status === RequestStatus.COMPLETE ? new Date().toISOString() : null,
             };
 
             // If we have access to the car data directly from state or need to fetch it
