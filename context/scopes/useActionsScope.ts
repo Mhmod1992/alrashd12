@@ -101,10 +101,12 @@ export const useActionsScope = (
         const { error } = await supabase.from('inspection_requests').update(updatedRequest).eq('id', updatedRequest.id);
         if (error) throw error;
 
-        // Sync to TV after update
-        const fullRequest = requests.find(r => r.id === updatedRequest.id);
-        if (fullRequest) {
-            syncToTvDisplay({ ...fullRequest, ...updatedRequest });
+        // Sync to TV after update ONLY if status is being changed
+        if ('status' in updatedRequest) {
+            const fullRequest = requests.find(r => r.id === updatedRequest.id);
+            if (fullRequest) {
+                syncToTvDisplay({ ...fullRequest, ...updatedRequest });
+            }
         }
     }, [setRequests, setSearchedRequests, requests, syncToTvDisplay]);
 
