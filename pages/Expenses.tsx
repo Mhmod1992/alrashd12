@@ -14,7 +14,7 @@ import UserCircleIcon from '../components/icons/UserCircleIcon';
 import { SkeletonTable } from '../components/Skeleton';
 
 // --- Constants ---
-const COMMON_CATEGORIES = ['قطع غيار', 'رواتب', 'فواتير كهرباء', 'إيجار', 'ضيافة', 'صيانة معدات', 'أدوات مكتبية', 'تسويق', 'نثريات'];
+const EXPENSE_CATEGORIES = ['رواتب', 'ضيافة', 'تسوق', 'ادوات مكتبية', 'اخر'];
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
 
@@ -546,31 +546,19 @@ const Expenses: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">فئة المصروف</label>
-                            <div className="flex flex-wrap gap-2 mb-3">
-                                {COMMON_CATEGORIES.map(cat => (
-                                    <button
-                                        key={cat}
-                                        type="button"
-                                        onClick={() => { setCurrentExpense(p => ({...p, category: cat})); setCustomCategory(cat); }}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${currentExpense.category === cat ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-50'}`}
-                                    >
-                                        {cat}
-                                    </button>
+                            <select
+                                value={currentExpense.category || ''}
+                                onChange={e => {
+                                    setCurrentExpense(p => ({...p, category: e.target.value}));
+                                    setCustomCategory(e.target.value);
+                                }}
+                                className={formInputClasses}
+                            >
+                                <option value="" disabled>اختر الفئة...</option>
+                                {EXPENSE_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
                                 ))}
-                            </div>
-                            <div className="relative">
-                                <input 
-                                    type="text" 
-                                    value={customCategory} 
-                                    onChange={e => { setCustomCategory(e.target.value); setCurrentExpense(p => ({...p, category: e.target.value})); }}
-                                    className={formInputClasses} 
-                                    placeholder="أو اكتب فئة أخرى..." 
-                                    list="categories-list"
-                                />
-                                <datalist id="categories-list">
-                                    {COMMON_CATEGORIES.map(c => <option key={c} value={c} />)}
-                                </datalist>
-                            </div>
+                            </select>
                         </div>
 
                         {isEditing && (
