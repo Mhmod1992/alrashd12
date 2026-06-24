@@ -806,15 +806,15 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                         // Price column payment icons & suffixes
                         let paymentIcon = null;
                         if (request.payment_type === PaymentType.Cash) {
-                            paymentIcon = <Banknote className="w-3.5 h-3.5 text-emerald-500 mx-1" title="نقدي" />;
+                            paymentIcon = <span title="نقدي"><Banknote className="w-3.5 h-3.5 text-emerald-500 mx-1" /></span>;
                         } else if (request.payment_type === PaymentType.Card) {
-                            paymentIcon = <CreditCard className="w-3.5 h-3.5 text-blue-500 mx-1" title="بطاقة" />;
+                            paymentIcon = <span title="بطاقة"><CreditCard className="w-3.5 h-3.5 text-blue-500 mx-1" /></span>;
                         } else if (request.payment_type === PaymentType.Transfer) {
-                            paymentIcon = <ArrowRightLeft className="w-3.5 h-3.5 text-amber-500 mx-1" title="تحويل" />;
+                            paymentIcon = <span title="تحويل"><ArrowRightLeft className="w-3.5 h-3.5 text-amber-500 mx-1" /></span>;
                         } else if (request.payment_type === PaymentType.Split) {
                             paymentIcon = <div className="flex -space-x-1 mx-1"><Banknote className="w-3.5 h-3.5 text-emerald-500" /><CreditCard className="w-3.5 h-3.5 text-blue-500" /></div>;
                         } else if (request.payment_type === PaymentType.Unpaid) {
-                            paymentIcon = <Clock className="w-3.5 h-3.5 text-rose-500 mx-1 animate-pulse" title="آجل" />;
+                            paymentIcon = <span title="آجل"><Clock className="w-3.5 h-3.5 text-rose-500 mx-1 animate-pulse" /></span>;
                         }
 
                         let priceSuffix = null;

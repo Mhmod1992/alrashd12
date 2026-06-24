@@ -957,6 +957,22 @@ const RecentActivity: React.FC<{ logs: ActivityLog[]; isLoading: boolean }> = ({
   );
 };
 
+const getSafeCachedStats = (key: string): FinancialStats | null => {
+  try {
+    const cached = localStorage.getItem(key);
+    if (!cached) return null;
+    const parsed = JSON.parse(cached);
+    const data = parsed?.data;
+    if (data && Array.isArray(data.filteredRequests) && Array.isArray(data.filteredExpenses)) {
+      return data;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error loading cached stats for key ${key}:`, error);
+    return null;
+  }
+};
+
 const Dashboard: React.FC = () => {
   const {
     authUser,
@@ -979,8 +995,7 @@ const Dashboard: React.FC = () => {
     "today" | "week" | "month" | "year"
   >("today");
   const [stats, setStats] = useState<FinancialStats | null>(() => {
-    const cached = localStorage.getItem("dashboard_main_stats_cache");
-    return cached ? JSON.parse(cached).data : null;
+    return getSafeCachedStats("dashboard_main_stats_cache");
   });
   const [clientStats, setClientStats] = useState<{
     total: number;
@@ -995,16 +1010,14 @@ const Dashboard: React.FC = () => {
   });
   const [prevStats, setPrevStats] = useState<FinancialStats | null>(null);
   const [pulseStats, setPulseStats] = useState<FinancialStats | null>(() => {
-    const cached = localStorage.getItem("dashboard_revenue_pulse_cache");
-    return cached ? JSON.parse(cached).data : null;
+    return getSafeCachedStats("dashboard_revenue_pulse_cache");
   });
   const [forecastData, setForecastData] = useState<any[]>(() => {
     const cached = localStorage.getItem("dashboard_forecast_cache");
     return cached ? JSON.parse(cached) : [];
   });
   const [monthStats, setMonthStats] = useState<FinancialStats | null>(() => {
-    const cached = localStorage.getItem("dashboard_month_stats_cache");
-    return cached ? JSON.parse(cached).data : null;
+    return getSafeCachedStats("dashboard_month_stats_cache");
   });
   const [prevMonthStats, setPrevMonthStats] = useState<FinancialStats | null>(
     null,
@@ -1013,18 +1026,17 @@ const Dashboard: React.FC = () => {
     "yesterday" | "week" | "month" | "all"
   >("month");
   const [carStats, setCarStats] = useState<FinancialStats | null>(() => {
-    const cached = localStorage.getItem("dashboard_car_stats_cache");
-    return cached ? JSON.parse(cached).data : null;
+    return getSafeCachedStats("dashboard_car_stats_cache");
   });
   const [allCarModels, setAllCarModels] = useState<any[]>(() => {
     const cached = localStorage.getItem("dashboard_car_models_cache");
     return cached ? JSON.parse(cached) : [];
   });
   const [isCarLoading, setIsCarLoading] = useState(
-    !localStorage.getItem("dashboard_car_stats_cache"),
+    !getSafeCachedStats("dashboard_car_stats_cache"),
   );
   const [isLoading, setIsLoading] = useState(
-    !localStorage.getItem("dashboard_main_stats_cache"),
+    !getSafeCachedStats("dashboard_main_stats_cache"),
   );
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
@@ -1355,7 +1367,7 @@ const Dashboard: React.FC = () => {
 
   // Derived Data
   const activeCars =
-    stats?.filteredRequests.filter(
+    (stats?.filteredRequests || []).filter(
       (r) => r.status === "قيد التنفيذ" || r.status === "جديد",
     ).length || 0;
 
@@ -1545,7 +1557,7 @@ const Dashboard: React.FC = () => {
 
   const transactionFeed = useMemo(() => {
     if (!stats) return [];
-    const incomes = stats.filteredRequests.map((r) => ({
+    const incomes = (stats.filteredRequests || []).map((r) => ({
       type: "income",
       amount: r.price,
       date: r.created_at,
@@ -1554,7 +1566,7 @@ const Dashboard: React.FC = () => {
         employees.find((e) => e.id === r.employee_id)?.name.split(" ")[0] ||
         "-",
     }));
-    const expenses = stats.filteredExpenses.map((e) => ({
+    const expenses = (stats.filteredExpenses || []).map((e) => ({
       type: "expense",
       amount: e.amount,
       date: e.date,
@@ -1622,7 +1634,7 @@ const Dashboard: React.FC = () => {
     // Use allCarModels if available, fallback to context carModels
     const modelsToUse = allCarModels.length > 0 ? allCarModels : carModels;
 
-    carStats.filteredRequests.forEach((req) => {
+    (carStats.filteredRequests || []).forEach((req) => {
       let make = (
         req.car_snapshot?.make_ar ||
         req.car_snapshot?.make_en ||
@@ -1762,13 +1774,13 @@ const Dashboard: React.FC = () => {
       });
     }
 
-    monthStats.filteredRequests.forEach((req) => {
+    (monthStats.filteredRequests || []).forEach((req) => {
       const day = new Date(req.created_at).getDate();
       const dayData = data.find((d) => d.day === day);
       if (dayData) dayData.current += 1;
     });
 
-    prevMonthStats.filteredRequests.forEach((req) => {
+    (prevMonthStats.filteredRequests || []).forEach((req) => {
       const day = new Date(req.created_at).getDate();
       const dayData = data.find((d) => d.day === day);
       if (dayData) dayData.previous += 1;
@@ -1798,13 +1810,13 @@ const Dashboard: React.FC = () => {
       });
     }
 
-    monthStats.filteredRequests.forEach((req) => {
+    (monthStats.filteredRequests || []).forEach((req) => {
       const day = new Date(req.created_at).getDate();
       const dayData = data.find((d) => d.day === day);
       if (dayData) dayData.current += req.price;
     });
 
-    prevMonthStats.filteredRequests.forEach((req) => {
+    (prevMonthStats.filteredRequests || []).forEach((req) => {
       const day = new Date(req.created_at).getDate();
       const dayData = data.find((d) => d.day === day);
       if (dayData) dayData.previous += req.price;
@@ -1914,7 +1926,7 @@ const Dashboard: React.FC = () => {
         />
         <ExecutiveKpiCard
           title="إجمالي الطلبات للفترة"
-          value={`${stats?.filteredRequests.length || 0}`}
+          value={`${stats?.filteredRequests?.length || 0}`}
           icon={<FileTextIcon />}
           bgClass="bg-violet-100 dark:bg-violet-900/40"
           colorClass="text-violet-600 dark:text-violet-400"

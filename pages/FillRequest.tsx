@@ -2565,7 +2565,38 @@ export const FillRequest: React.FC = () => {
                                 <div>
                                     <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">العميل</p>
                                     <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate px-2">{client?.name || 'Unknown'}</p>
+                                    {client?.phone && (
+                                        <p className="text-[10px] text-slate-500 font-mono mt-0.5" dir="ltr">{
+                                            client.phone.replace(/\D/g, '').length === 10 
+                                            ? `${client.phone.replace(/\D/g, '').slice(0, 3)}-${client.phone.replace(/\D/g, '').slice(3, 6)}-${client.phone.replace(/\D/g, '').slice(6)}`
+                                            : client.phone
+                                        }</p>
+                                    )}
                                 </div>
+                                
+                                {can('view_request_price_in_fill') && request.price !== undefined && (
+                                    <>
+                                        <div className="h-px bg-slate-100 dark:bg-slate-700/50 w-full"></div>
+                                        <div className="flex justify-between items-center px-1">
+                                            <div className="text-right flex-1">
+                                                <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">السعر</p>
+                                                <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{request.price} ر.س</p>
+                                            </div>
+                                            <div className="text-left flex-1">
+                                                <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">الدفع</p>
+                                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap ${
+                                                    request.payment_type === 'نقدي' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                                                    request.payment_type === 'بطاقة' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                    request.payment_type === 'تحويل' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                                                    request.payment_type === 'غير مدفوع' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' :
+                                                    'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                                }`}>
+                                                    {request.payment_type || 'غير محدد'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                         

@@ -76,6 +76,7 @@ export const PERMISSIONS = {
   view_requests_date_filters: 'عرض فلاتر النطاق الزمني في صفحة الطلبات',
   view_requests_price_column: 'عرض عمود السعر في جدول الطلبات',
   view_requests_stats_cards: 'عرض البطاقات الإحصائية في صفحة الطلبات',
+  view_request_price_in_fill: 'عرض السعر وحالة الدفع داخل بطاقة الفحص',
   resend_whatsapp_report: 'إعادة إرسال التقرير عبر الواتساب',
   view_settings: 'عرض صفحة الإعدادات',
 } as const;

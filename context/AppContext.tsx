@@ -50,7 +50,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [isCreatingRequest, setIsCreatingRequest] = useState(false);
     const [isSessionError, setIsSessionError] = useState(false);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
-    const isOnlineRef = useRef(navigator.onLine);
     const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected');
 
     const channelRef = useRef<RealtimeChannel | null>(null);
@@ -653,18 +652,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [authUser, fetchRequests, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations]);
 
-    const checkActualInternetConnection = async () => {
-        try {
-            await fetch('https://www.google.com/favicon.ico?_=' + new Date().getTime(), {
-                mode: 'no-cors',
-                cache: 'no-store'
-            });
-            return true;
-        } catch (error) {
-            return false;
-        }
-    };
-
     // Network Status & Reconnection
     useEffect(() => {
         const handleVisibilityChange = async () => {
@@ -683,58 +670,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (authUserRef.current && realtimeStatusRef.current === 'disconnected') {
                     retryConnection();
                 }
-
-                if (navigator.onLine) performInternetCheck();
-            }
-        };
-
-        const performInternetCheck = async () => {
-            const hasInternet = await checkActualInternetConnection();
-            if (hasInternet && !isOnlineRef.current) {
-                isOnlineRef.current = true;
-                setIsOnline(true);
-                addNotification({ title: 'تم استعادة الاتصال', message: 'لقد عدت متصلاً بالإنترنت.', type: 'info' });
-                if (authUserRef.current) {
-                    supabase.auth.startAutoRefresh();
-                    retryConnection();
-                }
-            } else if (!hasInternet && isOnlineRef.current) {
-                isOnlineRef.current = false;
-                setIsOnline(false);
-                setRealtimeStatus('disconnected');
-                addNotification({ title: 'فقد الاتصال', message: 'تم فقدان الاتصال بالإنترنت.', type: 'warning' });
             }
         };
 
         const handleOnline = () => {
-            performInternetCheck();
+            setIsOnline(true);
+            addNotification({ title: 'تم استعادة الاتصال', message: 'لقد عدت متصلاً بالإنترنت.', type: 'info' });
+            if (authUserRef.current) {
+                supabase.auth.startAutoRefresh();
+                retryConnection();
+            }
         };
 
         const handleOffline = () => {
-            if (isOnlineRef.current) {
-                isOnlineRef.current = false;
-                setIsOnline(false);
-                setRealtimeStatus('disconnected');
-                addNotification({ title: 'فقد الاتصال', message: 'لا يوجد اتصال بالإنترنت.', type: 'warning' });
-            }
+            setIsOnline(false);
+            setRealtimeStatus('disconnected');
+            addNotification({ title: 'فقد الاتصال', message: 'لا يوجد اتصال بالإنترنت.', type: 'warning' });
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
-        const pingInterval = setInterval(() => {
-            // Only check if browser thinks we are online
-            if (navigator.onLine) {
-                performInternetCheck();
-            }
-        }, 15000); // Check every 15 seconds
-
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
-            clearInterval(pingInterval);
         };
     }, [retryConnection, addNotification, logout]);
 
