@@ -125,6 +125,8 @@ interface RequestTableProps {
   onOpenUpdateModal?: (request: InspectionRequest) => void;
   plateDisplayLanguage?: 'ar' | 'en';
   setPlateDisplayLanguage?: React.Dispatch<React.SetStateAction<'ar' | 'en'>>;
+  disableAutoSortRequests?: boolean;
+  onToggleAutoSort?: (disabled: boolean) => void;
   isRefreshing?: boolean;
   isLive?: boolean;
   onRowClick?: (requestId: string) => void;
@@ -235,7 +237,7 @@ const getTypeGlowColor = (name: string) => {
 
 const RequestTable: React.FC<RequestTableProps> = React.memo(({ 
   requests, clients, cars, carMakes, carModels, inspectionTypes, employees,
-  title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, isRefreshing, isLive,
+  title, onOpenUpdateModal, plateDisplayLanguage = 'ar', setPlateDisplayLanguage, disableAutoSortRequests, onToggleAutoSort, isRefreshing, isLive,
   onRowClick, onHistoryClick, carsWithHistory, onProcessPayment, onResendWhatsApp, onDeleteSuccess, onRefresh,
   isLoading, onLoadMore, hasMore, isLoadingMore, searchTokens, highlightedRequestId, triggerHighlight,
   paymentFilter: externalPaymentFilter,
@@ -734,6 +736,21 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                 onChange={(e) => setPlateDisplayLanguage(e.target.checked ? 'en' : 'ar')}
               />
               <div className={`w-11 h-6 bg-slate-200 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 ${toggleCheckedClasses}`}></div>
+            </div>
+          </label>
+        )}
+
+        {onToggleAutoSort && (
+          <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">الترتيب التلقائي</span>
+            <div className="relative">
+              <input 
+                type="checkbox" 
+                className="sr-only peer"
+                checked={!disableAutoSortRequests}
+                onChange={(e) => onToggleAutoSort(!e.target.checked)}
+              />
+              <div className="w-9 h-5 bg-slate-200 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
             </div>
           </label>
         )}

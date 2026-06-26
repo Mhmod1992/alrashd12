@@ -10,7 +10,8 @@ export const PERSONAL_SETTING_KEYS: (keyof UserPreferences)[] = [
     'headerStyle',
     'backgroundImageUrl',
     'backgroundColor',
-    'glassmorphismIntensity'
+    'glassmorphismIntensity',
+    'disableAutoSortRequests'
 ];
 
 // --- NAVIGATION CONFIGURATION ---

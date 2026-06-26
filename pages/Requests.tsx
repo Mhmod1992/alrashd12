@@ -66,7 +66,7 @@ let moduleCachedRangeEnd = '';
 
 const Requests: React.FC = () => {
     const {
-        requests, clients, cars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings,
+        requests, clients, cars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings, updateSettings,
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests, searchQuery, setSearchQuery,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
@@ -122,6 +122,26 @@ const Requests: React.FC = () => {
     const [plateDisplayLanguage, setPlateDisplayLanguage] = useSessionStorage<'ar' | 'en'>('requests_plate_lang', 'ar');
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [showStats, setShowStats] = useState(false);
+
+    const disableAutoSortRequests = authUser?.preferences?.disableAutoSortRequests || false;
+
+    const handleToggleAutoSort = async (disabled: boolean) => {
+        try {
+            await updateSettings({ disableAutoSortRequests: disabled });
+            addNotification({
+                title: 'تم التحديث',
+                message: disabled ? 'تم إيقاف الترتيب التلقائي للطلبات' : 'تم إعادة تفعيل الترتيب التلقائي',
+                type: 'success'
+            });
+        } catch (error) {
+            console.error('Failed to update sort preference:', error);
+            addNotification({
+                title: 'خطأ',
+                message: 'حدث خطأ أثناء تحديث الإعدادات',
+                type: 'error'
+            });
+        }
+    };
 
     // Search Debounce Ref
     const searchDebounceRef = useRef<number | null>(null);
@@ -356,8 +376,10 @@ const Requests: React.FC = () => {
                 const aIsComplete = a.status === RequestStatus.COMPLETE;
                 const bIsComplete = b.status === RequestStatus.COMPLETE;
                 
-                if (aIsComplete && !bIsComplete) return 1;
-                if (!aIsComplete && bIsComplete) return -1;
+                if (!disableAutoSortRequests) {
+                    if (aIsComplete && !bIsComplete) return 1;
+                    if (!aIsComplete && bIsComplete) return -1;
+                }
 
                 const dateA = new Date(a.created_at);
                 const dateB = new Date(b.created_at);
@@ -369,7 +391,7 @@ const Requests: React.FC = () => {
             setServerFetchedData(newData);
         }
 
-    }, [requests, dateFilter]); 
+    }, [requests, dateFilter, disableAutoSortRequests]); 
 
     // --- Listen for Remote Deletion Events ---
     useEffect(() => {
@@ -1051,8 +1073,10 @@ const Requests: React.FC = () => {
             const aIsComplete = a.status === RequestStatus.COMPLETE;
             const bIsComplete = b.status === RequestStatus.COMPLETE;
             
-            if (aIsComplete && !bIsComplete) return 1;
-            if (!aIsComplete && bIsComplete) return -1;
+            if (!disableAutoSortRequests) {
+                if (aIsComplete && !bIsComplete) return 1;
+                if (!aIsComplete && bIsComplete) return -1;
+            }
 
             const dateA = new Date(a.created_at);
             const dateB = new Date(b.created_at);
@@ -1063,7 +1087,7 @@ const Requests: React.FC = () => {
         });
 
         return { dataToDisplay: statusFilteredReqs, waitingPaymentRequests: waitingReqs, carsWithHistory: carsWithHistorySet };
-    }, [requests, searchedRequests, serverFetchedData, statusFilter, employeeFilter, authUser, waitingSearchTerm, can]);
+    }, [requests, searchedRequests, serverFetchedData, statusFilter, employeeFilter, authUser, waitingSearchTerm, can, disableAutoSortRequests]);
 
 
     const [serverCarsWithHistory, setServerCarsWithHistory] = useState<Set<string>>(new Set());
@@ -1715,6 +1739,8 @@ const Requests: React.FC = () => {
                         onOpenUpdateModal={handleOpenUpdateModal}
                         plateDisplayLanguage={plateDisplayLanguage}
                         setPlateDisplayLanguage={setPlateDisplayLanguage}
+                        disableAutoSortRequests={disableAutoSortRequests}
+                        onToggleAutoSort={handleToggleAutoSort}
                         isRefreshing={isRefreshing}
                         isLive={true}
                         onHistoryClick={handleOpenHistoryModal}
@@ -1741,6 +1767,8 @@ const Requests: React.FC = () => {
                         onOpenUpdateModal={handleOpenUpdateModal}
                         plateDisplayLanguage={plateDisplayLanguage}
                         setPlateDisplayLanguage={setPlateDisplayLanguage}
+                        disableAutoSortRequests={disableAutoSortRequests}
+                        onToggleAutoSort={handleToggleAutoSort}
                         isRefreshing={isRefreshing}
                         isLive={true}
                         onRowClick={handleRowClick}

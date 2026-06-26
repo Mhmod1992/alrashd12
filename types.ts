@@ -462,6 +462,7 @@ export interface Settings {
   backgroundImageUrl: string | null;
   backgroundColor: string | null;
   glassmorphismIntensity: number;
+  disableAutoSortRequests?: boolean;
   plateCharacters: PlateCharacterMap[];
   platePreviewSettings: PlatePreviewSettings;
   reportSettings: ReportSettings;
@@ -491,6 +492,7 @@ export interface UserPreferences {
   backgroundColor?: string | null;
   glassmorphismIntensity?: number;
   isTechnician?: boolean; // Add isTechnician here
+  disableAutoSortRequests?: boolean;
 }
 
 export type SettingsPage = 'general' | 'appearance' | 'request' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management' | 'technical' | 'whatsapp' | 'reports_archive' | 'storage';

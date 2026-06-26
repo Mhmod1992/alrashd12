@@ -400,6 +400,25 @@ const EmployeesManagement: React.FC = () => {
                          )}
                     </div>
 
+                    <div className="mt-4 mb-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                        <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-700/50 p-2 rounded-md border border-slate-200 dark:border-slate-700">
+                            <input 
+                                type="checkbox" 
+                                checked={!!currentEmployee.preferences?.disableAutoSortRequests} 
+                                onChange={e => setCurrentEmployee(prev => ({
+                                    ...prev,
+                                    preferences: {
+                                        ...prev.preferences,
+                                        disableAutoSortRequests: e.target.checked
+                                    }
+                                }))} 
+                                className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" 
+                            />
+                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">إيقاف الترتيب التلقائي للطلبات في جدول الطلبات</span>
+                        </label>
+                         <p className="text-xs text-slate-400 mt-1 mr-8">عند التفعيل، لن يتم إرسال الطلبات المكتملة إلى أسفل الجدول تلقائياً، بل سيحتفظ الجدول بترتيب الإنشاء.</p>
+                    </div>
+
                     {isEditing && showPasswordInput && (
                         <div className="bg-yellow-50 dark:bg-yellow-900/10 p-3 rounded-lg border border-yellow-100 dark:border-yellow-900/30 animate-fade-in">
                             <label className="block text-xs font-bold mb-1 text-yellow-800 dark:text-yellow-200">تعيين كلمة مرور جديدة</label>
