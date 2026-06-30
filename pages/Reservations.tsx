@@ -270,7 +270,7 @@ const Reservations: React.FC = () => {
                             <Icon name="sparkles" className="w-6 h-6 text-amber-600 dark:text-amber-400" />
                         </div>
                         <div>
-                            <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">بانتظار التحويل</div>
+                            <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">بانتظار الاعتماد</div>
                             <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.filter(r => r.status === 'new').length}</div>
                         </div>
                     </div>
@@ -281,7 +281,7 @@ const Reservations: React.FC = () => {
                             <Icon name="check-circle" className="w-6 h-6 text-green-600 dark:text-green-400" />
                         </div>
                         <div>
-                            <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">تم تحويلها</div>
+                            <div className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">تم اعتمادها</div>
                             <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{reservations.filter(r => r.status === 'converted').length}</div>
                         </div>
                     </div>
@@ -454,7 +454,7 @@ const Reservations: React.FC = () => {
                                                     res.status === 'converted' ? 'bg-green-100 text-green-700 border border-green-200' : 
                                                     'bg-slate-100 text-slate-700 border border-slate-200'
                                                 }`}>
-                                                    {res.status === 'new' ? 'بانتظار التحويل' : res.status === 'converted' ? 'تم التحويل' : 'ملغي'}
+                                                    {res.status === 'new' ? 'بانتظار الاعتماد' : res.status === 'converted' ? 'تم الاعتماد' : 'ملغي'}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-[10px] text-slate-400 font-bold">
@@ -466,7 +466,7 @@ const Reservations: React.FC = () => {
                                                         <button 
                                                             onClick={() => handleConvert(res)}
                                                             className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all"
-                                                            title="تحويل لطلب"
+                                                            title="اعتماد وتحويل لطلب"
                                                         >
                                                             <Icon name="refresh-cw" className="w-4 h-4" />
                                                         </button>
@@ -669,7 +669,7 @@ const Reservations: React.FC = () => {
 
             {/* Convert to Request Modal - Reuses NewRequestForm */}
             {isConvertModalOpen && selectedReservation && (
-                <Modal isOpen={isConvertModalOpen} onClose={() => setIsConvertModalOpen(false)} title="تحويل الحجز إلى طلب فحص" size="5xl">
+                <Modal isOpen={isConvertModalOpen} onClose={() => setIsConvertModalOpen(false)} title="اعتماد الحجز وتحويله إلى طلب فحص" size="5xl">
                     <NewRequestForm
                         clients={clients}
                         carMakes={carMakes}

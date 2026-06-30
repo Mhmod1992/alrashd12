@@ -1460,7 +1460,7 @@ const Requests: React.FC = () => {
                                                         }`}>
                                                             {res.status === 'new' ? 'جديد' : 
                                                              res.status === 'confirmed' ? 'مؤكد' : 
-                                                             res.status === 'converted' ? 'تم التحويل' : 'ملغي'}
+                                                             res.status === 'converted' ? 'تم الاعتماد' : 'ملغي'}
                                                         </span>
                                                     </td>
                                                     <td className="p-3 text-center">
@@ -1474,7 +1474,7 @@ const Requests: React.FC = () => {
                                                             }`}
                                                         >
                                                             <Icon name="refresh-cw" className="w-3 h-3" />
-                                                            <span>تحويل</span>
+                                                            <span>اعتماد الحجز</span>
                                                         </button>
                                                     </td>
                                                 </tr>

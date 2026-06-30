@@ -330,17 +330,16 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
             <AnimatePresence>
                 {latestWhatsAppMessage && (
                     <motion.div
-                        initial={{ opacity: 0, y: -20, scale: 0.9, x: '-50%' }}
-                        animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
-                        exit={{ opacity: 0, y: -10, scale: 0.9, x: '-50%' }}
-                        className="absolute top-full left-1/2 mt-3 w-64 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-emerald-100 dark:border-emerald-900/50 shadow-2xl rounded-2xl p-4 z-50 cursor-pointer group pointer-events-auto origin-top"
-                        style={{ left: '50%' }}
+                        initial={{ opacity: 0, y: -15, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        className="absolute top-full left-0 mt-3 w-72 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-emerald-100 dark:border-emerald-900/50 shadow-2xl rounded-2xl p-4 z-50 cursor-pointer group pointer-events-auto origin-top-left"
                         onClick={() => {
                             setPage('whatsapp-inbox');
                             setLatestWhatsAppMessage(null);
                         }}
                     >
-                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white/95 dark:bg-slate-800/95 border-t border-l border-emerald-100 dark:border-emerald-900/50 rotate-45"></div>
+                        <div className="absolute -top-1.5 left-4 w-3 h-3 bg-white/95 dark:bg-slate-800/95 border-t border-l border-emerald-100 dark:border-emerald-900/50 rotate-45"></div>
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
