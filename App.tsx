@@ -3,7 +3,6 @@ import React, { Suspense, lazy } from 'react';
 import { AppProvider, useAppContext } from './context/AppContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import WhatsAppTicker from './components/WhatsAppTicker';
 import NotificationContainer from './components/NotificationContainer';
 import ConfirmModal from './components/ConfirmModal';
 import NewRequestSuccessModal from './components/NewRequestSuccessModal';
@@ -292,7 +291,6 @@ const AppContent: React.FC = () => {
         {!isFocusMode && <Sidebar isSidebarOpen={isSidebarOpen} setSidebarOpen={setSidebarOpen} />}
         <div className="flex-1 flex flex-col overflow-hidden">
           {!isFocusMode && <Header toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />}
-          {!isFocusMode && (page === 'dashboard' || page === 'requests' || page === 'financials') && <WhatsAppTicker />}
           <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-slate-100/80 dark:bg-slate-900/80 ${isFocusMode ? '' : 'p-4 sm:p-6'}`}>
             <Suspense fallback={<PageLoader />}>
               {mainContent()}

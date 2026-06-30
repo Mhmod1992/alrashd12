@@ -362,23 +362,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     
                     if (newMessage.direction === 'incoming' || !newMessage.direction) {
                         setUnreadWhatsAppCount(prev => prev + 1);
-                        
-                        // Smart Suppression: Don't show popups/bubbles if user is actively typing
-                        const activeEl = document.activeElement;
-                        const isTyping = activeEl && (
-                            activeEl.tagName === 'INPUT' || 
-                            activeEl.tagName === 'TEXTAREA' || 
-                            (activeEl as HTMLElement).isContentEditable
-                        );
-
-                        if (!isTyping) {
-                            setLatestWhatsAppMessage(newMessage);
-                            addNotification({ 
-                                title: 'رسالة واتساب جديدة', 
-                                message: `رسالة من ${newMessage.name || newMessage.phone}: ${newMessage.message}`, 
-                                type: 'info' 
-                            });
-                        }
+                        setLatestWhatsAppMessage(newMessage);
                     }
                 }
             )
@@ -387,7 +371,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
         whatsappChannelRef.current = waChannel;
 
-    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount]);
+    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount, setLatestWhatsAppMessage]);
 
     const retryConnection = useCallback(() => {
         const cleanup = async () => {
