@@ -3,6 +3,7 @@ import React, { useMemo, useEffect, useRef } from 'react';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, ReportStamp, ReportFontSizes, HighlightColor } from '../types';
 import { useAppContext } from '../context/AppContext';
 import Icon from './Icon';
+import { formatPhoneNumberDisplay } from '../lib/utils';
 
 interface InspectionReportProps {
     request: InspectionRequest;
@@ -421,7 +422,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         <div className={`${isPrintView ? 'mb-2 space-y-2' : 'mb-6 space-y-4'}`}>
                             <InfoBlock title={reportDirection === 'ltr' ? "Client Details" : "بيانات العميل"} icon={<Icon name="employee" className="w-5 h-5" />} settings={reportSettings} contentClassName={isPrintView ? `grid ${reportSettings.showPriceOnReport ? 'grid-cols-3' : 'grid-cols-2'} gap-2 items-center` : `grid grid-cols-1 ${reportSettings.showPriceOnReport ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6 items-center`} isPrintView={isPrintView} direction={reportDirection}>
                                 <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Name:' : 'الاسم:'}</span><span className={`font-bold ${isPrintView ? getPrintSize(fontSizes.clientData || fontSizes.blockHeader) : (fontSizes.clientData || fontSizes.blockHeader)}`}>{client.name}</span></div>
-                                <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Phone:' : 'الجوال:'}</span><span className={`font-bold dir-ltr ${isPrintView ? getPrintSize(fontSizes.clientData || fontSizes.blockHeader) : (fontSizes.clientData || fontSizes.blockHeader)}`}>{client.phone}</span></div>
+                                <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Phone:' : 'الجوال:'}</span><span className={`font-bold dir-ltr ${isPrintView ? getPrintSize(fontSizes.clientData || fontSizes.blockHeader) : (fontSizes.clientData || fontSizes.blockHeader)}`}>{formatPhoneNumberDisplay(client.phone)}</span></div>
                                 {reportSettings.showPriceOnReport && <div className={`flex justify-start items-center ${isPrintView ? 'gap-2' : 'gap-3'}`}><span className={`font-bold opacity-70 whitespace-nowrap ${isPrintView ? getPrintSize(fontSizes.blockLabel) : fontSizes.blockLabel}`}>{reportDirection === 'ltr' ? 'Total:' : 'المبلغ:'}</span><span className={`font-bold ${isPrintView ? getPrintSize(fontSizes.clientData || fontSizes.blockHeader) : (fontSizes.clientData || fontSizes.blockHeader)}`}>{request.price} {reportDirection === 'ltr' ? 'SAR' : 'ريال'}</span></div>}
                             </InfoBlock>
 

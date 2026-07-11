@@ -253,3 +253,19 @@ export const parseWhatsAppMessage = (rawMessage: string) => {
       replyTo
     };
 };
+export const formatPhoneNumberDisplay = (phone: string | undefined): string => {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\D/g, '');
+    let core = '';
+    if (cleaned.length === 10 && cleaned.startsWith('05')) {
+        core = cleaned.substring(1);
+    } else if (cleaned.length === 12 && cleaned.startsWith('9665')) {
+        core = cleaned.substring(3);
+    } else if (cleaned.length === 9 && cleaned.startsWith('5')) {
+        core = cleaned;
+    }
+    if (core.length === 9) {
+        return `0${core.substring(0, 2)}-${core.substring(2, 5)}-${core.substring(5)}`;
+    }
+    return phone;
+};
