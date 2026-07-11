@@ -1498,15 +1498,17 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 });
 
                 if (newAddedRequest) {
-                    if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected' && newStatus !== RequestStatus.WAITING_PAYMENT && finalPaymentType !== PaymentType.Unpaid) {
-                        const message = `حياكم الله ${clientName}،
+                    if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected' && newStatus !== RequestStatus.WAITING_PAYMENT && finalPaymentType !== PaymentType.Unpaid && clientPhone !== '0000000000') {
+                        const message = `حياكم الله *${clientName}*،
+
+*#${newAddedRequest.request_number}*
 
 تم تأكيد استلام مركبتكم *${carSnapshot.make_en || ''} ${carSnapshot.model_en || ''} ${carYear || ''}*
 وبدء إجراءات الفحص الفني في مركزنا.
-
-نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة، وسيتم إشعاركم فور الجاهزية.
-
+نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة،
+وسيتم إشعاركم فور الجاهزية.
 شكراً لاختياركم مركزنا.
+
 *ادارة مركز الراشد*`;
                         await sendWhatsAppMessage(clientPhone, message, clientName, { suppressModal: true });
                     }

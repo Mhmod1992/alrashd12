@@ -930,8 +930,8 @@ const Requests: React.FC = () => {
             if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected') {
                 const client = clients.find(c => c.id === paymentRequest.client_id);
                 if (client && client.phone) {
-                    const message = `حياكم الله ${client.name || ''}،
-
+                    const message = `حياكم الله *${client.name || ''}*،
+#${paymentRequest.request_number}
 تم تأكيد استلام مركبتكم *${paymentRequest.car_snapshot?.make_en || ''} ${paymentRequest.car_snapshot?.model_en || ''} ${paymentRequest.car_snapshot?.year || ''}*
 وبدء إجراءات الفحص الفني في مركزنا.
 

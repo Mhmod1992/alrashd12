@@ -359,6 +359,20 @@ const PrintReport: React.FC = () => {
         return originalRequest?.general_notes?.some(n => n.text === '__HANDWRITTEN_REPORT_TRUE__') || false;
     }, [originalRequest]);
 
+    const isReportEmpty = useMemo(() => {
+        if (!request) return true;
+        const hasFindings = request.structured_findings && request.structured_findings.length > 0;
+        const filteredGeneralNotes = (request.general_notes || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل') && (n.text || n.image));
+        const hasGeneralNotes = filteredGeneralNotes.length > 0;
+        
+        let hasCategoryNotes = false;
+        if (request.category_notes) {
+            hasCategoryNotes = Object.values(request.category_notes).some(notes => notes.length > 0);
+        }
+        
+        return !hasFindings && !hasGeneralNotes && !hasCategoryNotes;
+    }, [request]);
+
     const paperImages = useMemo(() => {
         return originalRequest?.attached_files?.filter(f => f.type === 'manual_paper' || f.type === 'internal_draft') || [];
     }, [originalRequest]);
@@ -1546,10 +1560,10 @@ ${reviewLink}
                                     variant="whatsapp" 
                                     size="sm" 
                                     className="lg:hidden flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white border-emerald-700"
-                                    disabled={isSendingWhatsApp || sentCount >= 2}
+                                    disabled={isSendingWhatsApp || sentCount >= 2 || originalRequest?.status === RequestStatus.COMPLETE || client?.phone === '0000000000'}
                                 >
                                     <WhatsappIcon className="w-4 h-4" />
-                                    <span className="hidden sm:inline ms-1">إشعار الجاهزية</span>
+                                    <span className="hidden sm:inline ms-1">{originalRequest?.status === RequestStatus.COMPLETE ? 'الطلب مكتمل' : client?.phone === '0000000000' ? 'رقم غير صالح' : 'إشعار الجاهزية'}</span>
                                     <span className="ms-1 bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded-full text-[9px] font-bold">
                                         {sentCount === 0 ? '0/2' : sentCount === 1 ? '1/2' : '2/2'}
                                     </span>
@@ -1572,6 +1586,16 @@ ${reviewLink}
                 </div>
             </header>
             
+            {isReportEmpty && (
+                <div className="no-print bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 p-3 sm:p-4 shadow-inner flex items-center justify-center gap-3 text-amber-800 dark:text-amber-200 z-40 relative">
+                    <Icon name="alert-circle" className="w-6 h-6 animate-pulse flex-shrink-0" />
+                    <div>
+                        <p className="font-bold text-sm sm:text-base">تنبيه: التقرير فارغ من البيانات</p>
+                        <p className="text-xs sm:text-sm mt-0.5 opacity-90">يُرجى مراجعة <strong className="underline decoration-amber-400 dark:decoration-amber-600 underline-offset-4 font-black">مسودة الطلب الموجودة في المرفقات</strong> لمعرفة التفاصيل.</p>
+                    </div>
+                </div>
+            )}
+
             {/* Small screen assigned technicians bar */}
             <div className="md:hidden flex items-center overflow-x-auto py-2 px-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 scrollbar-hide gap-2 no-print">
                 <Button 
@@ -1979,10 +2003,10 @@ ${reviewLink}
                         
                         <button 
                             onClick={handleSendReportReadyNotification}
-                            disabled={isSendingWhatsApp || sentCount >= 2}
+                            disabled={isSendingWhatsApp || sentCount >= 2 || originalRequest?.status === RequestStatus.COMPLETE || client?.phone === '0000000000'}
                             className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none text-white text-xs font-bold py-2 px-3 rounded-xl w-full flex items-center justify-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all text-center leading-tight cursor-pointer disabled:cursor-not-allowed"
                         >
-                            {isSendingWhatsApp ? 'جاري الإرسال...' : sentCount >= 2 ? 'مكتمل (مرتان)' : 'إرسال الإشعار'}
+                            {isSendingWhatsApp ? 'جاري الإرسال...' : originalRequest?.status === RequestStatus.COMPLETE ? 'الطلب مكتمل' : client?.phone === '0000000000' ? 'رقم غير صالح' : sentCount >= 2 ? 'مكتمل (مرتان)' : 'إرسال الإشعار'}
                         </button>
                         
                         <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent my-0.5" />
