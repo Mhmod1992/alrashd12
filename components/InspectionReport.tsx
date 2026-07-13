@@ -287,7 +287,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
     const { request, client, car, carMake, carModel, inspectionType, customFindingCategories, predefinedFindings, settings, isPrintView, reportDirection = 'rtl' } = props;
     const { appName, reportSettings } = settings;
     const { fontSizes } = reportSettings;
-    const { technicians, employees } = useAppContext();
+    const { technicians, employees, authUser } = useAppContext();
 
     const carDetails = useMemo(() => {
         if (request.car_snapshot) {
@@ -305,6 +305,43 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
     }, [request.car_snapshot, car, carMake, carModel]);
 
     const visibleCategoryIds = inspectionType.finding_category_ids;
+
+    const formatArabicDateTime = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+        const dayName = days[date.getDay()];
+        let hours = date.getHours();
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'م' : 'ص';
+        hours = hours % 12 || 12;
+        return `${year}/${month}/${day} يوم ${dayName} الساعة ${hours}:${minutes} ${ampm}`;
+    };
+
+    const reportWriters = useMemo(() => {
+        const authors = new Set<string>();
+        
+        if (request.general_notes) {
+            request.general_notes.forEach(note => {
+                if (note.authorName && !note.text.includes("__REPORT_READY_NOTIF_SENT__")) {
+                    authors.add(note.authorName);
+                }
+            });
+        }
+        
+        if (request.category_notes) {
+            Object.values(request.category_notes).forEach(notes => {
+                notes.forEach(note => {
+                    if (note.authorName) {
+                        authors.add(note.authorName);
+                    }
+                });
+            });
+        }
+        
+        return Array.from(authors);
+    }, [request.general_notes, request.category_notes]);
 
     const hasAnyFindings = useMemo(() => {
         const { structured_findings, general_notes, category_notes } = request;
@@ -557,8 +594,26 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                     )}
 
                     <footer className={`border-t-2 border-b-2 border-b-transparent print:border-b-transparent flex justify-between items-start gap-4 break-inside-avoid relative print:static ${isPrintView ? 'mt-4 pt-2 pb-6' : 'mt-6 pt-4 pb-8'}`} style={{ borderTopColor: reportSettings.borderColor }}>
-                        <div className="flex-grow" style={{ color: reportSettings.textColor, opacity: 0.8 }}>
+                        <div className="flex-grow flex flex-col gap-3" style={{ color: reportSettings.textColor, opacity: 0.8 }}>
                             <p data-setting-section="text-disclaimer" className={`break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes?.disclaimer || 'text-xs') : (fontSizes?.disclaimer || 'text-xs')}`}><span className="font-bold">{reportDirection === 'ltr' ? 'Disclaimer:' : 'إخلاء مسؤولية:'}</span> {reportSettings.disclaimerText || (reportDirection === 'ltr' ? 'No disclaimer provided' : 'لا يوجد نص إخلاء مسؤولية')}</p>
+                            
+                            <div className="flex justify-between items-center border-t pt-2 mt-2" style={{ borderColor: reportSettings.borderColor, fontSize: isPrintView ? '10px' : '12px' }}>
+                                <div className="flex gap-1">
+                                    <span className="font-bold">{reportDirection === 'ltr' ? 'Report Writer(s):' : 'كاتب التقرير:'}</span>
+                                    <span>{reportWriters.length > 0 ? reportWriters.join(' - ') : (authUser?.name || '')}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex gap-1">
+                                        <span className="font-bold">{reportDirection === 'ltr' ? 'Printed by:' : 'طبع بواسطة:'}</span>
+                                        <span>{authUser?.name || 'النظام'}</span>
+                                    </div>
+                                    <span>|</span>
+                                    <div className="flex gap-1">
+                                        <span className="font-bold">{reportDirection === 'ltr' ? 'Date & Time:' : 'تاريخ ووقت الطباعة:'}</span>
+                                        <span dir="ltr">{reportDirection === 'ltr' ? new Date().toLocaleString('en-US') : formatArabicDateTime(new Date())}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div data-setting-section="branding-stamp" className="flex-shrink-0 text-center">
                             <p className="font-bold text-xs mb-1" style={{ color: reportSettings.textColor, opacity: 0.7 }}>{reportDirection === 'ltr' ? 'Stamp' : 'ختم الورشة'}</p>

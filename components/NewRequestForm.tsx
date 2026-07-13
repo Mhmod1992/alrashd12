@@ -777,7 +777,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     }
 
                     // Auto-fill name if empty
-                    if (!clientName) setClientName(exactClient.name);
+                    setClientName(prev => prev.trim() === '' ? exactClient.name : prev);
                 } else {
                     setUnpaidDebtAlert(null);
                     setExistingClientSummary(null);
@@ -789,7 +789,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 setIsCheckingDebt(false);
             }
         }, 600);
-    }, [clientPhone, searchClients, fetchClientRequests, clientName]);
+    }, [clientPhone, searchClients, fetchClientRequests]);
 
 
     const handleFillCarData = () => {

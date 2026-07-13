@@ -19,6 +19,7 @@ import LogOutIcon from './components/icons/LogOutIcon'; // Import LogOut Icon
 import WifiOffIcon from './components/icons/WifiOffIcon'; // Import WifiOff Icon
 import IncomingRequestNotifier from './components/IncomingRequestNotifier'; // Import the new notifier
 import { KeyboardLayoutCorrector } from './components/KeyboardLayoutCorrector';
+import PrivacyOverlay from './components/PrivacyOverlay';
 const WhatsAppInbox = lazy(() => import('./pages/WhatsAppInbox'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Requests = lazy(() => import('./pages/Requests'));
@@ -264,6 +265,7 @@ const AppContent: React.FC = () => {
         <ConfirmModal />
         <IncomingRequestNotifier />
         <KeyboardLayoutCorrector />
+        <PrivacyOverlay />
       </div>
     );
   }
@@ -336,6 +338,7 @@ const AppContent: React.FC = () => {
           </div>
         </div>
       )}
+      <PrivacyOverlay />
     </div>
   );
 };

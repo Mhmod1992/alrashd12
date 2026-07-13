@@ -826,34 +826,7 @@ const PrintReport: React.FC = () => {
             clone.classList.add('print-clone');
 
             // Add generation info to the footer of the clone
-            const footerDisclaimer = clone.querySelector('[data-setting-section="text-disclaimer"]');
-            if (footerDisclaimer && footerDisclaimer.parentElement) {
-                const infoLine = document.createElement('div');
-                infoLine.style.cssText = `
-                    font-size: 8px; 
-                    color: #94a3b8; 
-                    margin-top: 6px; 
-                    border-top: 0.5px solid #e2e8f0; 
-                    padding-top: 4px; 
-                    display: flex; 
-                    gap: 15px; 
-                    flex-direction: ${reportDirection === 'ltr' ? 'row' : 'row-reverse'};
-                `;
-                
-                const userLabel = reportDirection === 'ltr' ? 'Downloaded by: ' : 'تم تحميل التقرير بواسطة: ';
-                const userName = authUser?.name || '';
-                const timeLabel = reportDirection === 'ltr' ? 'Date: ' : 'التاريخ والوقت: ';
-                const timeValue = reportDirection === 'ltr' ? new Date().toLocaleString('en-US') : formatArabicDateTime(new Date());
-                
-                infoLine.innerHTML = `
-                    <div style="display: flex; gap: 4px; flex-direction: ${reportDirection === 'ltr' ? 'row' : 'row-reverse'};">
-                        <span>${userLabel}</span>
-                        <span style="font-weight: 700 !important; color: #64748b;">${userName}</span>
-                    </div>
-                    <span>${timeLabel}${timeValue}</span>
-                `;
-                footerDisclaimer.parentElement.appendChild(infoLine);
-            }
+            // (Removed as it is now natively included in InspectionReport.tsx)
 
             document.body.appendChild(clone);
 
@@ -1588,7 +1561,7 @@ ${reviewLink}
             
             {isReportEmpty && (
                 <div className="no-print bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 p-3 sm:p-4 shadow-inner flex items-center justify-center gap-3 text-amber-800 dark:text-amber-200 z-40 relative">
-                    <Icon name="alert-circle" className="w-6 h-6 animate-pulse flex-shrink-0" />
+                    <Icon name="search" className="w-6 h-6 animate-pulse flex-shrink-0" />
                     <div>
                         <p className="font-bold text-sm sm:text-base">تنبيه: التقرير فارغ من البيانات</p>
                         <p className="text-xs sm:text-sm mt-0.5 opacity-90">يُرجى مراجعة <strong className="underline decoration-amber-400 dark:decoration-amber-600 underline-offset-4 font-black">مسودة الطلب الموجودة في المرفقات</strong> لمعرفة التفاصيل.</p>
