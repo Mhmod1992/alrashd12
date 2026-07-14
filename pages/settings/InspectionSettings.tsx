@@ -974,11 +974,33 @@ const TypeForm: React.FC<{ type?: InspectionType, onClose: () => void, onSave: (
 };
 
 const CategoryForm: React.FC<{ category?: CustomFindingCategory, onClose: () => void, onSave: (data: any) => void }> = ({ category, onClose, onSave }) => {
+    const { settings, updateSettings } = useAppContext();
     const [name, setName] = useState(category?.name || '');
+    const [noticeText, setNoticeText] = useState(category ? (settings.reportSettings.categoryNotices?.[category.id] || '') : '');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         onSave({ name });
+        if (category) {
+            const currentNotices = settings.reportSettings.categoryNotices || {};
+            if (noticeText.trim()) {
+                await updateSettings({
+                    reportSettings: {
+                        ...settings.reportSettings,
+                        categoryNotices: { ...currentNotices, [category.id]: noticeText.trim() }
+                    }
+                });
+            } else if (currentNotices[category.id]) {
+                const newNotices = { ...currentNotices };
+                delete newNotices[category.id];
+                await updateSettings({
+                    reportSettings: {
+                        ...settings.reportSettings,
+                        categoryNotices: newNotices
+                    }
+                });
+            }
+        }
         onClose();
     };
     
@@ -988,6 +1010,19 @@ const CategoryForm: React.FC<{ category?: CustomFindingCategory, onClose: () => 
                 <label className="block text-sm font-medium">اسم التبويب</label>
                 <input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"/>
             </div>
+            {category && (
+                <div>
+                    <label className="block text-sm font-medium">النص التوضيحي في التقرير (اختياري)</label>
+                    <p className="text-xs text-gray-500 mb-1">سيظهر هذا النص في تقرير الفحص أعلى البطاقات الخاصة بهذا التبويب.</p>
+                    <textarea 
+                        value={noticeText} 
+                        onChange={e => setNoticeText(e.target.value)} 
+                        rows={2} 
+                        className="mt-1 block w-full p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
+                        placeholder="مثال: يرجى العلم بأن البطاقات أدناه توضح أماكن وجود رش أو معجون..."
+                    />
+                </div>
+            )}
             <div className="flex justify-end gap-2 pt-4 border-t dark:border-gray-700"><Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button><Button type="submit">حفظ</Button></div>
         </form>
     );
@@ -1065,7 +1100,7 @@ const PositionPicker: React.FC<{ imageUrl: string, value: string, onChange: (val
 };
 
 const FindingForm: React.FC<{ finding?: PredefinedFinding, defaultCategoryId?: string, onClose: () => void, onSave: (data: any) => void }> = ({ finding, defaultCategoryId, onClose, onSave }) => {
-    const { predefinedFindings, addNotification, uploadImage } = useAppContext();
+    const { predefinedFindings, addNotification, uploadImage, settings, updateSettings } = useAppContext();
     const [name, setName] = useState(finding?.name || '');
     const [categoryId, setCategoryId] = useState(finding?.category_id || defaultCategoryId || '');
     const [orderIndex, setOrderIndex] = useState(finding?.orderIndex || 0);
@@ -1073,7 +1108,8 @@ const FindingForm: React.FC<{ finding?: PredefinedFinding, defaultCategoryId?: s
     const [isBundle, setIsBundle] = useState(!!finding?.is_bundle);
     const [linkedIds, setLinkedIds] = useState<string[]>(finding?.linked_finding_ids || []);
     const [bundleDefaultValue, setBundleDefaultValue] = useState(finding?.bundle_default_value || '');
-    
+    const [isExcluded, setIsExcluded] = useState(finding ? (settings.reportSettings.excludedNoticeFindings || []).includes(finding.id) : false);
+
     const getInitialGroups = (f?: PredefinedFinding) => {
         if (f?.groups) return f.groups;
         if (f?.group) return [f.group];
@@ -1103,7 +1139,7 @@ const FindingForm: React.FC<{ finding?: PredefinedFinding, defaultCategoryId?: s
         return predefinedFindings.filter(f => f.category_id === categoryId && f.id !== finding?.id && !f.is_bundle);
     }, [predefinedFindings, categoryId, finding?.id]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isUploading) return;
         onSave({ 
@@ -1120,6 +1156,25 @@ const FindingForm: React.FC<{ finding?: PredefinedFinding, defaultCategoryId?: s
             linked_finding_ids: isBundle ? linkedIds : [],
             bundle_default_value: isBundle ? bundleDefaultValue.trim() : undefined
         });
+
+        if (finding) {
+            const currentExcluded = settings.reportSettings.excludedNoticeFindings || [];
+            const currentlyExcluded = currentExcluded.includes(finding.id);
+            if (isExcluded !== currentlyExcluded) {
+                let newExcluded = [...currentExcluded];
+                if (isExcluded) {
+                    newExcluded.push(finding.id);
+                } else {
+                    newExcluded = newExcluded.filter(id => id !== finding.id);
+                }
+                await updateSettings({
+                    reportSettings: {
+                        ...settings.reportSettings,
+                        excludedNoticeFindings: newExcluded
+                    }
+                });
+            }
+        }
         onClose();
     };
 
@@ -1274,6 +1329,23 @@ const FindingForm: React.FC<{ finding?: PredefinedFinding, defaultCategoryId?: s
                 )}
             </div>
             
+            {finding && (
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 mt-4">
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                        <input 
+                            type="checkbox" 
+                            checked={isExcluded} 
+                            onChange={e => setIsExcluded(e.target.checked)} 
+                            className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" 
+                        />
+                        <div>
+                            <span className="font-bold text-gray-800 dark:text-gray-200">استثناء من التنبيه (رسالة القسم)</span>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">عند اختيار هذا البند (مثل "سليم") لن تظهر الرسالة التوضيحية الخاصة بالقسم إذا كانت موجودة.</p>
+                        </div>
+                    </label>
+                </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-4 border-t dark:border-gray-700 sticky bottom-0 bg-white dark:bg-slate-800 z-10">
                 <Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button>
                 <Button type="submit" disabled={isUploading}>{isUploading ? 'جاري الرفع...' : 'حفظ'}</Button>

@@ -558,9 +558,12 @@ const ReportSettingsPage: React.FC = () => {
                                         <ColorInput label="خط العناوين الرئيسية" value={reportSettings.sectionTitleFontColor} onChange={v => handleSettingChange('sectionTitleFontColor', v)} />
                                         <ColorInput label="خلفية أقسام الفحص" value={reportSettings.findingsHeaderBackgroundColor} onChange={v => handleSettingChange('findingsHeaderBackgroundColor', v)} />
                                         <ColorInput label="خط أقسام الفحص" value={reportSettings.findingsHeaderFontColor} onChange={v => handleSettingChange('findingsHeaderFontColor', v)} />
+                                        <ColorInput label="خلفية الرسالة التوضيحية" value={reportSettings.categoryNoticeBackgroundColor || '#fef3c7'} onChange={v => handleSettingChange('categoryNoticeBackgroundColor', v)} />
+                                        <ColorInput label="خط الرسالة التوضيحية" value={reportSettings.categoryNoticeFontColor || '#92400e'} onChange={v => handleSettingChange('categoryNoticeFontColor', v)} />
                                         <ColorInput label="خلفية حاوية القسم" value={reportSettings.findingContainerBackgroundColor} onChange={v => handleSettingChange('findingContainerBackgroundColor', v)} />
                                         <ColorInput label="خلفية الصفحة العامة" value={reportSettings.pageBackgroundColor} onChange={v => handleSettingChange('pageBackgroundColor', v)} />
                                         <ColorInput label="لون النص الأساسي" value={reportSettings.textColor} onChange={v => handleSettingChange('textColor', v)} />
+                                        <ColorInput label="لون نص التذييل (الكاتب)" value={reportSettings.footerMetaFontColor || '#64748b'} onChange={v => handleSettingChange('footerMetaFontColor', v)} />
                                         <ColorInput label="لون الحدود والفواصل" value={reportSettings.borderColor} onChange={v => handleSettingChange('borderColor', v)} />
                                     </div>
                                 </section>
@@ -578,8 +581,10 @@ const ReportSettingsPage: React.FC = () => {
                                         <FontSizeSelector label="اسم السيارة (EN)" value={reportSettings.fontSizes.carName} onChange={v => handleFontSizeChange('carName', v)} options={HEADER_FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="عناوين الأقسام" value={reportSettings.fontSizes.categoryTitle} onChange={v => handleFontSizeChange('categoryTitle', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="بنود الفحص" value={reportSettings.fontSizes.findingTitle} onChange={v => { handleFontSizeChange('findingTitle', v); handleFontSizeChange('findingValue', v); }} options={FONT_SIZE_OPTIONS} />
+                                        <FontSizeSelector label="الرسالة التوضيحية" value={reportSettings.fontSizes.categoryNoticeText || 'text-sm'} onChange={v => handleFontSizeChange('categoryNoticeText', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="نصوص الملاحظات" value={reportSettings.fontSizes.noteText} onChange={v => handleFontSizeChange('noteText', v)} options={FONT_SIZE_OPTIONS} />
                                         <FontSizeSelector label="نص إخلاء المسؤولية" value={reportSettings.fontSizes.disclaimer} onChange={v => handleFontSizeChange('disclaimer', v)} options={FONT_SIZE_OPTIONS} />
+                                        <FontSizeSelector label="نص التذييل (الكاتب)" value={reportSettings.fontSizes.footerMetaText || 'text-xs'} onChange={v => handleFontSizeChange('footerMetaText', v)} options={FONT_SIZE_OPTIONS} />
                                         <div className="flex flex-col gap-1.5">
                                             <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">حجم العلامة المائية</label>
                                             <input 
@@ -765,7 +770,16 @@ const ReportSettingsPage: React.FC = () => {
                                                 inspectionType={mockData.inspectionType as any}
                                                 customFindingCategories={mockData.categories as any}
                                                 predefinedFindings={mockData.predefined as any}
-                                                settings={{ ...settings, reportSettings: reportSettings }}
+                                                settings={{ 
+                                                    ...settings, 
+                                                    reportSettings: {
+                                                        ...reportSettings,
+                                                        categoryNotices: {
+                                                            ...(reportSettings.categoryNotices || {}),
+                                                            'cat-1': 'هذا نص توضيحي تجريبي لمعاينة الألوان والخطوط.'
+                                                        }
+                                                    } 
+                                                }}
                                                 isPrintView={true}
                                             />
                                         </div>

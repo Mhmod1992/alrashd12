@@ -809,6 +809,25 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
 
   const visibleCategoryIds = inspectionType.finding_category_ids;
 
+  const reportWriters = (() => {
+    const authors = new Set<string>();
+    if (request.general_notes) {
+      request.general_notes.forEach((note: any) => {
+        if (note.authorName && !note.text.includes("__REPORT_READY_NOTIF_SENT__")) {
+          authors.add(note.authorName);
+        }
+      });
+    }
+    if (request.category_notes) {
+      Object.values(request.category_notes).forEach((notes: any) => {
+        notes.forEach((note: any) => {
+          if (note.authorName) authors.add(note.authorName);
+        });
+      });
+    }
+    return Array.from(authors);
+  })();
+
   const allImageNotes: { note: Note; categoryName: string }[] = [];
   visibleCategoryIds.forEach(catId => {
     const category = customFindingCategories.find(c => c.id === catId);
@@ -1075,6 +1094,10 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
 
           const textOnlyNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !note.image);
 
+          const categoryNoticeText = reportSettings.categoryNotices?.[catId];
+          const excludedFindingsList = reportSettings.excludedNoticeFindings || [];
+          const shouldShowNotice = categoryNoticeText && sortedFindings.some(({ predefined }) => !predefined || !excludedFindingsList.includes(predefined.id));
+
           return (
             <View key={catId} style={[styles.categorySection, { borderColor: reportSettings.borderColor }]}>
               <Text
@@ -1091,6 +1114,29 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                     <Text key={i} style={styles.noteWatermarkText}>{category.name}</Text>
                   ))}
                 </View>
+
+                {shouldShowNotice && sortedFindings.length > 0 && (
+                  <View style={{
+                    marginBottom: 8,
+                    paddingHorizontal: 8,
+                    paddingVertical: 5,
+                    borderRadius: 6,
+                    borderWidth: 1,
+                    borderStyle: 'solid',
+                    textAlign: 'center',
+                    backgroundColor: reportSettings.categoryNoticeBackgroundColor || reportSettings.findingsHeaderBackgroundColor || '#f8fafc',
+                    borderColor: reportSettings.borderColor || '#cbd5e1',
+                  }}>
+                    <Text style={{
+                      color: reportSettings.categoryNoticeFontColor || reportSettings.findingsHeaderFontColor || '#0f172a',
+                      fontSize: 8,
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                    }}>
+                      {categoryNoticeText}
+                    </Text>
+                  </View>
+                )}
 
                 {categoryFindings.length === 0 && textOnlyNotes.length === 0 && (
                   <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 15, gap: 8 }}>
@@ -1369,21 +1415,30 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
             </Text>
             <Text>{reportSettings.disclaimerText}</Text>
             
-            {(downloadedBy || downloadDateTime) && (
-              <View style={{ marginTop: 6, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: '#e2e8f0', flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', gap: 10, flexWrap: 'wrap' }}>
-                {downloadedBy && (
-                  <View style={{ flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 6, color: '#94a3b8' }}>{reportDirection === 'ltr' ? 'Downloaded by: ' : 'تم تحميل التقرير بواسطة: '}</Text>
-                    <Text style={{ fontSize: 6, color: '#64748b', fontWeight: 'bold' }}>{downloadedBy}</Text>
-                  </View>
-                )}
-                {downloadDateTime && (
-                  <Text style={{ fontSize: 6, color: '#94a3b8' }}>
-                    {reportDirection === 'ltr' ? `Date: ${downloadDateTime}` : `التاريخ والوقت: ${downloadDateTime}`}
-                  </Text>
-                )}
+            <View style={{ marginTop: 6, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: '#e2e8f0', flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', gap: 10, flexWrap: 'wrap', color: reportSettings.footerMetaFontColor || '#64748b' }}>
+              <View style={{ flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', alignItems: 'center' }}>
+                <Text style={{ fontSize: 6, opacity: 0.8 }}>{reportDirection === 'ltr' ? 'Report Writer(s): ' : 'كاتب التقرير: '}</Text>
+                <Text style={{ fontSize: 6, fontWeight: 'bold' }}>{reportWriters.length > 0 ? reportWriters.join(' - ') : (downloadedBy || '')}</Text>
               </View>
-            )}
+              {downloadedBy && (
+                <>
+                  <Text style={{ fontSize: 6, opacity: 0.5 }}>|</Text>
+                  <View style={{ flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 6, opacity: 0.8 }}>{reportDirection === 'ltr' ? 'Printed by: ' : 'طبع بواسطة: '}</Text>
+                    <Text style={{ fontSize: 6, fontWeight: 'bold' }}>{downloadedBy}</Text>
+                  </View>
+                </>
+              )}
+              {downloadDateTime && (
+                <>
+                  <Text style={{ fontSize: 6, opacity: 0.5 }}>|</Text>
+                  <View style={{ flexDirection: reportDirection === 'ltr' ? 'row' : 'row-reverse', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 6, opacity: 0.8 }}>{reportDirection === 'ltr' ? 'Date & Time: ' : 'تاريخ ووقت الطباعة: '}</Text>
+                    <Text style={{ fontSize: 6 }}>{downloadDateTime}</Text>
+                  </View>
+                </>
+              )}
+            </View>
           </View>
         </View>
         <Text style={styles.pageNumber} render={({ pageNumber, totalPages }) => (

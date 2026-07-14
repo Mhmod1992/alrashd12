@@ -379,6 +379,8 @@ export interface ReportFontSizes {
   disclaimer: string;
   clientData: string;
   watermark: string;
+  categoryNoticeText?: string;
+  footerMetaText?: string;
 }
 
 export interface ReportSettings {
@@ -389,6 +391,9 @@ export interface ReportSettings {
   sectionTitleFontColor: string;
   findingsHeaderBackgroundColor: string;
   findingsHeaderFontColor: string;
+  categoryNoticeBackgroundColor?: string;
+  categoryNoticeFontColor?: string;
+  footerMetaFontColor?: string;
   noteImageBorderColor: string;
   noteImageBorderRadius: string;
   fontFamily: string;
@@ -425,6 +430,8 @@ export interface ReportSettings {
   carLogoHeight: number;
   noteHighlightOpacity: number;
   showTechnicianName: boolean;
+  categoryNotices?: Record<string, string>;
+  excludedNoticeFindings?: string[];
 }
 
 export interface CustomReportTemplate {

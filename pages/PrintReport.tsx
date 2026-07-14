@@ -1912,53 +1912,92 @@ ${reviewLink}
             </Modal>
             
             {/* Floating Price Card - Desktop only, hidden during print */}
-            <AnimatePresence>
-                <motion.div 
-                    initial={{ opacity: 0, x: -50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.6, ease: "easeOut" }}
-                    className="fixed top-24 left-8 z-[60] hidden lg:flex flex-col items-center gap-2 p-5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/50 dark:border-slate-700/50 print:hidden select-none hover:scale-105 transition-transform"
-                >
-                    <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-                        <Icon name="car" className="w-4 h-4" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">سعر الطلب</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1">
-                        <div className="flex items-baseline gap-1.5">
-                            <span className="text-4xl font-black text-blue-600 dark:text-blue-400 drop-shadow-sm">
-                                {originalRequest?.price || 0}
-                            </span>
-                            <span className="text-sm font-black text-slate-500 dark:text-slate-400">ر.س</span>
-                        </div>
-                        {originalRequest?.payment_type && (
-                            <div className={`text-[10px] font-bold px-3 py-1 rounded-full border shadow-sm ${
-                                originalRequest.payment_type === 'نقدي' 
-                                    ? 'bg-green-100 text-green-700 border-green-200' 
-                                    : originalRequest.payment_type === 'تحويل'
-                                    ? 'bg-yellow-100 text-yellow-700 border-yellow-200'
-                                    : originalRequest.payment_type === 'بطاقة'
-                                    ? 'bg-blue-100 text-blue-700 border-blue-200'
-                                    : originalRequest.payment_type === 'غير مدفوع'
-                                    ? 'bg-red-100 text-red-700 border-red-200'
-                                    : 'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}>
-                                {originalRequest.payment_type === 'غير مدفوع' ? 'آجل' : 
-                                 originalRequest.payment_type === 'بطاقة' ? 'شبكة' : originalRequest.payment_type}
+            {(() => {
+                const pType = originalRequest?.payment_type;
+                let cardBg = "bg-white/95 dark:bg-slate-800/95 border-slate-200/50 dark:border-slate-700/50 text-slate-800 dark:text-slate-100";
+                let priceColor = "text-blue-600 dark:text-blue-400";
+                let badgeStyle = "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/50 dark:text-slate-300 dark:border-slate-600/50";
+                let iconColor = "text-slate-400 dark:text-slate-500";
+                let dividerColor = "via-slate-200 dark:via-slate-700";
+                let subBadgeStyle = "bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400";
+                
+                if (pType === 'نقدي') {
+                    cardBg = "bg-emerald-50/95 dark:bg-emerald-950/80 border-emerald-200 dark:border-emerald-800/50 text-emerald-900 dark:text-emerald-100";
+                    priceColor = "text-emerald-600 dark:text-emerald-400";
+                    badgeStyle = "bg-emerald-600 text-white border-emerald-500";
+                    iconColor = "text-emerald-500/80 dark:text-emerald-400/80";
+                    dividerColor = "via-emerald-200/70 dark:via-emerald-800/50";
+                    subBadgeStyle = "bg-emerald-100/80 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300";
+                } else if (pType === 'تحويل') {
+                    cardBg = "bg-amber-50/95 dark:bg-amber-950/80 border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-100";
+                    priceColor = "text-amber-600 dark:text-amber-400";
+                    badgeStyle = "bg-amber-600 text-white border-amber-500";
+                    iconColor = "text-amber-500/80 dark:text-amber-400/80";
+                    dividerColor = "via-amber-200/70 dark:via-amber-800/50";
+                    subBadgeStyle = "bg-amber-100/80 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300";
+                } else if (pType === 'بطاقة') {
+                    cardBg = "bg-blue-50/95 dark:bg-blue-950/80 border-blue-200 dark:border-blue-800/50 text-blue-900 dark:text-blue-100";
+                    priceColor = "text-blue-600 dark:text-blue-400";
+                    badgeStyle = "bg-blue-600 text-white border-blue-500";
+                    iconColor = "text-blue-500/80 dark:text-blue-400/80";
+                    dividerColor = "via-blue-200/70 dark:via-blue-800/50";
+                    subBadgeStyle = "bg-blue-100/80 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300";
+                } else if (pType === 'غير مدفوع') {
+                    cardBg = "bg-rose-50/95 dark:bg-rose-950/80 border-rose-200 dark:border-rose-800/50 text-rose-900 dark:text-rose-100";
+                    priceColor = "text-rose-600 dark:text-rose-400";
+                    badgeStyle = "bg-rose-600 text-white border-rose-500";
+                    iconColor = "text-rose-500/80 dark:text-rose-400/80";
+                    dividerColor = "via-rose-200/70 dark:via-rose-800/50";
+                    subBadgeStyle = "bg-rose-100/80 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300";
+                } else if (pType === 'نقدي - بطاقة') {
+                    cardBg = "bg-violet-50/95 dark:bg-violet-950/80 border-violet-200 dark:border-violet-800/50 text-violet-900 dark:text-violet-100";
+                    priceColor = "text-violet-600 dark:text-violet-400";
+                    badgeStyle = "bg-violet-600 text-white border-violet-500";
+                    iconColor = "text-violet-500/80 dark:text-violet-400/80";
+                    dividerColor = "via-violet-200/70 dark:via-violet-800/50";
+                    subBadgeStyle = "bg-violet-100/80 dark:bg-violet-900/40 text-violet-800 dark:text-violet-300";
+                }
+                
+                return (
+                    <AnimatePresence>
+                        <motion.div 
+                            initial={{ opacity: 0, x: -50 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.6, ease: "easeOut" }}
+                            className={`fixed top-24 left-8 z-[60] hidden lg:flex flex-col items-center gap-2 p-5 backdrop-blur-md rounded-2xl shadow-2xl border print:hidden select-none hover:scale-105 transition-all duration-300 ${cardBg}`}
+                        >
+                            <div className={`flex items-center gap-2 ${iconColor}`}>
+                                <Icon name="car" className="w-4 h-4" />
+                                <span className="text-[10px] font-black uppercase tracking-widest">سعر الطلب</span>
                             </div>
-                        )}
-                    </div>
-                    <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent my-1" />
-                    <div className="flex flex-col items-center gap-1">
-                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 px-2 py-0.5 rounded-full">
-                            {inspectionType?.name || 'فحص فني'}
-                        </span>
-                        <div className="flex items-center gap-1 text-[9px] text-slate-400">
-                            <Icon name="history" className="w-3 h-3" />
-                            <span>رقم الطلب: {originalRequest?.request_number}</span>
-                        </div>
-                    </div>
-                </motion.div>
-            </AnimatePresence>
+                            <div className="flex flex-col items-center gap-1">
+                                <div className="flex items-baseline gap-1.5">
+                                    <span className={`text-4xl font-black drop-shadow-sm ${priceColor}`}>
+                                        {originalRequest?.price || 0}
+                                    </span>
+                                    <span className="text-sm font-black opacity-80">ر.س</span>
+                                </div>
+                                {pType && (
+                                    <div className={`text-[10px] font-bold px-3 py-1 rounded-full border shadow-sm ${badgeStyle}`}>
+                                        {pType === 'غير مدفوع' ? 'آجل' : 
+                                         pType === 'بطاقة' ? 'شبكة' : pType}
+                                    </div>
+                                )}
+                            </div>
+                            <div className={`w-full h-px bg-gradient-to-r from-transparent to-transparent my-1 ${dividerColor}`} />
+                            <div className="flex flex-col items-center gap-1">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${subBadgeStyle}`}>
+                                    {inspectionType?.name || 'فحص فني'}
+                                </span>
+                                <div className="flex items-center gap-1 text-[9px] opacity-75">
+                                    <Icon name="history" className="w-3 h-3" />
+                                    <span>رقم الطلب: {originalRequest?.request_number}</span>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </AnimatePresence>
+                );
+            })()}
             
             {/* Desktop Floating Report Ready Notification Card */}
             {whatsappApiStatus === 'connected' && (
