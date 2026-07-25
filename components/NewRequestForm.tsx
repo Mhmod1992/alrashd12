@@ -989,7 +989,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                  count: history.length,
                  lastVisit: history.length > 0 ? history[0].created_at : '',
                  name: client.name,
-                 isVip: client.is_vip
+                 isVip: client.is_vip,
+                 clientObj: client
              });
              
              setIsWelcomeCardVisible(true);
@@ -1938,7 +1939,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
             <ClientHistoryModal 
                 isOpen={isHistoryModalOpen} 
-                client={existingClientSummary?.clientObj || null} 
+                client={existingClientSummary?.clientObj || (clientPhone ? clients.find(c => c.phone.includes(clientPhone)) || null : null)} 
                 onClose={() => setIsHistoryModalOpen(false)} 
             />
 
