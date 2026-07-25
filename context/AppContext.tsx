@@ -291,6 +291,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     }
                 }
             )
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        const newClient = payload.new as Client;
+                        setClients(prev => {
+                            if (prev.some(c => c.id === newClient.id)) return prev;
+                            return [newClient, ...prev];
+                        });
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedClient = payload.new as Client;
+                        setClients(prev => prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c));
+                    } else if (payload.eventType === 'DELETE') {
+                        const deletedId = payload.old.id;
+                        setClients(prev => prev.filter(c => c.id !== deletedId));
+                    }
+                }
+            )
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cars' },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        const newCar = payload.new as Car;
+                        setCars(prev => {
+                            if (prev.some(c => c.id === newCar.id)) return prev;
+                            return [newCar, ...prev];
+                        });
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedCar = payload.new as Car;
+                        setCars(prev => prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c));
+                    } else if (payload.eventType === 'DELETE') {
+                        const deletedId = payload.old.id;
+                        setCars(prev => prev.filter(c => c.id !== deletedId));
+                    }
+                }
+            )
             .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' },
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
