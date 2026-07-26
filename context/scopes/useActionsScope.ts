@@ -632,12 +632,41 @@ export const useActionsScope = (
 
     // --- RESERVATIONS ---
     const addReservation = useCallback(async (reservation: Omit<Reservation, 'id' | 'created_at' | 'status'>): Promise<Reservation> => {
-        const { data, error } = await supabase.from('reservations').insert({ ...reservation, status: 'new' }).select().single();
-        if (error) throw error;
-        setReservations(prev => [data as Reservation, ...prev]);
+        const creatorName = (reservation as any).created_by_name || authUser?.name || 'النظام';
+        const noteTag = `[أنشأ بواسطة: ${creatorName}]`;
+        const updatedNotes = reservation.notes 
+            ? (reservation.notes.includes('[أنشأ بواسطة:') ? reservation.notes : `${reservation.notes}\n${noteTag}`)
+            : noteTag;
+
+        const payload = {
+            ...reservation,
+            notes: updatedNotes,
+            status: 'new'
+        };
+
+        let data: any = null;
+        let error: any = null;
+
+        try {
+            const res = await supabase.from('reservations').insert({ ...payload, created_by_name: creatorName }).select().single();
+            data = res.data;
+            error = res.error;
+        } catch (e) {
+            error = e;
+        }
+
+        if (error) {
+            const res = await supabase.from('reservations').insert(payload).select().single();
+            if (res.error) throw res.error;
+            data = res.data;
+        }
+
+        const newReservation = { ...data, created_by_name: creatorName } as Reservation;
+        setReservations(prev => [newReservation, ...prev]);
         addNotification({ title: 'نجاح', message: 'تمت إضافة الحجز.', type: 'success' });
-        return data as Reservation;
-    }, [addNotification, setReservations]);
+        createActivityLog('إضافة حجز', `قام ${creatorName} بإضافة حجز جديد للعميل: ${reservation.client_name}`);
+        return newReservation;
+    }, [addNotification, authUser, createActivityLog, setReservations]);
 
     const updateReservationStatus = useCallback(async (id: string, status: 'new' | 'confirmed' | 'converted' | 'cancelled') => {
         const { error } = await supabase.from('reservations').update({ status }).eq('id', id);

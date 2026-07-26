@@ -99,6 +99,7 @@ export interface Reservation {
   price?: number;
   payment_type?: PaymentType;
   created_at: string;
+  created_by_name?: string;
 }
 
 // ... Payroll Types ...

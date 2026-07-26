@@ -57,7 +57,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
         fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation, page,
-        sendWhatsAppMessage, whatsappApiStatus, requests
+        sendWhatsAppMessage, whatsappApiStatus, requests, reservations, searchReservations
     } = useAppContext();
 
     // Responsive Logic
@@ -174,6 +174,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [isCheckingDebt, setIsCheckingDebt] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isCarHistoryModalOpen, setIsCarHistoryModalOpen] = useState(false);
+    const [matchedReservationHint, setMatchedReservationHint] = useState<Reservation | null>(null);
     const debtDebounceRef = useRef<number | null>(null);
 
     // State for keyboard navigation
@@ -791,6 +792,51 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         }, 600);
     }, [clientPhone, searchClients, fetchClientRequests]);
 
+    // --- Search Reservations for Hint Effect ---
+    useEffect(() => {
+        if (isReservationMode || !clientPhone) {
+            setMatchedReservationHint(null);
+            return;
+        }
+
+        const cleanPhone = clientPhone.replace(/\D/g, '');
+        // Require at least 9 digits (full phone number) before searching for reservation hint
+        if (cleanPhone.length < 9) {
+            setMatchedReservationHint(null);
+            return;
+        }
+
+        const last9 = cleanPhone.slice(-9);
+        const isPhoneMatching = (resPhone?: string) => {
+            if (!resPhone) return false;
+            const cleanResPhone = resPhone.replace(/\D/g, '');
+            if (cleanResPhone.length < 9) return false;
+            return cleanResPhone.endsWith(last9) || last9.endsWith(cleanResPhone.slice(-9));
+        };
+
+        // 1. Search local context first (only 'new' status - pending confirmation)
+        const localMatch = reservations.find(r => 
+            r.status === 'new' && 
+            isPhoneMatching(r.client_phone)
+        );
+
+        if (localMatch) {
+            setMatchedReservationHint(localMatch);
+        } else {
+            // 2. Query Supabase with last 9 digits
+            let isSubscribed = true;
+            searchReservations(last9).then(results => {
+                if (!isSubscribed) return;
+                const match = results.find(r => r.status === 'new' && isPhoneMatching(r.client_phone));
+                setMatchedReservationHint(match || null);
+            }).catch(() => {
+                if (isSubscribed) setMatchedReservationHint(null);
+            });
+
+            return () => { isSubscribed = false; };
+        }
+    }, [clientPhone, isReservationMode, reservations, searchReservations]);
+
 
     const handleFillCarData = () => {
         if (!foundHistory) return;
@@ -1328,15 +1374,13 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         const customer_name = clientName;
                         const car_name = make && model ? `${make.name_en} ${model.name_en} ${carYear}` : car_details;
                         const booking_no = savedReservation.reservation_number ? `RSV-${String(savedReservation.reservation_number).padStart(4, '0')}` : '---';
-                        const priceVal = Number(inspectionPrice) || 0;
-                        const priceLine = priceVal > 0 ? `\nقيمة الفحص: ${priceVal} ريال` : '';
 
                         const whatsAppMessage = `أهلاً بك ${customer_name}،
 
 يسعدنا تأكيد حجز موعد فحص مركبتكم بنجاح في مركزنا.
 
 السيارة: ${car_name}
-رقم الحجز: ${booking_no}${priceLine}
+رقم الحجز: ${booking_no}
 
 يرجى إبراز رقم الحجز عند الوصول للمركز.
 
@@ -1712,6 +1756,69 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         data={reservationFillData} 
                         onManualFill={handleManualFill} 
                     />
+                )}
+
+                {/* Reservation Hint Card for Incoming Reservations */}
+                {matchedReservationHint && !isReservationMode && (
+                    <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-amber-50 dark:from-slate-800 dark:via-indigo-950/40 dark:to-amber-950/20 border-2 border-indigo-200 dark:border-indigo-800/60 p-4 rounded-2xl shadow-md animate-fade-in mb-4">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-sm shrink-0 mt-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                            <div className="space-y-1 w-full">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-black bg-indigo-600 text-white px-2.5 py-0.5 rounded-full">💡 تلميح: حجز سابق مسجل</span>
+                                    <span className="text-xs font-mono font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded-md">
+                                        رقم الحجز: #{matchedReservationHint.reservation_number || 'بدون رقم'}
+                                    </span>
+                                </div>
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                    تم العثور على حجز وارد للعميل: <span className="text-indigo-600 dark:text-indigo-400">{matchedReservationHint.client_name}</span>
+                                </p>
+                                <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1 pt-1 bg-white/60 dark:bg-slate-900/40 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-slate-700 dark:text-slate-200">السيارة:</span>
+                                        <span className="font-semibold text-slate-800 dark:text-slate-100 font-sans dir-ltr inline-block">
+                                            {(() => {
+                                                const allMakes = (contextCarMakes && contextCarMakes.length > 0) ? contextCarMakes : initialMakes;
+                                                const allModels = (contextCarModels && contextCarModels.length > 0) ? contextCarModels : initialModels;
+                                                
+                                                let makeEn = '';
+                                                let modelEn = '';
+
+                                                if (matchedReservationHint.car_make_id) {
+                                                    const makeObj = allMakes.find(m => m.id === matchedReservationHint.car_make_id);
+                                                    if (makeObj) makeEn = makeObj.name_en || makeObj.name_ar;
+                                                }
+
+                                                if (matchedReservationHint.car_model_id) {
+                                                    const modelObj = allModels.find(m => m.id === matchedReservationHint.car_model_id);
+                                                    if (modelObj) modelEn = modelObj.name_en || modelObj.name_ar;
+                                                }
+
+                                                const yearMatch = matchedReservationHint.car_details?.match(/\b(19|20)\d{2}\b/);
+                                                const yearStr = yearMatch ? yearMatch[0] : '';
+
+                                                if (makeEn || modelEn) {
+                                                    return `${makeEn} ${modelEn} ${yearStr}`.trim();
+                                                }
+
+                                                return matchedReservationHint.car_details || 'غير مسجلة';
+                                            })()}
+                                        </span>
+                                    </div>
+                                    {matchedReservationHint.notes && (
+                                        <div className="flex items-start gap-2">
+                                            <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">الملاحظة:</span>
+                                            <span className="text-amber-700 dark:text-amber-400 font-semibold">{matchedReservationHint.notes}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )}
 
                 <div className={isMobile && currentStep !== 1 ? 'hidden' : 'block animate-fade-in'}>

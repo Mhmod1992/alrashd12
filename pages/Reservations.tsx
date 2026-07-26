@@ -68,6 +68,19 @@ const Reservations: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [timeFilter, setTimeFilter] = useState<'today' | 'all'>('all');
 
+    const getReservationCreator = (res: Reservation) => {
+        if (res.created_by_name) return res.created_by_name;
+        if (res.notes) {
+            const match = res.notes.match(/\[أنشأ بواسطة:\s*([^\]]+)\]/);
+            if (match) return match[1].trim();
+        }
+        if (res.source_text) {
+            const match = res.source_text.match(/\[أنشأ بواسطة:\s*([^\]]+)\]/);
+            if (match) return match[1].trim();
+        }
+        return 'غير محدد';
+    };
+
     const filteredReservations = useMemo(() => {
         let result = [...reservations];
 
@@ -90,11 +103,13 @@ const Reservations: React.FC = () => {
                 const clientPhone = (r.client_phone || '').toLowerCase();
                 const clientName = (r.client_name || '').toLowerCase();
                 const resNum = r.reservation_number ? `#RSV-${r.reservation_number}`.toLowerCase() : '';
+                const creator = getReservationCreator(r).toLowerCase();
                 
                 return carDetails.includes(term) || 
                        clientPhone.includes(term) || 
                        clientName.includes(term) ||
-                       resNum.includes(term);
+                       resNum.includes(term) ||
+                       creator.includes(term);
             });
         }
 
@@ -208,10 +223,6 @@ const Reservations: React.FC = () => {
         }
         
         message += `\nرقم الحجز الخاص بك: *${reservationId}*`;
-        
-        if (res.price) {
-            message += `\nالسعر: *${res.price}* ريال`;
-        }
         
         message += `\n\nفريقنا بانتظارك في موعدك المحدد. نتشرف بزيارتك`;
         await sendWhatsAppMessage(phoneWithCode, message);
@@ -396,6 +407,7 @@ const Reservations: React.FC = () => {
                                         <th className="px-4 py-3 text-slate-400 font-bold">سنة الصنع</th>
                                         <th className="px-4 py-3 text-slate-400 font-bold">السعر</th>
                                         <th className="px-4 py-3 text-slate-400 font-bold">نوع الخدمة</th>
+                                        <th className="px-4 py-3 text-slate-400 font-bold">أنشئ بواسطة</th>
                                         <th className="px-4 py-3 text-slate-400 font-bold">الحالة</th>
                                         <th className="px-4 py-3 text-slate-400 font-bold">التاريخ</th>
                                         <th className="px-4 py-3 text-left text-slate-400 font-bold">إجراءات</th>
@@ -447,6 +459,16 @@ const Reservations: React.FC = () => {
                                                 <span className="text-[11px] bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-2 py-1 rounded-lg font-medium border border-purple-100 dark:border-purple-800">
                                                     {res.service_type}
                                                 </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-[10px] font-black shrink-0">
+                                                        {getReservationCreator(res).charAt(0)}
+                                                    </div>
+                                                    <span className="font-bold text-slate-700 dark:text-slate-200 text-xs">
+                                                        {getReservationCreator(res)}
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className={`inline-block whitespace-nowrap px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${

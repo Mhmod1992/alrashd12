@@ -123,7 +123,7 @@ const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client,
                     onClick={() => setActiveTab('latest')}
                     className={`pb-2 text-sm font-bold transition-colors relative ${activeTab === 'latest' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
                 >
-                    أحدث الطلبات (3)
+                    اخر ثلاث زيارات
                     {activeTab === 'latest' && <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-indigo-600 dark:bg-indigo-400 rounded-t-full"></span>}
                 </button>
                 <button 
@@ -158,7 +158,18 @@ const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client,
                                 <div className={`p-4 rounded-lg border ${isUnpaid ? 'bg-red-50/50 border-red-100 dark:bg-red-900/10 dark:border-red-900/30' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700'} shadow-sm hover:shadow-md transition-shadow group`}>
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center gap-2">
-                                            <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">#{req.request_number}</span>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${req.id}&from=print`;
+                                                    window.open(url, '_blank');
+                                                }}
+                                                className="font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-mono hover:underline flex items-center gap-1 cursor-pointer"
+                                                title="معاينة الطلب في صفحة جديدة"
+                                            >
+                                                #{req.request_number}
+                                            </button>
                                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isUnpaid ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}>
                                                 {req.payment_type}
                                             </span>
