@@ -73,15 +73,25 @@ const getCardWidthClass = (size: string | undefined, isPrint: boolean) => {
     }
 };
 
-const generateWatermarkStyle = (text: string, settings: ReportSettings): React.CSSProperties => {
-    const safeText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const opacity = settings.watermarkOpacity ?? 0.06;
+const generateWatermarkStyle = (text: string, settings: ReportSettings, isCustomerRequestIncomplete?: boolean, reportDirection?: 'ltr' | 'rtl'): React.CSSProperties => {
+    let finalOpacity = settings.watermarkOpacity ?? 0.06;
+    let finalColorString = '0,0,0';
+    let finalText = text;
+    
+    if (isCustomerRequestIncomplete) {
+        finalOpacity = 0.22;
+        finalColorString = '239, 68, 68'; // #ef4444
+        finalText = reportDirection === 'ltr' ? 'INCOMPLETE REQUEST' : 'لم يكمل الفحص';
+    }
+
+    const safeText = finalText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const opacity = finalOpacity;
     const fontSize = settings.watermarkSize ?? 30;
     const hSpacing = settings.watermarkRepeatSpacing ?? 250;
     const vSpacing = hSpacing * 0.4;
     const rotation = settings.watermarkRotation ?? -25;
     const isOutline = settings.watermarkTextStyle === 'outline';
-    const color = `rgba(0,0,0,${opacity})`;
+    const color = `rgba(${finalColorString},${opacity})`;
 
     const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${hSpacing}" height="${vSpacing}">
@@ -288,6 +298,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
     const { appName, reportSettings } = settings;
     const { fontSizes } = reportSettings;
     const { technicians, employees, authUser } = useAppContext();
+    const isCustomerRequestIncomplete = (request.report_stamps || []).includes('CUSTOMER_REQUEST_INCOMPLETE');
 
     const isGeneralClient = client.phone === '0000000000' || client.name === 'بدون اسم' || client.phone === '0';
     const displayClientName = isGeneralClient ? (reportDirection === 'ltr' ? 'General Client' : 'عميل عام') : client.name;
@@ -523,13 +534,21 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
                         const textOnlyNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !note.image);
                         const techNames = getAssignedTechnicians(catId);
-                        const watermarkStyle = generateWatermarkStyle(category.name, reportSettings);
+                        const watermarkStyle = generateWatermarkStyle(category.name, reportSettings, isCustomerRequestIncomplete, reportDirection);
 
                         const categoryNoticeText = reportSettings.categoryNotices?.[catId];
                         const excludedFindingsList = reportSettings.excludedNoticeFindings || [];
                         const shouldShowNotice = categoryNoticeText && sortedFindings.some(({ predefined }) => !predefined || !excludedFindingsList.includes(predefined.id));
 
                         if (allFindingsForCategory.length === 0 && textOnlyNotes.length === 0) {
+                            if (isCustomerRequestIncomplete) {
+                                return (
+                                    <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}>
+                                        <div className={`text-center w-full rounded-lg relative overflow-hidden ${isPrintView ? 'py-6' : 'py-10'}`} style={{ ...watermarkStyle, minHeight: isPrintView ? '80px' : '120px' }}>
+                                        </div>
+                                    </FindingCategorySection>
+                                );
+                            }
                             return <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}><div className={`text-center ${isPrintView ? 'py-2' : 'py-6'}`}><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMGI5ODEiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAgNkw5IDE3bC01LTUiLz48L3N2Zz4=" alt="No Issues" className="mx-auto" referrerPolicy="no-referrer" style={{ width: '40px', height: '40px', display: 'block' }} /><p className="mt-2 font-bold" style={{ color: '#475569' }}>{reportDirection === 'ltr' ? 'No Issues Found' : 'بدون ملاحظات'}</p></div></FindingCategorySection>;
                         }
 
@@ -557,7 +576,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
                     {generalTextOnlyNotes.length > 0 && (
                         <FindingCategorySection title={reportDirection === 'ltr' ? "General Notes" : "ملاحظات عامة"} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection}>
-                            <div data-setting-section="text-disclaimer" className={`bg-white rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', ...generateWatermarkStyle(reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة', reportSettings) }}>
+                            <div data-setting-section="text-disclaimer" className={`bg-white rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', ...generateWatermarkStyle(reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة', reportSettings, isCustomerRequestIncomplete, reportDirection) }}>
                                 <div className="relative z-10 space-y-1 p-0 m-0">{generalTextOnlyNotes.map(note => {
                                     const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
                                     const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
@@ -570,7 +589,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
 
                     {request.ai_analysis && (
                         <FindingCategorySection title={reportDirection === 'ltr' ? "Technical Report Explanation" : "شرح التقرير الفني"} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection}>
-                            <div data-setting-section="text-disclaimer" className={`bg-white rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', ...generateWatermarkStyle(reportDirection === 'ltr' ? 'Analysis' : 'تحليل', reportSettings) }}>
+                            <div data-setting-section="text-disclaimer" className={`bg-white rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', ...generateWatermarkStyle(reportDirection === 'ltr' ? 'Analysis' : 'تحليل', reportSettings, isCustomerRequestIncomplete, reportDirection) }}>
                                 <div className="relative z-10 space-y-1 p-0 m-0">
                                     {request.ai_analysis.split('\n').filter(line => line.trim() !== '').map((line, idx) => {
                                         const hasBold = line.includes('**');

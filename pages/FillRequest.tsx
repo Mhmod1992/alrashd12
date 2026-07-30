@@ -1712,71 +1712,7 @@ export const FillRequest: React.FC = () => {
                         updated_at: new Date().toISOString()
                     };
 
-                    // Auto-add/remove notes if stamping as INCOMPLETE
-                    if (isAdding && stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
-                        const noteText = "لم يتم إكمال الفحص بناءً على طلب العميل.";
-                        const updatedCategoryNotes = { ...categoryNotes };
-                        
-                        visibleFindingCategories.forEach(cat => {
-                            const newNote: Note = {
-                                id: uuidv4(),
-                                text: noteText,
-                                originalText: noteText,
-                                authorId: authUser?.id || '',
-                                authorName: authUser?.name || 'النظام',
-                                status: 'saved',
-                                highlightColor: 'red',
-                                displayTranslation: { lang: 'ar', isActive: false },
-                                categoryId: cat.id
-                            };
-                            updatedCategoryNotes[cat.id] = [...(updatedCategoryNotes[cat.id] || []), newNote];
-                        });
-                        
-                        setCategoryNotes(updatedCategoryNotes);
-                        updates.category_notes = updatedCategoryNotes;
-                        
-                        // Also add an activity log entry for this automatic action
-                        const autoNoteLog = createActivityLog('إضافة ملاحظات تلقائية', 'تم إضافة ملاحظة "لم يتم إكمال الفحص بناءً على طلب العميل" لجميع الأقسام باللون الأحمر');
-                        if (autoNoteLog) {
-                            updates.activity_log = [autoNoteLog, ...newActivityLog];
-                            setActivityLog(updates.activity_log);
-                        } else {
-                            setActivityLog(newActivityLog);
-                        }
-                    } else if (!isAdding && stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
-                        const noteText = "لم يتم إكمال الفحص بناءً على طلب العميل.";
-                        const noteTextAlt = "لم يتم إكمال الطلب بناءً على طلب العميل.";
-                        const noteTextAlt2 = "لم يتم إكمال الفحص  بناءً على طلب العميل.";
-                        const updatedCategoryNotes = { ...categoryNotes };
-                        let removedCount = 0;
-
-                        Object.keys(updatedCategoryNotes).forEach(catId => {
-                            if (updatedCategoryNotes[catId] && Array.isArray(updatedCategoryNotes[catId])) {
-                                const originalCount = updatedCategoryNotes[catId].length;
-                                updatedCategoryNotes[catId] = updatedCategoryNotes[catId].filter(n => 
-                                    n.text !== noteText && n.text !== noteTextAlt && n.text !== noteTextAlt2
-                                );
-                                removedCount += (originalCount - updatedCategoryNotes[catId].length);
-                            }
-                        });
-
-                        if (removedCount > 0) {
-                            setCategoryNotes(updatedCategoryNotes);
-                            updates.category_notes = updatedCategoryNotes;
-                            
-                            const autoRemoveLog = createActivityLog('حذف ملاحظات تلقائية', `تم حذف ${removedCount} ملاحظة "لم يتم إكمال الفحص بناءً على طلب العميل"`);
-                            if (autoRemoveLog) {
-                                updates.activity_log = [autoRemoveLog, ...newActivityLog];
-                                setActivityLog(updates.activity_log);
-                            } else {
-                                setActivityLog(newActivityLog);
-                            }
-                        } else {
-                            setActivityLog(newActivityLog);
-                        }
-                    } else {
-                        setActivityLog(newActivityLog);
-                    }
+                    setActivityLog(newActivityLog);
 
                     await updateRequest(updates);
 

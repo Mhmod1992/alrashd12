@@ -490,6 +490,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     position: 'relative',
     marginHorizontal: layoutSettings.notes.container.marginHorizontal,
+    overflow: 'hidden',
   },
   noteWatermarkContainer: {
     position: 'absolute',
@@ -1114,7 +1115,6 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                     <Text key={i} style={styles.noteWatermarkText}>{category.name}</Text>
                   ))}
                 </View>
-
                 {shouldShowNotice && sortedFindings.length > 0 && (
                   <View style={{
                     marginBottom: 8,
