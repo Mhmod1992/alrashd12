@@ -128,15 +128,9 @@ const NewRequestSuccessModal: React.FC = () => {
                         العودة للقائمة
                     </Button>
                     
-                    { (isReceptionist || newRequestSuccessState.showWhatsAppButton) ? (
-                        <Button onClick={handleSendToClient} variant="whatsapp" leftIcon={<WhatsappIcon className="w-5 h-5" />}>
-                            إرسال للعميل
-                        </Button>
-                    ) : (
-                        <Button onClick={handlePrintDraft} leftIcon={<Icon name="print" className="w-5 h-5" />}>
-                            طباعة مسودة
-                        </Button>
-                    )}
+                    <Button onClick={handlePrintDraft} leftIcon={<Icon name="print" className="w-5 h-5" />}>
+                        طباعة مسودة
+                    </Button>
                 </div>
             )}
         </Modal>

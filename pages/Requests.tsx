@@ -74,7 +74,8 @@ const Requests: React.FC = () => {
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
-        lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations
+        lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations,
+        showNewRequestSuccessModal
     } = useAppContext();
 
     const [requestNumberQuery, setRequestNumberQuery] = useState('');
@@ -945,8 +946,11 @@ const Requests: React.FC = () => {
 
             addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب.', type: 'success' });
             setIsPaymentModalOpen(false);
+            const paidRequestId = paymentRequest.id;
+            const paidRequestNumber = paymentRequest.request_number;
             setPaymentRequest(null);
             setSendWhatsAppStartNotify(true);
+            showNewRequestSuccessModal(paidRequestId, paidRequestNumber, false);
         } catch (error) {
             addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع.', type: 'error' });
         }

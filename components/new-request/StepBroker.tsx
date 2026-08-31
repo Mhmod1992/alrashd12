@@ -13,11 +13,13 @@ interface StepBrokerProps {
     brokerCommission: number;
     setBrokerCommission: (val: number) => void;
     brokers: Broker[];
+    stepNumber?: number;
 }
 
 const StepBroker: React.FC<StepBrokerProps> = ({ 
     useBroker, setUseBroker, brokerId, setBrokerId, 
-    brokerCommission, setBrokerCommission, brokers 
+    brokerCommission, setBrokerCommission, brokers,
+    stepNumber
 }) => {
     const formInputClasses = "mt-1 block w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
     const endRef = useRef<HTMLDivElement>(null);
@@ -65,7 +67,7 @@ const StepBroker: React.FC<StepBrokerProps> = ({
     return (
         <fieldset className="bg-white dark:bg-slate-800/50 p-4 sm:p-6 rounded-lg shadow-sm">
             <legend className="text-lg font-semibold mb-4 text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">4</span>
+                <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">{stepNumber ?? 4}</span>
                 السمسار وإنهاء
             </legend>
 

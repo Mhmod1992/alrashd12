@@ -71,6 +71,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
     brokers,
     carMakes,
     carModels,
+    showConfirmModal,
   } = useAppContext();
 
   // --- Configuration ---
@@ -1570,13 +1571,44 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
     );
   };
 
+  const handleCancel = () => {
+    const hasData = Boolean(
+      clientName.trim() ||
+      clientPhone.trim() ||
+      carMakeId ||
+      carModelId ||
+      plateChars.trim() ||
+      plateNums.trim() ||
+      chassisNumber.trim() ||
+      carMakeSearchTerm.trim() ||
+      carModelSearchTerm.trim() ||
+      inspectionTypeId ||
+      (inspectionPrice !== "" && inspectionPrice !== 0) ||
+      paymentNote.trim() ||
+      brokerId
+    );
+
+    if (hasData) {
+      showConfirmModal({
+        title: "تأكيد الإلغاء",
+        message: "هل أنت متأكد من الإلغاء؟ سيتم فقد البيانات المدخلة.",
+        icon: "warning",
+        onConfirm: () => {
+          onCancel();
+        },
+      });
+    } else {
+      onCancel();
+    }
+  };
+
   // --- Footer Buttons ---
   const renderFooter = () => {
     // Desktop Footer: Single Action Row
     if (!isMobile) {
       return (
         <div className="flex justify-end gap-4 mt-6 pt-4 border-t dark:border-slate-700">
-          <Button variant="secondary" onClick={onCancel}>
+          <Button variant="secondary" onClick={handleCancel}>
             إلغاء
           </Button>
           <Button onClick={(e) => handleSubmit(e as any)}>
@@ -1629,7 +1661,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
           {currentStep === 1 && (
             <button
               type="button"
-              onClick={onCancel}
+              onClick={handleCancel}
               className="text-sm font-medium text-slate-500 dark:text-slate-400 p-2"
             >
               إلغاء

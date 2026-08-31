@@ -29,6 +29,7 @@ const WaitingForPaymentRequests: React.FC = () => {
         employees,
         brokers,
         sendWhatsAppMessage,
+        showNewRequestSuccessModal,
     } = useAppContext();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -240,7 +241,10 @@ const WaitingForPaymentRequests: React.FC = () => {
             });
             addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب.', type: 'success' });
             setIsPaymentModalOpen(false);
+            const paidRequestId = paymentRequest.id;
+            const paidRequestNumber = paymentRequest.request_number;
             setPaymentRequest(null);
+            showNewRequestSuccessModal(paidRequestId, paidRequestNumber, false);
         } catch (error) {
             addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع.', type: 'error' });
         }

@@ -70,6 +70,7 @@ interface StepDetailsProps {
     typeDropdownRef?: React.RefObject<HTMLDivElement>;
     typeListRef?: React.RefObject<HTMLUListElement>;
     handleKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, type: 'name' | 'phone' | 'make' | 'model' | 'inspectionType') => void;
+    stepNumber?: number;
 }
 
 const StepDetails: React.FC<StepDetailsProps> = (props) => {
@@ -78,7 +79,7 @@ const StepDetails: React.FC<StepDetailsProps> = (props) => {
     return (
         <fieldset className="bg-white dark:bg-slate-800/50 p-4 sm:p-6 rounded-lg shadow-sm">
             <legend className="text-lg font-semibold mb-4 text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
+                <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">{props.stepNumber ?? 3}</span>
                 تفاصيل الطلب
             </legend>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

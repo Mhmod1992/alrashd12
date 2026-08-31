@@ -35,6 +35,7 @@ interface StepClientProps {
     onMagicFill?: () => void;
     hasDefaultClient?: boolean;
     isMobile?: boolean;
+    stepNumber?: number;
     whatsappApiStatus?: 'connected' | 'disconnected' | 'checking';
     sendWhatsAppStartNotify?: boolean;
     setSendWhatsAppStartNotify?: (val: boolean) => void;
@@ -62,7 +63,7 @@ const StepClient: React.FC<StepClientProps> = (props) => {
         <fieldset className="bg-white dark:bg-slate-800/50 p-4 sm:p-6 rounded-lg shadow-sm">
             <legend className="text-lg font-semibold mb-4 text-slate-700 dark:text-slate-200 flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
-                    <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+                    <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">{props.stepNumber ?? 1}</span>
                     بيانات العميل
                 </div>
                 {props.onMagicFill && props.hasDefaultClient && (

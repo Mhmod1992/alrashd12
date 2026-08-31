@@ -76,7 +76,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const isReceptionistMode = isReceptionistRole || page === 'waiting-requests';
     const isEditMode = !!initialData;
     const shouldShowWhatsAppCheckbox = !isReservationMode && !isEditMode && (!!initialReservationData || !isReceptionistMode);
-    const TOTAL_STEPS = (isReceptionistMode || isReservationMode) ? 3 : 4;
+    const hasBrokerStep = !isReceptionistMode && !isReservationMode && can('add_broker_commission');
+    const TOTAL_STEPS = hasBrokerStep ? 4 : 3;
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -448,7 +449,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             case 'name':
                 setClientName(reservationFillData.name);
                 setTimeout(() => {
-                    nameInputRef.current?.focus();
+                    if (!isMobile) nameInputRef.current?.focus();
                     if (reservationFillData.name.length >= 3) {
                         setIsSearchingClientName(true);
                         searchClients(reservationFillData.name).then(results => {
@@ -463,7 +464,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 const digits = reservationFillData.phone.replace(/\D/g, '').slice(0, 10);
                 setClientPhone(digits);
                 setTimeout(() => {
-                    phoneInputRef.current?.focus();
+                    if (!isMobile) phoneInputRef.current?.focus();
                     if (digits.length > 3) {
                         setIsSearchingClientPhone(true);
                         searchClients(digits).then(results => {
@@ -496,7 +497,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     });
                 }
                 setTimeout(() => {
-                    makeInputRef.current?.focus();
+                    if (!isMobile) makeInputRef.current?.focus();
                     setIsMakeDropdownOpen(true);
                     if (reservationFillData.make.length >= 1 && !matchedMake) {
                         setIsSearchingMake(true);
@@ -524,7 +525,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 }
 
                 setTimeout(() => {
-                    modelInputRef.current?.focus();
+                    if (!isMobile) modelInputRef.current?.focus();
                     setIsModelDropdownOpen(true);
                     if (resolvedMakeId) {
                         const hasModels = contextCarModels.some(m => m.make_id === resolvedMakeId);
@@ -551,12 +552,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 } else {
                     setCarYear(undefined as any);
                 }
-                setTimeout(() => yearInputRef.current?.focus(), 50);
+                if (!isMobile) setTimeout(() => yearInputRef.current?.focus(), 50);
                 break;
             case 'plate':
                 setPlateNums(reservationFillData.plateNums);
                 setPlateChars(reservationFillData.plateChars);
-                setTimeout(() => plateCharInputRef.current?.focus(), 50);
+                if (!isMobile) setTimeout(() => plateCharInputRef.current?.focus(), 50);
                 break;
             case 'service':
                 if (reservationFillData.service) {
@@ -573,8 +574,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     } else {
                         addNotification({ title: 'تنبيه', message: 'لم يتم العثور على نوع فحص مطابق تماماً، يرجى الاختيار من القائمة.', type: 'info' });
                     }
-                    if (currentStep < 3) setCurrentStep(3);
-                    setTimeout(() => typeInputRef.current?.focus(), 50);
+                    if (currentStep < 2 && isMobile) setCurrentStep(2);
+                    else if (currentStep < 3 && !isMobile) setCurrentStep(3);
+                    if (!isMobile) setTimeout(() => typeInputRef.current?.focus(), 50);
                 }
                 break;
             case 'price':
@@ -1145,7 +1147,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         }
 
         setIsModelDropdownOpen(true);
-        if (modelInputRef.current) {
+        if (modelInputRef.current && !isMobile) {
             modelInputRef.current.focus();
         }
     };
@@ -1156,7 +1158,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setIsModelDropdownOpen(false);
         setErrors(prev => ({ ...prev, carModel: false }));
 
-        if (yearInputRef.current) {
+        if (yearInputRef.current && !isMobile) {
             yearInputRef.current.focus();
         }
     };
@@ -1172,7 +1174,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     setCarMakeId(newMake.id);
                     setCarMakeSearchTerm(newMake.name_en);
                     addNotification({ title: 'تم الإضافة', message: 'تم إضافة الشركة بنجاح.', type: 'success' });
-                    modelInputRef.current?.focus();
+                    if (!isMobile) modelInputRef.current?.focus();
                 } catch (e) {
                     addNotification({ title: 'خطأ', message: 'فشل إضافة الشركة.', type: 'error' });
                 }
@@ -1191,7 +1193,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     setCarModelId(newModel.id);
                     setCarModelSearchTerm(newModel.name_en);
                     addNotification({ title: 'تم الإضافة', message: 'تم إضافة الموديل بنجاح.', type: 'success' });
-                    yearInputRef.current?.focus();
+                    if (!isMobile) yearInputRef.current?.focus();
                 } catch (e) {
                     addNotification({ title: 'خطأ', message: 'فشل إضافة الموديل.', type: 'error' });
                 }
@@ -1218,7 +1220,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         // Removed setInspectionPrice(type.price) to prevent overwriting user-entered price
         setIsTypeDropdownOpen(false);
         setErrors(prev => ({ ...prev, inspectionType: false }));
-        priceInputRef.current?.focus();
+        if (!isMobile) priceInputRef.current?.focus();
     };
 
     const displayInspectionTypes = useMemo(() => {
@@ -1238,81 +1240,121 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         return types;
     }, [inspectionTypeSearchTerm, inspectionTypes, requests]);
 
-    const validateStep = (step: number) => {
+    const validateClient = () => {
         const newErrors: Record<string, boolean> = {};
-        let firstInvalidField: HTMLElement | null = null;
-
-        const checkField = (field: string, ref: React.RefObject<HTMLElement>) => {
-            if (newErrors[field] && !firstInvalidField) firstInvalidField = ref.current;
-        };
-
-        switch (step) {
-            case 1:
-                if (showClientFields) {
-                    if (!clientName.trim()) newErrors['clientName'] = true;
-                    if (clientPhone.length < 10) newErrors['clientPhone'] = true;
-                }
-
-                checkField('clientName', nameInputRef);
-                checkField('clientPhone', phoneInputRef);
-                break;
-            case 2:
-                if (!isReservationMode) {
-                    if (useChassisNumber) {
-                        if (chassisNumber.length < 5) newErrors['chassisNumber'] = true;
-                    } else if (showPlateField) {
-                        if (plateChars.trim().length < 1) newErrors['plateChars'] = true;
-                        if (plateNums.trim().length < 1) newErrors['plateNums'] = true;
-                    }
-                }
-                
-                if (!foundHistory) {
-                    if (!carMakeId) newErrors['carMake'] = true;
-                    if (!carModelId) newErrors['carModel'] = true;
-                    if (!carYear || carYear < 1900 || carYear > 2100) newErrors['carYear'] = true;
-                }
-
-                checkField('chassisNumber', chassisInputRef);
-                checkField('plateChars', plateCharInputRef);
-                checkField('plateNums', plateNumInputRef);
-                checkField('carMake', makeInputRef);
-                checkField('carModel', modelInputRef);
-                checkField('carYear', yearInputRef);
-                break;
-            case 3:
-                if (!inspectionTypeId) newErrors['inspectionType'] = true;
-                if (Number(inspectionPrice) <= 0) newErrors['inspectionPrice'] = true;
-
-                if (!isReservationMode) {
-                    if (!isReceptionistMode) {
-                        if (!paymentType) newErrors['paymentType'] = true;
-                        if (paymentType === PaymentType.Split) {
-                            const totalSplit = splitCashAmount + splitCardAmount;
-                            if (Math.abs(totalSplit - (Number(inspectionPrice) || 0)) > 0.01) {
-                                addNotification({ title: 'خطأ في الدفع', message: 'المبالغ غير متطابقة.', type: 'error' });
-                                return false;
-                            }
-                        }
-                        // Payment note is now optional as per latest request
-                    }
-                }
-                checkField('inspectionType', typeInputRef);
-                checkField('inspectionPrice', priceInputRef);
-                break;
+        if (showClientFields) {
+            if (!clientName.trim()) newErrors['clientName'] = true;
+            if (clientPhone.length < 10) newErrors['clientPhone'] = true;
         }
 
-        setErrors(newErrors);
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(prev => ({ ...prev, ...newErrors }));
+            if (!isMobile) {
+                if (newErrors['clientName']) nameInputRef.current?.focus();
+                else if (newErrors['clientPhone']) phoneInputRef.current?.focus();
+            }
+            addNotification({ title: 'بيانات ناقصة', message: 'الرجاء تعبئة اسم ورقم هاتف العميل بشكل صحيح.', type: 'error' });
+            return false;
+        }
+        return true;
+    };
+
+    const validateCar = () => {
+        const newErrors: Record<string, boolean> = {};
+        if (!isReservationMode) {
+            if (useChassisNumber) {
+                if (chassisNumber.length < 5) newErrors['chassisNumber'] = true;
+            } else if (showPlateField) {
+                if (plateChars.trim().length < 1) newErrors['plateChars'] = true;
+                if (plateNums.trim().length < 1) newErrors['plateNums'] = true;
+            }
+        }
+        
+        if (!foundHistory) {
+            if (!carMakeId) newErrors['carMake'] = true;
+            if (!carModelId) newErrors['carModel'] = true;
+            if (!carYear || carYear < 1900 || carYear > 2100) newErrors['carYear'] = true;
+        }
 
         if (Object.keys(newErrors).length > 0) {
-            if (firstInvalidField) {
-                firstInvalidField.focus();
-                firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setErrors(prev => ({ ...prev, ...newErrors }));
+            if (!isMobile) {
+                if (newErrors['chassisNumber']) chassisInputRef.current?.focus();
+                else if (newErrors['plateChars']) plateCharInputRef.current?.focus();
+                else if (newErrors['plateNums']) plateNumInputRef.current?.focus();
+                else if (newErrors['carMake']) makeInputRef.current?.focus();
+                else if (newErrors['carModel']) modelInputRef.current?.focus();
+                else if (newErrors['carYear']) yearInputRef.current?.focus();
             }
             if (newErrors['carMake'] || newErrors['carModel']) {
                 addNotification({ title: 'بيانات ناقصة', message: 'الرجاء اختيار الشركة والموديل من القائمة أو إضافتهما.', type: 'error' });
             } else {
-                addNotification({ title: 'بيانات ناقصة', message: 'الرجاء تعبئة الحقول المطلوبة.', type: 'error' });
+                addNotification({ title: 'بيانات ناقصة', message: 'الرجاء تعبئة بيانات السيارة المطلوبة.', type: 'error' });
             }
+            return false;
+        }
+        return true;
+    };
+
+    const validateDetails = () => {
+        const newErrors: Record<string, boolean> = {};
+        if (!inspectionTypeId) newErrors['inspectionType'] = true;
+        if (Number(inspectionPrice) <= 0) newErrors['inspectionPrice'] = true;
+
+        if (!isReservationMode) {
+            if (!isReceptionistMode) {
+                if (!paymentType) newErrors['paymentType'] = true;
+                if (paymentType === PaymentType.Split) {
+                    const totalSplit = splitCashAmount + splitCardAmount;
+                    if (Math.abs(totalSplit - (Number(inspectionPrice) || 0)) > 0.01) {
+                        addNotification({ title: 'خطأ في الدفع', message: 'المبالغ غير متطابقة.', type: 'error' });
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(prev => ({ ...prev, ...newErrors }));
+            if (!isMobile) {
+                if (newErrors['inspectionType']) typeInputRef.current?.focus();
+                else if (newErrors['inspectionPrice']) priceInputRef.current?.focus();
+            }
+            addNotification({ title: 'بيانات ناقصة', message: 'الرجاء تعبئة تفاصيل الفحص والسعر.', type: 'error' });
+            return false;
+        }
+        return true;
+    };
+
+    const validateStep = (step: number) => {
+        if (isMobile) {
+            if (step === 1) return validateCar();
+            if (step === 2) return validateDetails();
+            if (step === 3 && hasBrokerStep) return true;
+            if ((step === 3 && !hasBrokerStep) || step === 4) return validateClient();
+            return true;
+        } else {
+            if (step === 1) return validateClient();
+            if (step === 2) return validateCar();
+            if (step === 3) return validateDetails();
+            return true;
+        }
+    };
+
+    const validateAll = () => {
+        const isCarValid = validateCar();
+        if (!isCarValid) {
+            if (isMobile) setCurrentStep(1);
+            return false;
+        }
+        const isDetailsValid = validateDetails();
+        if (!isDetailsValid) {
+            if (isMobile) setCurrentStep(2);
+            return false;
+        }
+        const isClientValid = validateClient();
+        if (!isClientValid) {
+            if (isMobile) setCurrentStep(hasBrokerStep ? 4 : 3);
             return false;
         }
         return true;
@@ -1321,14 +1363,16 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const handleNext = () => {
         if (validateStep(currentStep)) {
             setCurrentStep(prev => prev + 1);
-            setTimeout(() => {
-                if (currentStep === 1) {
-                    if (useChassisNumber) chassisInputRef.current?.focus();
-                    else plateCharInputRef.current?.focus();
-                } else if (currentStep === 2) {
-                    typeInputRef.current?.focus();
-                }
-            }, 300);
+            if (!isMobile) {
+                setTimeout(() => {
+                    if (currentStep === 1) {
+                        typeInputRef.current?.focus();
+                    } else if (currentStep === 2) {
+                        if (useChassisNumber) chassisInputRef.current?.focus();
+                        else plateCharInputRef.current?.focus();
+                    }
+                }, 300);
+            }
         }
     };
 
@@ -1336,8 +1380,40 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setCurrentStep(prev => prev - 1);
     };
 
+    const handleCancel = () => {
+        const hasData = Boolean(
+            clientName.trim() ||
+            clientPhone.trim() ||
+            carMakeId ||
+            carModelId ||
+            plateChars.trim() ||
+            plateNums.trim() ||
+            chassisNumber.trim() ||
+            carMakeSearchTerm.trim() ||
+            carModelSearchTerm.trim() ||
+            inspectionTypeId ||
+            (inspectionPrice !== '' && inspectionPrice !== 0) ||
+            paymentNote.trim() ||
+            reservationNotes.trim() ||
+            brokerId
+        );
+
+        if (hasData) {
+            showConfirmModal({
+                title: 'تأكيد الإلغاء',
+                message: 'هل أنت متأكد من الإلغاء؟ سيتم فقد البيانات المدخلة.',
+                icon: 'warning',
+                onConfirm: () => {
+                    onCancel();
+                }
+            });
+        } else {
+            onCancel();
+        }
+    };
+
     const handleReservationSubmit = async () => {
-        if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
+        if (!validateAll()) return;
 
         try {
             const make = contextCarMakes.find(m => m.id === carMakeId) || makeSuggestions.find(m => m.id === carMakeId);
@@ -1407,7 +1483,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             return;
         }
 
-        if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
+        if (!validateAll()) return;
 
         if (!authUser) {
             addNotification({ title: 'خطأ', message: 'لا يمكن تحديد موظف حالي.', type: 'error' });
@@ -1543,8 +1619,27 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 });
 
                 if (newAddedRequest) {
-                    if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected' && newStatus !== RequestStatus.WAITING_PAYMENT && finalPaymentType !== PaymentType.Unpaid && clientPhone !== '0000000000') {
-                        const message = `حياكم الله *${clientName}*،
+                    if (whatsappApiStatus === 'connected' && clientPhone !== '0000000000') {
+                        if (newStatus === RequestStatus.WAITING_PAYMENT) {
+                            // Automatically send WhatsApp for waiting payment requests without manual button click
+                            const makeName = carSnapshot.make_en || '';
+                            const modelName = carSnapshot.model_en || '';
+                            const yearName = carYear || '';
+                            const carInfo = (makeName || modelName) ? `🚙 *السيارة: ${makeName} ${modelName} ${yearName}*\n` : '';
+                            const inspectionTypeObj = inspectionTypes.find(t => t.id === inspectionTypeId);
+                            const inspectionTypeName = inspectionTypeObj ? inspectionTypeObj.name : 'فحص';
+
+                            let phone = clientPhone.replace(/\D/g, '');
+                            if (phone.startsWith('05')) {
+                                phone = '966' + phone.substring(1);
+                            } else if (phone.length === 9 && phone.startsWith('5')) {
+                                phone = '966' + phone;
+                            }
+
+                            const message = `أهلاً *${clientName}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${newAddedRequest.request_number}*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${Number(inspectionPrice)} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
+                            await sendWhatsAppMessage(phone, message, clientName, { suppressModal: true });
+                        } else if (sendWhatsAppStartNotify && finalPaymentType !== PaymentType.Unpaid) {
+                            const message = `حياكم الله *${clientName}*،
 
 *#${newAddedRequest.request_number}*
 
@@ -1555,7 +1650,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 شكراً لاختياركم مركزنا.
 
 *ادارة مركز الراشد*`;
-                        await sendWhatsAppMessage(clientPhone, message, clientName, { suppressModal: true });
+                            await sendWhatsAppMessage(clientPhone, message, clientName, { suppressModal: true });
+                        }
                     }
 
                     showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number, forceWhatsApp);
@@ -1585,6 +1681,15 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const getStepTitle = (step: number) => {
+        if (isMobile) {
+            switch (step) {
+                case 1: return 'بيانات السيارة';
+                case 2: return 'تفاصيل الطلب';
+                case 3: return hasBrokerStep ? 'السمسار وإنهاء' : 'بيانات العميل';
+                case 4: return 'بيانات العميل';
+                default: return '';
+            }
+        }
         switch (step) {
             case 1: return 'بيانات العميل';
             case 2: return 'بيانات السيارة';
@@ -1603,7 +1708,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 message: 'تم تعبئة حقول اللوحة. الرجاء المراجعة.',
                 type: 'success',
             });
-            setTimeout(() => makeInputRef.current?.focus(), 500);
+            if (!isMobile) setTimeout(() => makeInputRef.current?.focus(), 500);
         } else {
             addNotification({
                 title: 'فشل المسح',
@@ -1612,7 +1717,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             });
         }
         setIsScannerOpen(false);
-    }, [addNotification]);
+    }, [addNotification, isMobile]);
 
     const handleCarIdentifyComplete = useCallback((data: { makeId: string; makeName: string; modelId: string; modelName: string; year: number }) => {
         setIsCarScannerOpen(false);
@@ -1636,10 +1741,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             type: 'success',
         });
 
-        setTimeout(() => {
-            yearInputRef.current?.focus();
-        }, 100);
-    }, [addNotification, fetchCarModelsByMake]);
+        if (!isMobile) {
+            setTimeout(() => {
+                yearInputRef.current?.focus();
+            }, 100);
+        }
+    }, [addNotification, fetchCarModelsByMake, isMobile]);
 
     const handleMagicFill = useCallback(() => {
         const defaultClient = initialClients.find(c => c.is_system_default);
@@ -1821,9 +1928,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     </div>
                 )}
 
-                <div className={isMobile && currentStep !== 1 ? 'hidden' : 'block animate-fade-in'}>
+                <div className={isMobile && currentStep !== (hasBrokerStep ? 4 : 3) ? 'hidden' : 'block animate-fade-in'}>
                     {(isReservationMode ? showClientFields : true) && (
                         <StepClient 
+                            stepNumber={isMobile ? TOTAL_STEPS : 1}
                             clientName={clientName}
                             clientPhone={clientPhone}
                             onNameChange={handleNameChange}
@@ -1860,8 +1968,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     )}
                 </div>
 
-                <div className={isMobile && currentStep !== 2 ? 'hidden' : 'block animate-fade-in'} ref={carSectionRef}>
+                <div className={isMobile && currentStep !== 1 ? 'hidden' : 'block animate-fade-in'} ref={carSectionRef}>
                     <StepCar 
+                        stepNumber={isMobile ? 1 : 2}
                         useChassisNumber={useChassisNumber}
                         setUseChassisNumber={setUseChassisNumber}
                         plateChars={plateChars}
@@ -1928,8 +2037,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     />
                 </div>
 
-                <div className={isMobile && currentStep !== 3 ? 'hidden' : 'block animate-fade-in'}>
+                <div className={isMobile && currentStep !== 2 ? 'hidden' : 'block animate-fade-in'}>
                     <StepDetails 
+                        stepNumber={isMobile ? 2 : 3}
                         inspectionTypeId={inspectionTypeId}
                         setInspectionTypeId={setInspectionTypeId}
                         inspectionTypes={inspectionTypes}
@@ -1968,9 +2078,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     />
                 </div>
 
-                {!isReceptionistMode && !isReservationMode && can('add_broker_commission') && (
-                    <div className={isMobile && currentStep !== 4 ? 'hidden' : 'block animate-fade-in'}>
+                {hasBrokerStep && (
+                    <div className={isMobile && currentStep !== 3 ? 'hidden' : 'block animate-fade-in'}>
                         <StepBroker 
+                            stepNumber={isMobile ? 3 : 4}
                             useBroker={useBroker}
                             setUseBroker={setUseBroker}
                             brokerId={brokerId}
@@ -1989,7 +2100,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     <div className="flex justify-between gap-4 max-w-4xl mx-auto md:max-w-none md:justify-end">
                         {isMobile ? (
                             <>
-                                <Button type="button" variant="secondary" onClick={currentStep === 1 ? onCancel : handleBack} className="w-1/3">
+                                <Button type="button" variant="secondary" onClick={currentStep === 1 ? handleCancel : handleBack} className="w-1/3">
                                     {currentStep === 1 ? 'إلغاء' : 'السابق'}
                                 </Button>
 
@@ -2009,7 +2120,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             </>
                         ) : (
                             <>
-                                <Button type="button" variant="secondary" onClick={onCancel}>
+                                <Button type="button" variant="secondary" onClick={handleCancel}>
                                     إلغاء
                                 </Button>
                                 <Button 

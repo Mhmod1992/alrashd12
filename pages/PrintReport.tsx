@@ -10,7 +10,7 @@ import SparklesIcon from '../components/icons/SparklesIcon';
 import ReportTranslationModal from '../components/ReportTranslationModal';
 import AiAnalysisModal from '../components/AiAnalysisModal';
 import Modal from '../components/Modal'; 
-import { InspectionRequest, ReportSettings, CustomFindingCategory, Note, RequestStatus } from '../types';
+import { InspectionRequest, ReportSettings, CustomFindingCategory, Note, RequestStatus, PaymentType } from '../types';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import CameraIcon from '../components/icons/CameraIcon';
@@ -1949,7 +1949,7 @@ ${reviewLink}
                     iconColor = "text-rose-500/80 dark:text-rose-400/80";
                     dividerColor = "via-rose-200/70 dark:via-rose-800/50";
                     subBadgeStyle = "bg-rose-100/80 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300";
-                } else if (pType === 'نقدي - بطاقة') {
+                } else if (pType === PaymentType.Split || (pType as string) === 'نقدي - بطاقة') {
                     cardBg = "bg-violet-50/95 dark:bg-violet-950/80 border-violet-200 dark:border-violet-800/50 text-violet-900 dark:text-violet-100";
                     priceColor = "text-violet-600 dark:text-violet-400";
                     badgeStyle = "bg-violet-600 text-white border-violet-500";
