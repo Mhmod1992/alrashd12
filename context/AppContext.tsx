@@ -181,7 +181,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } = useThemeScope(authUser, setAuthUser, can);
     
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
-    const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; }>({ isOpen: false, requestNumber: null, requestId: null, showWhatsAppButton: false });
+    const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; isWaiting?: boolean; }>({ isOpen: false, requestNumber: null, requestId: null, showWhatsAppButton: false, isWaiting: false });
     const [whatsappSuccessModal, setWhatsappSuccessModal] = useState<{ isOpen: boolean; clientName: string; phone: string; }>({ isOpen: false, clientName: '', phone: '' });
     const [shouldPrintDraft, setShouldPrintDraft] = useState(false);
 
@@ -1447,8 +1447,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const removeNotification = useCallback((id: string) => setNotifications(prev => prev.filter(n => n.id !== id)), []);
 
-    const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null, showWhatsAppButton: boolean = false) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber, showWhatsAppButton }), []);
-    const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null }), []);
+    const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null, showWhatsAppButton: boolean = false, isWaiting?: boolean) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber, showWhatsAppButton, isWaiting }), []);
+    const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null, showWhatsAppButton: false, isWaiting: false }), []);
 
     const showWhatsAppSuccessModal = useCallback((clientName: string, phone: string) => setWhatsappSuccessModal({ isOpen: true, clientName, phone }), []);
     const hideWhatsAppSuccessModal = useCallback(() => setWhatsappSuccessModal(prev => ({ ...prev, isOpen: false })), []);

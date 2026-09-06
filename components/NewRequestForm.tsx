@@ -1694,7 +1694,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     showNewRequestSuccessModal(
                         newAddedRequest.id,
                         newStatus === RequestStatus.WAITING_PAYMENT ? waitingNum : newAddedRequest.request_number,
-                        forceWhatsApp
+                        forceWhatsApp,
+                        newStatus === RequestStatus.WAITING_PAYMENT
                     );
                     onSuccess(newAddedRequest);
                 }

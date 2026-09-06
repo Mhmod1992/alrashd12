@@ -30,9 +30,14 @@ const NewRequestSuccessModal: React.FC = () => {
     }
 
     const isLoading = newRequestSuccessState.requestNumber === null;
-    const isReceptionist = authUser?.role === 'receptionist';
     const request = requests.find(r => r.id === newRequestSuccessState.requestId);
-    const isWaiting = request ? request.status === RequestStatus.WAITING_PAYMENT : (isReceptionist || newRequestSuccessState.showWhatsAppButton);
+    
+    // Explicit isWaiting flag takes precedence.
+    // Otherwise deduce from request status or showWhatsAppButton
+    const isWaiting = newRequestSuccessState.isWaiting !== undefined
+        ? newRequestSuccessState.isWaiting
+        : (request ? request.status === RequestStatus.WAITING_PAYMENT : Boolean(newRequestSuccessState.showWhatsAppButton));
+
     const waitingNumber = request?.waiting_number || (request?.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || newRequestSuccessState.requestNumber || 100;
 
     const handleGoToRequests = () => {
@@ -41,8 +46,8 @@ const NewRequestSuccessModal: React.FC = () => {
         }
         hideNewRequestSuccessModal();
         
-        // Redirect logic based on context or role
-        if (isReceptionist || newRequestSuccessState.showWhatsAppButton) {
+        // Redirect to waiting list if it's a waiting request, or to main requests list if official/paid
+        if (isWaiting) {
             setPage('waiting-requests');
         } else {
             setPage('requests');
@@ -88,7 +93,7 @@ const NewRequestSuccessModal: React.FC = () => {
         hideNewRequestSuccessModal();
         
         // Ensure we go to waiting list if we sent from there
-        if (isReceptionist || newRequestSuccessState.showWhatsAppButton) {
+        if (isWaiting) {
             setPage('waiting-requests');
         }
     };
@@ -97,7 +102,7 @@ const NewRequestSuccessModal: React.FC = () => {
         <Modal 
             isOpen={newRequestSuccessState.isOpen} 
             onClose={isLoading ? () => {} : hideNewRequestSuccessModal} 
-            title={isLoading ? 'جاري إصدار الطلب...' : 'تم إنشاء الطلب بنجاح'} 
+            title={isLoading ? 'جاري إصدار الطلب...' : (isWaiting ? 'تم تسجيل الطلب بانتظار الدفع' : 'تم تفعيل الطلب بنجاح')} 
             size="md"
         >
             <div className="text-center py-8">

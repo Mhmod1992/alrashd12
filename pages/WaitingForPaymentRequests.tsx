@@ -56,6 +56,7 @@ const WaitingForPaymentRequests: React.FC = () => {
 
     // Payment Modal State
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
     const [paymentRequest, setPaymentRequest] = useState<InspectionRequest | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<PaymentType>(PaymentType.Cash);
     const [splitCashAmount, setSplitCashAmount] = useState<number>(0);
@@ -229,7 +230,7 @@ const WaitingForPaymentRequests: React.FC = () => {
     };
 
     const confirmPayment = async () => {
-        if (!paymentRequest) return;
+        if (!paymentRequest || isSubmittingPayment) return;
         
         if (paymentMethod === PaymentType.Split) {
              if (splitCashAmount + splitCardAmount !== paymentRequest.price) {
@@ -238,28 +239,39 @@ const WaitingForPaymentRequests: React.FC = () => {
              }
         }
 
+        setIsSubmittingPayment(true);
         try {
             const now = new Date().toISOString();
             const currentReq = requests.find(r => r.id === paymentRequest.id) || paymentRequest;
 
-            // Calculate next official serial number
-            let nextOfficialNumber = 1;
+            // Calculate next official serial number reliably
+            const maxLocal = requests
+                .filter(r => r.status !== RequestStatus.WAITING_PAYMENT && r.id !== paymentRequest.id)
+                .reduce((max, r) => Math.max(max, Number(r.request_number) || 0), 0);
+            
+            let nextOfficialNumber = Math.max(maxLocal, Number(currentReq.request_number) || 0);
+
             try {
-                const { data: maxData } = await supabase
+                const { data: maxData, error: maxError } = await supabase
                     .from('inspection_requests')
                     .select('request_number')
                     .neq('status', RequestStatus.WAITING_PAYMENT)
                     .neq('id', paymentRequest.id)
                     .order('request_number', { ascending: false })
                     .limit(1);
-                if (maxData && maxData.length > 0 && maxData[0].request_number) {
-                    nextOfficialNumber = Number(maxData[0].request_number) + 1;
+
+                if (!maxError && maxData && maxData.length > 0 && maxData[0].request_number) {
+                    const dbMax = Number(maxData[0].request_number);
+                    if (dbMax >= nextOfficialNumber) {
+                        nextOfficialNumber = dbMax + 1;
+                    }
                 }
             } catch (e) {
-                const maxLocal = requests
-                    .filter(r => r.status !== RequestStatus.WAITING_PAYMENT && r.id !== paymentRequest.id)
-                    .reduce((max, r) => Math.max(max, Number(r.request_number) || 0), 0);
-                nextOfficialNumber = maxLocal + 1;
+                console.warn('Could not fetch max request_number from DB, using calculated number:', e);
+            }
+
+            if (nextOfficialNumber <= 0) {
+                nextOfficialNumber = Number(currentReq.request_number) || 1;
             }
 
             const cleanPaymentNote = (currentReq.payment_note || '').replace(/\[W-\d+\]\s*/gi, '').trim();
@@ -283,13 +295,22 @@ const WaitingForPaymentRequests: React.FC = () => {
                 created_at: now,
                 activity_log: updatedLog
             });
+
             addNotification({ title: 'نجاح', message: `تم استلام الدفعة وتفعيل الطلب برقم #${nextOfficialNumber}.`, type: 'success' });
-            setIsPaymentModalOpen(false);
+            
             const paidRequestId = paymentRequest.id;
+            setIsPaymentModalOpen(false);
             setPaymentRequest(null);
-            showNewRequestSuccessModal(paidRequestId, nextOfficialNumber, false);
+
+            // Open success modal explicitly with isWaiting = false
+            setTimeout(() => {
+                showNewRequestSuccessModal(paidRequestId, nextOfficialNumber, false, false);
+            }, 100);
         } catch (error) {
-            addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع.', type: 'error' });
+            console.error('Payment confirmation error:', error);
+            addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع وتفعيل الطلب.', type: 'error' });
+        } finally {
+            setIsSubmittingPayment(false);
         }
     };
     
@@ -454,8 +475,10 @@ const WaitingForPaymentRequests: React.FC = () => {
                     )}
                 </div>
                 <div className="flex justify-end gap-2 pt-4 mt-2 border-t dark:border-slate-700">
-                    <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)}>إلغاء</Button>
-                    <Button onClick={confirmPayment}>تأكيد الاستلام</Button>
+                    <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isSubmittingPayment}>إلغاء</Button>
+                    <Button onClick={confirmPayment} disabled={isSubmittingPayment}>
+                        {isSubmittingPayment ? 'جاري التأكيد...' : 'تأكيد الاستلام'}
+                    </Button>
                 </div>
             </Modal>
 
