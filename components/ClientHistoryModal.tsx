@@ -41,14 +41,15 @@ const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client,
 
         requests.forEach(req => {
             const price = Number(req.price) || 0;
-            // Debt logic matching the rest of the app
+            // Debt logic: Only genuine unpaid/credit (not waiting payment or cancelled)
             if (
                 req.status !== RequestStatus.CANCELLED &&
-                (req.payment_type === PaymentType.Unpaid || req.status === RequestStatus.WAITING_PAYMENT)
+                req.status !== RequestStatus.WAITING_PAYMENT &&
+                req.payment_type === PaymentType.Unpaid
             ) {
                 totalDebt += price;
                 debtCount++;
-            } else if (req.status !== RequestStatus.CANCELLED) {
+            } else if (req.status !== RequestStatus.CANCELLED && req.status !== RequestStatus.WAITING_PAYMENT) {
                 totalPaid += price;
             }
         });
@@ -148,14 +149,15 @@ const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client,
                     {displayedRequests.map((req, index) => {
                         const car = cars.find(c => c.id === req.car_id);
                         const carDisplayName = req.car_snapshot ? `${req.car_snapshot.make_ar} ${req.car_snapshot.model_ar} ${req.car_snapshot.year}` : (car ? 'سيارة مسجلة' : 'غير محدد');
-                        const isUnpaid = req.status !== RequestStatus.CANCELLED && (req.payment_type === PaymentType.Unpaid || req.status === RequestStatus.WAITING_PAYMENT);
+                        const isUnpaid = req.status !== RequestStatus.CANCELLED && req.status !== RequestStatus.WAITING_PAYMENT && req.payment_type === PaymentType.Unpaid;
+                        const isWaiting = req.status === RequestStatus.WAITING_PAYMENT;
 
                         return (
                             <div key={req.id} className="relative">
                                 {/* Timeline Dot */}
-                                <div className={`absolute -right-[33px] top-1 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 ${isUnpaid ? 'bg-red-500 dark:bg-red-400' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
+                                <div className={`absolute -right-[33px] top-1 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 ${isUnpaid ? 'bg-red-500 dark:bg-red-400' : (isWaiting ? 'bg-purple-500 dark:bg-purple-400' : 'bg-slate-300 dark:bg-slate-600')}`}></div>
                                 
-                                <div className={`p-4 rounded-lg border ${isUnpaid ? 'bg-red-50/50 border-red-100 dark:bg-red-900/10 dark:border-red-900/30' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700'} shadow-sm hover:shadow-md transition-shadow group`}>
+                                <div className={`p-4 rounded-lg border ${isUnpaid ? 'bg-red-50/50 border-red-100 dark:bg-red-900/10 dark:border-red-900/30' : (isWaiting ? 'bg-purple-50/40 border-purple-100 dark:bg-purple-900/10 dark:border-purple-900/30' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700')} shadow-sm hover:shadow-md transition-shadow group`}>
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center gap-2">
                                             <button
@@ -170,8 +172,8 @@ const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client,
                                             >
                                                 #{req.request_number}
                                             </button>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isUnpaid ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}>
-                                                {req.payment_type}
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isUnpaid ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' : (isWaiting ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400')}`}>
+                                                {isWaiting ? 'بانتظار الدفع' : req.payment_type}
                                             </span>
                                         </div>
                                         <div className="text-left text-xs">
@@ -186,7 +188,7 @@ const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client,
                                             <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">{carDisplayName}</p>
                                         </div>
                                         <div className="text-left">
-                                            <p className={`font-black text-lg ${isUnpaid ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                            <p className={`font-black text-lg ${isUnpaid ? 'text-red-600 dark:text-red-400' : (isWaiting ? 'text-purple-600 dark:text-purple-400' : 'text-slate-800 dark:text-slate-200')}`}>
                                                 {req.price} <span className="text-xs text-slate-500 font-normal">ريال</span>
                                             </p>
                                         </div>

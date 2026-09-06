@@ -324,9 +324,9 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
           const history = await fetchClientRequests(exactClient.id);
           const debts = history.filter(
             (r) =>
-              r.status === RequestStatus.WAITING_PAYMENT ||
-              (r.payment_type === PaymentType.Unpaid &&
-                r.status !== RequestStatus.COMPLETE),
+              r.status !== RequestStatus.CANCELLED &&
+              r.status !== RequestStatus.WAITING_PAYMENT &&
+              r.payment_type === PaymentType.Unpaid,
           );
           if (debts.length > 0) {
             setUnpaidDebtAlert(debts);
@@ -826,7 +826,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
       }
 
       const finalPaymentType = isReceptionist
-        ? PaymentType.Unpaid
+        ? PaymentType.WaitingPayment
         : (paymentType as PaymentType);
       let finalPaymentNote = undefined;
       if (

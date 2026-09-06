@@ -124,7 +124,15 @@ export const useDataScope = (
 
             if (reqError) throw reqError;
 
-            const requestsData = reqs || [];
+            const requestsData = (reqs || []).map(r => {
+                if (r.payment_note) {
+                    const match = r.payment_note.match(/\[W-(\d+)\]/i);
+                    if (match) {
+                        return { ...r, waiting_number: parseInt(match[1], 10) };
+                    }
+                }
+                return r;
+            });
             const carsData = crs || [];
             const clientsData = clts || [];
 

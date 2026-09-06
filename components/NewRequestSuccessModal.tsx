@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { useAppContext } from '../context/AppContext';
+import { RequestStatus } from '../types';
 import Modal from './Modal';
 import Button from './Button';
 import CheckCircleIcon from './icons/CheckCircleIcon';
@@ -31,6 +32,8 @@ const NewRequestSuccessModal: React.FC = () => {
     const isLoading = newRequestSuccessState.requestNumber === null;
     const isReceptionist = authUser?.role === 'receptionist';
     const request = requests.find(r => r.id === newRequestSuccessState.requestId);
+    const isWaiting = request ? request.status === RequestStatus.WAITING_PAYMENT : (isReceptionist || newRequestSuccessState.showWhatsAppButton);
+    const waitingNumber = request?.waiting_number || (request?.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || newRequestSuccessState.requestNumber || 100;
 
     const handleGoToRequests = () => {
         if (newRequestSuccessState.requestId) {
@@ -109,14 +112,15 @@ const NewRequestSuccessModal: React.FC = () => {
                     <>
                         <CheckCircleIcon className="w-20 h-20 text-green-500 mx-auto mb-4 animate-scale-in" />
                         <p className="text-xl text-slate-800 dark:text-slate-200">
-                            رقم الطلب الجديد هو:
+                            {isWaiting ? 'رقم الطلب بانتظار الدفع:' : 'رقم الطلب الجديد هو:'}
                         </p>
-                        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400 mt-2">
-                            #{newRequestSuccessState.requestNumber}
+                        <p className={`text-4xl font-bold mt-2 font-mono ${isWaiting ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                            {isWaiting ? `w - ${waitingNumber}` : `#${newRequestSuccessState.requestNumber}`}
                         </p>
-                        {isReceptionist && (
-                            <p className="mt-4 text-slate-600 dark:text-slate-400 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
-                                الطلب الآن في قائمة "انتظار الدفع".<br/>يرجى توجيه العميل للكاشير لإتمام العملية.
+                        {isWaiting && (
+                            <p className="mt-4 text-slate-600 dark:text-slate-400 bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800 text-sm">
+                                الطلب الآن في قائمة <strong>"انتظار الدفع"</strong> برقم مؤقت <span className="font-mono font-bold text-purple-700 dark:text-purple-300">w - {waitingNumber}</span>.<br/>
+                                يرجى توجيه العميل للكاشير للتحصيل وإصدار الرقم التسلسلي الرسمي للطلب.
                             </p>
                         )}
                     </>

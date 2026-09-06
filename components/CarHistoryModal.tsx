@@ -102,7 +102,8 @@ const CarHistoryModal: React.FC<CarHistoryModalProps> = ({ isOpen, car, requests
                 <div className="relative border-r-2 border-slate-100 dark:border-slate-800/50 mr-4 pr-6 space-y-2 max-h-[500px] overflow-y-auto custom-scrollbar">
                     {requests.map((req) => {
                         const client = clients.find(c => c.id === req.client_id);
-                        const isUnpaid = req.status !== RequestStatus.CANCELLED && (req.payment_type === PaymentType.Unpaid || req.status === RequestStatus.WAITING_PAYMENT);
+                        const isUnpaid = req.status !== RequestStatus.CANCELLED && req.status !== RequestStatus.WAITING_PAYMENT && req.payment_type === PaymentType.Unpaid;
+                        const isWaiting = req.status === RequestStatus.WAITING_PAYMENT;
 
                         const handleViewReport = () => {
                             const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${req.id}&from=print`;
@@ -112,15 +113,15 @@ const CarHistoryModal: React.FC<CarHistoryModalProps> = ({ isOpen, car, requests
                         return (
                             <div key={req.id} className="relative">
                                 {/* Timeline Dot */}
-                                <div className={`absolute -right-[33px] top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 z-10 ${isUnpaid ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'}`}></div>
+                                <div className={`absolute -right-[33px] top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 z-10 ${isUnpaid ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : (isWaiting ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]' : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]')}`}></div>
                                 
-                                <div className={`flex items-center justify-between gap-2 p-3 rounded-xl border ${isUnpaid ? 'bg-red-50/10 border-red-100 dark:bg-red-900/5 dark:border-red-900/30' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700'} shadow-sm hover:shadow-md transition-all group overflow-hidden`}>
+                                <div className={`flex items-center justify-between gap-2 p-3 rounded-xl border ${isUnpaid ? 'bg-red-50/10 border-red-100 dark:bg-red-900/5 dark:border-red-900/30' : (isWaiting ? 'bg-purple-50/10 border-purple-100 dark:bg-purple-900/5 dark:border-purple-900/30' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700')} shadow-sm hover:shadow-md transition-all group overflow-hidden`}>
                                     
                                     {/* Column 1: Request # */}
                                     <div className="flex flex-col min-w-[90px] shrink-0 border-l border-slate-100 dark:border-slate-700 ml-2">
                                         <span className="font-bold text-slate-800 dark:text-slate-200 font-mono text-base tracking-tight">#{req.request_number}</span>
                                         <span className={`text-[7px] self-start px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter mt-1 ${
-                                            isUnpaid ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-700/50 dark:text-slate-500'
+                                            isUnpaid ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : (isWaiting ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-slate-100 text-slate-400 dark:bg-slate-700/50 dark:text-slate-500')
                                         }`}>
                                             {req.status}
                                         </span>

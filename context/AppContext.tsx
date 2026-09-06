@@ -720,12 +720,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
     const fetchAndUpdateSingleRequest = useCallback(async (requestId: string) => {
-        const { data: req, error } = await supabase.from('inspection_requests').select('*').eq('id', requestId).single();
-        if (error && !req) {
+        const { data: rawReq, error } = await supabase.from('inspection_requests').select('*').eq('id', requestId).single();
+        if (error && !rawReq) {
             setRequests(prev => prev.filter(r => r.id !== requestId));
             return;
         }
-        if (req) {
+        if (rawReq) {
+            let req = rawReq;
+            if (req.payment_note) {
+                const match = req.payment_note.match(/\[W-(\d+)\]/i);
+                if (match) {
+                    req = { ...req, waiting_number: parseInt(match[1], 10) };
+                }
+            }
             setRequests(prev => {
                 const exists = prev.some(r => r.id === requestId);
                 return exists ? prev.map(r => r.id === requestId ? { ...r, ...req } : r) : [req, ...prev];
@@ -755,11 +762,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const loadMoreRequests = useCallback(async () => {
         if (isLoadingMore || !hasMoreRequests) return;
         setIsLoadingMore(true);
-        const { data: nextBatch, error } = await supabase.from('inspection_requests')
+        const { data: rawBatch, error } = await supabase.from('inspection_requests')
             .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, report_stamps, attached_files, payment_note, split_payment_details')
             .order('created_at', { ascending: false })
             .range(requestsOffset, requestsOffset + REQUESTS_PAGE_SIZE - 1);
-        if (!error && nextBatch) {
+        if (!error && rawBatch) {
+            const nextBatch = rawBatch.map(r => {
+                if (r.payment_note) {
+                    const match = r.payment_note.match(/\[W-(\d+)\]/i);
+                    if (match) {
+                        return { ...r, waiting_number: parseInt(match[1], 10) };
+                    }
+                }
+                return r;
+            });
             await ensureEntitiesLoaded(nextBatch);
             setRequests(prev => [...prev, ...nextBatch]);
             setRequestsOffset(prev => prev + nextBatch.length);
@@ -799,9 +815,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (exactOnly) {
             // STRICT ORDER ID SEARCH
-            if (isNumericQuery) {
-                const queryNum = Number(query);
-                localResults = requests.filter(r => r.request_number === queryNum);
+            const lowerQuery = query.toLowerCase().replace(/\s/g, '');
+            const isWaitingQuery = lowerQuery.startsWith('w-') || lowerQuery.startsWith('w');
+            const parsedNum = isWaitingQuery ? parseInt(lowerQuery.replace(/^w-?/, ''), 10) : (isNumericQuery ? Number(query) : null);
+
+            if (parsedNum !== null && !isNaN(parsedNum)) {
+                localResults = requests.filter(r => {
+                    const waitingNum = r.waiting_number || (r.payment_note?.match(/\[W-(\d+)\]/i)?.[1] ? parseInt(r.payment_note.match(/\[W-(\d+)\]/i)![1], 10) : null);
+                    if (isWaitingQuery) {
+                        return waitingNum === parsedNum;
+                    }
+                    return r.request_number === parsedNum || (r.status === RequestStatus.WAITING_PAYMENT && waitingNum === parsedNum);
+                });
             } else {
                 setSearchedRequests([]);
                 setIsRefreshing(false);
@@ -822,7 +847,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
 
                 if (isNumericQuery && cleanQuery.length <= 4 && !isModelAndYear) {
-                     const isOrder = r.request_number === Number(cleanQuery);
+                     const num = Number(cleanQuery);
+                     const waitingNum = r.waiting_number || (r.payment_note?.match(/\[W-(\d+)\]/i)?.[1] ? parseInt(r.payment_note.match(/\[W-(\d+)\]/i)![1], 10) : null);
+                     const isOrder = r.request_number === num || (r.status === RequestStatus.WAITING_PAYMENT && waitingNum === num);
                      const plateNormalized = car?.plate_number?.replace(/\s/g, '').toLowerCase() || '';
                      const plateEnNormalized = car?.plate_number_en?.replace(/\s/g, '').toLowerCase() || '';
                      const isPlate = plateNormalized.includes(cleanQuery) || plateEnNormalized.includes(cleanQuery);
@@ -1112,7 +1139,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         let query = supabase.from('inspection_requests').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
         if (startDate) query = query.gte('created_at', startDate);
         if (endDate) query = query.lte('created_at', endDate);
-        if (onlyUnpaid) query = query.or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT} `);
+        if (onlyUnpaid) query = query.eq('payment_type', PaymentType.Unpaid).neq('status', RequestStatus.WAITING_PAYMENT);
         
         if (limit) {
             query = query.limit(limit);
@@ -1134,13 +1161,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const getClientFinancialSummary = useCallback(async (clientId: string) => {
         try {
-            // Fetch all unpaid/pending requests for Aged Debt calculation
+            // Fetch all unpaid requests for Aged Debt calculation
             const { data: unpaid, error: unpaidError } = await supabase
                 .from('inspection_requests')
                 .select('*')
                 .eq('client_id', clientId)
-                .or(`payment_type.eq.${PaymentType.Unpaid}, status.eq.${RequestStatus.WAITING_PAYMENT}`)
+                .eq('payment_type', PaymentType.Unpaid)
                 .neq('status', 'cancelled')
+                .neq('status', RequestStatus.WAITING_PAYMENT)
                 .order('created_at', { ascending: false });
 
             if (unpaidError) throw unpaidError;
@@ -1533,7 +1561,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             )
         `).gte('created_at', startDate).lte('created_at', endDate).order('created_at', { ascending: false });
         if (includeCompletedOnly) query = query.eq('status', RequestStatus.COMPLETE);
-        else query = query.neq('status', 'cancelled');
+        else query = query.neq('status', 'cancelled').neq('status', RequestStatus.WAITING_PAYMENT);
         const { data: requests, error: reqError } = await query;
         if (reqError) throw reqError;
         

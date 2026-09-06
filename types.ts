@@ -16,6 +16,7 @@ export enum PaymentType {
   Transfer = 'تحويل',
   Split = 'دفع مجزأ (نقدي + بطاقة)',
   Unpaid = 'غير مدفوع',
+  WaitingPayment = 'بانتظار الدفع',
 }
 
 export enum TaxMode {
@@ -305,6 +306,7 @@ export type ReportStamp = 'CUSTOMER_REQUEST_INCOMPLETE';
 export interface InspectionRequest {
   id: string;
   request_number: number;
+  waiting_number?: number;
   client_id: string;
   car_id: string;
   car_snapshot?: CarSnapshot;
@@ -335,6 +337,44 @@ export interface InspectionRequest {
   ai_analysis?: string;
   reservation_id?: string;
 }
+
+export const getWaitingNumber = (req: Partial<InspectionRequest> | null | undefined): number | null => {
+  if (!req) return null;
+  if (typeof req.waiting_number === 'number' && !isNaN(req.waiting_number)) {
+    return req.waiting_number;
+  }
+  if (req.payment_note) {
+    const match = req.payment_note.match(/\[W-(\d+)\]/i);
+    if (match) return parseInt(match[1], 10);
+  }
+  return null;
+};
+
+export const getNextWaitingNumber = (existingRequests: Array<{ waiting_number?: number; payment_note?: string; status?: RequestStatus }>): number => {
+  let highest = 99;
+  for (const r of existingRequests) {
+    let num: number | null = null;
+    if (typeof r.waiting_number === 'number' && !isNaN(r.waiting_number)) {
+      num = r.waiting_number;
+    } else if (r.payment_note) {
+      const match = r.payment_note.match(/\[W-(\d+)\]/i);
+      if (match) num = parseInt(match[1], 10);
+    }
+    if (num && !isNaN(num) && num > highest) {
+      highest = num;
+    }
+  }
+  return highest + 1;
+};
+
+export const formatRequestNumber = (req: Partial<InspectionRequest> | null | undefined): string => {
+  if (!req) return '';
+  if (req.status === RequestStatus.WAITING_PAYMENT) {
+    const wNum = getWaitingNumber(req) || 100;
+    return `w - ${wNum}`;
+  }
+  return req.request_number ? `#${req.request_number}` : '';
+};
 
 export interface PlateCharacterMap {
   ar: string;

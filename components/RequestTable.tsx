@@ -669,6 +669,11 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
         const baseClasses = "group border-b align-middle transition-colors duration-150 last:border-0";
         const highlightClass = req.id === highlightedRequestId ? 'animate-highlight' : '';
         
+        // Waiting Payment Requests
+        if (req.status === RequestStatus.WAITING_PAYMENT || req.payment_type === PaymentType.WaitingPayment) {
+             return `${baseClasses} bg-purple-50/40 border-purple-100 dark:bg-purple-900/10 dark:border-purple-900/30 hover:bg-purple-100/50 dark:hover:bg-purple-900/20 ${highlightClass}`;
+        }
+
         // Highlight Unpaid (Debt) Requests
         if (req.payment_type === PaymentType.Unpaid) {
              return `${baseClasses} bg-rose-50 border-rose-100 dark:bg-rose-900/10 dark:border-rose-900/30 hover:bg-rose-100 dark:hover:bg-rose-900/20 ${highlightClass}`;
@@ -830,12 +835,16 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                             paymentIcon = <span title="تحويل"><ArrowRightLeft className="w-3.5 h-3.5 text-amber-500 mx-1" /></span>;
                         } else if (request.payment_type === PaymentType.Split) {
                             paymentIcon = <div className="flex -space-x-1 mx-1"><Banknote className="w-3.5 h-3.5 text-emerald-500" /><CreditCard className="w-3.5 h-3.5 text-blue-500" /></div>;
+                        } else if (request.payment_type === PaymentType.WaitingPayment || request.status === RequestStatus.WAITING_PAYMENT) {
+                            paymentIcon = <span title="بانتظار الدفع"><Clock className="w-3.5 h-3.5 text-purple-500 mx-1 animate-pulse" /></span>;
                         } else if (request.payment_type === PaymentType.Unpaid) {
                             paymentIcon = <span title="آجل"><Clock className="w-3.5 h-3.5 text-rose-500 mx-1 animate-pulse" /></span>;
                         }
 
                         let priceSuffix = null;
-                        if (request.payment_type === PaymentType.Unpaid) {
+                        if (request.payment_type === PaymentType.WaitingPayment || request.status === RequestStatus.WAITING_PAYMENT) {
+                            priceSuffix = <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-900/50 px-1.5 py-0.5 rounded mr-1">(بانتظار الدفع)</span>;
+                        } else if (request.payment_type === PaymentType.Unpaid) {
                             priceSuffix = <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold bg-rose-100 dark:bg-rose-900/50 px-1.5 py-0.5 rounded mr-1">(آجل)</span>;
                         } else if (request.payment_type === PaymentType.Transfer) {
                             priceSuffix = <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded mr-1">(تحويل)</span>;
@@ -868,9 +877,15 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                 {(request.reservation_id || request.payment_note?.includes('[WA-RES]')) && (
                                                     <WhatsappIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
                                                 )}
-                                                <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">
-                                                    #<HighlightText text={request.request_number} tokens={expandedSearchTokens} />
-                                                </span>
+                                                {isWaitingTable || isWaitingPayment ? (
+                                                    <span className="font-bold text-purple-700 dark:text-purple-300 bg-purple-100/80 dark:bg-purple-900/40 px-2 py-1 rounded-md border border-purple-300 dark:border-purple-700/60 font-mono tracking-wide">
+                                                        w - <HighlightText text={String(request.waiting_number || (request.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || 100)} tokens={expandedSearchTokens} />
+                                                    </span>
+                                                ) : (
+                                                    <span className="font-bold text-slate-800 dark:text-slate-200 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600/50">
+                                                        #<HighlightText text={request.request_number} tokens={expandedSearchTokens} />
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
@@ -916,7 +931,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                 </div>
                                             )}
                                         </td>
-                                        <td className={`px-6 py-4 sticky right-0 md:static z-10 shadow-sm md:shadow-none transition-colors duration-150 ${request.payment_type === PaymentType.Unpaid ? 'bg-rose-50 dark:bg-rose-900/20' : request.payment_type === PaymentType.Transfer ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30'}`}>
+                                        <td className={`px-6 py-4 sticky right-0 md:static z-10 shadow-sm md:shadow-none transition-colors duration-150 ${(request.status === RequestStatus.WAITING_PAYMENT || request.payment_type === PaymentType.WaitingPayment) ? 'bg-purple-50/60 dark:bg-purple-900/20' : request.payment_type === PaymentType.Unpaid ? 'bg-rose-50 dark:bg-rose-900/20' : request.payment_type === PaymentType.Transfer ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30'}`}>
                                             <div className="flex items-center gap-2">
                                                 {lazyHasCarHistory && onHistoryClick && (
                                                     <button
@@ -1206,7 +1221,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                             </button>
                                         )}
                                         
-                                        {request.payment_type === PaymentType.Unpaid && (
+                                        {request.payment_type === PaymentType.Unpaid && request.status !== RequestStatus.WAITING_PAYMENT && (
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();

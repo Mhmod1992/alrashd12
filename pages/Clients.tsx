@@ -409,7 +409,7 @@ const Clients: React.FC = () => {
         if (debtAgeStatusFilter !== 'all') {
             const now = new Date();
             reqs = reqs.filter(req => {
-                const isUnpaid = req.payment_type === PaymentType.Unpaid || req.status === RequestStatus.WAITING_PAYMENT;
+                const isUnpaid = req.payment_type === PaymentType.Unpaid && req.status !== RequestStatus.WAITING_PAYMENT;
                 if (!isUnpaid) return false;
 
                 const reqDate = new Date(req.created_at);
@@ -969,7 +969,7 @@ const Clients: React.FC = () => {
                                                       {filteredClientRequests.map((req, idx) => {
                                                           const carInfo = getCarInfo(req.car_id);
                                                           const carName = req.car_snapshot ? `${req.car_snapshot.make_ar} ${req.car_snapshot.model_ar}` : carInfo.name;
-                                                          const isUnpaid = req.payment_type === PaymentType.Unpaid || req.status === RequestStatus.WAITING_PAYMENT;
+                                                          const isUnpaid = req.payment_type === PaymentType.Unpaid && req.status !== RequestStatus.WAITING_PAYMENT;
                                                           return (
                                                               <motion.tr 
                                                                   key={req.id} 

@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { formatRequestNumber } from '../types';
 import Icon from '../components/Icon';
 import Button from '../components/Button';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
@@ -128,7 +129,7 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                     
                     {/* LEFT SIDE (Start in RTL): Inspection Type, Request Number & Vehicle Name */}
                     <div className="flex flex-col gap-1 max-w-[60%]">
-                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-300">#{request.request_number}</h1>
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-300 font-mono">{formatRequestNumber(request)}</h1>
                         <div className="flex items-center gap-3">
                             <div className="border border-black dark:border-slate-400 rounded px-2 py-1 text-center font-bold text-sm bg-transparent">
                                <span className="me-1 text-slate-800 dark:text-slate-300">نوع الفحص:</span>

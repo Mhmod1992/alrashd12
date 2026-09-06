@@ -75,7 +75,7 @@ const Requests: React.FC = () => {
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
         lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations,
-        showNewRequestSuccessModal
+        showNewRequestSuccessModal, createActivityLog
     } = useAppContext();
 
     const [requestNumberQuery, setRequestNumberQuery] = useState('');
@@ -921,18 +921,50 @@ const Requests: React.FC = () => {
         }
 
         try {
+            const now = new Date().toISOString();
+            const currentReq = requests.find(r => r.id === paymentRequest.id) || paymentRequest;
+
+            // Calculate next official serial number
+            let nextOfficialNumber = 1;
+            try {
+                const { data: maxData } = await supabase
+                    .from('inspection_requests')
+                    .select('request_number')
+                    .neq('status', RequestStatus.WAITING_PAYMENT)
+                    .neq('id', paymentRequest.id)
+                    .order('request_number', { ascending: false })
+                    .limit(1);
+                if (maxData && maxData.length > 0 && maxData[0].request_number) {
+                    nextOfficialNumber = Number(maxData[0].request_number) + 1;
+                }
+            } catch (e) {
+                const maxLocal = requests
+                    .filter(r => r.status !== RequestStatus.WAITING_PAYMENT && r.id !== paymentRequest.id)
+                    .reduce((max, r) => Math.max(max, Number(r.request_number) || 0), 0);
+                nextOfficialNumber = maxLocal + 1;
+            }
+
+            const newLog = createActivityLog ? createActivityLog(
+                'تحصيل وتفعيل الطلب', 
+                `تم تحصيل المبلغ (${paymentRequest.price} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي`
+            ) : null;
+            const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
+
             await updateRequest({
                 id: paymentRequest.id,
+                request_number: nextOfficialNumber,
                 status: RequestStatus.NEW,
                 payment_type: paymentMethod,
-                split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined
+                split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
+                created_at: now,
+                activity_log: updatedLog
             });
 
             if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected') {
                 const client = clients.find(c => c.id === paymentRequest.client_id);
                 if (client && client.phone) {
                     const message = `حياكم الله *${client.name || ''}*،
-#${paymentRequest.request_number}
+#${nextOfficialNumber}
 تم تأكيد استلام مركبتكم *${paymentRequest.car_snapshot?.make_en || ''} ${paymentRequest.car_snapshot?.model_en || ''} ${paymentRequest.car_snapshot?.year || ''}*
 وبدء إجراءات الفحص الفني في مركزنا.
 
@@ -944,13 +976,12 @@ const Requests: React.FC = () => {
                 }
             }
 
-            addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب.', type: 'success' });
+            addNotification({ title: 'نجاح', message: `تم استلام الدفعة وتفعيل الطلب برقم #${nextOfficialNumber}.`, type: 'success' });
             setIsPaymentModalOpen(false);
             const paidRequestId = paymentRequest.id;
-            const paidRequestNumber = paymentRequest.request_number;
             setPaymentRequest(null);
             setSendWhatsAppStartNotify(true);
-            showNewRequestSuccessModal(paidRequestId, paidRequestNumber, false);
+            showNewRequestSuccessModal(paidRequestId, nextOfficialNumber, false);
         } catch (error) {
             addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع.', type: 'error' });
         }
@@ -1056,7 +1087,12 @@ const Requests: React.FC = () => {
         }
 
         if (waitingSearchTerm.trim()) {
-            waitingReqs = waitingReqs.filter(r => String(r.request_number).includes(waitingSearchTerm.trim()));
+            const term = waitingSearchTerm.trim().toLowerCase().replace(/\s/g, '');
+            const termNum = term.replace(/^w-?/, '');
+            waitingReqs = waitingReqs.filter(r => {
+                const wNum = String(r.waiting_number || (r.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || '');
+                return String(r.request_number).includes(term) || wNum.includes(termNum) || `w-${wNum}`.includes(term);
+            });
         }
 
         let statusFilteredReqs = otherReqs.filter(req => {
@@ -1862,19 +1898,14 @@ const Requests: React.FC = () => {
             <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="تحصيل المبلغ وتفعيل الطلب" size="md">
                 <div className="space-y-4">
                     <p className="text-sm text-slate-600 dark:text-slate-300">
-                        سيتم تحويل حالة الطلب <strong>#{paymentRequest?.request_number}</strong> إلى "جديد" وسيتمكن الفنيون من رؤيته.
+                        سيتم تحويل حالة الطلب <strong className="font-mono text-purple-600 dark:text-purple-400">w - {paymentRequest?.waiting_number || (paymentRequest?.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || 100}</strong> إلى "جديد" وسيتم تعيين الرقم التسلسلي الرسمي للطلب تلقائياً.
                     </p>
 
                     <div className="space-y-2 text-sm bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border dark:border-slate-600">
                         <div className="flex justify-between items-center">
-                            <span className="text-slate-500 dark:text-slate-400">تاريخ الإنشاء:</span>
+                            <span className="text-slate-500 dark:text-slate-400">وقت حجز الطلب المعلق:</span>
                             <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                {paymentRequest ? (() => {
-                                    const rd = new Date(paymentRequest.created_at);
-                                    const bd = new Date(rd);
-                                    if (bd.getHours() < 4) bd.setDate(bd.getDate() - 1);
-                                    return bd.toLocaleDateString('en-GB');
-                                })() : ''}
+                                {paymentRequest ? `${new Date(paymentRequest.created_at).toLocaleDateString('en-GB')} ${new Date(paymentRequest.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}` : ''}
                             </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -1882,6 +1913,9 @@ const Requests: React.FC = () => {
                             <span className="font-semibold text-slate-800 dark:text-slate-200">
                                 {creatorEmployee?.name || 'غير معروف'}
                             </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
+                            <span>⏱️ سيتم تحديث وقت الطلب إلى وقت التحصيل الفعلي فور التأكيد</span>
                         </div>
                     </div>
 
