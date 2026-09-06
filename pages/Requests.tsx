@@ -944,14 +944,14 @@ const Requests: React.FC = () => {
                 nextOfficialNumber = maxLocal + 1;
             }
 
-            const newLog = createActivityLog ? createActivityLog(
-                'تحصيل وتفعيل الطلب', 
-                `تم تحصيل المبلغ (${paymentRequest.price} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي`
-            ) : null;
-            const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
-
             const cleanPaymentNote = (currentReq.payment_note || '').replace(/\[W-\d+\]\s*/gi, '').trim();
             const prevWaitingNum = paymentRequest.waiting_number || (paymentRequest.payment_note?.match(/\[W-(\d+)\]/i)?.[1] ? parseInt(paymentRequest.payment_note.match(/\[W-(\d+)\]/i)![1], 10) : undefined);
+
+            const newLog = createActivityLog ? createActivityLog(
+                'تحصيل وتفعيل الطلب', 
+                `تم تحصيل المبلغ (${paymentRequest.price} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي${prevWaitingNum ? ` (طلب انتظار w - ${prevWaitingNum})` : ''}`
+            ) : null;
+            const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
 
             await updateRequest({
                 id: paymentRequest.id,
@@ -961,6 +961,7 @@ const Requests: React.FC = () => {
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
                 payment_note: cleanPaymentNote || null,
                 waiting_number: prevWaitingNum,
+                inspection_data: prevWaitingNum ? { ...(currentReq.inspection_data || {}), waiting_number: prevWaitingNum } : currentReq.inspection_data,
                 created_at: now,
                 activity_log: updatedLog
             });

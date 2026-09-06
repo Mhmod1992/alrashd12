@@ -16,6 +16,7 @@ import {
   RequestStatus,
   CarSnapshot,
   InspectionType,
+  getNextWaitingNumberAsync,
 } from "../types";
 import Button from "./Button";
 import { uuidv4 } from "../lib/utils";
@@ -71,6 +72,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
     brokers,
     carMakes,
     carModels,
+    requests,
     showConfirmModal,
   } = useAppContext();
 
@@ -837,6 +839,12 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
         finalPaymentNote = paymentNote.trim() ? paymentNote.trim() : undefined;
       }
 
+      let waitingNum: number | undefined = undefined;
+      if (isReceptionist && !isEditMode) {
+        waitingNum = await getNextWaitingNumberAsync(requests);
+        finalPaymentNote = `[W-${waitingNum}] ${finalPaymentNote || ""}`.trim();
+      }
+
       // 3. Request Data Construction
       const reqData = {
         client_id: clientId,
@@ -864,7 +872,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
             : new Date().toISOString(),
         // Empty arrays for new request
         inspection_data:
-          isEditMode && initialData ? initialData.inspection_data : {},
+          isEditMode && initialData ? initialData.inspection_data : (waitingNum ? { waiting_number: waitingNum } : {}),
         general_notes:
           isEditMode && initialData ? initialData.general_notes : [],
         category_notes:

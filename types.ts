@@ -338,63 +338,8 @@ export interface InspectionRequest {
   reservation_id?: string;
 }
 
-export const getWaitingNumber = (req: Partial<InspectionRequest> | null | undefined): number | null => {
-  if (!req) return null;
-  if (typeof req.waiting_number === 'number' && !isNaN(req.waiting_number)) {
-    return req.waiting_number;
-  }
-  if (req.payment_note) {
-    const match = req.payment_note.match(/\[W-(\d+)\]/i);
-    if (match) return parseInt(match[1], 10);
-  }
-  return null;
-};
-
-export const getNextWaitingNumber = (existingRequests: Array<{ waiting_number?: number; payment_note?: string; status?: RequestStatus }>): number => {
-  let highest = 99;
-
-  // 1. Check localStorage for highest waiting number issued (Option 2: continuous progression)
-  try {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('al_fahs_highest_waiting_number');
-      if (stored) {
-        const parsed = parseInt(stored, 10);
-        if (!isNaN(parsed) && parsed > highest) {
-          highest = parsed;
-        }
-      }
-    }
-  } catch (e) {
-    // Ignore storage read errors
-  }
-
-  // 2. Scan all existing requests (waiting or converted/paid)
-  for (const r of existingRequests) {
-    let num: number | null = null;
-    if (typeof r.waiting_number === 'number' && !isNaN(r.waiting_number)) {
-      num = r.waiting_number;
-    } else if (r.payment_note) {
-      const match = r.payment_note.match(/\[W-(\d+)\]/i);
-      if (match) num = parseInt(match[1], 10);
-    }
-    if (num && !isNaN(num) && num > highest) {
-      highest = num;
-    }
-  }
-
-  const nextNumber = highest + 1;
-
-  // Save the highest generated waiting number so it never resets even after collection
-  try {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('al_fahs_highest_waiting_number', String(nextNumber));
-    }
-  } catch (e) {
-    // Ignore storage write errors
-  }
-
-  return nextNumber;
-};
+import { getWaitingNumber, getNextWaitingNumber, getNextWaitingNumberAsync } from './lib/waitingNumber';
+export { getWaitingNumber, getNextWaitingNumber, getNextWaitingNumberAsync };
 
 export const formatRequestNumber = (req: Partial<InspectionRequest> | null | undefined): string => {
   if (!req) return '';

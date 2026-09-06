@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode, getNextWaitingNumber, getWaitingNumber } from '../types';
+import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode, getNextWaitingNumber, getNextWaitingNumberAsync, getWaitingNumber } from '../types';
 import Button from './Button';
 import { uuidv4 } from '../lib/utils';
 import Modal from './Modal';
@@ -1538,7 +1538,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
             let waitingNum = 100;
             if (newStatus === RequestStatus.WAITING_PAYMENT) {
-                waitingNum = getNextWaitingNumber(requests);
+                waitingNum = await getNextWaitingNumberAsync(requests);
                 paymentNoteValue = `[W-${waitingNum}] ${paymentNoteValue || ''}`.trim();
             }
 
