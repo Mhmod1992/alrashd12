@@ -94,7 +94,7 @@ const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, ca
                   {getPaymentLabel(request.payment_type, request.split_payment_details)}
                 </td>
                 <td className="border border-black p-1 text-right text-[7.5pt] max-w-[150px]">
-                  {request.payment_note || '-'}
+                  {request.payment_note?.replace(/\[W-\d+\]\s*/gi, '').trim() || '-'}
                 </td>
                 <td className="border border-black p-1 text-center text-[8pt] text-red-700">
                   {commission > 0 ? commission.toLocaleString() : '-'}

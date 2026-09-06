@@ -1032,15 +1032,19 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                     <ChevronDownIcon className="w-3 h-3 text-slate-400" />
                                                 </div>
                                                 
-                                                {request.payment_note && (
-                                                    <div className="relative group/tooltip flex items-center justify-center cursor-help mx-1">
-                                                        <InfoIcon className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors" />
-                                                        <div className="absolute bottom-full right-1/2 translate-x-[50%] mb-2 w-max max-w-[200px] p-2 bg-slate-900 text-white font-normal text-xs rounded shadow-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-50 pointer-events-none whitespace-pre-wrap text-center leading-relaxed">
-                                                            {request.payment_note}
-                                                            <div className="absolute top-full right-1/2 translate-x-[50%] border-[5px] border-transparent border-t-slate-900"></div>
+                                                {(() => {
+                                                    const displayPaymentNote = request.payment_note?.replace(/\[W-\d+\]\s*/gi, '').trim();
+                                                    if (!displayPaymentNote) return null;
+                                                    return (
+                                                        <div className="relative group/tooltip flex items-center justify-center cursor-help mx-1">
+                                                            <InfoIcon className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors" />
+                                                            <div className="absolute bottom-full right-1/2 translate-x-[50%] mb-2 w-max max-w-[200px] p-2 bg-slate-900 text-white font-normal text-xs rounded shadow-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-50 pointer-events-none whitespace-pre-wrap text-center leading-relaxed">
+                                                                {displayPaymentNote}
+                                                                <div className="absolute top-full right-1/2 translate-x-[50%] border-[5px] border-transparent border-t-slate-900"></div>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                )}
+                                                    );
+                                                })()}
                                             </div>
 
                                             {/* Quick Broker Menu */}

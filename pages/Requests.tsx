@@ -950,12 +950,17 @@ const Requests: React.FC = () => {
             ) : null;
             const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
 
+            const cleanPaymentNote = (currentReq.payment_note || '').replace(/\[W-\d+\]\s*/gi, '').trim();
+            const prevWaitingNum = paymentRequest.waiting_number || (paymentRequest.payment_note?.match(/\[W-(\d+)\]/i)?.[1] ? parseInt(paymentRequest.payment_note.match(/\[W-(\d+)\]/i)![1], 10) : undefined);
+
             await updateRequest({
                 id: paymentRequest.id,
                 request_number: nextOfficialNumber,
                 status: RequestStatus.NEW,
                 payment_type: paymentMethod,
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
+                payment_note: cleanPaymentNote || null,
+                waiting_number: prevWaitingNum,
                 created_at: now,
                 activity_log: updatedLog
             });

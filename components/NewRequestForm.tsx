@@ -279,7 +279,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             setInspectionPrice(req.price);
             setPaymentType(req.payment_type);
             
-            const rawNote = req.payment_note || '';
+            let rawNote = (req.payment_note || '').replace(/\[W-\d+\]\s*/gi, '').trim();
             if (rawNote.includes('[WA-RES]')) {
                 setIsFromReservation(true);
                 setPaymentNote(rawNote.replace('[WA-RES]', '').trim());

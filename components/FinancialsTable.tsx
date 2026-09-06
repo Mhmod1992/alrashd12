@@ -102,11 +102,14 @@ const FinancialsTable: React.FC<{
                 <td className="px-3 py-2.5 font-black font-numeric">{request.price.toLocaleString('en-US')}</td>
                 <td className="px-3 py-2.5"><PaymentMethodBadge request={request} /></td>
                 <td className="px-3 py-2.5 text-[10px] text-slate-500 dark:text-slate-400 print:text-black">
-                  {request.payment_note ? (
-                      <span className="block max-w-[150px] truncate bg-yellow-50 dark:bg-yellow-900/20 px-2 py-0.5 rounded text-yellow-800 dark:text-yellow-200 border border-yellow-100 dark:border-yellow-800 print:bg-transparent print:border-none print:max-w-none print:whitespace-normal" title={request.payment_note}>
-                          {request.payment_note}
+                  {(() => {
+                    const cleanNote = request.payment_note?.replace(/\[W-\d+\]\s*/gi, '').trim();
+                    return cleanNote ? (
+                      <span className="block max-w-[150px] truncate bg-yellow-50 dark:bg-yellow-900/20 px-2 py-0.5 rounded text-yellow-800 dark:text-yellow-200 border border-yellow-100 dark:border-yellow-800 print:bg-transparent print:border-none print:max-w-none print:whitespace-normal" title={cleanNote}>
+                          {cleanNote}
                       </span>
-                  ) : '-'}
+                    ) : '-';
+                  })()}
                 </td>
                 <td className="px-3 py-2.5 text-rose-600 dark:text-rose-400 font-bold font-numeric">{commission > 0 ? commission.toLocaleString('en-US') : '-'}</td>
                 <td className="px-3 py-2.5 font-bold text-emerald-600 dark:text-emerald-400 font-numeric">{netIncome.toLocaleString('en-US')}</td>

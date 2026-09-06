@@ -395,7 +395,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
       setInspectionTypeId(req.inspection_type_id);
       setInspectionPrice(req.price);
       setPaymentType(req.payment_type);
-      setPaymentNote(req.payment_note || "");
+      setPaymentNote((req.payment_note || "").replace(/\[W-\d+\]\s*/gi, '').trim());
 
       if (req.payment_type === PaymentType.Split && req.split_payment_details) {
         setSplitCashAmount(req.split_payment_details.cash);
