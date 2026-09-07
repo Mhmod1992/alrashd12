@@ -58,7 +58,7 @@ const WaitingForPaymentRequests: React.FC = () => {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
     const [paymentRequest, setPaymentRequest] = useState<InspectionRequest | null>(null);
-    const [paymentMethod, setPaymentMethod] = useState<PaymentType>(PaymentType.Cash);
+    const [paymentMethod, setPaymentMethod] = useState<PaymentType | ''>('');
     const [splitCashAmount, setSplitCashAmount] = useState<number>(0);
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
 
@@ -215,7 +215,7 @@ const WaitingForPaymentRequests: React.FC = () => {
 
     const handleProcessPaymentClick = (request: InspectionRequest) => {
       setPaymentRequest(request);
-      setPaymentMethod(PaymentType.Cash); 
+      setPaymentMethod(''); 
       setSplitCashAmount(0);
       setSplitCardAmount(request.price);
       setIsPaymentModalOpen(true);
@@ -232,6 +232,11 @@ const WaitingForPaymentRequests: React.FC = () => {
     const confirmPayment = async () => {
         if (!paymentRequest || isSubmittingPayment) return;
         
+        if (!paymentMethod) {
+            addNotification({ title: 'تنبيه', message: 'يرجى تحديد طريقة دفع المبلغ أولاً.', type: 'warning' });
+            return;
+        }
+
         if (paymentMethod === PaymentType.Split) {
              if (splitCashAmount + splitCardAmount !== paymentRequest.price) {
                  addNotification({ title: 'خطأ', message: 'مجموع المبالغ لا يساوي قيمة الطلب.', type: 'error' });
@@ -430,25 +435,37 @@ const WaitingForPaymentRequests: React.FC = () => {
                         <p className="text-3xl font-bold text-green-600 dark:text-green-400">{paymentRequest?.price.toLocaleString('en-US')} ريال</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">طريقة الدفع</label>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            طريقة الدفع <span className="text-red-500">*</span>
+                        </label>
                         <select 
                             value={paymentMethod} 
                             onChange={(e) => {
-                                const newMethod = e.target.value as PaymentType;
+                                const newMethod = e.target.value as PaymentType | '';
                                 setPaymentMethod(newMethod);
                                 if (newMethod === PaymentType.Split && paymentRequest) {
                                     setSplitCashAmount(0);
                                     setSplitCardAmount(paymentRequest.price);
                                 }
                             }}
-                            className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
+                            className={`w-full p-2.5 border rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 transition-colors ${
+                                !paymentMethod 
+                                    ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400/50' 
+                                    : 'border-slate-300 dark:border-slate-600'
+                            }`}
                         >
+                            <option value="" disabled>-- اختر طريقة التحصيل --</option>
                             <option value={PaymentType.Cash}>نقدي</option>
                             <option value={PaymentType.Card}>بطاقة</option>
                             <option value={PaymentType.Transfer}>تحويل بنكي</option>
                             <option value={PaymentType.Split}>نقدي - بطاقة</option>
                             <option value={PaymentType.Unpaid}>غير مدفوع (آجل)</option>
                         </select>
+                        {!paymentMethod && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
+                                * يرجى تحديد طريقة الدفع لتفعيل الطلب
+                            </p>
+                        )}
                     </div>
 
                     {paymentMethod === PaymentType.Split && (
@@ -476,7 +493,7 @@ const WaitingForPaymentRequests: React.FC = () => {
                 </div>
                 <div className="flex justify-end gap-2 pt-4 mt-2 border-t dark:border-slate-700">
                     <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isSubmittingPayment}>إلغاء</Button>
-                    <Button onClick={confirmPayment} disabled={isSubmittingPayment}>
+                    <Button onClick={confirmPayment} disabled={isSubmittingPayment || !paymentMethod}>
                         {isSubmittingPayment ? 'جاري التأكيد...' : 'تأكيد الاستلام'}
                     </Button>
                 </div>
