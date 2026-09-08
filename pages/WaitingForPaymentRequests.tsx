@@ -209,12 +209,18 @@ const WaitingForPaymentRequests: React.FC = () => {
     
         let carInfo = '';
         if (request.car_snapshot) {
-            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
+            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en || ''} ${request.car_snapshot.model_en || ''} ${request.car_snapshot.year || ''}*\n`;
         }
-    
-        const message = `أهلاً *${client.name}*، نود تذكيركم بالطلب رقم *#${request.request_number}* الذي لا يزال بانتظار الدفع.\n\n${carInfo}المبلغ المطلوب: *${request.price}* ريال.\n\nشكراً لكم.`;
+
+        const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);
+        const typeInfo = inspectionType?.name ? `📋 *نوع الفحص: ${inspectionType.name}*\n` : '';
+
+        const waitingNum = request.waiting_number || (request.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || (request.status === RequestStatus.WAITING_PAYMENT ? 100 : request.request_number);
+        const reqLabel = request.status === RequestStatus.WAITING_PAYMENT ? `w - ${waitingNum} (بانتظار الدفع)` : `#${request.request_number}`;
+
+        const message = `أهلاً *${client.name}*، نود تذكيركم بالطلب رقم *${reqLabel}*.\n\n${carInfo}${typeInfo}💳 *المبلغ المطلوب: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.\nشكراً لكم.`;
         
-        await sendWhatsAppMessage(phone, message);
+        await sendWhatsAppMessage(phone, message, client.name);
     };
 
     const handleProcessPaymentClick = (request: InspectionRequest) => {

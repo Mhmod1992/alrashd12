@@ -87,7 +87,17 @@ const NewRequestSuccessModal: React.FC = () => {
             carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
         }
 
-        const message = `أهلاً *${client.name}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${request.request_number}*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
+        const message = isWaiting
+            ? `أهلاً *${client.name}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: w - ${waitingNumber} (بانتظار الدفع)*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`
+            : `حياكم الله *${client.name}*،
+#${request.request_number}
+تم تأكيد استلام مركبتكم *${request.car_snapshot?.make_en || ''} ${request.car_snapshot?.model_en || ''} ${request.car_snapshot?.year || ''}*
+وبدء إجراءات الفحص الفني في مركزنا.
+
+نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة، وسيتم إشعاركم فور الجاهزية.
+
+شكراً لاختياركم مركزنا.
+*ادارة مركز الراشد*`;
         
         await sendWhatsAppMessage(phone, message, client.name);
         hideNewRequestSuccessModal();
