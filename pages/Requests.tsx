@@ -70,7 +70,7 @@ const Requests: React.FC = () => {
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests, searchQuery, setSearchQuery,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
-        page, setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage, whatsappApiStatus,
+        page, setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage, whatsappApiStatus, checkWhatsAppStatus,
         updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
@@ -877,6 +877,10 @@ const Requests: React.FC = () => {
         setPaymentMethod('');
         setSplitCashAmount(0);
         setSplitCardAmount(request.price);
+        setSendWhatsAppStartNotify(true);
+        if (checkWhatsAppStatus) {
+            checkWhatsAppStatus();
+        }
         setIsPaymentModalOpen(true);
     };
 
@@ -984,7 +988,7 @@ const Requests: React.FC = () => {
                 activity_log: updatedLog
             });
 
-            if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected') {
+            if (sendWhatsAppStartNotify && paymentMethod !== PaymentType.Unpaid) {
                 const client = clients.find(c => c.id === paymentRequest.client_id);
                 if (client && client.phone) {
                     const message = `حياكم الله *${client.name || ''}*،
@@ -2012,18 +2016,35 @@ const Requests: React.FC = () => {
                         </div>
                     )}
 
-                    {paymentMethod && paymentMethod !== PaymentType.Unpaid && whatsappApiStatus === 'connected' && (
+                    {paymentMethod !== PaymentType.Unpaid && (
                         <div className="pt-2 border-t dark:border-slate-700">
-                            <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={sendWhatsAppStartNotify}
-                                    onChange={(e) => setSendWhatsAppStartNotify(e.target.checked)}
-                                    className="w-4 h-4 text-green-500 border-slate-300 rounded focus:ring-green-500"
-                                />
-                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                                    إرسال إشعار للعميل عبر واتساب (بدء الفحص)
-                                </span>
+                            <label className="flex items-center justify-between gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={sendWhatsAppStartNotify}
+                                        onChange={(e) => setSendWhatsAppStartNotify(e.target.checked)}
+                                        className="w-4 h-4 text-green-500 border-slate-300 rounded focus:ring-green-500"
+                                    />
+                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                        إرسال إشعار للعميل عبر واتساب (بدء الفحص)
+                                    </span>
+                                </div>
+                                {settings.whatsappMode === 'api' ? (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                        whatsappApiStatus === 'connected' 
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                            : whatsappApiStatus === 'checking'
+                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                    }`}>
+                                        {whatsappApiStatus === 'connected' ? '🟢 متصل' : whatsappApiStatus === 'checking' ? '🟡 جاري التحقق...' : '🔴 غير متصل'}
+                                    </span>
+                                ) : (
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                        💬 واتساب يدوي
+                                    </span>
+                                )}
                             </label>
                         </div>
                     )}

@@ -29,6 +29,9 @@ const WaitingForPaymentRequests: React.FC = () => {
         employees,
         brokers,
         sendWhatsAppMessage,
+        whatsappApiStatus,
+        checkWhatsAppStatus,
+        settings,
         showNewRequestSuccessModal,
         createActivityLog,
     } = useAppContext();
@@ -61,6 +64,7 @@ const WaitingForPaymentRequests: React.FC = () => {
     const [paymentMethod, setPaymentMethod] = useState<PaymentType | ''>('');
     const [splitCashAmount, setSplitCashAmount] = useState<number>(0);
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
+    const [sendWhatsAppStartNotify, setSendWhatsAppStartNotify] = useState<boolean>(true);
 
     useEffect(() => {
         if (initialRequestModalState === 'new' && can('create_requests')) {
@@ -218,6 +222,10 @@ const WaitingForPaymentRequests: React.FC = () => {
       setPaymentMethod(''); 
       setSplitCashAmount(0);
       setSplitCardAmount(request.price);
+      setSendWhatsAppStartNotify(true);
+      if (checkWhatsAppStatus) {
+          checkWhatsAppStatus();
+      }
       setIsPaymentModalOpen(true);
     };
 
@@ -300,6 +308,22 @@ const WaitingForPaymentRequests: React.FC = () => {
                 created_at: now,
                 activity_log: updatedLog
             });
+
+            if (sendWhatsAppStartNotify && paymentMethod !== PaymentType.Unpaid) {
+                const client = clients.find(c => c.id === paymentRequest.client_id);
+                if (client && client.phone) {
+                    const message = `حياكم الله *${client.name || ''}*،
+#${nextOfficialNumber}
+تم تأكيد استلام مركبتكم *${paymentRequest.car_snapshot?.make_en || ''} ${paymentRequest.car_snapshot?.model_en || ''} ${paymentRequest.car_snapshot?.year || ''}*
+وبدء إجراءات الفحص الفني في مركزنا.
+
+نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة، وسيتم إشعاركم فور الجاهزية.
+
+شكراً لاختياركم مركزنا.
+*ادارة مركز الراشد*`;
+                    await sendWhatsAppMessage(client.phone, message, client.name, { suppressModal: true });
+                }
+            }
 
             addNotification({ title: 'نجاح', message: `تم استلام الدفعة وتفعيل الطلب برقم #${nextOfficialNumber}.`, type: 'success' });
             
@@ -488,6 +512,39 @@ const WaitingForPaymentRequests: React.FC = () => {
                                     className="w-full p-2 text-sm border rounded bg-slate-100 dark:bg-slate-600 dark:border-slate-500 text-slate-500 cursor-not-allowed"
                                 />
                             </div>
+                        </div>
+                    )}
+
+                    {paymentMethod !== PaymentType.Unpaid && (
+                        <div className="pt-2 border-t dark:border-slate-700">
+                            <label className="flex items-center justify-between gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={sendWhatsAppStartNotify}
+                                        onChange={(e) => setSendWhatsAppStartNotify(e.target.checked)}
+                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                                    />
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        إرسال رسالة واتساب للعميل ببدء الفحص
+                                    </span>
+                                </div>
+                                {settings.whatsappMode === 'api' ? (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                        whatsappApiStatus === 'connected' 
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                            : whatsappApiStatus === 'checking'
+                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                    }`}>
+                                        {whatsappApiStatus === 'connected' ? '🟢 متصل' : whatsappApiStatus === 'checking' ? '🟡 جاري التحقق...' : '🔴 غير متصل'}
+                                    </span>
+                                ) : (
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                        💬 واتساب يدوي
+                                    </span>
+                                )}
+                            </label>
                         </div>
                     )}
                 </div>
