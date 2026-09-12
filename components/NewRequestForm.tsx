@@ -1598,6 +1598,22 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             } else {
                 const requestDate = forceCustomDate && customDate ? new Date(customDate) : new Date();
 
+                // Calculate next request number from the database to prevent duplicates
+                let nextRequestNumber: number | undefined = undefined;
+                try {
+                    const { data: maxData, error: maxError } = await supabase
+                        .from('inspection_requests')
+                        .select('request_number')
+                        .order('request_number', { ascending: false })
+                        .limit(1);
+                    
+                    if (!maxError && maxData && maxData.length > 0) {
+                        nextRequestNumber = Number(maxData[0].request_number) + 1;
+                    }
+                } catch (e) {
+                    console.error("Error fetching max request number:", e);
+                }
+
                 const newAddedRequest = await addRequestOptimized({
                     clientName,
                     clientPhone,
@@ -1617,7 +1633,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     employeeId: authUser.id,
                     broker: brokerValue,
                     createdAt: requestDate.toISOString(),
-                    reservationId: initialReservationData?.id || null
+                    reservationId: initialReservationData?.id || null,
+                    requestNumber: nextRequestNumber
                 });
 
                 if (newAddedRequest) {

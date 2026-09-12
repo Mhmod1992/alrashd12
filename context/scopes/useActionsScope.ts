@@ -192,6 +192,7 @@ export const useActionsScope = (
         broker: any;
         createdAt: string;
         reservationId?: string | null;
+        requestNumber?: number;
     }): Promise<InspectionRequest> => {
         const { data, error } = await supabase.rpc('create_inspection_request_v3', {
             p_client_name: payload.clientName,
@@ -217,8 +218,23 @@ export const useActionsScope = (
 
         if (error) throw error;
         
+        let newRequest = data as InspectionRequest;
+        
+        // --- OVERRIDE REQUEST NUMBER IF PROVIDED ---
+        // This ensures the client-generated sequence number is respected without altering the database schema
+        if (payload.requestNumber && newRequest.request_number !== payload.requestNumber) {
+            const { error: updateError } = await supabase
+                .from('inspection_requests')
+                .update({ request_number: payload.requestNumber })
+                .eq('id', newRequest.id);
+                
+            if (!updateError) {
+                newRequest.request_number = payload.requestNumber;
+            }
+        }
+        // ------------------------------------------
+
         // Update local state immediately with the returned data
-        const newRequest = data as InspectionRequest;
         setRequests(prev => [newRequest, ...prev]);
         
         // Trigger a background fetch to update clients and other metadata (like history counts)
