@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode, getNextWaitingNumber, getNextWaitingNumberAsync, getWaitingNumber } from '../types';
+import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode } from '../types';
 import Button from './Button';
 import { uuidv4 } from '../lib/utils';
 import Modal from './Modal';
@@ -55,7 +55,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         searchClients, searchCarMakes, searchCarModels, checkCarHistory,
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
-        can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, updateRequest, cars,
+        can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
         fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation, page,
         sendWhatsAppMessage, whatsappApiStatus, requests, reservations, searchReservations
     } = useAppContext();
@@ -279,7 +279,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             setInspectionPrice(req.price);
             setPaymentType(req.payment_type);
             
-            let rawNote = (req.payment_note || '').replace(/\[W-\d+\]\s*/gi, '').trim();
+            const rawNote = req.payment_note || '';
             if (rawNote.includes('[WA-RES]')) {
                 setIsFromReservation(true);
                 setPaymentNote(rawNote.replace('[WA-RES]', '').trim());
@@ -1536,12 +1536,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 paymentNoteValue = paymentNote.trim() ? paymentNote.trim() : undefined;
             }
 
-            let waitingNum = 100;
-            if (newStatus === RequestStatus.WAITING_PAYMENT) {
-                waitingNum = await getNextWaitingNumberAsync(requests);
-                paymentNoteValue = `[W-${waitingNum}] ${paymentNoteValue || ''}`.trim();
-            }
-
             const splitPaymentDetails = paymentType === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined;
             const brokerValue = (!isReceptionistMode && useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : null;
 
@@ -1627,38 +1621,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 });
 
                 if (newAddedRequest) {
-                    if (newStatus === RequestStatus.WAITING_PAYMENT) {
-                        newAddedRequest.waiting_number = waitingNum;
-                    } else {
-                        // Ensure official sequential numbering for completed/new requests
-                        let nextOfficialNum = 1;
-                        try {
-                            const { data: maxData } = await supabase
-                                .from('inspection_requests')
-                                .select('request_number')
-                                .neq('status', RequestStatus.WAITING_PAYMENT)
-                                .neq('id', newAddedRequest.id)
-                                .order('request_number', { ascending: false })
-                                .limit(1);
-                            if (maxData && maxData.length > 0 && maxData[0].request_number) {
-                                nextOfficialNum = Number(maxData[0].request_number) + 1;
-                            }
-                        } catch (e) {
-                            const maxLocal = requests
-                                .filter(r => r.status !== RequestStatus.WAITING_PAYMENT && r.id !== newAddedRequest.id)
-                                .reduce((max, r) => Math.max(max, Number(r.request_number) || 0), 0);
-                            nextOfficialNum = maxLocal + 1;
-                        }
-
-                        if (newAddedRequest.request_number !== nextOfficialNum) {
-                            await updateRequest({ id: newAddedRequest.id, request_number: nextOfficialNum });
-                            newAddedRequest.request_number = nextOfficialNum;
-                        }
-                    }
-
                     if (whatsappApiStatus === 'connected' && clientPhone !== '0000000000') {
                         if (newStatus === RequestStatus.WAITING_PAYMENT) {
-                            // Automatically send WhatsApp for waiting payment requests with w - {waitingNum}
+                            // Automatically send WhatsApp for waiting payment requests without manual button click
                             const makeName = carSnapshot.make_en || '';
                             const modelName = carSnapshot.model_en || '';
                             const yearName = carYear || '';
@@ -1673,7 +1638,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                 phone = '966' + phone;
                             }
 
-                            const message = `أهلاً *${clientName}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: w - ${waitingNum} (بانتظار الدفع)*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${Number(inspectionPrice)} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
+                            const message = `أهلاً *${clientName}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${newAddedRequest.request_number}*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${Number(inspectionPrice)} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
                             await sendWhatsAppMessage(phone, message, clientName, { suppressModal: true });
                         } else if (sendWhatsAppStartNotify && finalPaymentType !== PaymentType.Unpaid) {
                             const message = `حياكم الله *${clientName}*،
@@ -1691,12 +1656,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         }
                     }
 
-                    showNewRequestSuccessModal(
-                        newAddedRequest.id,
-                        newStatus === RequestStatus.WAITING_PAYMENT ? waitingNum : newAddedRequest.request_number,
-                        forceWhatsApp,
-                        newStatus === RequestStatus.WAITING_PAYMENT
-                    );
+                    showNewRequestSuccessModal(newAddedRequest.id, newAddedRequest.request_number, forceWhatsApp);
                     onSuccess(newAddedRequest);
                 }
             }

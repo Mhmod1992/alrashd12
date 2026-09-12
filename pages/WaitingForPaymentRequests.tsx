@@ -29,9 +29,6 @@ const WaitingForPaymentRequests: React.FC = () => {
         employees,
         brokers,
         sendWhatsAppMessage,
-        whatsappApiStatus,
-        checkWhatsAppStatus,
-        settings,
         showNewRequestSuccessModal,
         createActivityLog,
     } = useAppContext();
@@ -59,12 +56,10 @@ const WaitingForPaymentRequests: React.FC = () => {
 
     // Payment Modal State
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-    const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
     const [paymentRequest, setPaymentRequest] = useState<InspectionRequest | null>(null);
-    const [paymentMethod, setPaymentMethod] = useState<PaymentType | ''>('');
+    const [paymentMethod, setPaymentMethod] = useState<PaymentType>(PaymentType.Cash);
     const [splitCashAmount, setSplitCashAmount] = useState<number>(0);
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
-    const [sendWhatsAppStartNotify, setSendWhatsAppStartNotify] = useState<boolean>(true);
 
     useEffect(() => {
         if (initialRequestModalState === 'new' && can('create_requests')) {
@@ -77,12 +72,7 @@ const WaitingForPaymentRequests: React.FC = () => {
         const waiting = requests.filter(r => r.status === RequestStatus.WAITING_PAYMENT);
         let sourceData = waiting;
         if (searchTerm.trim()) {
-            const term = searchTerm.trim().toLowerCase().replace(/\s/g, '');
-            const termNum = term.replace(/^w-?/, '');
-            sourceData = waiting.filter(r => {
-                const wNum = String(r.waiting_number || (r.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || '');
-                return String(r.request_number).includes(term) || wNum.includes(termNum) || `w-${wNum}`.includes(term);
-            });
+            sourceData = waiting.filter(r => String(r.request_number).includes(searchTerm.trim()));
         }
 
         const identityToRequestCount = new Map<string, number>();
@@ -209,29 +199,19 @@ const WaitingForPaymentRequests: React.FC = () => {
     
         let carInfo = '';
         if (request.car_snapshot) {
-            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en || ''} ${request.car_snapshot.model_en || ''} ${request.car_snapshot.year || ''}*\n`;
+            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
         }
-
-        const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);
-        const typeInfo = inspectionType?.name ? `📋 *نوع الفحص: ${inspectionType.name}*\n` : '';
-
-        const waitingNum = request.waiting_number || (request.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || (request.status === RequestStatus.WAITING_PAYMENT ? 100 : request.request_number);
-        const reqLabel = request.status === RequestStatus.WAITING_PAYMENT ? `w - ${waitingNum} (بانتظار الدفع)` : `#${request.request_number}`;
-
-        const message = `أهلاً *${client.name}*، نود تذكيركم بالطلب رقم *${reqLabel}*.\n\n${carInfo}${typeInfo}💳 *المبلغ المطلوب: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.\nشكراً لكم.`;
+    
+        const message = `أهلاً *${client.name}*، نود تذكيركم بالطلب رقم *#${request.request_number}* الذي لا يزال بانتظار الدفع.\n\n${carInfo}المبلغ المطلوب: *${request.price}* ريال.\n\nشكراً لكم.`;
         
-        await sendWhatsAppMessage(phone, message, client.name);
+        await sendWhatsAppMessage(phone, message);
     };
 
     const handleProcessPaymentClick = (request: InspectionRequest) => {
       setPaymentRequest(request);
-      setPaymentMethod(''); 
+      setPaymentMethod(PaymentType.Cash); 
       setSplitCashAmount(0);
       setSplitCardAmount(request.price);
-      setSendWhatsAppStartNotify(true);
-      if (checkWhatsAppStatus) {
-          checkWhatsAppStatus();
-      }
       setIsPaymentModalOpen(true);
     };
 
@@ -244,13 +224,8 @@ const WaitingForPaymentRequests: React.FC = () => {
     };
 
     const confirmPayment = async () => {
-        if (!paymentRequest || isSubmittingPayment) return;
+        if (!paymentRequest) return;
         
-        if (!paymentMethod) {
-            addNotification({ title: 'تنبيه', message: 'يرجى تحديد طريقة دفع المبلغ أولاً.', type: 'warning' });
-            return;
-        }
-
         if (paymentMethod === PaymentType.Split) {
              if (splitCashAmount + splitCardAmount !== paymentRequest.price) {
                  addNotification({ title: 'خطأ', message: 'مجموع المبالغ لا يساوي قيمة الطلب.', type: 'error' });
@@ -258,94 +233,28 @@ const WaitingForPaymentRequests: React.FC = () => {
              }
         }
 
-        setIsSubmittingPayment(true);
         try {
             const now = new Date().toISOString();
             const currentReq = requests.find(r => r.id === paymentRequest.id) || paymentRequest;
-
-            // Calculate next official serial number reliably
-            const maxLocal = requests
-                .filter(r => r.status !== RequestStatus.WAITING_PAYMENT && r.id !== paymentRequest.id)
-                .reduce((max, r) => Math.max(max, Number(r.request_number) || 0), 0);
-            
-            let nextOfficialNumber = Math.max(maxLocal, Number(currentReq.request_number) || 0);
-
-            try {
-                const { data: maxData, error: maxError } = await supabase
-                    .from('inspection_requests')
-                    .select('request_number')
-                    .neq('status', RequestStatus.WAITING_PAYMENT)
-                    .neq('id', paymentRequest.id)
-                    .order('request_number', { ascending: false })
-                    .limit(1);
-
-                if (!maxError && maxData && maxData.length > 0 && maxData[0].request_number) {
-                    const dbMax = Number(maxData[0].request_number);
-                    if (dbMax >= nextOfficialNumber) {
-                        nextOfficialNumber = dbMax + 1;
-                    }
-                }
-            } catch (e) {
-                console.warn('Could not fetch max request_number from DB, using calculated number:', e);
-            }
-
-            if (nextOfficialNumber <= 0) {
-                nextOfficialNumber = Number(currentReq.request_number) || 1;
-            }
-
-            const cleanPaymentNote = (currentReq.payment_note || '').replace(/\[W-\d+\]\s*/gi, '').trim();
-            const prevWaitingNum = paymentRequest.waiting_number || (paymentRequest.payment_note?.match(/\[W-(\d+)\]/i)?.[1] ? parseInt(paymentRequest.payment_note.match(/\[W-(\d+)\]/i)![1], 10) : undefined);
-
-            const newLog = createActivityLog ? createActivityLog(
-                'تحصيل وتفعيل الطلب', 
-                `تم تحصيل المبلغ (${paymentRequest.price} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي${prevWaitingNum ? ` (طلب انتظار w - ${prevWaitingNum})` : ''}`
-            ) : null;
+            const newLog = createActivityLog ? createActivityLog('تحصيل وتفعيل الطلب', `تم تحصيل المبلغ (${paymentRequest.price} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي`) : null;
             const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
 
             await updateRequest({
                 id: paymentRequest.id,
-                request_number: nextOfficialNumber,
                 status: RequestStatus.NEW,
                 payment_type: paymentMethod,
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
-                payment_note: cleanPaymentNote || null,
-                waiting_number: prevWaitingNum,
-                inspection_data: prevWaitingNum ? { ...(currentReq.inspection_data || {}), waiting_number: prevWaitingNum } : currentReq.inspection_data,
                 created_at: now,
                 activity_log: updatedLog
             });
-
-            if (sendWhatsAppStartNotify && paymentMethod !== PaymentType.Unpaid) {
-                const client = clients.find(c => c.id === paymentRequest.client_id);
-                if (client && client.phone) {
-                    const message = `حياكم الله *${client.name || ''}*،
-#${nextOfficialNumber}
-تم تأكيد استلام مركبتكم *${paymentRequest.car_snapshot?.make_en || ''} ${paymentRequest.car_snapshot?.model_en || ''} ${paymentRequest.car_snapshot?.year || ''}*
-وبدء إجراءات الفحص الفني في مركزنا.
-
-نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة، وسيتم إشعاركم فور الجاهزية.
-
-شكراً لاختياركم مركزنا.
-*ادارة مركز الراشد*`;
-                    await sendWhatsAppMessage(client.phone, message, client.name, { suppressModal: true });
-                }
-            }
-
-            addNotification({ title: 'نجاح', message: `تم استلام الدفعة وتفعيل الطلب برقم #${nextOfficialNumber}.`, type: 'success' });
-            
-            const paidRequestId = paymentRequest.id;
+            addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب بالوقت الجديد.', type: 'success' });
             setIsPaymentModalOpen(false);
+            const paidRequestId = paymentRequest.id;
+            const paidRequestNumber = paymentRequest.request_number;
             setPaymentRequest(null);
-
-            // Open success modal explicitly with isWaiting = false
-            setTimeout(() => {
-                showNewRequestSuccessModal(paidRequestId, nextOfficialNumber, false, false);
-            }, 100);
+            showNewRequestSuccessModal(paidRequestId, paidRequestNumber, false);
         } catch (error) {
-            console.error('Payment confirmation error:', error);
-            addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع وتفعيل الطلب.', type: 'error' });
-        } finally {
-            setIsSubmittingPayment(false);
+            addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع.', type: 'error' });
         }
     };
     
@@ -439,7 +348,7 @@ const WaitingForPaymentRequests: React.FC = () => {
             <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="تحصيل المبلغ وتفعيل الطلب" size="md">
                 <div className="space-y-4">
                     <p className="text-sm text-slate-600 dark:text-slate-300">
-                        سيتم تحويل حالة الطلب <strong className="font-mono text-purple-600 dark:text-purple-400">w - {paymentRequest?.waiting_number || (paymentRequest?.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || 100}</strong> إلى "جديد" وسيتم تعيين الرقم التسلسلي الرسمي للطلب تلقائياً.
+                        سيتم تحويل حالة الطلب <strong>#{paymentRequest?.request_number}</strong> إلى "جديد" وسيتمكن الفنيون من رؤيته.
                     </p>
 
                     <div className="space-y-2 text-sm bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border dark:border-slate-600">
@@ -465,37 +374,25 @@ const WaitingForPaymentRequests: React.FC = () => {
                         <p className="text-3xl font-bold text-green-600 dark:text-green-400">{paymentRequest?.price.toLocaleString('en-US')} ريال</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            طريقة الدفع <span className="text-red-500">*</span>
-                        </label>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">طريقة الدفع</label>
                         <select 
                             value={paymentMethod} 
                             onChange={(e) => {
-                                const newMethod = e.target.value as PaymentType | '';
+                                const newMethod = e.target.value as PaymentType;
                                 setPaymentMethod(newMethod);
                                 if (newMethod === PaymentType.Split && paymentRequest) {
                                     setSplitCashAmount(0);
                                     setSplitCardAmount(paymentRequest.price);
                                 }
                             }}
-                            className={`w-full p-2.5 border rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 transition-colors ${
-                                !paymentMethod 
-                                    ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400/50' 
-                                    : 'border-slate-300 dark:border-slate-600'
-                            }`}
+                            className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                         >
-                            <option value="" disabled>-- اختر طريقة التحصيل --</option>
                             <option value={PaymentType.Cash}>نقدي</option>
                             <option value={PaymentType.Card}>بطاقة</option>
                             <option value={PaymentType.Transfer}>تحويل بنكي</option>
                             <option value={PaymentType.Split}>نقدي - بطاقة</option>
                             <option value={PaymentType.Unpaid}>غير مدفوع (آجل)</option>
                         </select>
-                        {!paymentMethod && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
-                                * يرجى تحديد طريقة الدفع لتفعيل الطلب
-                            </p>
-                        )}
                     </div>
 
                     {paymentMethod === PaymentType.Split && (
@@ -520,45 +417,10 @@ const WaitingForPaymentRequests: React.FC = () => {
                             </div>
                         </div>
                     )}
-
-                    {paymentMethod !== PaymentType.Unpaid && (
-                        <div className="pt-2 border-t dark:border-slate-700">
-                            <label className="flex items-center justify-between gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={sendWhatsAppStartNotify}
-                                        onChange={(e) => setSendWhatsAppStartNotify(e.target.checked)}
-                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
-                                    />
-                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                        إرسال رسالة واتساب للعميل ببدء الفحص
-                                    </span>
-                                </div>
-                                {settings.whatsappMode === 'api' ? (
-                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                        whatsappApiStatus === 'connected' 
-                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                            : whatsappApiStatus === 'checking'
-                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                    }`}>
-                                        {whatsappApiStatus === 'connected' ? '🟢 متصل' : whatsappApiStatus === 'checking' ? '🟡 جاري التحقق...' : '🔴 غير متصل'}
-                                    </span>
-                                ) : (
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                                        💬 واتساب يدوي
-                                    </span>
-                                )}
-                            </label>
-                        </div>
-                    )}
                 </div>
                 <div className="flex justify-end gap-2 pt-4 mt-2 border-t dark:border-slate-700">
-                    <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isSubmittingPayment}>إلغاء</Button>
-                    <Button onClick={confirmPayment} disabled={isSubmittingPayment || !paymentMethod}>
-                        {isSubmittingPayment ? 'جاري التأكيد...' : 'تأكيد الاستلام'}
-                    </Button>
+                    <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)}>إلغاء</Button>
+                    <Button onClick={confirmPayment}>تأكيد الاستلام</Button>
                 </div>
             </Modal>
 

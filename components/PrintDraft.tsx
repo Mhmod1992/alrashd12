@@ -1,5 +1,5 @@
 import React from 'react';
-import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, formatRequestNumber } from '../types';
+import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory } from '../types';
 
 interface PrintDraftProps {
     request: InspectionRequest;
@@ -28,7 +28,7 @@ const PrintDraft = React.forwardRef<HTMLDivElement, PrintDraftProps>((props, ref
             {logoUrl && <img src={logoUrl} alt="Logo" className="h-16" />}
         </header>
         <div className="grid grid-cols-2 gap-4 text-lg">
-            <p><strong>رقم الطلب:</strong> {formatRequestNumber(request)}</p>
+            <p><strong>رقم الطلب:</strong> {request?.request_number}</p>
             <p><strong>تاريخ الطلب:</strong> {new Date(request?.created_at).toLocaleString('ar-EG')}</p>
             <p><strong>اسم العميل:</strong> {client?.name}</p>
             <p><strong>رقم الهاتف:</strong> {client?.phone}</p>

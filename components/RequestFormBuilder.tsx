@@ -16,7 +16,6 @@ import {
   RequestStatus,
   CarSnapshot,
   InspectionType,
-  getNextWaitingNumberAsync,
 } from "../types";
 import Button from "./Button";
 import { uuidv4 } from "../lib/utils";
@@ -72,7 +71,6 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
     brokers,
     carMakes,
     carModels,
-    requests,
     showConfirmModal,
   } = useAppContext();
 
@@ -397,7 +395,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
       setInspectionTypeId(req.inspection_type_id);
       setInspectionPrice(req.price);
       setPaymentType(req.payment_type);
-      setPaymentNote((req.payment_note || "").replace(/\[W-\d+\]\s*/gi, '').trim());
+      setPaymentNote(req.payment_note || "");
 
       if (req.payment_type === PaymentType.Split && req.split_payment_details) {
         setSplitCashAmount(req.split_payment_details.cash);
@@ -839,12 +837,6 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
         finalPaymentNote = paymentNote.trim() ? paymentNote.trim() : undefined;
       }
 
-      let waitingNum: number | undefined = undefined;
-      if (isReceptionist && !isEditMode) {
-        waitingNum = await getNextWaitingNumberAsync(requests);
-        finalPaymentNote = `[W-${waitingNum}] ${finalPaymentNote || ""}`.trim();
-      }
-
       // 3. Request Data Construction
       const reqData = {
         client_id: clientId,
@@ -872,7 +864,7 @@ const RequestFormBuilder: React.FC<RequestFormBuilderProps> = ({
             : new Date().toISOString(),
         // Empty arrays for new request
         inspection_data:
-          isEditMode && initialData ? initialData.inspection_data : (waitingNum ? { waiting_number: waitingNum } : {}),
+          isEditMode && initialData ? initialData.inspection_data : {},
         general_notes:
           isEditMode && initialData ? initialData.general_notes : [],
         category_notes:

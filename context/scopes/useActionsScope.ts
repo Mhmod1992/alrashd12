@@ -98,8 +98,7 @@ export const useActionsScope = (
             if (!prev) return null;
             return prev.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } : r);
         });
-        const { waiting_number, ...dbPayload } = updatedRequest;
-        const { error } = await supabase.from('inspection_requests').update(dbPayload).eq('id', updatedRequest.id);
+        const { error } = await supabase.from('inspection_requests').update(updatedRequest).eq('id', updatedRequest.id);
         if (error) throw error;
 
         // Sync to TV after update ONLY if status is being changed

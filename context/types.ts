@@ -164,8 +164,8 @@ export interface AppContextType {
     setInitialRequestModalState: (state: 'new' | null) => void;
     currentDbUsage: number;
     currentStorageUsage: number;
-    newRequestSuccessState: { isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; isWaiting?: boolean; };
-    showNewRequestSuccessModal: (requestId: string | null, requestNumber: number | null, showWhatsAppButton?: boolean, isWaiting?: boolean) => void;
+    newRequestSuccessState: { isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; };
+    showNewRequestSuccessModal: (requestId: string | null, requestNumber: number | null, showWhatsAppButton?: boolean) => void;
     hideNewRequestSuccessModal: () => void;
     shouldPrintDraft: boolean;
     setShouldPrintDraft: (shouldPrint: boolean) => void;

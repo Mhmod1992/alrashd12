@@ -181,7 +181,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } = useThemeScope(authUser, setAuthUser, can);
     
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
-    const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; isWaiting?: boolean; }>({ isOpen: false, requestNumber: null, requestId: null, showWhatsAppButton: false, isWaiting: false });
+    const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; }>({ isOpen: false, requestNumber: null, requestId: null, showWhatsAppButton: false });
     const [whatsappSuccessModal, setWhatsappSuccessModal] = useState<{ isOpen: boolean; clientName: string; phone: string; }>({ isOpen: false, clientName: '', phone: '' });
     const [shouldPrintDraft, setShouldPrintDraft] = useState(false);
 
@@ -720,19 +720,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
     const fetchAndUpdateSingleRequest = useCallback(async (requestId: string) => {
-        const { data: rawReq, error } = await supabase.from('inspection_requests').select('*').eq('id', requestId).single();
-        if (error && !rawReq) {
+        const { data: req, error } = await supabase.from('inspection_requests').select('*').eq('id', requestId).single();
+        if (error && !req) {
             setRequests(prev => prev.filter(r => r.id !== requestId));
             return;
         }
-        if (rawReq) {
-            let req = rawReq;
-            if (req.payment_note) {
-                const match = req.payment_note.match(/\[W-(\d+)\]/i);
-                if (match) {
-                    req = { ...req, waiting_number: parseInt(match[1], 10) };
-                }
-            }
+        if (req) {
             setRequests(prev => {
                 const exists = prev.some(r => r.id === requestId);
                 return exists ? prev.map(r => r.id === requestId ? { ...r, ...req } : r) : [req, ...prev];
@@ -762,20 +755,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const loadMoreRequests = useCallback(async () => {
         if (isLoadingMore || !hasMoreRequests) return;
         setIsLoadingMore(true);
-        const { data: rawBatch, error } = await supabase.from('inspection_requests')
+        const { data: nextBatch, error } = await supabase.from('inspection_requests')
             .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, report_stamps, attached_files, payment_note, split_payment_details')
             .order('created_at', { ascending: false })
             .range(requestsOffset, requestsOffset + REQUESTS_PAGE_SIZE - 1);
-        if (!error && rawBatch) {
-            const nextBatch = rawBatch.map(r => {
-                if (r.payment_note) {
-                    const match = r.payment_note.match(/\[W-(\d+)\]/i);
-                    if (match) {
-                        return { ...r, waiting_number: parseInt(match[1], 10) };
-                    }
-                }
-                return r;
-            });
+        if (!error && nextBatch) {
             await ensureEntitiesLoaded(nextBatch);
             setRequests(prev => [...prev, ...nextBatch]);
             setRequestsOffset(prev => prev + nextBatch.length);
@@ -815,18 +799,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (exactOnly) {
             // STRICT ORDER ID SEARCH
-            const lowerQuery = query.toLowerCase().replace(/\s/g, '');
-            const isWaitingQuery = lowerQuery.startsWith('w-') || lowerQuery.startsWith('w');
-            const parsedNum = isWaitingQuery ? parseInt(lowerQuery.replace(/^w-?/, ''), 10) : (isNumericQuery ? Number(query) : null);
-
-            if (parsedNum !== null && !isNaN(parsedNum)) {
-                localResults = requests.filter(r => {
-                    const waitingNum = r.waiting_number || (r.payment_note?.match(/\[W-(\d+)\]/i)?.[1] ? parseInt(r.payment_note.match(/\[W-(\d+)\]/i)![1], 10) : null);
-                    if (isWaitingQuery) {
-                        return waitingNum === parsedNum;
-                    }
-                    return r.request_number === parsedNum || (r.status === RequestStatus.WAITING_PAYMENT && waitingNum === parsedNum);
-                });
+            if (isNumericQuery) {
+                const queryNum = Number(query);
+                localResults = requests.filter(r => r.request_number === queryNum);
             } else {
                 setSearchedRequests([]);
                 setIsRefreshing(false);
@@ -847,9 +822,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
 
                 if (isNumericQuery && cleanQuery.length <= 4 && !isModelAndYear) {
-                     const num = Number(cleanQuery);
-                     const waitingNum = r.waiting_number || (r.payment_note?.match(/\[W-(\d+)\]/i)?.[1] ? parseInt(r.payment_note.match(/\[W-(\d+)\]/i)![1], 10) : null);
-                     const isOrder = r.request_number === num || (r.status === RequestStatus.WAITING_PAYMENT && waitingNum === num);
+                     const isOrder = r.request_number === Number(cleanQuery);
                      const plateNormalized = car?.plate_number?.replace(/\s/g, '').toLowerCase() || '';
                      const plateEnNormalized = car?.plate_number_en?.replace(/\s/g, '').toLowerCase() || '';
                      const isPlate = plateNormalized.includes(cleanQuery) || plateEnNormalized.includes(cleanQuery);
@@ -1447,8 +1420,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const removeNotification = useCallback((id: string) => setNotifications(prev => prev.filter(n => n.id !== id)), []);
 
-    const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null, showWhatsAppButton: boolean = false, isWaiting?: boolean) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber, showWhatsAppButton, isWaiting }), []);
-    const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null, showWhatsAppButton: false, isWaiting: false }), []);
+    const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null, showWhatsAppButton: boolean = false) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber, showWhatsAppButton }), []);
+    const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null }), []);
 
     const showWhatsAppSuccessModal = useCallback((clientName: string, phone: string) => setWhatsappSuccessModal({ isOpen: true, clientName, phone }), []);
     const hideWhatsAppSuccessModal = useCallback(() => setWhatsappSuccessModal(prev => ({ ...prev, isOpen: false })), []);

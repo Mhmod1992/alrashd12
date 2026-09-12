@@ -1,7 +1,6 @@
 
 import React from 'react';
 import { useAppContext } from '../context/AppContext';
-import { RequestStatus } from '../types';
 import Modal from './Modal';
 import Button from './Button';
 import CheckCircleIcon from './icons/CheckCircleIcon';
@@ -30,15 +29,8 @@ const NewRequestSuccessModal: React.FC = () => {
     }
 
     const isLoading = newRequestSuccessState.requestNumber === null;
+    const isReceptionist = authUser?.role === 'receptionist';
     const request = requests.find(r => r.id === newRequestSuccessState.requestId);
-    
-    // Explicit isWaiting flag takes precedence.
-    // Otherwise deduce from request status or showWhatsAppButton
-    const isWaiting = newRequestSuccessState.isWaiting !== undefined
-        ? newRequestSuccessState.isWaiting
-        : (request ? request.status === RequestStatus.WAITING_PAYMENT : Boolean(newRequestSuccessState.showWhatsAppButton));
-
-    const waitingNumber = request?.waiting_number || (request?.payment_note?.match(/\[W-(\d+)\]/i)?.[1]) || newRequestSuccessState.requestNumber || 100;
 
     const handleGoToRequests = () => {
         if (newRequestSuccessState.requestId) {
@@ -46,8 +38,8 @@ const NewRequestSuccessModal: React.FC = () => {
         }
         hideNewRequestSuccessModal();
         
-        // Redirect to waiting list if it's a waiting request, or to main requests list if official/paid
-        if (isWaiting) {
+        // Redirect logic based on context or role
+        if (isReceptionist || newRequestSuccessState.showWhatsAppButton) {
             setPage('waiting-requests');
         } else {
             setPage('requests');
@@ -87,23 +79,13 @@ const NewRequestSuccessModal: React.FC = () => {
             carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
         }
 
-        const message = isWaiting
-            ? `أهلاً *${client.name}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: w - ${waitingNumber} (بانتظار الدفع)*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`
-            : `حياكم الله *${client.name}*،
-#${request.request_number}
-تم تأكيد استلام مركبتكم *${request.car_snapshot?.make_en || ''} ${request.car_snapshot?.model_en || ''} ${request.car_snapshot?.year || ''}*
-وبدء إجراءات الفحص الفني في مركزنا.
-
-نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة، وسيتم إشعاركم فور الجاهزية.
-
-شكراً لاختياركم مركزنا.
-*ادارة مركز الراشد*`;
+        const message = `أهلاً *${client.name}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${request.request_number}*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
         
         await sendWhatsAppMessage(phone, message, client.name);
         hideNewRequestSuccessModal();
         
         // Ensure we go to waiting list if we sent from there
-        if (isWaiting) {
+        if (isReceptionist || newRequestSuccessState.showWhatsAppButton) {
             setPage('waiting-requests');
         }
     };
@@ -112,7 +94,7 @@ const NewRequestSuccessModal: React.FC = () => {
         <Modal 
             isOpen={newRequestSuccessState.isOpen} 
             onClose={isLoading ? () => {} : hideNewRequestSuccessModal} 
-            title={isLoading ? 'جاري إصدار الطلب...' : (isWaiting ? 'تم تسجيل الطلب بانتظار الدفع' : 'تم تفعيل الطلب بنجاح')} 
+            title={isLoading ? 'جاري إصدار الطلب...' : 'تم إنشاء الطلب بنجاح'} 
             size="md"
         >
             <div className="text-center py-8">
@@ -127,15 +109,14 @@ const NewRequestSuccessModal: React.FC = () => {
                     <>
                         <CheckCircleIcon className="w-20 h-20 text-green-500 mx-auto mb-4 animate-scale-in" />
                         <p className="text-xl text-slate-800 dark:text-slate-200">
-                            {isWaiting ? 'رقم الطلب بانتظار الدفع:' : 'رقم الطلب الجديد هو:'}
+                            رقم الطلب الجديد هو:
                         </p>
-                        <p className={`text-4xl font-bold mt-2 font-mono ${isWaiting ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'}`}>
-                            {isWaiting ? `w - ${waitingNumber}` : `#${newRequestSuccessState.requestNumber}`}
+                        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400 mt-2">
+                            #{newRequestSuccessState.requestNumber}
                         </p>
-                        {isWaiting && (
-                            <p className="mt-4 text-slate-600 dark:text-slate-400 bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800 text-sm">
-                                الطلب الآن في قائمة <strong>"انتظار الدفع"</strong> برقم مؤقت <span className="font-mono font-bold text-purple-700 dark:text-purple-300">w - {waitingNumber}</span>.<br/>
-                                يرجى توجيه العميل للكاشير للتحصيل وإصدار الرقم التسلسلي الرسمي للطلب.
+                        {isReceptionist && (
+                            <p className="mt-4 text-slate-600 dark:text-slate-400 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                                الطلب الآن في قائمة "انتظار الدفع".<br/>يرجى توجيه العميل للكاشير لإتمام العملية.
                             </p>
                         )}
                     </>

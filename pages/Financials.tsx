@@ -873,7 +873,7 @@ const Financials: React.FC = () => {
                                             <tr key={req.id}>
                                                 <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 font-numeric">#{req.request_number}</td>
                                                 <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-200">{getClientName(req.client_id)}</td>
-                                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{req.payment_note?.replace(/\[W-\d+\]\s*/gi, '').trim() || '-'}</td>
+                                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{req.payment_note || '-'}</td>
                                                 <td className="px-4 py-3 font-bold text-amber-600 font-numeric">{req.price.toLocaleString('en-US')}</td>
                                             </tr>
                                         ))}

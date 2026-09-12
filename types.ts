@@ -306,7 +306,6 @@ export type ReportStamp = 'CUSTOMER_REQUEST_INCOMPLETE';
 export interface InspectionRequest {
   id: string;
   request_number: number;
-  waiting_number?: number;
   client_id: string;
   car_id: string;
   car_snapshot?: CarSnapshot;
@@ -337,18 +336,6 @@ export interface InspectionRequest {
   ai_analysis?: string;
   reservation_id?: string;
 }
-
-import { getWaitingNumber, getNextWaitingNumber, getNextWaitingNumberAsync } from './lib/waitingNumber';
-export { getWaitingNumber, getNextWaitingNumber, getNextWaitingNumberAsync };
-
-export const formatRequestNumber = (req: Partial<InspectionRequest> | null | undefined): string => {
-  if (!req) return '';
-  if (req.status === RequestStatus.WAITING_PAYMENT) {
-    const wNum = getWaitingNumber(req) || 100;
-    return `w - ${wNum}`;
-  }
-  return req.request_number ? `#${req.request_number}` : '';
-};
 
 export interface PlateCharacterMap {
   ar: string;
