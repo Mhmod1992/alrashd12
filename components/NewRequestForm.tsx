@@ -1629,31 +1629,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 if (newAddedRequest) {
                     if (newStatus === RequestStatus.WAITING_PAYMENT) {
                         newAddedRequest.waiting_number = waitingNum;
-                    } else {
-                        // Ensure official sequential numbering for completed/new requests
-                        let nextOfficialNum = 1;
-                        try {
-                            const { data: maxData } = await supabase
-                                .from('inspection_requests')
-                                .select('request_number')
-                                .neq('status', RequestStatus.WAITING_PAYMENT)
-                                .neq('id', newAddedRequest.id)
-                                .order('request_number', { ascending: false })
-                                .limit(1);
-                            if (maxData && maxData.length > 0 && maxData[0].request_number) {
-                                nextOfficialNum = Number(maxData[0].request_number) + 1;
-                            }
-                        } catch (e) {
-                            const maxLocal = requests
-                                .filter(r => r.status !== RequestStatus.WAITING_PAYMENT && r.id !== newAddedRequest.id)
-                                .reduce((max, r) => Math.max(max, Number(r.request_number) || 0), 0);
-                            nextOfficialNum = maxLocal + 1;
-                        }
-
-                        if (newAddedRequest.request_number !== nextOfficialNum) {
-                            await updateRequest({ id: newAddedRequest.id, request_number: nextOfficialNum });
-                            newAddedRequest.request_number = nextOfficialNum;
-                        }
                     }
 
                     if (whatsappApiStatus === 'connected' && clientPhone !== '0000000000') {

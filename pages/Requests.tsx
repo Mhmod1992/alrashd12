@@ -941,36 +941,7 @@ const Requests: React.FC = () => {
         try {
             const now = new Date().toISOString();
             const currentReq = requests.find(r => r.id === paymentRequest.id) || paymentRequest;
-
-            // Calculate next official serial number reliably
-            const maxLocal = requests
-                .filter(r => r.status !== RequestStatus.WAITING_PAYMENT && r.id !== paymentRequest.id)
-                .reduce((max, r) => Math.max(max, Number(r.request_number) || 0), 0);
-            
-            let nextOfficialNumber = Math.max(maxLocal, Number(currentReq.request_number) || 0);
-
-            try {
-                const { data: maxData, error: maxError } = await supabase
-                    .from('inspection_requests')
-                    .select('request_number')
-                    .neq('status', RequestStatus.WAITING_PAYMENT)
-                    .neq('id', paymentRequest.id)
-                    .order('request_number', { ascending: false })
-                    .limit(1);
-
-                if (!maxError && maxData && maxData.length > 0 && maxData[0].request_number) {
-                    const dbMax = Number(maxData[0].request_number);
-                    if (dbMax >= nextOfficialNumber) {
-                        nextOfficialNumber = dbMax + 1;
-                    }
-                }
-            } catch (e) {
-                console.warn('Could not fetch max request_number from DB, using calculated number:', e);
-            }
-
-            if (nextOfficialNumber <= 0) {
-                nextOfficialNumber = Number(currentReq.request_number) || 1;
-            }
+            const finalOfficialNumber = paymentRequest.request_number || currentReq.request_number;
 
             const cleanPaymentNote = (currentReq.payment_note || '').replace(/\[W-\d+\]\s*/gi, '').trim();
             const prevWaitingNum = paymentRequest.waiting_number || (paymentRequest.payment_note?.match(/\[W-(\d+)\]/i)?.[1] ? parseInt(paymentRequest.payment_note.match(/\[W-(\d+)\]/i)![1], 10) : undefined);
@@ -983,7 +954,6 @@ const Requests: React.FC = () => {
 
             await updateRequest({
                 id: paymentRequest.id,
-                request_number: nextOfficialNumber,
                 status: RequestStatus.NEW,
                 payment_type: paymentMethod,
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
@@ -998,7 +968,7 @@ const Requests: React.FC = () => {
                 const client = clients.find(c => c.id === paymentRequest.client_id);
                 if (client && client.phone) {
                     const message = `حياكم الله *${client.name || ''}*،
-#${nextOfficialNumber}
+#${finalOfficialNumber}
 تم تأكيد استلام مركبتكم *${paymentRequest.car_snapshot?.make_en || ''} ${paymentRequest.car_snapshot?.model_en || ''} ${paymentRequest.car_snapshot?.year || ''}*
 وبدء إجراءات الفحص الفني في مركزنا.
 
@@ -1010,7 +980,7 @@ const Requests: React.FC = () => {
                 }
             }
 
-            addNotification({ title: 'نجاح', message: `تم استلام الدفعة وتفعيل الطلب برقم #${nextOfficialNumber}.`, type: 'success' });
+            addNotification({ title: 'نجاح', message: `تم استلام الدفعة وتفعيل الطلب برقم #${finalOfficialNumber}.`, type: 'success' });
             
             const paidRequestId = paymentRequest.id;
             setIsPaymentModalOpen(false);
@@ -1019,7 +989,7 @@ const Requests: React.FC = () => {
 
             // Open success modal explicitly with isWaiting = false
             setTimeout(() => {
-                showNewRequestSuccessModal(paidRequestId, nextOfficialNumber, false, false);
+                showNewRequestSuccessModal(paidRequestId, finalOfficialNumber, false, false);
             }, 100);
         } catch (error) {
             console.error('Payment confirmation error:', error);
