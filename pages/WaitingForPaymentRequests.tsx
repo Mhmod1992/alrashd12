@@ -70,6 +70,8 @@ const WaitingForPaymentRequests: React.FC = () => {
     }, [initialRequestModalState, setInitialRequestModalState, can]);
 
     const { dataToDisplay, carsWithHistory } = useMemo(() => {
+        // ALWAYS use the global requests list and filter by WAITING_PAYMENT
+        // This ensures that when a request status changes globally, it is immediately removed from this list.
         const waiting = requests.filter(r => r.status === RequestStatus.WAITING_PAYMENT);
         let sourceData = waiting;
         if (searchTerm.trim()) {

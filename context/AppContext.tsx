@@ -271,7 +271,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         const newReq = payload.new as InspectionRequest;
                         await ensureEntitiesLoadedRef.current([newReq]);
                         setRequests(prev => {
-                            if (prev.some(r => r.id === newReq.id)) return prev;
+                            // If we already have this request, it might have an updated request_number from our optimistic override, 
+                            // so we should prefer our existing state or update it carefully.
+                            const existingReqIndex = prev.findIndex(r => r.id === newReq.id);
+                            if (existingReqIndex !== -1) {
+                                const updatedPrev = [...prev];
+                                // Only update if the incoming realtime event has a HIGHER request number, 
+                                // otherwise keep our optimistically set one.
+                                if (newReq.request_number > updatedPrev[existingReqIndex].request_number) {
+                                    updatedPrev[existingReqIndex] = { ...updatedPrev[existingReqIndex], ...newReq };
+                                }
+                                return updatedPrev.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                            }
                             return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                         });
                         if (authUserRef.current && newReq.employee_id !== authUserRef.current.id) {
@@ -685,8 +696,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 
                 supabase.auth.startAutoRefresh();
                 
-                if (authUserRef.current && realtimeStatusRef.current === 'disconnected') {
-                    retryConnection();
+                if (authUserRef.current) {
+                    if (realtimeStatusRef.current === 'disconnected') {
+                        retryConnection();
+                    }
+                    // Always fetch latest data when returning to foreground to catch missed Realtime events
+                    fetchRequests();
                 }
             }
         };
