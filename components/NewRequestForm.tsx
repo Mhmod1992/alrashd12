@@ -1641,10 +1641,19 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     if (whatsappApiStatus === 'connected' && clientPhone !== '0000000000') {
                         if (newStatus === RequestStatus.WAITING_PAYMENT) {
                             // Automatically send WhatsApp for waiting payment requests without manual button click
+                            const formatShortRequestNumber = (num: string | number) => {
+                                const str = String(num);
+                                if (str.length >= 4) {
+                                    return str.replace(/(\d)(\d{3})$/, '$1-$2');
+                                }
+                                return str;
+                            };
+
+                            const shortReqNum = formatShortRequestNumber(newAddedRequest.request_number);
                             const makeName = carSnapshot.make_en || '';
                             const modelName = carSnapshot.model_en || '';
                             const yearName = carYear || '';
-                            const carInfo = (makeName || modelName) ? `🚙 *السيارة: ${makeName} ${modelName} ${yearName}*\n` : '';
+                            const carInfo = (makeName || modelName) ? `🚙 السيارة:  *${makeName} ${modelName} ${yearName}*\n` : '';
                             const inspectionTypeObj = inspectionTypes.find(t => t.id === inspectionTypeId);
                             const inspectionTypeName = inspectionTypeObj ? inspectionTypeObj.name : 'فحص';
 
@@ -1655,7 +1664,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                 phone = '966' + phone;
                             }
 
-                            const message = `أهلاً *${clientName}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${newAddedRequest.request_number}*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${Number(inspectionPrice)} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
+                            const message = `أهلاً\n *${clientName}*، طلبك جاهز للدفع.\n\n🧾 الطلب:\n*#${shortReqNum}*\n\n${carInfo} 📋 نوع الفحص\n    *${inspectionTypeName}*\n💳 المبلغ:\n*${Number(inspectionPrice)} ريال*\n\nالرجاء *إتمام الدفع لدى المحاسب* لبدء الفحص.\n\n\n*ادارة  مركز الراشد*`;
                             await sendWhatsAppMessage(phone, message, clientName, { suppressModal: true });
                         } else if (sendWhatsAppStartNotify && finalPaymentType !== PaymentType.Unpaid) {
                             const message = `حياكم الله *${clientName}*،

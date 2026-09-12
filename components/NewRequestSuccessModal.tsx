@@ -71,15 +71,27 @@ const NewRequestSuccessModal: React.FC = () => {
             phone = '966' + phone;
         }
 
+        const formatShortRequestNumber = (num: string | number) => {
+            const str = String(num);
+            if (str.length >= 4) {
+                return str.replace(/(\d)(\d{3})$/, '$1-$2');
+            }
+            return str;
+        };
+
+        const shortReqNum = formatShortRequestNumber(request.request_number);
         const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);
         const inspectionTypeName = inspectionType ? inspectionType.name : 'فحص';
 
         let carInfo = '';
         if (request.car_snapshot) {
-            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
+            const carParts = [request.car_snapshot.make_en, request.car_snapshot.model_en, request.car_snapshot.year].filter(Boolean).join(' ');
+            if (carParts) {
+                carInfo = `🚙 السيارة:  *${carParts}*\n`;
+            }
         }
 
-        const message = `أهلاً *${client.name}*، طلبك جاهز للدفع.\n\n🧾 *الطلب: #${request.request_number}*\n${carInfo}📋 *نوع الفحص: ${inspectionTypeName}*\n💳 *المبلغ: ${request.price} ريال*\n\nالرجاء إتمام الدفع لدى الكاشير لبدء الفحص.`;
+        const message = `أهلاً\n *${client.name}*، طلبك جاهز للدفع.\n\n🧾 الطلب:\n*#${shortReqNum}*\n\n${carInfo} 📋 نوع الفحص\n    *${inspectionTypeName}*\n💳 المبلغ:\n*${request.price} ريال*\n\nالرجاء *إتمام الدفع لدى المحاسب* لبدء الفحص.\n\n\n*ادارة  مركز الراشد*`;
         
         await sendWhatsAppMessage(phone, message, client.name);
         hideNewRequestSuccessModal();

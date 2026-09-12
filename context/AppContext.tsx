@@ -700,8 +700,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     if (realtimeStatusRef.current === 'disconnected') {
                         retryConnection();
                     }
-                    // Always fetch latest data when returning to foreground to catch missed Realtime events
-                    fetchRequests();
+                    // Only fetch data on tab return for mobile devices
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+                    if (isMobile) {
+                        fetchRequests();
+                    }
                 }
             }
         };
