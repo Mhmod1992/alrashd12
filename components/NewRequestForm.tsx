@@ -1653,7 +1653,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             const makeName = carSnapshot.make_en || '';
                             const modelName = carSnapshot.model_en || '';
                             const yearName = carYear || '';
-                            const carInfo = (makeName || modelName) ? `🚙 السيارة:  *${makeName} ${modelName} ${yearName}*\n` : '';
+                            const carDetails = [makeName, modelName, yearName].filter(Boolean).join(' ') || 'غير محدد';
                             const inspectionTypeObj = inspectionTypes.find(t => t.id === inspectionTypeId);
                             const inspectionTypeName = inspectionTypeObj ? inspectionTypeObj.name : 'فحص';
 
@@ -1664,20 +1664,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                 phone = '966' + phone;
                             }
 
-                            const message = `أهلاً\n *${clientName}*، طلبك جاهز للدفع.\n\n🧾 الطلب:\n*#${shortReqNum}*\n\n${carInfo} 📋 نوع الفحص\n    *${inspectionTypeName}*\n💳 المبلغ:\n*${Number(inspectionPrice)} ريال*\n\nالرجاء *إتمام الدفع لدى المحاسب* لبدء الفحص.\n\n\n*ادارة  مركز الراشد*`;
+                            const message = `*إشعار دفع — مركز الراشد*\n\n*أهلاً ${clientName}،*\nالسلام عليكم ورحمة الله وبركاته،\n\nبيانات طلب الفحص:\n──────────────────\n▪️ رقم الطلب: *\u200E#${shortReqNum}\u200E*\n▪️ السيارة: *${carDetails}*\n▪️ _*خدمة الفحص: ${inspectionTypeName}*_\n💵 المبلغ الإجمالي: *《 ${Number(inspectionPrice)} ريال 》*\n──────────────────\n\n*_برجاء سداد المبلغ لدى المحاسب للمباشرة في فحص المركبة._*\n\nشاكرين تعاونكم،\n\n*إدارة مركز الراشد*`;
                             await sendWhatsAppMessage(phone, message, clientName, { suppressModal: true });
                         } else if (sendWhatsAppStartNotify && finalPaymentType !== PaymentType.Unpaid) {
-                            const message = `حياكم الله *${clientName}*،
-
-*#${newAddedRequest.request_number}*
-
-تم تأكيد استلام مركبتكم *${carSnapshot.make_en || ''} ${carSnapshot.model_en || ''} ${carYear || ''}*
-وبدء إجراءات الفحص الفني في مركزنا.
-نعمل حالياً على إتمام الفحص وتجهيز التقرير بأعلى معايير الدقة والجودة،
-وسيتم إشعاركم فور الجاهزية.
-شكراً لاختياركم مركزنا.
-
-*ادارة مركز الراشد*`;
+                            const message = `*مركز الراشد* لخدمات فحص السيارات\n\nأهلاً وسهلاً بكم *${clientName}،* ويسعدنا خدمتكم دائماً.\n\nيسرنا إفادتكم بتأكيد استلام مركبتكم وبدء الفحص الفني:\n\n──────────────────\n▪️ رقم الطلب: *\u200E#${newAddedRequest.request_number}\u200E*\n▪️ السيارة: *${carDetails}*\n──────────────────\n\nفريقنا المختص يعمل الآن على إجراء الفحص الشامل و\nإعداد التقرير بكل دقة وعناية، وسنقوم بإشعاركم فور الانتهاء مباشرة.\n\nأسعدنا اختياركم لمركزنا، ونتمنى لكم يوماً سعيداً.\n\n*إدارة مركز الراشد*`;
                             await sendWhatsAppMessage(clientPhone, message, clientName, { suppressModal: true });
                         }
                     }

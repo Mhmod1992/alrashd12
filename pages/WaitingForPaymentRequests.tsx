@@ -200,12 +200,21 @@ const WaitingForPaymentRequests: React.FC = () => {
             phone = '966' + phone;
         }
     
-        let carInfo = '';
+        const formatShortRequestNumber = (num: string | number) => {
+            const str = String(num);
+            if (str.length >= 4) {
+                return str.replace(/(\d)(\d{3})$/, '$1-$2');
+            }
+            return str;
+        };
+
+        const shortReqNum = formatShortRequestNumber(request.request_number);
+        let carDetails = 'غير محدد';
         if (request.car_snapshot) {
-            carInfo = `🚙 *السيارة: ${request.car_snapshot.make_en} ${request.car_snapshot.model_en} ${request.car_snapshot.year}*\n`;
+            carDetails = [request.car_snapshot.make_en, request.car_snapshot.model_en, request.car_snapshot.year].filter(Boolean).join(' ') || 'غير محدد';
         }
-    
-        const message = `أهلاً *${client.name}*، نود تذكيركم بالطلب رقم *#${request.request_number}* الذي لا يزال بانتظار الدفع.\n\n${carInfo}المبلغ المطلوب: *${request.price}* ريال.\n\nشكراً لكم.`;
+
+        const message = `*تذكير بالدفع — مركز الراشد*\n\nالمكرم *${client.name}* ،\nنُذكّركم بأن الطلب *\u200E#${shortReqNum}\u200E* بانتظار الدفع:\n\n▪️ السيارة: ${carDetails}\n💵 المبلغ: *《 ${request.price} ريال 》*\n\nيرجى السداد لدى *المحاسب لبدء الفحص* .\n\n*إدارة مركز الراشد*`;
         
         await sendWhatsAppMessage(phone, message);
     };

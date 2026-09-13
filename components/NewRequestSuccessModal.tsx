@@ -83,15 +83,15 @@ const NewRequestSuccessModal: React.FC = () => {
         const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);
         const inspectionTypeName = inspectionType ? inspectionType.name : 'فحص';
 
-        let carInfo = '';
+        let carDetails = 'غير محدد';
         if (request.car_snapshot) {
             const carParts = [request.car_snapshot.make_en, request.car_snapshot.model_en, request.car_snapshot.year].filter(Boolean).join(' ');
             if (carParts) {
-                carInfo = `🚙 السيارة:  *${carParts}*\n`;
+                carDetails = carParts;
             }
         }
 
-        const message = `أهلاً\n *${client.name}*، طلبك جاهز للدفع.\n\n🧾 الطلب:\n*#${shortReqNum}*\n\n${carInfo} 📋 نوع الفحص\n    *${inspectionTypeName}*\n💳 المبلغ:\n*${request.price} ريال*\n\nالرجاء *إتمام الدفع لدى المحاسب* لبدء الفحص.\n\n\n*ادارة  مركز الراشد*`;
+        const message = `*إشعار دفع — مركز الراشد*\n\n*أهلاً ${client.name}،*\nالسلام عليكم ورحمة الله وبركاته،\n\nبيانات طلب الفحص:\n──────────────────\n▪️ رقم الطلب: *\u200E#${shortReqNum}\u200E*\n▪️ السيارة: *${carDetails}*\n▪️ _*خدمة الفحص: ${inspectionTypeName}*_\n💵 المبلغ الإجمالي: *《 ${request.price} ريال 》*\n──────────────────\n\n*_برجاء سداد المبلغ لدى المحاسب للمباشرة في فحص المركبة._*\n\nشاكرين تعاونكم،\n\n*إدارة مركز الراشد*`;
         
         await sendWhatsAppMessage(phone, message, client.name);
         hideNewRequestSuccessModal();
