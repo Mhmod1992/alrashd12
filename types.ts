@@ -337,6 +337,29 @@ export interface InspectionRequest {
   reservation_id?: string;
 }
 
+export interface PendingRequest {
+  id: string;
+  pending_number: number;
+  client_name: string;
+  client_phone: string;
+  car_make_id?: string;
+  car_model_id?: string;
+  car_year?: number;
+  plate_number?: string | null;
+  plate_number_en?: string | null;
+  vin?: string | null;
+  car_snapshot?: CarSnapshot;
+  inspection_type_id: string;
+  price: number;
+  payment_note?: string;
+  employee_id?: string;
+  broker?: {
+    id: string;
+    commission: number;
+  };
+  created_at: string;
+}
+
 export interface PlateCharacterMap {
   ar: string;
   en: string;

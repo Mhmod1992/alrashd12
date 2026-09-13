@@ -27,7 +27,7 @@ import AlertTriangleIcon from '../components/icons/AlertTriangleIcon';
 import Icon from '../components/Icon';
 import InAppScannerModal from '../components/InAppScannerModal';
 import { Skeleton } from '../components/Skeleton';
-import { uuidv4, timeAgo } from '../lib/utils';
+import { uuidv4, timeAgo, formatPendingNumber } from '../lib/utils';
 
 const StatBlock: React.FC<{ title: string; count: number; icon: React.ReactElement<{ className?: string }>; color: string; }> = ({ title, count, icon, color }) => (
     <div 
@@ -66,12 +66,12 @@ let moduleCachedRangeEnd = '';
 
 const Requests: React.FC = () => {
     const {
-        requests, clients, cars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings, updateSettings,
+        requests, pendingRequests, convertPendingToOfficialRequest, clients, cars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings, updateSettings,
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests, searchQuery, setSearchQuery,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
         page, setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage, whatsappApiStatus,
-        updateRequest, employees, showConfirmModal, fetchRequestsByDateRange,
+        updateRequest, updateClient, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
         lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations,
@@ -161,6 +161,10 @@ const Requests: React.FC = () => {
     const [splitCashAmount, setSplitCashAmount] = useState<number>(0);
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
     const [sendWhatsAppStartNotify, setSendWhatsAppStartNotify] = useState<boolean>(true);
+    const [editableClientName, setEditableClientName] = useState<string>('');
+    const [editableClientPhone, setEditableClientPhone] = useState<string>('');
+    const [editablePrice, setEditablePrice] = useState<number>(0);
+    const [isSubmittingPayment, setIsSubmittingPayment] = useState<boolean>(false);
 
     const [isReservationsAccordionOpen, setIsReservationsAccordionOpen] = useState(false);
     const [reservationMiniSearchTerm, setReservationMiniSearchTerm] = useState('');
@@ -876,17 +880,33 @@ const Requests: React.FC = () => {
         setPaymentRequest(request);
         setPaymentMethod('');
         setPaymentError(null);
+
+        const rawPending = (request as any)?._rawPending;
+        let cName = '';
+        let cPhone = '';
+
+        if (rawPending) {
+            cName = rawPending.client_name || '';
+            cPhone = rawPending.client_phone || '';
+        } else if (request.client_id) {
+            const client = clients.find(c => c.id === request.client_id);
+            cName = client?.name || '';
+            cPhone = client?.phone || '';
+        }
+
+        setEditableClientName(cName);
+        setEditableClientPhone(cPhone);
+        setEditablePrice(request.price || 0);
+
         setSplitCashAmount(0);
-        setSplitCardAmount(request.price);
+        setSplitCardAmount(request.price || 0);
         setIsPaymentModalOpen(true);
     };
 
     const handleSplitCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = Number(e.target.value);
         setSplitCashAmount(val);
-        if (paymentRequest) {
-            setSplitCardAmount(paymentRequest.price - val);
-        }
+        setSplitCardAmount(Math.max(0, editablePrice - val));
     };
 
     const handleResendWhatsApp = async (request: InspectionRequest) => {
@@ -923,29 +943,65 @@ const Requests: React.FC = () => {
     };
 
     const confirmPayment = async () => {
-        if (!paymentRequest) return;
+        if (!paymentRequest || isSubmittingPayment) return;
         if (!paymentMethod) {
             setPaymentError('يرجى تحديد طريقة دفع المبلغ أولاً.');
             addNotification({ title: 'تنبيه', message: 'يرجى تحديد طريقة دفع المبلغ أولاً.', type: 'warning' });
             return;
         }
+
+        if (editablePrice < 0) {
+            addNotification({ title: 'خطأ', message: 'يرجى إدخال مبلغ صحيح للطلب.', type: 'error' });
+            return;
+        }
+
         if (paymentMethod === PaymentType.Split) {
-            if (splitCashAmount + splitCardAmount !== paymentRequest.price) {
+            if (splitCashAmount + splitCardAmount !== editablePrice) {
                 addNotification({ title: 'خطأ', message: 'مجموع المبالغ لا يساوي قيمة الطلب.', type: 'error' });
                 return;
             }
         }
 
+        setIsSubmittingPayment(true);
+
         try {
+            if ((paymentRequest as any)?._isPending && (paymentRequest as any)?._rawPending) {
+                const officialReq = await convertPendingToOfficialRequest(
+                    (paymentRequest as any)._rawPending,
+                    paymentMethod as PaymentType,
+                    paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
+                    {
+                        client_name: editableClientName,
+                        client_phone: editableClientPhone,
+                        price: editablePrice
+                    }
+                );
+                addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب ورسمنة الرقم التسلسلي الجديد.', type: 'success' });
+                setIsPaymentModalOpen(false);
+                setPaymentRequest(null);
+                showNewRequestSuccessModal(officialReq.id, officialReq.request_number, false);
+                return;
+            }
+
             const now = new Date().toISOString();
             const currentReq = requests.find(r => r.id === paymentRequest.id) || paymentRequest;
-            const newLog = createActivityLog ? createActivityLog('تحصيل وتفعيل الطلب', `تم تحصيل المبلغ (${paymentRequest.price} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي`) : null;
+
+            // If client info changed for an existing client, update client record
+            if (paymentRequest.client_id) {
+                const client = clients.find(c => c.id === paymentRequest.client_id);
+                if (client && (client.name !== editableClientName || client.phone !== editableClientPhone)) {
+                    await updateClient({ ...client, name: editableClientName, phone: editableClientPhone });
+                }
+            }
+
+            const newLog = createActivityLog ? createActivityLog('تحصيل وتفعيل الطلب', `تم تحصيل المبلغ (${editablePrice} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي`) : null;
             const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
 
             await updateRequest({
                 id: paymentRequest.id,
                 status: RequestStatus.NEW,
                 payment_type: paymentMethod,
+                price: editablePrice,
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
                 created_at: now,
                 activity_log: updatedLog
@@ -953,11 +1009,19 @@ const Requests: React.FC = () => {
 
             if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected') {
                 const client = clients.find(c => c.id === paymentRequest.client_id);
-                if (client && client.phone) {
+                const targetPhone = editableClientPhone || client?.phone;
+                const targetName = editableClientName || client?.name;
+                if (targetPhone) {
                     const carDetails = [paymentRequest.car_snapshot?.make_en, paymentRequest.car_snapshot?.model_en, paymentRequest.car_snapshot?.year].filter(Boolean).join(' ') || 'غير محدد';
+                    let phone = targetPhone.replace(/\D/g, '');
+                    if (phone.startsWith('05')) {
+                        phone = '966' + phone.substring(1);
+                    } else if (phone.length === 9 && phone.startsWith('5')) {
+                        phone = '966' + phone;
+                    }
 
-                    const message = `*مركز الراشد* لخدمات فحص السيارات\n\nأهلاً وسهلاً بكم *${client.name || ''}،* ويسعدنا خدمتكم دائماً.\n\nيسرنا إفادتكم بتأكيد استلام مركبتكم وبدء الفحص الفني:\n\n──────────────────\n▪️ رقم الطلب: *\u200E#${paymentRequest.request_number}\u200E*\n▪️ السيارة: *${carDetails}*\n──────────────────\n\nفريقنا المختص يعمل الآن على إجراء الفحص الشامل و\nإعداد التقرير بكل دقة وعناية، وسنقوم بإشعاركم فور الانتهاء مباشرة.\n\nأسعدنا اختياركم لمركزنا، ونتمنى لكم يوماً سعيداً.\n\n*إدارة مركز الراشد*`;
-                    await sendWhatsAppMessage(client.phone, message, client.name, { suppressModal: true });
+                    const message = `*مركز الراشد* لخدمات فحص السيارات\n\nأهلاً وسهلاً بكم *${targetName || ''}،* ويسعدنا خدمتكم دائماً.\n\nيسرنا إفادتكم بتأكيد استلام مركبتكم وبدء الفحص الفني:\n\n──────────────────\n▪️ رقم الطلب: *\u200E#${paymentRequest.request_number}\u200E*\n▪️ السيارة: *${carDetails}*\n──────────────────\n\nفريقنا المختص يعمل الآن على إجراء الفحص الشامل و\nإعداد التقرير بكل دقة وعناية، وسنقوم بإشعاركم فور الانتهاء مباشرة.\n\nأسعدنا اختياركم لمركزنا، ونتمنى لكم يوماً سعيداً.\n\n*إدارة مركز الراشد*`;
+                    await sendWhatsAppMessage(phone, message, targetName, { suppressModal: true });
                 }
             }
 
@@ -969,7 +1033,10 @@ const Requests: React.FC = () => {
             setSendWhatsAppStartNotify(true);
             showNewRequestSuccessModal(paidRequestId, paidRequestNumber, false);
         } catch (error) {
+            console.error("Payment confirmation error:", error);
             addNotification({ title: 'خطأ', message: 'فشل معالجة الدفع.', type: 'error' });
+        } finally {
+            setIsSubmittingPayment(false);
         }
     };
 
@@ -1062,11 +1129,39 @@ const Requests: React.FC = () => {
             }
         });
 
+        const formattedPending: InspectionRequest[] = (pendingRequests || []).map(p => {
+            const matchingClient = clients.find(c => c.name === p.client_name || c.phone === p.client_phone);
+            const clientId = matchingClient ? matchingClient.id : '';
+
+            return {
+                id: p.id,
+                request_number: formatPendingNumber(p.pending_number),
+                client_id: clientId,
+                car_id: '',
+                car_snapshot: p.car_snapshot || {
+                    make_ar: '', make_en: '', model_ar: '', model_en: '', year: p.car_year || new Date().getFullYear(),
+                    plate_number: p.plate_number || '', plate_number_en: p.plate_number_en || '', vin: p.vin || ''
+                },
+                inspection_type_id: p.inspection_type_id,
+                payment_type: PaymentType.WaitingPayment,
+                price: p.price,
+                status: RequestStatus.WAITING_PAYMENT,
+                created_at: p.created_at,
+                employee_id: p.employee_id || '',
+                broker: p.broker,
+                payment_note: p.payment_note,
+                _isPending: true,
+                _rawPending: p
+            } as any;
+        });
+
+        const legacyWaiting = sourceData.filter(r => r.status === RequestStatus.WAITING_PAYMENT);
+
         let waitingReqs: InspectionRequest[] = [];
         let otherReqs: InspectionRequest[] = [];
 
         if (authUser?.role !== 'receptionist') {
-            waitingReqs = sourceData.filter(r => r.status === RequestStatus.WAITING_PAYMENT);
+            waitingReqs = [...formattedPending, ...legacyWaiting];
             otherReqs = sourceData.filter(r => r.status !== RequestStatus.WAITING_PAYMENT);
         } else {
             otherReqs = sourceData;
@@ -1108,7 +1203,7 @@ const Requests: React.FC = () => {
         });
 
         return { dataToDisplay: statusFilteredReqs, waitingPaymentRequests: waitingReqs, carsWithHistory: carsWithHistorySet };
-    }, [requests, searchedRequests, serverFetchedData, statusFilter, employeeFilter, authUser, waitingSearchTerm, can, disableAutoSortRequests]);
+    }, [requests, pendingRequests, clients, searchedRequests, serverFetchedData, statusFilter, employeeFilter, authUser, waitingSearchTerm, can, disableAutoSortRequests]);
 
 
     const [serverCarsWithHistory, setServerCarsWithHistory] = useState<Set<string>>(new Set());
@@ -1876,10 +1971,10 @@ const Requests: React.FC = () => {
                 </Modal>
             )}
 
-            <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="تحصيل المبلغ وتفعيل الطلب" size="md">
+            <Modal isOpen={isPaymentModalOpen} onClose={() => !isSubmittingPayment && setIsPaymentModalOpen(false)} title="تحصيل المبلغ وتفعيل الطلب" size="md">
                 <div className="space-y-4">
                     <p className="text-sm text-slate-600 dark:text-slate-300">
-                        سيتم تحويل حالة الطلب <strong>#{paymentRequest?.request_number}</strong> إلى "جديد" وسيتمكن الفنيون من رؤيته.
+                        سيتم تحويل حالة الطلب <strong>{(paymentRequest as any)?._isPending ? paymentRequest?.request_number : `#${paymentRequest?.request_number}`}</strong> إلى "جديد" وسيتمكن الفنيون من رؤيته.
                     </p>
 
                     <div className="space-y-2 text-sm bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border dark:border-slate-600">
@@ -1900,23 +1995,70 @@ const Requests: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="bg-slate-100 dark:bg-slate-700 p-4 rounded-lg border dark:border-slate-600 text-center">
-                        <p className="text-sm text-slate-500 dark:text-slate-400">المبلغ المطلوب</p>
-                        <p className="text-3xl font-bold text-green-600 dark:text-green-400">{paymentRequest?.price.toLocaleString('en-US')} ريال</p>
+                    {/* EDITABLE FIELDS SECTION */}
+                    <div className="p-3 bg-amber-50/50 dark:bg-amber-900/10 rounded-lg border border-amber-200/60 dark:border-amber-800/40 space-y-3">
+                        <h4 className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                            ✏️ تعديل بيانات الطلب قبل التحصيل:
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">اسم العميل</label>
+                                <input
+                                    type="text"
+                                    value={editableClientName}
+                                    disabled={isSubmittingPayment}
+                                    onChange={(e) => setEditableClientName(e.target.value)}
+                                    placeholder="اسم العميل"
+                                    className="w-full p-2 text-sm border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-amber-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">رقم الهاتف</label>
+                                <input
+                                    type="text"
+                                    dir="ltr"
+                                    value={editableClientPhone}
+                                    disabled={isSubmittingPayment}
+                                    onChange={(e) => setEditableClientPhone(e.target.value)}
+                                    placeholder="05xxxxxxxx"
+                                    className="w-full p-2 text-sm border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-amber-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">المبلغ المطلوب (ريال)</label>
+                            <input
+                                type="number"
+                                value={editablePrice || ''}
+                                disabled={isSubmittingPayment}
+                                onChange={(e) => {
+                                    const val = Math.max(0, Number(e.target.value));
+                                    setEditablePrice(val);
+                                    if (paymentMethod === PaymentType.Split) {
+                                        setSplitCardAmount(Math.max(0, val - splitCashAmount));
+                                    }
+                                }}
+                                placeholder="المبلغ"
+                                className="w-full p-2 text-base font-bold text-green-700 dark:text-green-400 border rounded-lg bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-green-500"
+                            />
+                        </div>
                     </div>
+
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                             طريقة الدفع <span className="text-red-500">*</span>
                         </label>
                         <select
                             value={paymentMethod}
+                            disabled={isSubmittingPayment}
                             onChange={(e) => {
                                 const newMethod = e.target.value as PaymentType | '';
                                 setPaymentMethod(newMethod);
                                 setPaymentError(null);
-                                if (newMethod === PaymentType.Split && paymentRequest) {
+                                if (newMethod === PaymentType.Split) {
                                     setSplitCashAmount(0);
-                                    setSplitCardAmount(paymentRequest.price);
+                                    setSplitCardAmount(editablePrice);
                                 }
                             }}
                             className={`w-full p-2.5 border rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 ${
@@ -1942,6 +2084,7 @@ const Requests: React.FC = () => {
                                 <input
                                     type="number"
                                     value={splitCashAmount}
+                                    disabled={isSubmittingPayment}
                                     onChange={handleSplitCashChange}
                                     className="w-full p-2 text-sm border rounded dark:bg-slate-800 dark:border-slate-600"
                                 />
@@ -1958,12 +2101,13 @@ const Requests: React.FC = () => {
                         </div>
                     )}
 
-                     {paymentMethod !== PaymentType.Unpaid && whatsappApiStatus === 'connected' && (
+                    {paymentMethod !== PaymentType.Unpaid && whatsappApiStatus === 'connected' && (
                         <div className="pt-2 border-t dark:border-slate-700">
                             <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                                 <input
                                     type="checkbox"
                                     checked={sendWhatsAppStartNotify}
+                                    disabled={isSubmittingPayment}
                                     onChange={(e) => setSendWhatsAppStartNotify(e.target.checked)}
                                     className="w-4 h-4 text-green-500 border-slate-300 rounded focus:ring-green-500"
                                 />
@@ -1975,8 +2119,14 @@ const Requests: React.FC = () => {
                     )}
                 </div>
                 <div className="flex justify-end gap-2 pt-4 mt-2 border-t dark:border-slate-700">
-                    <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)}>إلغاء</Button>
-                    <Button onClick={confirmPayment} disabled={!paymentMethod}>تأكيد الاستلام</Button>
+                    <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isSubmittingPayment}>إلغاء</Button>
+                    <Button 
+                        onClick={confirmPayment} 
+                        disabled={!paymentMethod || isSubmittingPayment}
+                        leftIcon={isSubmittingPayment ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : undefined}
+                    >
+                        {isSubmittingPayment ? 'جاري التحصيل...' : 'تأكيد الاستلام'}
+                    </Button>
                 </div>
             </Modal>
 

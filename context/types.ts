@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-    InspectionRequest, Client, Car, CarMake, CarModel, InspectionType,
+    InspectionRequest, PendingRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Settings, Employee,
     SettingsPage, Notification, ConfirmModalState, Permission, Page, AppNotification,
     Expense, Revenue, ActivityLog, InternalMessage, Technician,
@@ -28,6 +28,10 @@ export interface AppContextType {
     settingsPage: SettingsPage;
     setSettingsPage: (page: SettingsPage) => void;
     requests: InspectionRequest[];
+    pendingRequests: PendingRequest[];
+    addPendingRequest: (payload: Omit<PendingRequest, 'id' | 'pending_number' | 'created_at'>) => Promise<PendingRequest>;
+    deletePendingRequest: (id: string) => Promise<void>;
+    convertPendingToOfficialRequest: (pendingReq: PendingRequest, paymentMethod: PaymentType, splitPaymentDetails?: any, overrides?: { client_name?: string; client_phone?: string; price?: number }) => Promise<InspectionRequest>;
     loadMoreRequests: () => Promise<void>;
     hasMoreRequests: boolean;
     isLoadingMore: boolean;
@@ -164,8 +168,8 @@ export interface AppContextType {
     setInitialRequestModalState: (state: 'new' | null) => void;
     currentDbUsage: number;
     currentStorageUsage: number;
-    newRequestSuccessState: { isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; };
-    showNewRequestSuccessModal: (requestId: string | null, requestNumber: number | null, showWhatsAppButton?: boolean) => void;
+    newRequestSuccessState: { isOpen: boolean; requestNumber: number | string | null; requestId: string | null; showWhatsAppButton?: boolean; };
+    showNewRequestSuccessModal: (requestId: string | null, requestNumber: number | string | null, showWhatsAppButton?: boolean) => void;
     hideNewRequestSuccessModal: () => void;
     shouldPrintDraft: boolean;
     setShouldPrintDraft: (shouldPrint: boolean) => void;

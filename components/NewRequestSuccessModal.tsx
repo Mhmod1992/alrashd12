@@ -18,6 +18,7 @@ const NewRequestSuccessModal: React.FC = () => {
         triggerHighlight,
         authUser,
         requests,
+        pendingRequests,
         clients,
         addNotification,
         inspectionTypes,
@@ -30,6 +31,8 @@ const NewRequestSuccessModal: React.FC = () => {
 
     const isLoading = newRequestSuccessState.requestNumber === null;
     const isReceptionist = authUser?.role === 'receptionist';
+    const reqNumStr = String(newRequestSuccessState.requestNumber || '');
+    const isPending = reqNumStr.startsWith('W-') || (pendingRequests || []).some(p => p.id === newRequestSuccessState.requestId);
     const request = requests.find(r => r.id === newRequestSuccessState.requestId);
 
     const handleGoToRequests = () => {
@@ -124,9 +127,9 @@ const NewRequestSuccessModal: React.FC = () => {
                             رقم الطلب الجديد هو:
                         </p>
                         <p className="text-4xl font-bold text-blue-600 dark:text-blue-400 mt-2">
-                            #{newRequestSuccessState.requestNumber}
+                            {reqNumStr.startsWith('W-') ? reqNumStr : `#${newRequestSuccessState.requestNumber}`}
                         </p>
-                        {isReceptionist && (
+                        {(isReceptionist || isPending) && (
                             <p className="mt-4 text-slate-600 dark:text-slate-400 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
                                 الطلب الآن في قائمة "انتظار الدفع".<br/>يرجى توجيه العميل للكاشير لإتمام العملية.
                             </p>
@@ -140,9 +143,11 @@ const NewRequestSuccessModal: React.FC = () => {
                         العودة للقائمة
                     </Button>
                     
-                    <Button onClick={handlePrintDraft} leftIcon={<Icon name="print" className="w-5 h-5" />}>
-                        طباعة مسودة
-                    </Button>
+                    {!isPending && (
+                        <Button onClick={handlePrintDraft} leftIcon={<Icon name="print" className="w-5 h-5" />}>
+                            طباعة مسودة
+                        </Button>
+                    )}
                 </div>
             )}
         </Modal>

@@ -2,7 +2,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import {
-    InspectionRequest, Client, Car, CarMake, CarModel, InspectionType,
+    InspectionRequest, PendingRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Employee,
     Notification, AppNotification, Expense, Revenue, ActivityLog,
     InternalMessage, Technician, Reservation, RequestStatus, Page, WhatsAppMessage, PaymentType,
@@ -16,6 +16,7 @@ export const useDataScope = (
 ) => {
 
     const [requests, setRequests] = useState<InspectionRequest[]>([]);
+    const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
     const [requestsOffset, setRequestsOffset] = useState(0);
     const [hasMoreRequests, setHasMoreRequests] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -92,6 +93,7 @@ export const useDataScope = (
                     .limit(50),
                 supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(50),
                 supabase.from('whatsapp_messages').select('*').order('created_at', { ascending: false }).limit(50),
+                supabase.from('pending_requests').select('*').order('created_at', { ascending: false }),
             ]);
 
             const [
@@ -99,7 +101,8 @@ export const useDataScope = (
                 { data: brks }, { data: cats }, { data: finds }, { data: exps },
                 { data: clts }, { data: crs }, { data: emps }, { data: techs }, { data: notifs },
                 { data: res },
-                { data: waMsgs, error: waError }
+                { data: waMsgs, error: waError },
+                { data: pndData }
             ] = results;
 
             if (waError) console.error("WA Error:", waError);
@@ -143,6 +146,7 @@ export const useDataScope = (
             setTechnicians(techs || []);
             setAppNotifications(notifs as AppNotification[] || []);
             setReservations(res || []);
+            setPendingRequests(pndData || []);
             setWhatsappMessages(waMsgs || []);
             setUnreadWhatsAppCount((waMsgs || []).filter((m: any) => !m.is_read && (m.direction === 'incoming' || !m.direction)).length);
 
@@ -474,6 +478,7 @@ export const useDataScope = (
 
     return {
         requests, setRequests,
+        pendingRequests, setPendingRequests,
         requestsOffset, setRequestsOffset,
         hasMoreRequests, setHasMoreRequests,
         isLoadingMore, setIsLoadingMore,

@@ -6,6 +6,13 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // A simple UUID generator for the browser environment
+export const formatPendingNumber = (num: number | string): string => {
+    if (typeof num === 'string' && num.startsWith('W-')) return num;
+    const numeric = typeof num === 'number' ? num : parseInt(String(num).replace(/\D/g, ''), 10) || 1;
+    if (numeric >= 100) return `W-${numeric}`;
+    return `W-${99 + numeric}`;
+};
+
 export const uuidv4 = (): string => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();

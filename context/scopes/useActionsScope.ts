@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { uuidv4 } from '../../lib/utils';
 import {
-    InspectionRequest, Client, Car, CarMake, CarModel, InspectionType,
+    InspectionRequest, PendingRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Expense, Revenue,
     InternalMessage, Technician, Reservation, ActivityLog, Employee,
     AppNotification, Notification, PaymentType, Page, WhatsAppMessage,
@@ -12,6 +12,8 @@ import {
 export const useActionsScope = (
     requests: InspectionRequest[],
     setRequests: React.Dispatch<React.SetStateAction<InspectionRequest[]>>,
+    pendingRequests: PendingRequest[],
+    setPendingRequests: React.Dispatch<React.SetStateAction<PendingRequest[]>>,
     setSearchedRequests: React.Dispatch<React.SetStateAction<InspectionRequest[] | null>>,
     setClients: React.Dispatch<React.SetStateAction<Client[]>>,
     setCars: React.Dispatch<React.SetStateAction<Car[]>>,
@@ -163,14 +165,14 @@ export const useActionsScope = (
         const { request_number, ...requestData } = request as any;
         const { data, error } = await supabase.from('inspection_requests').insert(requestData).select().single();
         if (error) throw error;
-        await fetchRequests();
+        setRequests(prev => [data as InspectionRequest, ...prev]);
         
         // Sync to TV after creation
         if (data) syncToTvDisplay(data as InspectionRequest);
         
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return data;
-    }, [sendSystemNotification, fetchRequests, addNotification, syncToTvDisplay]);
+    }, [sendSystemNotification, setRequests, addNotification, syncToTvDisplay]);
 
     const addRequestOptimized = useCallback(async (payload: {
         clientName: string;
@@ -237,15 +239,94 @@ export const useActionsScope = (
         // Update local state immediately with the returned data
         setRequests(prev => [newRequest, ...prev]);
         
-        // Trigger a background fetch to update clients and other metadata (like history counts)
-        fetchRequests().catch(console.error);
-
         // Sync to TV after creation
         syncToTvDisplay(newRequest);
         
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return newRequest;
-    }, [setRequests, addNotification, fetchRequests, syncToTvDisplay]);
+    }, [setRequests, addNotification, syncToTvDisplay]);
+
+    // --- PENDING REQUESTS ---
+    const addPendingRequest = useCallback(async (payload: Omit<PendingRequest, 'id' | 'pending_number' | 'created_at'>): Promise<PendingRequest> => {
+        const { data, error } = await supabase
+            .from('pending_requests')
+            .insert({
+                client_name: payload.client_name,
+                client_phone: payload.client_phone,
+                car_make_id: payload.car_make_id || null,
+                car_model_id: payload.car_model_id || null,
+                car_year: payload.car_year || null,
+                plate_number: payload.plate_number || null,
+                plate_number_en: payload.plate_number_en || null,
+                vin: payload.vin || null,
+                car_snapshot: payload.car_snapshot || null,
+                inspection_type_id: payload.inspection_type_id,
+                price: payload.price,
+                payment_note: payload.payment_note || null,
+                employee_id: payload.employee_id || null,
+                broker: payload.broker || null
+            })
+            .select('*')
+            .single();
+
+        if (error) throw error;
+        const newPending = data as PendingRequest;
+        setPendingRequests(prev => [newPending, ...prev]);
+        addNotification({ title: 'نجاح', message: 'تم تسجيل الطلب بانتظار الدفع بنجاح.', type: 'success' });
+        return newPending;
+    }, [setPendingRequests, addNotification]);
+
+    const deletePendingRequest = useCallback(async (id: string) => {
+        const { error } = await supabase.from('pending_requests').delete().eq('id', id);
+        if (error) throw error;
+        setPendingRequests(prev => prev.filter(p => p.id !== id));
+    }, [setPendingRequests]);
+
+    const convertPendingToOfficialRequest = useCallback(async (
+        pendingReq: PendingRequest,
+        paymentMethod: PaymentType,
+        splitPaymentDetails?: any,
+        overrides?: { client_name?: string; client_phone?: string; price?: number }
+    ): Promise<InspectionRequest> => {
+        const now = new Date().toISOString();
+
+        const clientName = overrides?.client_name?.trim() || pendingReq.client_name;
+        const clientPhone = overrides?.client_phone?.trim() || pendingReq.client_phone;
+        const finalPrice = typeof overrides?.price === 'number' && !isNaN(overrides.price) ? overrides.price : pendingReq.price;
+        
+        // Immediately remove from local pending state so UI updates instantly
+        setPendingRequests(prev => prev.filter(p => p.id !== pendingReq.id));
+
+        // Delete from pending_requests DB table FIRST before adding official request
+        const { error: delErr } = await supabase.from('pending_requests').delete().eq('id', pendingReq.id);
+        if (delErr) {
+            console.error("Failed to cleanup pending request in database:", delErr);
+        }
+        
+        // Create official inspection request with clean SERIAL request_number
+        const officialRequest = await addRequestOptimized({
+            clientName: clientName,
+            clientPhone: clientPhone,
+            carMakeId: pendingReq.car_make_id || '',
+            carModelId: pendingReq.car_model_id || '',
+            carYear: pendingReq.car_year || new Date().getFullYear(),
+            plateNumber: pendingReq.plate_number || null,
+            plateNumberEn: pendingReq.plate_number_en || null,
+            vin: pendingReq.vin || null,
+            carSnapshot: pendingReq.car_snapshot,
+            inspectionTypeId: pendingReq.inspection_type_id,
+            paymentType: paymentMethod,
+            paymentNote: pendingReq.payment_note || '',
+            splitPaymentDetails: splitPaymentDetails || null,
+            price: finalPrice,
+            status: RequestStatus.NEW,
+            employeeId: authUser?.id || pendingReq.employee_id || '',
+            broker: pendingReq.broker || null,
+            createdAt: now,
+        });
+
+        return officialRequest;
+    }, [addRequestOptimized, authUser, setPendingRequests]);
 
 
     // --- CLIENTS ---
@@ -705,6 +786,7 @@ export const useActionsScope = (
 
     return {
         updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest, addRequestOptimized,
+        addPendingRequest, deletePendingRequest, convertPendingToOfficialRequest,
         ensureLocalClient, addClient, updateClient, deleteClient,
         addCar,
         addInspectionType, updateInspectionType, deleteInspectionType,

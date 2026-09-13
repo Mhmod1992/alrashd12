@@ -83,6 +83,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const {
         requests, setRequests,
+        pendingRequests, setPendingRequests,
         requestsOffset, setRequestsOffset,
         hasMoreRequests, setHasMoreRequests,
         isLoadingMore, setIsLoadingMore,
@@ -134,6 +135,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const {
         updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest, addRequestOptimized,
+        addPendingRequest, deletePendingRequest, convertPendingToOfficialRequest,
         ensureLocalClient, addClient, updateClient, deleteClient,
         addCar,
         addInspectionType, updateInspectionType, deleteInspectionType,
@@ -149,7 +151,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addTechnician, updateTechnician, deleteTechnician,
         addReservation, updateReservationStatus, updateReservation, deleteReservation, sendSystemNotification
     } = useActionsScope(
-        requests, setRequests, setSearchedRequests, setClients, setCars, setCarMakes, setCarModels,
+        requests, setRequests, pendingRequests, setPendingRequests, setSearchedRequests, setClients, setCars, setCarMakes, setCarModels,
         setBrokers, employees, setEmployees, setTechnicians, setExpenses, setInspectionTypes,
         setCustomFindingCategories, setPredefinedFindings, setReservations, setUnreadMessagesCount,
         setWhatsappMessages, setUnreadWhatsAppCount,
@@ -181,7 +183,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } = useThemeScope(authUser, setAuthUser, can);
     
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
-    const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | null; requestId: string | null; showWhatsAppButton?: boolean; }>({ isOpen: false, requestNumber: null, requestId: null, showWhatsAppButton: false });
+    const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | string | null; requestId: string | null; showWhatsAppButton?: boolean; }>({ isOpen: false, requestNumber: null, requestId: null, showWhatsAppButton: false });
     const [whatsappSuccessModal, setWhatsappSuccessModal] = useState<{ isOpen: boolean; clientName: string; phone: string; }>({ isOpen: false, clientName: '', phone: '' });
     const [shouldPrintDraft, setShouldPrintDraft] = useState(false);
 
@@ -1438,7 +1440,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const removeNotification = useCallback((id: string) => setNotifications(prev => prev.filter(n => n.id !== id)), []);
 
-    const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | null, showWhatsAppButton: boolean = false) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber, showWhatsAppButton }), []);
+    const showNewRequestSuccessModal = useCallback((requestId: string | null, requestNumber: number | string | null, showWhatsAppButton: boolean = false) => setNewRequestSuccessState({ isOpen: true, requestId, requestNumber, showWhatsAppButton }), []);
     const hideNewRequestSuccessModal = useCallback(() => setNewRequestSuccessState({ isOpen: false, requestId: null, requestNumber: null }), []);
 
     const showWhatsAppSuccessModal = useCallback((clientName: string, phone: string) => setWhatsappSuccessModal({ isOpen: true, clientName, phone }), []);
@@ -2090,7 +2092,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
-        requests, clients, cars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
+        requests, pendingRequests, addPendingRequest, deletePendingRequest, convertPendingToOfficialRequest, clients, cars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
         loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, clearSearchedRequests, searchedRequests,
         searchQuery, setSearchQuery, highlightedRequestId, triggerHighlight,
         customFindingCategories, predefinedFindings, selectedRequestId, setSelectedRequestId, selectedClientId, setSelectedClientId,

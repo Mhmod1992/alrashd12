@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useAppContext } from '../context/AppContext';
 import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode } from '../types';
 import Button from './Button';
-import { uuidv4 } from '../lib/utils';
+import { uuidv4, formatPendingNumber } from '../lib/utils';
 import Modal from './Modal';
 import CameraScannerModal from './CameraScannerModal';
 import ChevronRightIcon from './icons/ChevronRightIcon';
@@ -50,7 +50,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     forceCustomDate = false
 }) => {
     const {
-        settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addNotification,
+        settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addPendingRequest, addNotification,
         addCarMake, addCarModel, addBroker, showNewRequestSuccessModal, hideNewRequestSuccessModal, showConfirmModal,
         searchClients, searchCarMakes, searchCarModels, checkCarHistory,
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
@@ -1595,24 +1595,51 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
+            } else if (newStatus === RequestStatus.WAITING_PAYMENT || isReceptionistMode) {
+                // Route to pending_requests table so SERIAL sequence in inspection_requests is not consumed!
+                const pendingReq = await addPendingRequest({
+                    client_name: clientName,
+                    client_phone: clientPhone,
+                    car_make_id: make?.id,
+                    car_model_id: model?.id,
+                    car_year: carYear,
+                    plate_number: plateNumberArabic || null,
+                    plate_number_en: plateNumberEnglish || null,
+                    vin: vin || null,
+                    car_snapshot: carSnapshot,
+                    inspection_type_id: inspectionTypeId,
+                    price: Number(inspectionPrice),
+                    payment_note: paymentNoteValue || undefined,
+                    employee_id: authUser.id,
+                    broker: brokerValue || undefined,
+                });
+
+                if (pendingReq) {
+                    const pendingNumStr = formatPendingNumber(pendingReq.pending_number);
+                    if (whatsappApiStatus === 'connected' && clientPhone !== '0000000000') {
+                        const makeName = carSnapshot.make_en || '';
+                        const modelName = carSnapshot.model_en || '';
+                        const yearName = carYear || '';
+                        const carDetails = [makeName, modelName, yearName].filter(Boolean).join(' ') || 'غير محدد';
+                        const inspectionTypeObj = inspectionTypes.find(t => t.id === inspectionTypeId);
+                        const inspectionTypeName = inspectionTypeObj ? inspectionTypeObj.name : 'فحص';
+
+                        let phone = clientPhone.replace(/\D/g, '');
+                        if (phone.startsWith('05')) {
+                            phone = '966' + phone.substring(1);
+                        } else if (phone.length === 9 && phone.startsWith('5')) {
+                            phone = '966' + phone;
+                        }
+
+                        const message = `*إشعار دفع — مركز الراشد*\n\n*أهلاً ${clientName}،*\nالسلام عليكم ورحمة الله وبركاته،\n\nبيانات طلب الفحص المعلق:\n──────────────────\n▪️ رقم الانتظار: *\u200E#${pendingNumStr}\u200E*\n▪️ السيارة: *${carDetails}*\n▪️ _*خدمة الفحص: ${inspectionTypeName}*_\n💵 المبلغ الإجمالي: *《 ${Number(inspectionPrice)} ريال 》*\n──────────────────\n\n*_برجاء سداد المبلغ لدى المحاسب للمباشرة في فحص المركبة._*\n\nشاكرين تعاونكم،\n\n*إدارة مركز الراشد*`;
+                        await sendWhatsAppMessage(phone, message, clientName, { suppressModal: true });
+                    }
+
+                    showNewRequestSuccessModal(pendingReq.id, pendingNumStr, forceWhatsApp);
+                    onSuccess(pendingReq as any);
+                }
             } else {
                 const requestDate = forceCustomDate && customDate ? new Date(customDate) : new Date();
-
-                // Calculate next request number from the database to prevent duplicates
-                let nextRequestNumber: number | undefined = undefined;
-                try {
-                    const { data: maxData, error: maxError } = await supabase
-                        .from('inspection_requests')
-                        .select('request_number')
-                        .order('request_number', { ascending: false })
-                        .limit(1);
-                    
-                    if (!maxError && maxData && maxData.length > 0) {
-                        nextRequestNumber = Number(maxData[0].request_number) + 1;
-                    }
-                } catch (e) {
-                    console.error("Error fetching max request number:", e);
-                }
 
                 const newAddedRequest = await addRequestOptimized({
                     clientName,
@@ -1633,40 +1660,16 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     employeeId: authUser.id,
                     broker: brokerValue,
                     createdAt: requestDate.toISOString(),
-                    reservationId: initialReservationData?.id || null,
-                    requestNumber: nextRequestNumber
+                    reservationId: initialReservationData?.id || null
                 });
 
                 if (newAddedRequest) {
                     if (whatsappApiStatus === 'connected' && clientPhone !== '0000000000') {
-                        if (newStatus === RequestStatus.WAITING_PAYMENT) {
-                            // Automatically send WhatsApp for waiting payment requests without manual button click
-                            const formatShortRequestNumber = (num: string | number) => {
-                                const str = String(num);
-                                if (str.length >= 4) {
-                                    return str.replace(/(\d)(\d{3})$/, '$1-$2');
-                                }
-                                return str;
-                            };
-
-                            const shortReqNum = formatShortRequestNumber(newAddedRequest.request_number);
+                        if (sendWhatsAppStartNotify && finalPaymentType !== PaymentType.Unpaid) {
                             const makeName = carSnapshot.make_en || '';
                             const modelName = carSnapshot.model_en || '';
                             const yearName = carYear || '';
                             const carDetails = [makeName, modelName, yearName].filter(Boolean).join(' ') || 'غير محدد';
-                            const inspectionTypeObj = inspectionTypes.find(t => t.id === inspectionTypeId);
-                            const inspectionTypeName = inspectionTypeObj ? inspectionTypeObj.name : 'فحص';
-
-                            let phone = clientPhone.replace(/\D/g, '');
-                            if (phone.startsWith('05')) {
-                                phone = '966' + phone.substring(1);
-                            } else if (phone.length === 9 && phone.startsWith('5')) {
-                                phone = '966' + phone;
-                            }
-
-                            const message = `*إشعار دفع — مركز الراشد*\n\n*أهلاً ${clientName}،*\nالسلام عليكم ورحمة الله وبركاته،\n\nبيانات طلب الفحص:\n──────────────────\n▪️ رقم الطلب: *\u200E#${shortReqNum}\u200E*\n▪️ السيارة: *${carDetails}*\n▪️ _*خدمة الفحص: ${inspectionTypeName}*_\n💵 المبلغ الإجمالي: *《 ${Number(inspectionPrice)} ريال 》*\n──────────────────\n\n*_برجاء سداد المبلغ لدى المحاسب للمباشرة في فحص المركبة._*\n\nشاكرين تعاونكم،\n\n*إدارة مركز الراشد*`;
-                            await sendWhatsAppMessage(phone, message, clientName, { suppressModal: true });
-                        } else if (sendWhatsAppStartNotify && finalPaymentType !== PaymentType.Unpaid) {
                             const message = `*مركز الراشد* لخدمات فحص السيارات\n\nأهلاً وسهلاً بكم *${clientName}،* ويسعدنا خدمتكم دائماً.\n\nيسرنا إفادتكم بتأكيد استلام مركبتكم وبدء الفحص الفني:\n\n──────────────────\n▪️ رقم الطلب: *\u200E#${newAddedRequest.request_number}\u200E*\n▪️ السيارة: *${carDetails}*\n──────────────────\n\nفريقنا المختص يعمل الآن على إجراء الفحص الشامل و\nإعداد التقرير بكل دقة وعناية، وسنقوم بإشعاركم فور الانتهاء مباشرة.\n\nأسعدنا اختياركم لمركزنا، ونتمنى لكم يوماً سعيداً.\n\n*إدارة مركز الراشد*`;
                             await sendWhatsAppMessage(clientPhone, message, clientName, { suppressModal: true });
                         }
