@@ -8,7 +8,7 @@ import {
     Broker, CustomFindingCategory, PredefinedFinding, Settings, Employee,
     SettingsPage, Notification, ConfirmModalState, Permission, Note, Page, AppNotification,
     Expense, Revenue, RequestStatus, ActivityLog, PERMISSIONS, UserPreferences, InternalMessage, Technician,
-    FinancialStats, ArchiveResult, PaymentType, PayrollDraft, PayrollItem, Reservation, WhatsAppMessage
+    FinancialStats, ArchiveResult, PaymentType, PayrollDraft, PayrollItem, Reservation, WhatsAppMessage, PendingRequest
 } from '../types';
 import { mockSettings } from '../data/mockData';
 import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile, arabicToEnglishNumerals } from '../lib/utils';
@@ -363,6 +363,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     }
                 }
             )
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_requests' },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        const newPending = payload.new as PendingRequest;
+                        setPendingRequests(prev => {
+                            if (prev.some(p => p.id === newPending.id)) return prev;
+                            return [newPending, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                        });
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedPending = payload.new as PendingRequest;
+                        setPendingRequests(prev => prev.map(p => p.id === updatedPending.id ? { ...p, ...updatedPending } : p));
+                    } else if (payload.eventType === 'DELETE') {
+                        const deletedId = payload.old.id;
+                        setPendingRequests(prev => prev.filter(p => p.id !== deletedId));
+                    }
+                }
+            )
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
                 else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -418,7 +435,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
         whatsappChannelRef.current = waChannel;
 
-    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount, setLatestWhatsAppMessage]);
+    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setPendingRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount, setLatestWhatsAppMessage]);
 
     const retryConnection = useCallback(() => {
         const cleanup = async () => {

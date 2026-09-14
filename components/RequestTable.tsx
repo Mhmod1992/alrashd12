@@ -246,7 +246,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
-    deleteRequest, addNotification, can, updateRequest, createActivityLog,
+    deleteRequest, deletePendingRequest, addNotification, can, updateRequest, createActivityLog,
     brokers
   } = useAppContext();
 
@@ -473,11 +473,24 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
 
 
 
-  const getClientInfo = (clientId: string) => {
+  const getClientInfo = (clientId: string, req?: InspectionRequest) => {
+    const rawPending = (req as any)?._rawPending;
+    if (rawPending) {
+      return {
+        name: rawPending.client_name || 'غير معروف',
+        phone: rawPending.client_phone || '',
+      };
+    }
     const client = clients.find(c => c.id === clientId);
+    if (client) {
+      return {
+        name: client.name || 'غير معروف',
+        phone: client.phone || '',
+      };
+    }
     return {
-      name: client?.name || 'غير معروف',
-      phone: client?.phone || '',
+      name: 'غير معروف',
+      phone: '',
     };
   };
   
@@ -575,7 +588,12 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
         message: 'هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.',
         onConfirm: async () => {
             try {
-                await deleteRequest(request.id);
+                if ((request as any)._isPending) {
+                    const pendingId = (request as any)._rawPending?.id || request.id;
+                    await deletePendingRequest(pendingId);
+                } else {
+                    await deleteRequest(request.id);
+                }
                 addNotification({ title: 'نجاح', message: 'تم حذف الطلب بنجاح.', type: 'success' });
                 // Notify parent component to update local list
                 if (onDeleteSuccess) {
@@ -790,7 +808,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                     <AnimatePresence>
                     {displayedRequests.length > 0 ? (
                         displayedRequests.map((request) => {
-                            const clientInfo = getClientInfo(request.client_id);
+                            const clientInfo = getClientInfo(request.client_id, request);
                         const carInfo = getCarInfo(request.car_id);
                         const creator = employees.find(e => e.id === request.employee_id);
                         const carDisplayName = request.car_snapshot
