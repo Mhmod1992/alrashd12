@@ -23,6 +23,7 @@ import CameraPage from '../components/CameraPage';
 import CustomDatePicker from '../components/CustomDatePicker';
 import InAppScannerModal from '../components/InAppScannerModal';
 import TechnicianSelectionModal from '../components/TechnicianSelectionModal';
+import BulkDraftUploadModal from '../components/BulkDraftUploadModal';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -122,9 +123,11 @@ const PaperArchive: React.FC = () => {
     const [customEndDate, setCustomEndDate] = useState('');
 
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<InspectionRequest | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [filteredRequests, setFilteredRequests] = useState<InspectionRequest[]>([]);
+    const [rawRequests, setRawRequests] = useState<InspectionRequest[]>([]);
     
     // Sync filteredRequests with context updates
     useEffect(() => {
@@ -137,6 +140,17 @@ const PaperArchive: React.FC = () => {
             const isChanged = updatedFiltered.some((r, i) => r !== filteredRequests[i]);
             if (isChanged) {
                 setFilteredRequests(updatedFiltered);
+            }
+        }
+        
+        if (requests.length > 0 && rawRequests.length > 0) {
+            const updatedRaw = rawRequests.map(fr => {
+                const contextReq = requests.find(r => r.id === fr.id);
+                return contextReq ? contextReq : fr;
+            });
+            const isChanged = updatedRaw.some((r, i) => r !== rawRequests[i]);
+            if (isChanged) {
+                setRawRequests(updatedRaw);
             }
         }
         
@@ -407,6 +421,8 @@ const PaperArchive: React.FC = () => {
                 }
                 data = await fetchPaperArchiveRequests(start.toISOString(), end.toISOString());
             }
+
+            setRawRequests(data);
 
             // Apply Archive Filter
             if (archiveStatusFilter === 'archived') {
@@ -843,13 +859,20 @@ const PaperArchive: React.FC = () => {
 
     return (
         <div className="container mx-auto animate-fade-in p-4 pb-20">
-            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-3">
-                    <Icon name="folder-open" className="w-8 h-8 text-blue-600" />
-                    أرشيف الورقيات
-                </h2>
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
+                <div className="flex items-center gap-4 w-full xl:w-auto justify-between xl:justify-start">
+                    <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-3">
+                        <Icon name="folder-open" className="w-8 h-8 text-blue-600" />
+                        أرشيف الورقيات
+                    </h2>
+                    <Button variant="primary" onClick={() => setIsBulkUploadModalOpen(true)} className="flex items-center gap-2">
+                        <Icon name="upload" className="w-4 h-4" />
+                        <span className="hidden md:inline">رفع مجمع</span>
+                    </Button>
+                </div>
                 
-                <div className="flex flex-wrap gap-2 items-center bg-slate-200 dark:bg-slate-700 p-1.5 rounded-xl">
+                <div className="flex w-full xl:w-auto gap-4 overflow-x-auto hide-scrollbar pb-2 xl:pb-0 -mx-4 px-4 xl:mx-0 xl:px-0">
+                    <div className="flex shrink-0 items-center bg-slate-200 dark:bg-slate-700 p-1.5 rounded-xl">
                     <button onClick={() => {
                         const prevDay = new Date();
                         if (dateFilter === 'today') {
@@ -871,7 +894,7 @@ const PaperArchive: React.FC = () => {
                              setDateFilter('yesterday');
                         }
                     }} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-600 hover:text-blue-600 dark:hover:text-blue-300 transition-all" title="اليوم السابق">
-                        <Icon name="chevron-right" className="w-5 h-5" />
+                        <Icon name="chevron-left" className="w-5 h-5" />
                     </button>
 
                     <button onClick={() => setDateFilter('today')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'today' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>اليوم</button>
@@ -895,17 +918,17 @@ const PaperArchive: React.FC = () => {
                              }
                          }
                     }} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-600 hover:text-blue-600 dark:hover:text-blue-300 transition-all" title="اليوم التالي" disabled={dateFilter === 'today'}>
-                        <Icon name="chevron-left" className="w-5 h-5" />
+                        <Icon name="chevron-right" className="w-5 h-5" />
                     </button>
 
                     <div className="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-1"></div>
 
                     <button onClick={() => setDateFilter('month')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'month' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>هذا الشهر</button>
                     <button onClick={() => setDateFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>الكل</button>
-                    <button onClick={() => setDateFilter('custom')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${dateFilter === 'custom' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>مخصص</button>
+                    <button onClick={() => setDateFilter('custom')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${dateFilter === 'custom' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}>مخصص</button>
                 </div>
 
-                <div className="flex bg-slate-200 dark:bg-slate-700 p-1.5 rounded-xl">
+                <div className="flex shrink-0 bg-slate-200 dark:bg-slate-700 p-1.5 rounded-xl">
                     <button 
                         onClick={() => setViewMode('table')}
                         className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${viewMode === 'table' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400'}`}
@@ -923,6 +946,7 @@ const PaperArchive: React.FC = () => {
                         <Icon name="gallery" className="w-4 h-4" />
                         <span>معرض</span>
                     </button>
+                </div>
                 </div>
             </div>
 
@@ -951,6 +975,57 @@ const PaperArchive: React.FC = () => {
                     <Button onClick={loadData} disabled={isLoading || !customStartDate || !customEndDate} size="sm">تطبيق</Button>
                 </div>
             )}
+
+            {/* إحصائيات الأرشفة للمدة المحددة */}
+            <div className="flex md:grid md:grid-cols-3 gap-4 mb-6 overflow-x-auto hide-scrollbar snap-x pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+                <div className="min-w-[280px] md:min-w-0 snap-center shrink-0 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mb-1">إجمالي الطلبات (للفترة)</p>
+                        <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">
+                            {rawRequests.length}
+                        </h3>
+                    </div>
+                    <div className="w-12 h-12 bg-slate-50 dark:bg-slate-700 text-slate-400 rounded-full flex items-center justify-center shrink-0">
+                        <Icon name="document-report" className="w-6 h-6" />
+                    </div>
+                </div>
+                <div className="min-w-[280px] md:min-w-0 snap-center shrink-0 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold mb-1">مكتمل الأرشفة</p>
+                        <div className="flex items-baseline gap-2">
+                            <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">
+                                {rawRequests.filter(r => r.attached_files?.some(f => f.type === 'internal_draft')).length}
+                            </h3>
+                            {rawRequests.length > 0 && (
+                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
+                                    {Math.round((rawRequests.filter(r => r.attached_files?.some(f => f.type === 'internal_draft')).length / rawRequests.length) * 100)}%
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
+                        <CheckCircleIcon className="w-6 h-6" />
+                    </div>
+                </div>
+                <div className="min-w-[280px] md:min-w-0 snap-center shrink-0 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                        <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mb-1">بانتظار الأرشفة</p>
+                        <div className="flex items-baseline gap-2">
+                            <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">
+                                {rawRequests.filter(r => !r.attached_files?.some(f => f.type === 'internal_draft')).length}
+                            </h3>
+                            {rawRequests.length > 0 && (
+                                <span className="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded">
+                                    {Math.round((rawRequests.filter(r => !r.attached_files?.some(f => f.type === 'internal_draft')).length / rawRequests.length) * 100)}%
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-full flex items-center justify-center shrink-0">
+                        <Icon name="calendar-clock" className="w-6 h-6" />
+                    </div>
+                </div>
+            </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col gap-4">
@@ -1802,6 +1877,11 @@ const PaperArchive: React.FC = () => {
                 </div>
             </Modal>
             
+            <BulkDraftUploadModal 
+                isOpen={isBulkUploadModalOpen} 
+                onClose={() => setIsBulkUploadModalOpen(false)} 
+            />
+
             <TechnicianSelectionModal 
                 isOpen={isTechnicianModalOpen} 
                 onClose={() => setIsTechnicianModalOpen(false)} 

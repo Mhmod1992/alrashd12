@@ -14,12 +14,14 @@ interface ModalProps {
   hideCloseButton?: boolean;
   noPadding?: boolean;
   fullHeight?: boolean;
+  fullScreen?: boolean;
 }
 
 const Modal: React.FC<ModalProps> = ({ 
     isOpen, onClose, title, children, footer, 
     size = '2xl', hideCloseButton = false, 
-    noPadding = false, fullHeight = false 
+    noPadding = false, fullHeight = false,
+    fullScreen = false
 }) => {
   const { settings } = useAppContext();
   const design = settings.design || 'aero';
@@ -39,7 +41,7 @@ const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   const sizeClasses = {
-    sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '3xl': 'max-w-3xl', '4xl': 'max-w-4xl', '5xl': 'max-w-5xl'
+    sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '3xl': 'max-w-3xl', '4xl': 'max-w-4xl', '5xl': 'max-w-5xl', full: 'max-w-[100vw] w-screen h-screen m-0 rounded-none'
   };
   
   const getModalDesignClasses = () => {
@@ -51,12 +53,12 @@ const Modal: React.FC<ModalProps> = ({
           const blur = blurLevels[intensity] || 'lg';
           const blurClass = `backdrop-blur-${blur}`;
           const glassBg = `bg-white/[${opacity.toFixed(2)}] dark:bg-slate-800/[${darkOpacity.toFixed(2)}] ${blurClass}`;
-          return `${glassBg} shadow-2xl border border-white/20 dark:border-slate-700`;
+          return `${glassBg} shadow-2xl ${fullScreen ? 'border-0' : 'border border-white/20 dark:border-slate-700'}`;
       }
       return 'bg-white dark:bg-slate-800 shadow-xl';
   }
   
-  const modalBaseClasses = `w-full ${sizeClasses[size]} transform transition-all ${fullHeight ? 'h-[90vh] my-4' : 'my-8'} animate-slide-in-down rounded-lg flex flex-col`;
+  const modalBaseClasses = `w-full ${fullScreen ? sizeClasses['full'] : sizeClasses[size]} transform transition-all ${fullScreen ? '' : (fullHeight ? 'h-[90vh] my-4' : 'my-8')} ${!fullScreen ? 'animate-slide-in-down rounded-lg' : 'animate-fade-in'} flex flex-col`;
   const modalDesignClasses = getModalDesignClasses();
     
   const headerFooterDesignClasses = design === 'glass'
@@ -65,13 +67,13 @@ const Modal: React.FC<ModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-2 sm:p-4"
+      className={`fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center ${fullScreen ? 'p-0' : 'p-2 sm:p-4'}`}
     >
       <div 
         className={`${modalBaseClasses} ${modalDesignClasses}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`flex items-center justify-between p-4 border-b dark:border-slate-700 sticky top-0 rounded-t-lg z-10 shrink-0 ${headerFooterDesignClasses}`}>
+        <div className={`flex items-center justify-between p-4 border-b dark:border-slate-700 sticky top-0 ${fullScreen ? 'rounded-none' : 'rounded-t-lg'} z-10 shrink-0 ${headerFooterDesignClasses}`}>
           <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200">{title}</h3>
           {!hideCloseButton && (
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
@@ -81,11 +83,11 @@ const Modal: React.FC<ModalProps> = ({
             </button>
           )}
         </div>
-        <div className={`${noPadding ? 'p-0' : 'p-6'} ${fullHeight ? 'flex-1' : 'max-h-[80vh]'} overflow-y-auto`}>
+        <div className={`${noPadding ? 'p-0' : 'p-6'} ${fullHeight || fullScreen ? 'flex-1' : 'max-h-[80vh]'} overflow-y-auto`}>
           {children}
         </div>
         {footer && (
-          <div className={`flex items-center justify-end p-4 border-t dark:border-slate-700 gap-3 sticky bottom-0 rounded-b-lg shrink-0 ${headerFooterDesignClasses}`}>
+          <div className={`flex items-center justify-end p-4 border-t dark:border-slate-700 gap-3 sticky bottom-0 ${fullScreen ? 'rounded-none' : 'rounded-b-lg'} shrink-0 ${headerFooterDesignClasses}`}>
             {footer}
           </div>
         )}

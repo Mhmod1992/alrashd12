@@ -80,6 +80,123 @@ export const compressImageFile = (file: File, options: { maxWidth: number; maxHe
   });
 };
 
+export const processScannerImageFile = (file: File, filterType: 'original' | 'document' | 'bw' | 'magic_color' | 'natural_compressed'): Promise<File> => {
+    return new Promise((resolve) => {
+        if (!file.type.startsWith('image/') || filterType === 'original') {
+            return resolve(file);
+        }
+        
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('No context');
+
+                canvas.width = img.width;
+                canvas.height = img.height;
+                
+                // ضغط ذكي طبيعي: الحفاظ الكامل على الألوان والخلفية والتفاصيل بدون أي تلاعب بالبكسلات
+                if (filterType === 'natural_compressed') {
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    const supportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+                    const format = supportsWebP ? 'image/webp' : 'image/jpeg';
+                    const quality = supportsWebP ? 0.82 : 0.85;
+
+                    canvas.toBlob((blob) => {
+                        URL.revokeObjectURL(img.src);
+                        if (blob) {
+                            const ext = supportsWebP ? 'webp' : 'jpg';
+                            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + `.${ext}`, { type: format });
+                            resolve(newFile);
+                        } else {
+                            resolve(file);
+                        }
+                    }, format, quality);
+                    return;
+                }
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    
+                    let v = 0.299 * r + 0.587 * g + 0.114 * b;
+                    
+                    if (filterType === 'magic_color') {
+                        if (v > 150) {
+                            const blend = Math.min(1, (v - 150) / 40);
+                            data[i] = r + (255 - r) * blend;
+                            data[i + 1] = g + (255 - g) * blend;
+                            data[i + 2] = b + (255 - b) * blend;
+                        } else {
+                            data[i] = Math.max(0, r * 1.15 - 25);
+                            data[i + 1] = Math.max(0, g * 1.15 - 25);
+                            data[i + 2] = Math.max(0, b * 1.15 - 25);
+                        }
+                    } else if (filterType === 'document') {
+                        v = 255 * Math.pow(v / 255, 0.7);
+                        const contrast = 1.6;
+                        const intercept = 128 * (1 - contrast);
+                        v = v * contrast + intercept;
+                        v = Math.min(255, Math.max(0, v));
+                        data[i] = v;
+                        data[i + 1] = v;
+                        data[i + 2] = v;
+                    } else if (filterType === 'bw') {
+                        const contrast = 1.3;
+                        const intercept = 128 * (1 - contrast);
+                        let nv = v * contrast + intercept;
+                        if (nv > 220) nv = 255; 
+                        if (nv < 40) nv = 0;   
+                        nv = Math.min(255, Math.max(0, nv));
+                        data[i] = nv;
+                        data[i + 1] = nv;
+                        data[i + 2] = nv;
+                    }
+                }
+                ctx.putImageData(imageData, 0, 0);
+                
+                const supportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+                const format = supportsWebP ? 'image/webp' : 'image/jpeg';
+                const quality = supportsWebP ? 0.7 : 0.85;
+
+                canvas.toBlob((blob) => {
+                    URL.revokeObjectURL(img.src);
+                    if (blob) {
+                        const ext = supportsWebP ? 'webp' : 'jpg';
+                        const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + `.${ext}`, { type: format });
+                        resolve(newFile);
+                    } else {
+                        resolve(file);
+                    }
+                }, format, quality);
+            } catch (e) {
+                console.error('Filter processing failed:', e);
+                URL.revokeObjectURL(img.src);
+                resolve(file);
+            }
+        };
+        
+        img.onerror = () => {
+            URL.revokeObjectURL(img.src);
+            resolve(file);
+        };
+    });
+};
+
 export const compressImageToBase64 = (file: File, options: { maxWidth: number; maxHeight: number; quality: number; }): Promise<string> => {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
