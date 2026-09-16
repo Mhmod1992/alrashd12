@@ -1919,23 +1919,23 @@ const Requests: React.FC = () => {
 
             {!isFetchingDateRange && !isMainSearchActive && authUser?.role !== 'receptionist' && can('view_waiting_requests') && (waitingPaymentRequests.length > 0 || waitingSearchTerm) && (
                 <div className="mb-8 animate-fade-in">
-                    {/* Distinct Eye-Catching Purple Search Banner for Waiting for Payment Requests */}
-                    <div className="mb-4 bg-gradient-to-r from-purple-500/10 via-purple-400/5 to-fuchsia-500/10 dark:from-purple-950/40 dark:via-purple-900/20 dark:to-fuchsia-950/30 border-2 border-purple-400/70 dark:border-purple-500/60 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+                    {/* Refined Soft Purple Search Banner for Waiting for Payment Requests */}
+                    <div className="mb-4 bg-purple-50/40 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-800/40 rounded-2xl p-3.5 sm:p-4 shadow-xs relative overflow-hidden">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                             <div className="flex items-center gap-2.5">
-                                <span className="p-2 rounded-xl bg-purple-600 text-white shadow-md shadow-purple-600/20 flex-shrink-0">
+                                <span className="p-2 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-300 flex-shrink-0">
                                     <CalendarClockIcon className="w-5 h-5" />
                                 </span>
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <h3 className="font-extrabold text-sm text-purple-950 dark:text-purple-200">
+                                        <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">
                                             البحث في طلبات بانتظار الدفع
                                         </h3>
-                                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-200/90 text-purple-900 dark:bg-purple-800/80 dark:text-purple-100 border border-purple-300 dark:border-purple-700 shadow-xs">
+                                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-200 border border-purple-200/80 dark:border-purple-800/60">
                                             {waitingPaymentRequests.length} {waitingPaymentRequests.length === 1 ? 'طلب معلق' : 'طلبات معلقة'}
                                         </span>
                                     </div>
-                                    <p className="text-[11px] text-purple-800/80 dark:text-purple-300/70 font-medium">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-normal">
                                         حقل مخصص للبحث الحصري داخل قائمة الانتظار بانتظار التحصيل
                                     </p>
                                 </div>
@@ -1943,7 +1943,7 @@ const Requests: React.FC = () => {
                             {waitingSearchTerm && (
                                 <button
                                     onClick={() => setWaitingSearchTerm('')}
-                                    className="self-start sm:self-center px-3 py-1.5 text-xs font-bold text-purple-900 hover:text-purple-950 dark:text-purple-200 dark:hover:text-purple-100 bg-purple-200/80 hover:bg-purple-300 dark:bg-purple-900/60 dark:hover:bg-purple-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+                                    className="self-start sm:self-center px-2.5 py-1 text-xs font-medium text-purple-700 hover:text-purple-900 dark:text-purple-300 dark:hover:text-purple-100 bg-purple-100/70 hover:bg-purple-200/80 dark:bg-purple-900/40 dark:hover:bg-purple-900/70 rounded-lg transition-colors flex items-center gap-1.5"
                                     title="مسح البحث في قائمة الانتظار"
                                 >
                                     <XIcon className="w-3.5 h-3.5" />
@@ -1952,8 +1952,8 @@ const Requests: React.FC = () => {
                             )}
                         </div>
                         <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-purple-600 dark:text-purple-400">
-                                <SearchIcon className="h-5 w-5" />
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-purple-400 dark:text-purple-400">
+                                <SearchIcon className="h-4 w-4" />
                             </span>
                             <input
                                 id="waiting-requests-search"
@@ -1962,7 +1962,7 @@ const Requests: React.FC = () => {
                                 placeholder="🔍 ابحث برقم الطلب المعلق في قائمة بانتظار الدفع..."
                                 value={waitingSearchTerm}
                                 onChange={(e) => setWaitingSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-purple-400/80 dark:border-purple-600/80 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-purple-800/60 dark:placeholder:text-purple-300/50 text-sm font-semibold focus:outline-none focus:border-purple-600 focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner"
+                                className="w-full pl-10 pr-4 py-2 rounded-xl border border-purple-200 dark:border-purple-800/60 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm font-normal focus:outline-none focus:border-purple-400 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-200/50 dark:focus:ring-purple-900/30 transition-all shadow-xs"
                             />
                         </div>
                     </div>

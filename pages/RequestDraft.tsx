@@ -41,6 +41,61 @@ const DraftQRCode: React.FC<{ requestNumber: number }> = ({ requestNumber }) => 
 };
 
 
+// Draft watermark component that repeats diagonally across the entire printable page
+const DraftWatermark: React.FC<{ text?: string }> = ({ text }) => {
+    if (!text) return null;
+    const reactId = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+    const patternId = `wm-draft-pat-${reactId}`;
+
+    return (
+        <div 
+            className="absolute inset-0 pointer-events-none z-0 overflow-hidden select-none" 
+            aria-hidden="true"
+            style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        >
+            <svg 
+                className="w-full h-full" 
+                xmlns="http://www.w3.org/2000/svg"
+                style={{ width: '100%', height: '100%', display: 'block', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+            >
+                <defs>
+                    <pattern
+                        id={patternId}
+                        width="240"
+                        height="150"
+                        patternUnits="userSpaceOnUse"
+                        patternTransform="rotate(-30 0 0)"
+                    >
+                        <text
+                            x="120"
+                            y="75"
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill="#64748b"
+                            fillOpacity="0.13"
+                            fontSize="21"
+                            fontWeight="bold"
+                            style={{ 
+                                fontFamily: 'inherit',
+                                WebkitPrintColorAdjust: 'exact',
+                                printColorAdjust: 'exact'
+                            }}
+                        >
+                            {text}
+                        </text>
+                    </pattern>
+                </defs>
+                <rect 
+                    width="100%" 
+                    height="100%" 
+                    fill={`url(#${patternId})`} 
+                    style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                />
+            </svg>
+        </div>
+    );
+};
+
 // This component contains only the content to be printed/displayed on the "paper".
 const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType }) => {
     const { settings } = useAppContext();
@@ -86,8 +141,10 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
 
     return (
         <div 
-            className="printable-content relative bg-white dark:bg-slate-800 flex flex-col w-[210mm] min-h-[297mm] p-[15mm] box-border text-black"
+            className="printable-content relative bg-white dark:bg-slate-800 flex flex-col w-[210mm] min-h-[297mm] p-[15mm] box-border text-black overflow-hidden"
         >
+            {/* Full-Page Slanted Transparent Watermark for Inspection Type */}
+            <DraftWatermark text={inspectionType?.name} />
              {/* ABSOLUTE POSITIONED IMAGE (Rendered outside normal flow if mode is absolute) */}
              {showImage && !isFloatMode && (
                 <div
@@ -438,7 +495,7 @@ const RequestDraft: React.FC = () => {
                     size: A4;
                     margin: 0;
                 }
-                body {
+                body, * {
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
                 }
@@ -454,6 +511,10 @@ const RequestDraft: React.FC = () => {
                     width: 100%;
                     height: 100vh; /* Fill the page */
                     color: black;
+                }
+                .printable-content, .printable-content *, .printable-content svg, .printable-content svg * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
                 }
                 .printable-content header {
                     display: flex !important;

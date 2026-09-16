@@ -14,12 +14,67 @@ interface PrintDraftProps {
     customFindingCategories: CustomFindingCategory[];
 }
 
+const DraftWatermark: React.FC<{ text?: string }> = ({ text }) => {
+    if (!text) return null;
+    const reactId = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+    const patternId = `wm-print-pat-${reactId}`;
+
+    return (
+        <div 
+            className="absolute inset-0 pointer-events-none z-0 overflow-hidden select-none" 
+            aria-hidden="true"
+            style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        >
+            <svg 
+                className="w-full h-full" 
+                xmlns="http://www.w3.org/2000/svg"
+                style={{ width: '100%', height: '100%', display: 'block', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+            >
+                <defs>
+                    <pattern
+                        id={patternId}
+                        width="240"
+                        height="150"
+                        patternUnits="userSpaceOnUse"
+                        patternTransform="rotate(-30 0 0)"
+                    >
+                        <text
+                            x="120"
+                            y="75"
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill="#64748b"
+                            fillOpacity="0.13"
+                            fontSize="21"
+                            fontWeight="bold"
+                            style={{ 
+                                fontFamily: 'inherit',
+                                WebkitPrintColorAdjust: 'exact',
+                                printColorAdjust: 'exact'
+                            }}
+                        >
+                            {text}
+                        </text>
+                    </pattern>
+                </defs>
+                <rect 
+                    width="100%" 
+                    height="100%" 
+                    fill={`url(#${patternId})`} 
+                    style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                />
+            </svg>
+        </div>
+    );
+};
+
 const PrintDraft = React.forwardRef<HTMLDivElement, PrintDraftProps>((props, ref) => {
   const { request, client, car, carMake, carModel, inspectionType, price, appName, logoUrl } = props;
   
   return (
-    <div ref={ref} className="print-only">
-      <div className="p-8" dir="rtl">
+    <div ref={ref} className="print-only relative overflow-hidden">
+      <DraftWatermark text={inspectionType?.name} />
+      <div className="p-8 relative z-10" dir="rtl">
         <header className="flex justify-between items-center border-b-2 pb-4 mb-4">
             <div>
                 <h1 className="text-3xl font-bold">{appName}</h1>
