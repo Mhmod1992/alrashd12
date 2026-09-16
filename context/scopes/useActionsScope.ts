@@ -282,6 +282,21 @@ export const useActionsScope = (
         setPendingRequests(prev => prev.filter(p => p.id !== id));
     }, [setPendingRequests]);
 
+    const updatePendingRequest = useCallback(async (id: string, updates: Partial<PendingRequest>): Promise<PendingRequest> => {
+        const { data, error } = await supabase
+            .from('pending_requests')
+            .update(updates)
+            .eq('id', id)
+            .select('*')
+            .single();
+
+        if (error) throw error;
+        const updated = data as PendingRequest;
+        setPendingRequests(prev => prev.map(p => p.id === id ? updated : p));
+        addNotification({ title: 'نجاح', message: 'تم تحديث بيانات الطلب المعلق بنجاح.', type: 'success' });
+        return updated;
+    }, [setPendingRequests, addNotification]);
+
     const convertPendingToOfficialRequest = useCallback(async (
         pendingReq: PendingRequest,
         paymentMethod: PaymentType,
@@ -786,7 +801,7 @@ export const useActionsScope = (
 
     return {
         updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest, addRequestOptimized,
-        addPendingRequest, deletePendingRequest, convertPendingToOfficialRequest,
+        addPendingRequest, updatePendingRequest, deletePendingRequest, convertPendingToOfficialRequest,
         ensureLocalClient, addClient, updateClient, deleteClient,
         addCar,
         addInspectionType, updateInspectionType, deleteInspectionType,

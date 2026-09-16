@@ -30,6 +30,7 @@ export interface AppContextType {
     requests: InspectionRequest[];
     pendingRequests: PendingRequest[];
     addPendingRequest: (payload: Omit<PendingRequest, 'id' | 'pending_number' | 'created_at'>) => Promise<PendingRequest>;
+    updatePendingRequest: (id: string, updates: Partial<PendingRequest>) => Promise<PendingRequest>;
     deletePendingRequest: (id: string) => Promise<void>;
     convertPendingToOfficialRequest: (pendingReq: PendingRequest, paymentMethod: PaymentType, splitPaymentDetails?: any, overrides?: { client_name?: string; client_phone?: string; price?: number }) => Promise<InspectionRequest>;
     loadMoreRequests: () => Promise<void>;

@@ -50,7 +50,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     forceCustomDate = false
 }) => {
     const {
-        settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addPendingRequest, addNotification,
+        settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addPendingRequest, updatePendingRequest, addNotification,
         addCarMake, addCarModel, addBroker, showNewRequestSuccessModal, hideNewRequestSuccessModal, showConfirmModal,
         searchClients, searchCarMakes, searchCarModels, checkCarHistory,
         ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
@@ -219,12 +219,17 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     useEffect(() => {
         if (initialData && populatedIdRef.current !== initialData.id) {
             const req = initialData;
+            const rawPending = (req as any)?._rawPending;
+
             // Client
             const existingClient = clients.find(c => c.id === req.client_id);
             if (existingClient) {
                 setClientName(existingClient.name);
                 setClientPhone(existingClient.phone);
-            } else {
+            } else if (rawPending) {
+                setClientName(rawPending.client_name || '');
+                setClientPhone(rawPending.client_phone || '');
+            } else if (req.client_id) {
                 searchClients(req.client_id).then(res => {
                     if (res && res.length > 0) {
                         setClientName(res[0].name);
@@ -236,10 +241,30 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             // Car
             const existingCar = cars.find(c => c.id === req.car_id);
             
+            if (rawPending) {
+                if (rawPending.car_make_id) setCarMakeId(rawPending.car_make_id);
+                if (rawPending.car_model_id) setCarModelId(rawPending.car_model_id);
+                if (rawPending.car_year) setCarYear(rawPending.car_year);
+                
+                const makeObj = contextCarMakes.find(m => m.id === rawPending.car_make_id);
+                if (makeObj) setCarMakeSearchTerm(makeObj.name_en);
+                const modelObj = contextCarModels.find(m => m.id === rawPending.car_model_id);
+                if (modelObj) setCarModelSearchTerm(modelObj.name_en);
+            }
+
             if (req.car_snapshot) {
-                setCarMakeSearchTerm(req.car_snapshot.make_en);
-                setCarModelSearchTerm(req.car_snapshot.model_en);
-                setCarYear(req.car_snapshot.year);
+                if (req.car_snapshot.make_en) setCarMakeSearchTerm(req.car_snapshot.make_en);
+                if (req.car_snapshot.model_en) setCarModelSearchTerm(req.car_snapshot.model_en);
+                if (req.car_snapshot.year) setCarYear(req.car_snapshot.year);
+
+                if (!rawPending?.car_make_id && req.car_snapshot.make_en) {
+                    const foundMake = contextCarMakes.find(m => m.name_en?.toLowerCase() === req.car_snapshot?.make_en?.toLowerCase() || m.name_ar === req.car_snapshot?.make_ar);
+                    if (foundMake) setCarMakeId(foundMake.id);
+                }
+                if (!rawPending?.car_model_id && req.car_snapshot.model_en) {
+                    const foundModel = contextCarModels.find(m => m.name_en?.toLowerCase() === req.car_snapshot?.model_en?.toLowerCase() || m.name_ar === req.car_snapshot?.model_ar);
+                    if (foundModel) setCarModelId(foundModel.id);
+                }
             }
 
             if (existingCar) {
@@ -253,19 +278,23 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     if (make) setCarMakeSearchTerm(make.name_en);
                     if (model) setCarModelSearchTerm(model.name_en);
                 }
+            }
 
-                if (existingCar.vin) {
+            // Plate / VIN logic for existing car, raw pending, or snapshot
+            const carDataSource = existingCar || rawPending || req.car_snapshot;
+            if (carDataSource) {
+                if (carDataSource.vin) {
                     setUseChassisNumber(true);
-                    setChassisNumber(existingCar.vin);
-                } else if (existingCar.plate_number) {
-                    if (existingCar.plate_number.startsWith('شاصي')) {
+                    setChassisNumber(carDataSource.vin);
+                } else if (carDataSource.plate_number) {
+                    if (carDataSource.plate_number.startsWith('شاصي')) {
                         setUseChassisNumber(true);
-                        setChassisNumber(existingCar.plate_number.replace('شاصي ', ''));
+                        setChassisNumber(carDataSource.plate_number.replace('شاصي ', ''));
                     } else {
                         setUseChassisNumber(false);
-                        const parts = existingCar.plate_number.split(' ');
-                        const nums = parts.find(p => /^\d+$/.test(p)) || '';
-                        const letters = parts.filter(p => !/^\d+$/.test(p)).join(' ');
+                        const parts = carDataSource.plate_number.split(' ');
+                        const nums = parts.find((p: string) => /^\d+$/.test(p)) || '';
+                        const letters = parts.filter((p: string) => !/^\d+$/.test(p)).join(' ');
                         setPlateNums(nums);
                         setPlateChars(letters);
                     }
@@ -1540,6 +1569,30 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             const brokerValue = (!isReceptionistMode && useBroker && brokerId) ? { id: brokerId, commission: brokerCommission } : null;
 
             if (isEditMode && initialData) {
+                if ((initialData as any)._isPending || (initialData as any)._rawPending) {
+                    const rawPending = (initialData as any)._rawPending;
+                    const pendingId = rawPending?.id || initialData.id;
+
+                    await updatePendingRequest(pendingId, {
+                        client_name: clientName,
+                        client_phone: clientPhone,
+                        car_make_id: make?.id || null,
+                        car_model_id: model?.id || null,
+                        car_year: carYear || null,
+                        plate_number: plateNumberArabic || null,
+                        plate_number_en: plateNumberEnglish || null,
+                        vin: vin || null,
+                        car_snapshot: carSnapshot,
+                        inspection_type_id: inspectionTypeId,
+                        price: Number(inspectionPrice),
+                        payment_note: paymentNoteValue || null,
+                        broker: brokerValue || null
+                    });
+
+                    onSuccess(initialData);
+                    return;
+                }
+
                 // Find or Create Client (Only for Edit Mode)
                 let client: Client | undefined;
                 client = clients.find(c => c.phone === clientPhone);

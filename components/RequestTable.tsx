@@ -800,7 +800,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">نوع الفحص</th>
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">الحالة</th>
                         {!isWaitingTable && <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">التاريخ</th>}
-                        {!isWaitingTable && can('view_requests_price_column') && <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">السعر</th>}
+                        {can('view_requests_price_column') && <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700">السعر</th>}
                         <th scope="col" className="px-6 py-4 font-bold border-b dark:border-slate-700 text-left">إجراءات</th>
                     </tr>
                 </thead>
@@ -1013,7 +1013,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                         );
                                     })()
                                 )}
-                                {!isWaitingTable && can('view_requests_price_column') &&
+                                {can('view_requests_price_column') &&
                                      <td className="px-6 py-4">
                                         <div className="relative">
                                             <div 
@@ -1178,6 +1178,15 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                         تحصيل
                                                     </button>
                                                 )}
+                                                {onOpenUpdateModal && can('update_requests_data') && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onOpenUpdateModal(request); }}
+                                                        className={`p-2 rounded-lg text-slate-500 hover:text-${primaryColor}-600 hover:bg-${primaryColor}-50 dark:hover:bg-${primaryColor}-900/20 transition-all`}
+                                                        title="تعديل بيانات الطلب"
+                                                    >
+                                                        <RefreshCwIcon className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                                 {onResendWhatsApp && can('resend_whatsapp_report') && (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); onResendWhatsApp(request); }}
@@ -1285,7 +1294,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                         >
-                            <td colSpan={isWaitingTable ? 6 : (can('view_requests_price_column') ? 8 : 7)} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                            <td colSpan={can('view_requests_price_column') ? (isWaitingTable ? 7 : 8) : (isWaitingTable ? 6 : 7)} className="p-8 text-center text-slate-500 dark:text-slate-400">
                                 لا توجد طلبات تطابق نوع الدفع المحدد.
                             </td>
                         </motion.tr>

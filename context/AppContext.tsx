@@ -135,7 +135,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const {
         updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest, addRequestOptimized,
-        addPendingRequest, deletePendingRequest, convertPendingToOfficialRequest,
+        addPendingRequest, updatePendingRequest, deletePendingRequest, convertPendingToOfficialRequest,
         ensureLocalClient, addClient, updateClient, deleteClient,
         addCar,
         addInspectionType, updateInspectionType, deleteInspectionType,
@@ -2109,7 +2109,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
-        requests, pendingRequests, addPendingRequest, deletePendingRequest, convertPendingToOfficialRequest, clients, cars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
+        requests, pendingRequests, addPendingRequest, updatePendingRequest, deletePendingRequest, convertPendingToOfficialRequest, clients, cars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
         loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, clearSearchedRequests, searchedRequests,
         searchQuery, setSearchQuery, highlightedRequestId, triggerHighlight,
         customFindingCategories, predefinedFindings, selectedRequestId, setSelectedRequestId, selectedClientId, setSelectedClientId,

@@ -11,7 +11,8 @@ import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import WhatsappIcon from '../components/icons/WhatsappIcon';
 import SearchIcon from '../components/icons/SearchIcon';
 import RequestTable from '../components/RequestTable';
-import { formatPendingNumber } from '../lib/utils';
+import { formatPendingNumber, arabicToEnglishNumerals } from '../lib/utils';
+import { ClientSearchInput } from '../components/ClientSearchInput';
 
 const WaitingForPaymentRequests: React.FC = () => {
     const {
@@ -35,6 +36,7 @@ const WaitingForPaymentRequests: React.FC = () => {
         sendWhatsAppMessage,
         showNewRequestSuccessModal,
         createActivityLog,
+        searchClients,
     } = useAppContext();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,8 +69,16 @@ const WaitingForPaymentRequests: React.FC = () => {
     const [splitCardAmount, setSplitCardAmount] = useState<number>(0);
     const [editableClientName, setEditableClientName] = useState<string>('');
     const [editableClientPhone, setEditableClientPhone] = useState<string>('');
+    const [selectedPaymentClientId, setSelectedPaymentClientId] = useState<string | null>(null);
     const [editablePrice, setEditablePrice] = useState<number>(0);
     const [isSubmittingPayment, setIsSubmittingPayment] = useState<boolean>(false);
+    const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+    const [requestToUpdate, setRequestToUpdate] = useState<InspectionRequest | null>(null);
+
+    const handleOpenUpdateModal = (request: InspectionRequest) => {
+        setRequestToUpdate(request);
+        setIsUpdateModalOpen(true);
+    };
 
     useEffect(() => {
         if (initialRequestModalState === 'new' && can('create_requests')) {
@@ -223,19 +233,47 @@ const WaitingForPaymentRequests: React.FC = () => {
     };
 
     const handleResendWhatsApp = async (request: InspectionRequest) => {
-        const client = clients.find(c => c.id === request.client_id);
-        if (!client || !client.phone) {
-            addNotification({ title: 'خطأ', message: 'رقم هاتف العميل غير موجود.', type: 'error' });
-            return;
+        const rawPending = (request as any)?._rawPending;
+        let clientName = '';
+        let clientPhone = '';
+
+        if (rawPending) {
+            clientName = rawPending.client_name || '';
+            clientPhone = rawPending.client_phone || '';
         }
-    
-        let phone = client.phone.replace(/\D/g, '');
-        if (phone.startsWith('05')) {
+
+        if (!clientPhone && request.client_id) {
+            const client = clients.find(c => c.id === request.client_id);
+            if (client) {
+                if (!clientName) clientName = client.name || '';
+                clientPhone = client.phone || '';
+            }
+        }
+
+        if (!clientPhone && (request as any).client) {
+            clientName = clientName || (request as any).client.name || '';
+            clientPhone = (request as any).client.phone || '';
+        }
+
+        if (!clientName) {
+            clientName = 'العميل';
+        }
+
+        const normalizedPhone = arabicToEnglishNumerals(String(clientPhone || ''));
+        let phone = normalizedPhone.replace(/\D/g, '');
+        if (phone.startsWith('00966')) {
+            phone = phone.substring(2);
+        } else if (phone.startsWith('05')) {
             phone = '966' + phone.substring(1);
         } else if (phone.length === 9 && phone.startsWith('5')) {
             phone = '966' + phone;
         }
-    
+
+        if (!phone || phone.length < 9) {
+            addNotification({ title: 'خطأ', message: 'رقم هاتف العميل غير موجود أو غير صحيح.', type: 'error' });
+            return;
+        }
+
         const formatShortRequestNumber = (num: string | number) => {
             const str = String(num);
             if (str.length >= 4) {
@@ -250,9 +288,9 @@ const WaitingForPaymentRequests: React.FC = () => {
             carDetails = [request.car_snapshot.make_en, request.car_snapshot.model_en, request.car_snapshot.year].filter(Boolean).join(' ') || 'غير محدد';
         }
 
-        const message = `*تذكير بالدفع — مركز الراشد*\n\nالمكرم *${client.name}* ،\nنُذكّركم بأن الطلب *\u200E#${shortReqNum}\u200E* بانتظار الدفع:\n\n▪️ السيارة: ${carDetails}\n💵 المبلغ: *《 ${request.price} ريال 》*\n\nيرجى السداد لدى *المحاسب لبدء الفحص* .\n\n*إدارة مركز الراشد*`;
+        const message = `*تذكير بالدفع — مركز الراشد*\n\nالمكرم *${clientName}* ،\nنُذكّركم بأن الطلب *\u200E#${shortReqNum}\u200E* بانتظار الدفع:\n\n▪️ السيارة: ${carDetails}\n💵 المبلغ: *《 ${request.price} ريال 》*\n\nيرجى السداد لدى *المحاسب لبدء الفحص* .\n\n*إدارة مركز الراشد*`;
         
-        await sendWhatsAppMessage(phone, message);
+        await sendWhatsAppMessage(phone, message, clientName);
     };
 
     const handleProcessPaymentClick = (request: InspectionRequest) => {
@@ -273,9 +311,48 @@ const WaitingForPaymentRequests: React.FC = () => {
           cPhone = client?.phone || '';
       }
 
+      // Check if phone or client_id matches an existing registered client in the database
+      const cleaned = (cPhone || '').replace(/\D/g, '');
+      let matchedClient: any = undefined;
+
+      if (request.client_id) {
+          matchedClient = clients.find(c => c.id === request.client_id);
+      }
+      if (!matchedClient && cleaned.length >= 9) {
+          const last9 = cleaned.slice(-9);
+          matchedClient = clients.find(c => c.phone && c.phone.replace(/\D/g, '').endsWith(last9));
+      }
+
+      let resolvedClientId: string | null = null;
+      if (matchedClient) {
+          // Do not rely on the temporary name in the pending request; use the official client name in database!
+          if (matchedClient.name) {
+              cName = matchedClient.name;
+          }
+          if (matchedClient.phone) {
+              cPhone = matchedClient.phone;
+          }
+          resolvedClientId = matchedClient.id;
+      }
+
       setEditableClientName(cName);
       setEditableClientPhone(cPhone);
+      setSelectedPaymentClientId(resolvedClientId);
       setEditablePrice(request.price || 0);
+
+      // Async DB lookup if not matched in cached clients
+      if (!matchedClient && searchClients && cleaned.length >= 9) {
+          searchClients(cleaned).then(remoteMatches => {
+              if (Array.isArray(remoteMatches)) {
+                  const last9 = cleaned.slice(-9);
+                  const dbMatch = remoteMatches.find(c => c.phone && c.phone.replace(/\D/g, '').endsWith(last9));
+                  if (dbMatch && dbMatch.name) {
+                      setEditableClientName(dbMatch.name);
+                      setSelectedPaymentClientId(dbMatch.id);
+                  }
+              }
+          }).catch(console.error);
+      }
 
       setSplitCashAmount(0);
       setSplitCardAmount(request.price || 0);
@@ -333,11 +410,22 @@ const WaitingForPaymentRequests: React.FC = () => {
             const now = new Date().toISOString();
             const currentReq = requests.find(r => r.id === paymentRequest.id) || paymentRequest;
 
+            // Determine target client ID if linked
+            let targetClientId = selectedPaymentClientId || paymentRequest.client_id;
+            if (!targetClientId && editableClientPhone) {
+                const cleaned = editableClientPhone.replace(/\D/g, '');
+                if (cleaned.length >= 9) {
+                    const last9 = cleaned.slice(-9);
+                    const found = clients.find(c => c.phone && c.phone.replace(/\D/g, '').endsWith(last9));
+                    if (found) targetClientId = found.id;
+                }
+            }
+
             // If client info changed for an existing client, update client record
-            if (paymentRequest.client_id) {
-                const client = clients.find(c => c.id === paymentRequest.client_id);
-                if (client && (client.name !== editableClientName || client.phone !== editableClientPhone)) {
-                    await updateClient({ ...client, name: editableClientName, phone: editableClientPhone });
+            if (targetClientId) {
+                const client = clients.find(c => c.id === targetClientId);
+                if (client && (client.name !== editableClientName.trim() || client.phone !== editableClientPhone.trim())) {
+                    await updateClient({ ...client, name: editableClientName.trim(), phone: editableClientPhone.trim() });
                 }
             }
 
@@ -351,7 +439,8 @@ const WaitingForPaymentRequests: React.FC = () => {
                 price: editablePrice,
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
                 created_at: now,
-                activity_log: updatedLog
+                activity_log: updatedLog,
+                ...(targetClientId ? { client_id: targetClientId } : {})
             });
             addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب بالوقت الجديد.', type: 'success' });
             setIsPaymentModalOpen(false);
@@ -433,6 +522,7 @@ const WaitingForPaymentRequests: React.FC = () => {
                     isRefreshing={isRefreshing}
                     isLive={true}
                     onProcessPayment={can('process_payment') ? handleProcessPaymentClick : undefined}
+                    onOpenUpdateModal={handleOpenUpdateModal}
                     onResendWhatsApp={handleResendWhatsApp}
                     onHistoryClick={handleOpenHistoryModal}
                     carsWithHistory={combinedCarsWithHistory}
@@ -450,6 +540,21 @@ const WaitingForPaymentRequests: React.FC = () => {
                         onCancel={() => setIsModalOpen(false)}
                         onSuccess={() => setIsModalOpen(false)}
                         forceWhatsApp={true}
+                    />
+                </Modal>
+            )}
+
+            {isUpdateModalOpen && requestToUpdate && (
+                <Modal isOpen={isUpdateModalOpen} onClose={() => setIsUpdateModalOpen(false)} title={`تعديل بيانات الطلب ${(requestToUpdate as any)?._isPending ? requestToUpdate.request_number : `#${requestToUpdate.request_number}`}`} size="5xl">
+                    <NewRequestForm
+                        initialData={requestToUpdate}
+                        clients={clients}
+                        carMakes={carMakes}
+                        carModels={carModels}
+                        inspectionTypes={inspectionTypes}
+                        brokers={brokers}
+                        onCancel={() => setIsUpdateModalOpen(false)}
+                        onSuccess={() => setIsUpdateModalOpen(false)}
                     />
                 </Modal>
             )}
@@ -481,33 +586,19 @@ const WaitingForPaymentRequests: React.FC = () => {
                     {/* EDITABLE FIELDS SECTION */}
                     <div className="p-3 bg-amber-50/50 dark:bg-amber-900/10 rounded-lg border border-amber-200/60 dark:border-amber-800/40 space-y-3">
                         <h4 className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                            ✏️ تعديل بيانات الطلب قبل التحصيل:
+                            ✏️ بيانات العميل والمبلغ المطلوب قبل التحصيل:
                         </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">اسم العميل</label>
-                                <input
-                                    type="text"
-                                    value={editableClientName}
-                                    disabled={isSubmittingPayment}
-                                    onChange={(e) => setEditableClientName(e.target.value)}
-                                    placeholder="اسم العميل"
-                                    className="w-full p-2 text-sm border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-amber-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">رقم الهاتف</label>
-                                <input
-                                    type="text"
-                                    dir="ltr"
-                                    value={editableClientPhone}
-                                    disabled={isSubmittingPayment}
-                                    onChange={(e) => setEditableClientPhone(e.target.value)}
-                                    placeholder="05xxxxxxxx"
-                                    className="w-full p-2 text-sm border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-amber-500"
-                                />
-                            </div>
-                        </div>
+                        
+                        <ClientSearchInput
+                            clientName={editableClientName}
+                            clientPhone={editableClientPhone}
+                            onNameChange={setEditableClientName}
+                            onPhoneChange={setEditableClientPhone}
+                            selectedClientId={selectedPaymentClientId}
+                            onSelectClient={(client) => setSelectedPaymentClientId(client.id)}
+                            onClearSelection={() => setSelectedPaymentClientId(null)}
+                            disabled={isSubmittingPayment}
+                        />
 
                         <div>
                             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">المبلغ المطلوب (ريال)</label>
