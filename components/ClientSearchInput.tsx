@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Client } from '../types';
 import { useAppContext } from '../context/AppContext';
-import { arabicToEnglishNumerals, formatPhoneNumberDisplay } from '../lib/utils';
+import { cleanSaudiPhoneNumber, formatPhoneNumberDisplay } from '../lib/utils';
 import RefreshCwIcon from './icons/RefreshCwIcon';
 import SearchIcon from './icons/SearchIcon';
 import UserCheckIcon from './icons/UserCheckIcon';
@@ -72,21 +72,12 @@ export const ClientSearchInput: React.FC<ClientSearchInputProps> = ({
 
     // Perform phone search (local memory first + debounced database search)
     const handlePhoneChange = useCallback((rawVal: string) => {
-        const normalized = arabicToEnglishNumerals(rawVal);
-        let digits = normalized.replace(/\D/g, '');
-        
-        // Normalize international Saudi prefix
-        if (digits.startsWith('00966')) {
-            digits = '0' + digits.substring(5);
-        } else if (digits.startsWith('966')) {
-            digits = '0' + digits.substring(3);
-        }
-        digits = digits.slice(0, 10);
+        const digits = cleanSaudiPhoneNumber(rawVal);
 
         onPhoneChange(digits);
         setActivePhoneIndex(-1);
 
-        if (digits.length < 3) {
+        if (digits.length < 9) {
             setPhoneSuggestions([]);
             return;
         }
@@ -95,50 +86,22 @@ export const ClientSearchInput: React.FC<ClientSearchInputProps> = ({
         const lastDigits = digits.slice(-9);
         const localMatches = clients.filter(c => {
             const p = (c.phone || '').replace(/\D/g, '');
-            return p.includes(digits) || (lastDigits.length >= 4 && p.endsWith(lastDigits));
+            return p.includes(digits) || (lastDigits.length >= 9 && p.endsWith(lastDigits));
         }).slice(0, 8);
 
         setPhoneSuggestions(localMatches);
-
-        // Auto-update client name if an existing client matches this phone
-        if (digits.length >= 9) {
-            const exactClient = clients.find(c => {
-                const p = (c.phone || '').replace(/\D/g, '');
-                return p === digits || (p.length >= 9 && p.endsWith(lastDigits));
-            });
-            if (exactClient && exactClient.name) {
-                onNameChange(exactClient.name);
-                if (onSelectClient) {
-                    onSelectClient(exactClient);
-                }
-            }
-        }
 
         // 2. Debounced remote query if searchClients is available
         if (debounceTimerRef.current) {
             window.clearTimeout(debounceTimerRef.current);
         }
 
-        if (searchClients && digits.length >= 3) {
+        if (searchClients && digits.length >= 9) {
             setIsSearchingPhone(true);
             debounceTimerRef.current = window.setTimeout(async () => {
                 try {
                     const remoteMatches = await searchClients(digits);
                     if (Array.isArray(remoteMatches)) {
-                        // Check if remote matches contain an exact client match
-                        if (digits.length >= 9) {
-                            const found = remoteMatches.find(c => {
-                                const p = (c.phone || '').replace(/\D/g, '');
-                                return p === digits || (p.length >= 9 && p.endsWith(lastDigits));
-                            });
-                            if (found && found.name) {
-                                onNameChange(found.name);
-                                if (onSelectClient) {
-                                    onSelectClient(found);
-                                }
-                            }
-                        }
-
                         // Merge and deduplicate
                         setPhoneSuggestions(prev => {
                             const map = new Map<string, Client>();
@@ -226,10 +189,13 @@ export const ClientSearchInput: React.FC<ClientSearchInputProps> = ({
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setActivePhoneIndex(prev => (prev > 0 ? prev - 1 : phoneSuggestions.length - 1));
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
             if (activePhoneIndex >= 0 && activePhoneIndex < phoneSuggestions.length) {
+                e.preventDefault();
                 selectClient(phoneSuggestions[activePhoneIndex]);
+            } else if (e.key === 'Tab' && phoneSuggestions.length > 0) {
+                e.preventDefault();
+                selectClient(phoneSuggestions[0]);
             }
         } else if (e.key === 'Escape') {
             setIsPhoneFocused(false);
@@ -246,10 +212,13 @@ export const ClientSearchInput: React.FC<ClientSearchInputProps> = ({
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setActiveNameIndex(prev => (prev > 0 ? prev - 1 : nameSuggestions.length - 1));
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
             if (activeNameIndex >= 0 && activeNameIndex < nameSuggestions.length) {
+                e.preventDefault();
                 selectClient(nameSuggestions[activeNameIndex]);
+            } else if (e.key === 'Tab' && nameSuggestions.length > 0) {
+                e.preventDefault();
+                selectClient(nameSuggestions[0]);
             }
         } else if (e.key === 'Escape') {
             setIsNameFocused(false);
@@ -356,24 +325,8 @@ export const ClientSearchInput: React.FC<ClientSearchInputProps> = ({
                             onFocus={() => {
                                 setIsPhoneFocused(true);
                                 setIsNameFocused(false);
-                                if (clientPhone.length >= 3) {
+                                if (clientPhone.length >= 9) {
                                     handlePhoneChange(clientPhone);
-                                }
-                            }}
-                            onBlur={() => {
-                                const digits = clientPhone.replace(/\D/g, '');
-                                if (digits.length >= 9) {
-                                    const lastDigits = digits.slice(-9);
-                                    const exactClient = clients.find(c => {
-                                        const p = (c.phone || '').replace(/\D/g, '');
-                                        return p === digits || (p.length >= 9 && p.endsWith(lastDigits));
-                                    });
-                                    if (exactClient && exactClient.name) {
-                                        onNameChange(exactClient.name);
-                                        if (onSelectClient) {
-                                            onSelectClient(exactClient);
-                                        }
-                                    }
                                 }
                             }}
                             onKeyDown={handlePhoneKeyDown}

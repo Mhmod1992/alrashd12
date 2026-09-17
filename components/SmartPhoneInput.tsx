@@ -1,5 +1,6 @@
 
 import React, { useRef, useState } from 'react';
+import { cleanSaudiPhoneNumber } from '../lib/utils';
 
 interface SmartPhoneInputProps {
     value: string; // digits only (e.g. "0512345678")
@@ -39,8 +40,15 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+        const val = cleanSaudiPhoneNumber(e.target.value);
         onChange(val);
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text');
+        const cleaned = cleanSaudiPhoneNumber(text);
+        onChange(cleaned);
     };
 
     const handleContainerClick = () => {
@@ -117,6 +125,7 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
                 type="tel"
                 value={value}
                 onChange={handleChange}
+                onPaste={handlePaste}
                 onSelect={handleSelect}
                 onKeyDown={onKeyDown}
                 onKeyUp={handleSelect}
@@ -125,7 +134,7 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
                 onBlur={(e) => { setIsFocused(false); handleSelect(e); onBlur?.(); }}
                 autoFocus={autoFocus}
                 required={required}
-                maxLength={10}
+                maxLength={25}
                 className="absolute inset-0 w-full h-full bg-transparent text-transparent z-10 cursor-text selection:bg-transparent dark:selection:bg-transparent caret-transparent focus:outline-none"
                 autoComplete="off"
                 style={{ direction: 'ltr' }}

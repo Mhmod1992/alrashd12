@@ -1046,9 +1046,22 @@ const Requests: React.FC = () => {
                         price: editablePrice
                     }
                 );
+
+                if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected' && paymentMethod !== PaymentType.Unpaid) {
+                    const targetPhone = editableClientPhone || (paymentRequest as any)?._rawPending?.client_phone;
+                    const targetName = editableClientName || (paymentRequest as any)?._rawPending?.client_name;
+                    if (targetPhone && targetPhone !== '0000000000') {
+                        const carSnapshot = officialReq.car_snapshot || (paymentRequest as any)?._rawPending?.car_snapshot;
+                        const carDetails = [carSnapshot?.make_en, carSnapshot?.model_en, carSnapshot?.year].filter(Boolean).join(' ') || 'غير محدد';
+                        const message = `*مركز الراشد* لخدمات فحص السيارات\n\nأهلاً وسهلاً بكم *${targetName || ''}،* ويسعدنا خدمتكم دائماً.\n\nيسرنا إفادتكم بتأكيد استلام مركبتكم وبدء الفحص الفني:\n\n──────────────────\n▪️ رقم الطلب: *\u200E#${officialReq.request_number}\u200E*\n▪️ السيارة: *${carDetails}*\n──────────────────\n\nفريقنا المختص يعمل الآن على إجراء الفحص الشامل و\nإعداد التقرير بكل دقة وعناية، وسنقوم بإشعاركم فور الانتهاء مباشرة.\n\nأسعدنا اختياركم لمركزنا، ونتمنى لكم يوماً سعيداً.\n\n*إدارة مركز الراشد*`;
+                        await sendWhatsAppMessage(targetPhone, message, targetName, { suppressModal: true });
+                    }
+                }
+
                 addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب ورسمنة الرقم التسلسلي الجديد.', type: 'success' });
                 setIsPaymentModalOpen(false);
                 setPaymentRequest(null);
+                setSendWhatsAppStartNotify(true);
                 showNewRequestSuccessModal(officialReq.id, officialReq.request_number, false);
                 return;
             }

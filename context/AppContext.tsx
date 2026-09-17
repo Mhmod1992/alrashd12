@@ -1968,7 +1968,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         let success = false;
 
         // Clean and format phone number to international Saudi standard without a leading plus or zero
-        let cleanPhone = phone.replace(/\D/g, '');
+        const normalizedInput = arabicToEnglishNumerals(String(phone || ''));
+        let cleanPhone = normalizedInput.replace(/\D/g, '');
         if (cleanPhone.startsWith('00966')) {
             cleanPhone = cleanPhone.substring(2);
         } else if (cleanPhone.startsWith('0')) {

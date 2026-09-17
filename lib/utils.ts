@@ -377,19 +377,36 @@ export const parseWhatsAppMessage = (rawMessage: string) => {
       replyTo
     };
 };
+export const cleanSaudiPhoneNumber = (rawPhone: string): string => {
+    if (!rawPhone) return '';
+
+    // Convert Arabic numerals to Western digits
+    const arabicToWestern: Record<string, string> = {
+        '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+        '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+    };
+    let normalized = rawPhone.replace(/[٠-٩]/g, (d) => arabicToWestern[d] || d);
+
+    // Remove all non-digits
+    let digits = normalized.replace(/\D/g, '');
+
+    // Handle country code prefixes (e.g. +9665..., 009665..., 9665...)
+    if (digits.startsWith('009665')) {
+        digits = '0' + digits.slice(5);
+    } else if (digits.startsWith('9665')) {
+        digits = '0' + digits.slice(3);
+    } else if (digits.startsWith('5') && digits.length >= 9) {
+        digits = '0' + digits;
+    }
+
+    return digits.slice(0, 10);
+};
+
 export const formatPhoneNumberDisplay = (phone: string | undefined): string => {
     if (!phone) return '';
-    const cleaned = phone.replace(/\D/g, '');
-    let core = '';
+    const cleaned = cleanSaudiPhoneNumber(phone);
     if (cleaned.length === 10 && cleaned.startsWith('05')) {
-        core = cleaned.substring(1);
-    } else if (cleaned.length === 12 && cleaned.startsWith('9665')) {
-        core = cleaned.substring(3);
-    } else if (cleaned.length === 9 && cleaned.startsWith('5')) {
-        core = cleaned;
-    }
-    if (core.length === 9) {
-        return `0${core.substring(0, 2)}-${core.substring(2, 5)}-${core.substring(5)}`;
+        return `${cleaned.substring(0, 3)}-${cleaned.substring(3, 6)}-${cleaned.substring(6)}`;
     }
     return phone;
 };

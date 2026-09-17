@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useAppContext } from '../context/AppContext';
 import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode } from '../types';
 import Button from './Button';
-import { uuidv4, formatPendingNumber } from '../lib/utils';
+import { uuidv4, formatPendingNumber, cleanSaudiPhoneNumber } from '../lib/utils';
 import Modal from './Modal';
 import CameraScannerModal from './CameraScannerModal';
 import ChevronRightIcon from './icons/ChevronRightIcon';
@@ -490,11 +490,11 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 }, 50);
                 break;
             case 'phone':
-                const digits = reservationFillData.phone.replace(/\D/g, '').slice(0, 10);
+                const digits = cleanSaudiPhoneNumber(reservationFillData.phone);
                 setClientPhone(digits);
                 setTimeout(() => {
                     if (!isMobile) phoneInputRef.current?.focus();
-                    if (digits.length > 3) {
+                    if (digits.length >= 9) {
                         setIsSearchingClientPhone(true);
                         searchClients(digits).then(results => {
                             setPhoneSuggestions(results);
@@ -778,7 +778,11 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             try {
                 // First verify client exists
                 const foundClients = await searchClients(clientPhone);
-                const exactClient = foundClients.find(c => c.phone.includes(clientPhone));
+                const exactClient = foundClients.find(c => {
+                    const cPhone = c.phone.replace(/\D/g, '');
+                    const currentP = clientPhone.replace(/\D/g, '');
+                    return cPhone === currentP || (cPhone.length >= 9 && currentP.length >= 9 && cPhone.slice(-9) === currentP.slice(-9));
+                });
 
                 if (exactClient) {
                     // Fetch full history to determine visit count & debts
@@ -792,9 +796,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         isVip: exactClient.is_vip,
                         clientObj: exactClient
                     });
-                    
-                    // DO NOT automatically show welcome card here, wait for selection or blur
-                    // setIsWelcomeCardVisible(true); 
 
                     // Filter Debts
                     const debts = history.filter(r => 
@@ -808,9 +809,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     } else {
                         setUnpaidDebtAlert(null);
                     }
-
-                    // Auto-fill name if empty
-                    setClientName(prev => prev.trim() === '' ? exactClient.name : prev);
                 } else {
                     setUnpaidDebtAlert(null);
                     setExistingClientSummary(null);
@@ -896,11 +894,11 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+        const digits = cleanSaudiPhoneNumber(e.target.value);
         setClientPhone(digits);
         setErrors(prev => ({ ...prev, clientPhone: false }));
 
-        if (digits.trim().length < 4) {
+        if (digits.trim().length < 9) {
             setPhoneSuggestions([]);
             setIsPhoneSuggestionsOpen(false);
             return;
@@ -1046,7 +1044,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const handlePhoneFocus = () => {
-        if (clientPhone.trim().length >= 4 && phoneSuggestions.length > 0) {
+        if (clientPhone.trim().length >= 9 && phoneSuggestions.length > 0) {
             setIsPhoneSuggestionsOpen(true);
         }
     };
@@ -1139,11 +1137,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 });
                 break;
             case 'Enter':
-                e.preventDefault();
                 if (index > -1) {
+                    e.preventDefault();
                     selectFn(suggestions[index]);
-                } else if (suggestions.length > 0) {
-                    selectFn(suggestions[0]);
+                } else {
+                    // Do not auto-select suggestions[0]. Close dropdown so it won't force unwanted client.
+                    setOpen(false);
                 }
                 break;
             case 'Tab':

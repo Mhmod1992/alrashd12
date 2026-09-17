@@ -34,6 +34,7 @@ const WaitingForPaymentRequests: React.FC = () => {
         employees,
         brokers,
         sendWhatsAppMessage,
+        whatsappApiStatus,
         showNewRequestSuccessModal,
         createActivityLog,
         searchClients,
@@ -42,6 +43,7 @@ const WaitingForPaymentRequests: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [plateDisplayLanguage, setPlateDisplayLanguage] = useState<'ar' | 'en'>('ar');
+    const [sendWhatsAppStartNotify, setSendWhatsAppStartNotify] = useState<boolean>(true);
     
     // History Modal State
     const [historyModalCar, setHistoryModalCar] = useState<{ carId: string, carName: string } | null>(null);
@@ -400,9 +402,22 @@ const WaitingForPaymentRequests: React.FC = () => {
                         price: editablePrice
                     }
                 );
+
+                if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected' && paymentMethod !== PaymentType.Unpaid) {
+                    const targetPhone = editableClientPhone || (paymentRequest as any)?._rawPending?.client_phone;
+                    const targetName = editableClientName || (paymentRequest as any)?._rawPending?.client_name;
+                    if (targetPhone && targetPhone !== '0000000000') {
+                        const carSnapshot = officialReq.car_snapshot || (paymentRequest as any)?._rawPending?.car_snapshot;
+                        const carDetails = [carSnapshot?.make_en, carSnapshot?.model_en, carSnapshot?.year].filter(Boolean).join(' ') || 'غير محدد';
+                        const message = `*مركز الراشد* لخدمات فحص السيارات\n\nأهلاً وسهلاً بكم *${targetName || ''}،* ويسعدنا خدمتكم دائماً.\n\nيسرنا إفادتكم بتأكيد استلام مركبتكم وبدء الفحص الفني:\n\n──────────────────\n▪️ رقم الطلب: *\u200E#${officialReq.request_number}\u200E*\n▪️ السيارة: *${carDetails}*\n──────────────────\n\nفريقنا المختص يعمل الآن على إجراء الفحص الشامل و\nإعداد التقرير بكل دقة وعناية، وسنقوم بإشعاركم فور الانتهاء مباشرة.\n\nأسعدنا اختياركم لمركزنا، ونتمنى لكم يوماً سعيداً.\n\n*إدارة مركز الراشد*`;
+                        await sendWhatsAppMessage(targetPhone, message, targetName, { suppressModal: true });
+                    }
+                }
+
                 addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب ورسمنة الرقم التسلسلي الجديد.', type: 'success' });
                 setIsPaymentModalOpen(false);
                 setPaymentRequest(null);
+                setSendWhatsAppStartNotify(true);
                 showNewRequestSuccessModal(officialReq.id, officialReq.request_number, false);
                 return;
             }
@@ -442,11 +457,24 @@ const WaitingForPaymentRequests: React.FC = () => {
                 activity_log: updatedLog,
                 ...(targetClientId ? { client_id: targetClientId } : {})
             });
+
+            if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected' && paymentMethod !== PaymentType.Unpaid) {
+                const client = targetClientId ? clients.find(c => c.id === targetClientId) : null;
+                const targetPhone = editableClientPhone || client?.phone;
+                const targetName = editableClientName || client?.name;
+                if (targetPhone && targetPhone !== '0000000000') {
+                    const carDetails = [paymentRequest.car_snapshot?.make_en, paymentRequest.car_snapshot?.model_en, paymentRequest.car_snapshot?.year].filter(Boolean).join(' ') || 'غير محدد';
+                    const message = `*مركز الراشد* لخدمات فحص السيارات\n\nأهلاً وسهلاً بكم *${targetName || ''}،* ويسعدنا خدمتكم دائماً.\n\nيسرنا إفادتكم بتأكيد استلام مركبتكم وبدء الفحص الفني:\n\n──────────────────\n▪️ رقم الطلب: *\u200E#${paymentRequest.request_number}\u200E*\n▪️ السيارة: *${carDetails}*\n──────────────────\n\nفريقنا المختص يعمل الآن على إجراء الفحص الشامل و\nإعداد التقرير بكل دقة وعناية، وسنقوم بإشعاركم فور الانتهاء مباشرة.\n\nأسعدنا اختياركم لمركزنا، ونتمنى لكم يوماً سعيداً.\n\n*إدارة مركز الراشد*`;
+                    await sendWhatsAppMessage(targetPhone, message, targetName, { suppressModal: true });
+                }
+            }
+
             addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب بالوقت الجديد.', type: 'success' });
             setIsPaymentModalOpen(false);
             const paidRequestId = paymentRequest.id;
             const paidRequestNumber = paymentRequest.request_number;
             setPaymentRequest(null);
+            setSendWhatsAppStartNotify(true);
             showNewRequestSuccessModal(paidRequestId, paidRequestNumber, false);
         } catch (error) {
             console.error("Payment confirmation error:", error);
@@ -672,6 +700,23 @@ const WaitingForPaymentRequests: React.FC = () => {
                                     className="w-full p-2 text-sm border rounded bg-slate-100 dark:bg-slate-600 dark:border-slate-500 text-slate-500 cursor-not-allowed"
                                 />
                             </div>
+                        </div>
+                    )}
+
+                    {paymentMethod !== PaymentType.Unpaid && whatsappApiStatus === 'connected' && (
+                        <div className="pt-2 border-t dark:border-slate-700">
+                            <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={sendWhatsAppStartNotify}
+                                    disabled={isSubmittingPayment}
+                                    onChange={(e) => setSendWhatsAppStartNotify(e.target.checked)}
+                                    className="w-4 h-4 text-green-500 border-slate-300 rounded focus:ring-green-500"
+                                />
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                    إرسال إشعار للعميل عبر واتساب (بدء الفحص)
+                                </span>
+                            </label>
                         </div>
                     )}
                 </div>
