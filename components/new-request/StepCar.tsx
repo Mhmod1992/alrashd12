@@ -121,6 +121,7 @@ interface StepCarProps {
     isReservationMode?: boolean;
     showPlateField?: boolean;
     stepNumber?: number;
+    isMobile?: boolean;
 }
 
 import YearPicker from '../YearPicker';
@@ -146,10 +147,25 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                 {!props.useChassisNumber ? (
                     props.showPlateField && (
                         <div className="space-y-4">
+                            {/* Mobile only: Camera Scan Button above fields */}
+                            {props.isMobile && (
+                                <button
+                                    type="button"
+                                    onClick={() => props.setIsScannerOpen(true)}
+                                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-bold text-sm rounded-xl border border-indigo-200 dark:border-indigo-800/60 shadow-sm transition-all active:scale-[0.98]"
+                                    title="مسح اللوحة بالكاميرا"
+                                >
+                                    <Icon name="scan-plate" className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                    <span>مسح اللوحة بالكاميرا</span>
+                                </button>
+                            )}
+
                             <div className="flex items-center gap-2 relative">
                                 <input
                                     ref={props.plateNumInputRef}
-                                    type="text"
+                                    type="tel"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
                                     placeholder="أرقام"
                                     value={props.plateNums}
                                     onChange={(e) => {
@@ -157,7 +173,7 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                                         props.setPlateNums(val.split('').join(' '));
                                     }}
                                     required={!props.isReservationMode}
-                                    className={`${props.getInputClass('plateNums')} text-center font-bold text-lg`}
+                                    className={`${props.getInputClass('plateNums')} text-center font-bold text-lg flex-1`}
                                     style={{ direction: 'ltr' }}
                                     autoComplete="off"
                                 />
@@ -180,13 +196,15 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                                         props.setPlateChars(validChars.slice(0, 4).split('').join(' '));
                                     }}
                                     required={!props.isReservationMode}
-                                    className={`${props.getInputClass('plateChars')} text-center font-bold text-lg`}
+                                    className={`${props.getInputClass('plateChars')} text-center font-bold text-lg flex-1`}
                                     style={{ direction: /[\u0600-\u06FF]/.test(props.plateChars) ? 'rtl' : 'ltr' }}
                                     autoComplete="off"
                                 />
-                                <Button type="button" variant="secondary" onClick={() => props.setIsScannerOpen(true)} className="p-3" title="مسح اللوحة بالكاميرا">
-                                    <Icon name="scan-plate" className="w-5 h-5" />
-                                </Button>
+                                {!props.isMobile && (
+                                    <Button type="button" variant="secondary" onClick={() => props.setIsScannerOpen(true)} className="p-3" title="مسح اللوحة بالكاميرا">
+                                        <Icon name="scan-plate" className="w-5 h-5" />
+                                    </Button>
+                                )}
 
                                 {props.isCheckingHistory && (
                                     <div className="absolute left-[-30px] top-1/2 transform -translate-y-1/2">

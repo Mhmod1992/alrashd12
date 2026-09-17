@@ -1851,18 +1851,96 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     return (
         <>
             {isMobile && (
-                <div className="mb-4">
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                            {getStepTitle(currentStep)}
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                            خطوة {currentStep} من {TOTAL_STEPS}
-                        </span>
+                <div className="mb-4 bg-white dark:bg-slate-800/90 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    {/* Top Row: Navigation Buttons (Right / Left) + Title */}
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                        {/* Right Arrow (Previous Step in RTL) */}
+                        <button
+                            type="button"
+                            onClick={handleBack}
+                            disabled={currentStep === 1}
+                            className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-all ${
+                                currentStep === 1
+                                    ? 'opacity-30 border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed'
+                                    : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 active:scale-95 shadow-xs'
+                            }`}
+                            title="الخطوة السابقة"
+                        >
+                            <ChevronRightIcon className="w-5 h-5" />
+                        </button>
+
+                        {/* Step Title & Step Indicator */}
+                        <div className="flex flex-col items-center text-center">
+                            <span className="text-sm font-black text-slate-800 dark:text-slate-100">
+                                {getStepTitle(currentStep)}
+                            </span>
+                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                خطوة {currentStep} من {TOTAL_STEPS}
+                            </span>
+                        </div>
+
+                        {/* Left Arrow (Next Step in RTL) */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (currentStep < TOTAL_STEPS) {
+                                    if (isEditMode) {
+                                        setCurrentStep(prev => prev + 1);
+                                    } else {
+                                        handleNext();
+                                    }
+                                }
+                            }}
+                            disabled={currentStep === TOTAL_STEPS}
+                            className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-all ${
+                                currentStep === TOTAL_STEPS
+                                    ? 'opacity-30 border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed'
+                                    : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 active:scale-95 shadow-xs'
+                            }`}
+                            title="الخطوة التالية"
+                        >
+                            <ChevronRightIcon className="w-5 h-5 transform rotate-180" />
+                        </button>
                     </div>
-                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+
+                    {/* Step Badges for Direct Jumping between steps */}
+                    <div className="flex items-center justify-between gap-1 mb-2">
+                        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((stepNum) => {
+                            const isActive = stepNum === currentStep;
+                            const isCompleted = stepNum < currentStep;
+                            return (
+                                <button
+                                    key={stepNum}
+                                    type="button"
+                                    onClick={() => {
+                                        if (isEditMode || stepNum < currentStep) {
+                                            setCurrentStep(stepNum);
+                                        } else if (stepNum === currentStep + 1) {
+                                            handleNext();
+                                        } else {
+                                            if (validateStep(currentStep)) {
+                                                setCurrentStep(stepNum);
+                                            }
+                                        }
+                                    }}
+                                    className={`flex-1 py-1 px-1 rounded-md text-[11px] font-bold transition-all text-center truncate ${
+                                        isActive
+                                            ? 'bg-blue-600 text-white shadow-xs'
+                                            : isCompleted
+                                            ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50'
+                                            : 'bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400'
+                                    }`}
+                                >
+                                    {getStepTitle(stepNum)}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
                         <div
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
                             style={{ width: `${(currentStep / TOTAL_STEPS) * 100}%` }}
                         ></div>
                     </div>
@@ -2043,6 +2121,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 <div className={isMobile && currentStep !== 1 ? 'hidden' : 'block animate-fade-in'} ref={carSectionRef}>
                     <StepCar 
+                        isMobile={isMobile}
                         stepNumber={isMobile ? 1 : 2}
                         useChassisNumber={useChassisNumber}
                         setUseChassisNumber={setUseChassisNumber}

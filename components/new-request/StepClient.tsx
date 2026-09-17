@@ -45,6 +45,16 @@ interface StepClientProps {
 
 const StepClient: React.FC<StepClientProps> = (props) => {
     
+    // Auto focus phone input when step opens on mobile
+    React.useEffect(() => {
+        if (props.isMobile) {
+            const timer = setTimeout(() => {
+                props.phoneInputRef.current?.focus();
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [props.isMobile, props.stepNumber]);
+
     // Calculate total debt amount
     const totalDebt = useMemo(() => {
         if (!props.unpaidDebtAlert) return 0;
@@ -122,7 +132,49 @@ const StepClient: React.FC<StepClientProps> = (props) => {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative">
+                {/* Phone Input: On mobile it is displayed at the top (order-1), on desktop it is on the left (md:order-2) */}
+                <div className={`relative ${props.isMobile ? 'order-1' : 'order-2 md:order-2'}`}>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">رقم الهاتف</label>
+                    <div className="relative">
+                        <SmartPhoneInput
+                            ref={props.phoneInputRef}
+                            id="clientPhone"
+                            value={props.clientPhone}
+                            onChange={(val) => {
+                                const e = { target: { value: val } } as React.ChangeEvent<HTMLInputElement>;
+                                props.onPhoneChange(e);
+                            }}
+                            onKeyDown={(e) => props.onKeyDown(e, 'phone')}
+                            onFocus={props.onPhoneFocus}
+                            onBlur={() => {}}
+                            required={!props.isReservationMode}
+                            autoFocus={true}
+                        />
+                        {props.isSearchingClientPhone && (
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-20">
+                                <RefreshCwIcon className="h-5 w-5 animate-spin text-blue-500" />
+                            </div>
+                        )}
+                    </div>
+                    {props.isPhoneSuggestionsOpen && props.phoneSuggestions.length > 0 && (
+                        <ul className="absolute z-20 w-full bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
+                            {props.phoneSuggestions.map((client, index) => (
+                                <li
+                                    key={client.id}
+                                    id={`suggestion-phone-${index}`}
+                                    onMouseDown={() => props.onClientSelection(client, props.nameInputRef.current!)}
+                                    onMouseOver={() => props.setPhoneSuggestionIndex(index)}
+                                    className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.phoneSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
+                                >
+                                    <span style={{ direction: 'ltr', display: 'inline-block' }}>{formatPhone(client.phone)}</span> ({client.name})
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+
+                {/* Name Input: On mobile it is displayed below phone (order-2), on desktop it is on the right (md:order-1) */}
+                <div className={`relative ${props.isMobile ? 'order-2' : 'order-1 md:order-1'}`}>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">اسم العميل</label>
                     <div className="relative">
                         <input
@@ -153,45 +205,6 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                                     className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.nameSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
                                 >
                                     {client.name} - <span className="text-slate-500 dark:text-slate-400" style={{ direction: 'ltr', display: 'inline-block' }}>{formatPhone(client.phone)}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
-                <div className="relative">
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">رقم الهاتف</label>
-                    <div className="relative">
-                        <SmartPhoneInput
-                            ref={props.phoneInputRef}
-                            id="clientPhone"
-                            value={props.clientPhone}
-                            onChange={(val) => {
-                                const e = { target: { value: val } } as React.ChangeEvent<HTMLInputElement>;
-                                props.onPhoneChange(e);
-                            }}
-                            onKeyDown={(e) => props.onKeyDown(e, 'phone')}
-                            onFocus={props.onPhoneFocus}
-                            onBlur={() => {}} // Placeholder or keep current logic
-                            required={!props.isReservationMode}
-                            autoFocus={!props.isMobile}
-                        />
-                        {props.isSearchingClientPhone && (
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-20">
-                                <RefreshCwIcon className="h-5 w-5 animate-spin text-blue-500" />
-                            </div>
-                        )}
-                    </div>
-                    {props.isPhoneSuggestionsOpen && props.phoneSuggestions.length > 0 && (
-                        <ul className="absolute z-20 w-full bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
-                            {props.phoneSuggestions.map((client, index) => (
-                                <li
-                                    key={client.id}
-                                    id={`suggestion-phone-${index}`}
-                                    onMouseDown={() => props.onClientSelection(client)}
-                                    onMouseOver={() => props.setPhoneSuggestionIndex(index)}
-                                    className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.phoneSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
-                                >
-                                    <span style={{ direction: 'ltr', display: 'inline-block' }}>{formatPhone(client.phone)}</span> ({client.name})
                                 </li>
                             ))}
                         </ul>

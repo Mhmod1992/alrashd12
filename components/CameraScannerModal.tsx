@@ -29,7 +29,7 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
     const [step, setStep] = useState<'capture' | 'processing' | 'review'>('capture');
     const [error, setError] = useState<string | null>(null);
-    const [scanLanguage, setScanLanguage] = useState<'ar' | 'en'>('ar');
+    const [scanLanguage, setScanLanguage] = useState<'ar' | 'en'>('en');
     
     // --- Review State (For Car Mode) ---
     const [capturedImage, setCapturedImage] = useState<string | null>(null);

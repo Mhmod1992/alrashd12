@@ -885,40 +885,29 @@ const Requests: React.FC = () => {
         setPaymentError(null);
 
         const rawPending = (request as any)?._rawPending;
-        let cName = '';
-        let cPhone = '';
+        let cName = rawPending?.client_name || (request as any)?.client_name || '';
+        let cPhone = rawPending?.client_phone || (request as any)?.client_phone || '';
 
-        if (rawPending) {
-            cName = rawPending.client_name || '';
-            cPhone = rawPending.client_phone || '';
-        } else if (request.client_id) {
+        if (!cPhone && request.client_id) {
             const client = clients.find(c => c.id === request.client_id);
-            cName = client?.name || '';
+            cName = client?.name || cName;
             cPhone = client?.phone || '';
         }
 
-        // Check if phone or client_id matches an existing registered client in the database
+        // Check strictly by phone number if an official registered client exists in the database
         const cleaned = (cPhone || '').replace(/\D/g, '');
         let matchedClient: any = undefined;
+        let resolvedClientId: string | null = null;
 
-        if (request.client_id) {
-            matchedClient = clients.find(c => c.id === request.client_id);
-        }
-        if (!matchedClient && cleaned.length >= 9) {
+        if (cleaned.length >= 9) {
             const last9 = cleaned.slice(-9);
             matchedClient = clients.find(c => c.phone && c.phone.replace(/\D/g, '').endsWith(last9));
-        }
-
-        let resolvedClientId: string | null = null;
-        if (matchedClient) {
-            // Do not rely on the temporary name in the pending request; use the official client name in database!
-            if (matchedClient.name) {
-                cName = matchedClient.name;
+            if (matchedClient) {
+                if (matchedClient.name) {
+                    cName = matchedClient.name;
+                }
+                resolvedClientId = matchedClient.id;
             }
-            if (matchedClient.phone) {
-                cPhone = matchedClient.phone;
-            }
-            resolvedClientId = matchedClient.id;
         }
 
         setEditableClientName(cName);
@@ -926,7 +915,7 @@ const Requests: React.FC = () => {
         setSelectedPaymentClientId(resolvedClientId);
         setEditablePrice(request.price || 0);
 
-        // Async DB lookup if not matched in cached clients
+        // Async DB lookup strictly by phone if not matched in cached clients
         if (!matchedClient && searchClients && cleaned.length >= 9) {
             searchClients(cleaned).then(remoteMatches => {
                 if (Array.isArray(remoteMatches)) {
@@ -2146,6 +2135,7 @@ const Requests: React.FC = () => {
                             onSelectClient={(client) => setSelectedPaymentClientId(client.id)}
                             onClearSelection={() => setSelectedPaymentClientId(null)}
                             disabled={isSubmittingPayment}
+                            autoFocusPhone={true}
                         />
 
                         <div>
