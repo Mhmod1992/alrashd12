@@ -5,12 +5,19 @@ import { ArabicText as Text } from '../ArabicText';
 import { formatPhoneNumberDisplay } from '../../lib/utils';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor, ReportStamp, Technician, Employee } from '../../types';
 
-// Register Arabic Font (Tajawal)
+// Register Arabic Font (Tajawal - Local & Robust)
+const getFontUrl = (filename: string) => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/fonts/${filename}`;
+  }
+  return `/fonts/${filename}`;
+};
+
 Font.register({
   family: 'Tajawal',
   fonts: [
-    { src: 'https://raw.githubusercontent.com/google/fonts/main/ofl/tajawal/Tajawal-Regular.ttf', fontWeight: 'normal' },
-    { src: 'https://raw.githubusercontent.com/google/fonts/main/ofl/tajawal/Tajawal-Bold.ttf', fontWeight: 'bold' },
+    { src: getFontUrl('Tajawal-Regular.ttf'), fontWeight: 'normal' },
+    { src: getFontUrl('Tajawal-Bold.ttf'), fontWeight: 'bold' },
   ],
 });
 

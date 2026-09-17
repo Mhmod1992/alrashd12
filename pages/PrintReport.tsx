@@ -118,11 +118,26 @@ const ensureLibraries = async (): Promise<void> => {
 };
 
 const ensureFonts = async () => {
-    await document.fonts.ready;
-    const font = "16px 'Tajawal'";
-    if (!document.fonts.check(font)) {
-        await new Promise(r => setTimeout(r, 1000)); 
+    try {
+        if (typeof FontFace !== 'undefined' && document.fonts) {
+            const fontFamilies = [
+                { weight: '400', url: '/fonts/Tajawal-Regular.ttf' },
+                { weight: '500', url: '/fonts/Tajawal-Medium.ttf' },
+                { weight: '700', url: '/fonts/Tajawal-Bold.ttf' }
+            ];
+
+            const loadPromises = fontFamilies.map(async ({ weight, url }) => {
+                const fontFace = new FontFace('Tajawal', `url(${url})`, { weight, style: 'normal' });
+                const loadedFace = await fontFace.load();
+                document.fonts.add(loadedFace);
+            });
+
+            await Promise.allSettled(loadPromises);
+        }
+    } catch (e) {
+        console.warn('Local FontFace load error fallback:', e);
     }
+    await document.fonts.ready;
 };
 
 const compressImageForPdf = async (url: string, maxWidth: number = 600, quality: number = 0.5): Promise<string> => {
