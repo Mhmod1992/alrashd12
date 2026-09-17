@@ -165,11 +165,11 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                                     ref={props.plateNumInputRef}
                                     type="tel"
                                     inputMode="numeric"
-                                    pattern="[0-9]*"
                                     placeholder="أرقام"
                                     value={props.plateNums}
                                     onChange={(e) => {
-                                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                        const normalized = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+                                        const val = normalized.replace(/\D/g, '').slice(0, 4);
                                         props.setPlateNums(val.split('').join(' '));
                                     }}
                                     required={!props.isReservationMode}
