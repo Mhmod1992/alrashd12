@@ -30,6 +30,7 @@ import WifiOffIcon from '../components/icons/WifiOffIcon';
 import ClipboardListIcon from '../components/icons/ClipboardListIcon';
 import WhatsappIcon from '../components/icons/WhatsappIcon';
 import TrashIcon from '../components/icons/TrashIcon';
+import { Equal, ArrowUp, ArrowDown, FolderInput, ArrowLeft, ArrowUpDown, Check, X } from 'lucide-react';
 
 
 // Imported Components (Refactored)
@@ -85,7 +86,16 @@ export const FillRequest: React.FC = () => {
     const [colorPickerOpenFor, setColorPickerOpenFor] = useState<string | null>(null);
     const colorPickerRef = useRef<HTMLDivElement>(null);
     const [multiSelectMode, setMultiSelectMode] = useState<Record<string, boolean>>({}); // key: 'general' or categoryId
+    const [moveMode, setMoveMode] = useState<Record<string, boolean>>({}); // key: 'general' or categoryId
+    const [selectedMoveTargetCategory, setSelectedMoveTargetCategory] = useState<Record<string, string>>({});
+    const [reorderMode, setReorderMode] = useState<Record<string, boolean>>({});
+    const [reorderBackup, setReorderBackup] = useState<Record<string, Note[]>>({});
     const [selectedNoteIds, setSelectedNoteIds] = useState<Record<string, Set<string>>>({}); // key: 'general' or categoryId
+    const [activeTransferNoteId, setActiveTransferNoteId] = useState<string | null>(null);
+    const [isBulkMoveDropdownOpen, setIsBulkMoveDropdownOpen] = useState(false);
+    const [draggedNoteInfo, setDraggedNoteInfo] = useState<{ id: string; categoryId: string | 'general'; index: number } | null>(null);
+    const [dragOverTarget, setDragOverTarget] = useState<{ categoryId: string | 'general'; index: number } | null>(null);
+    const bulkMoveDropdownRef = useRef<HTMLDivElement>(null);
     const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(false);
 
     // View Modes
@@ -159,11 +169,19 @@ export const FillRequest: React.FC = () => {
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
+            const targetElement = event.target as HTMLElement;
             if (colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
-                const targetElement = event.target as HTMLElement;
                 if (!targetElement.closest('.color-picker-trigger')) {
                     setColorPickerOpenFor(null);
                 }
+            }
+            if (bulkMoveDropdownRef.current && !bulkMoveDropdownRef.current.contains(event.target as Node)) {
+                if (!targetElement.closest('.bulk-move-container')) {
+                    setIsBulkMoveDropdownOpen(false);
+                }
+            }
+            if (!targetElement.closest('.note-transfer-container')) {
+                setActiveTransferNoteId(null);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -208,7 +226,7 @@ export const FillRequest: React.FC = () => {
 
     const [isEditNoteModalOpen, setIsEditNoteModalOpen] = useState(false);
     const [editingNote, setEditingNote] = useState<{ note: Note; categoryId: string | 'general' } | null>(null);
-    const [modalNoteData, setModalNoteData] = useState<{ text: string; image: string | null; highlightColor: HighlightColor | null }>({ text: '', image: null, highlightColor: null });
+    const [modalNoteData, setModalNoteData] = useState<{ text: string; image: string | null; highlightColor: HighlightColor | null; targetCategoryId?: string | 'general' }>({ text: '', image: null, highlightColor: null, targetCategoryId: 'general' });
     const [modalNoteFile, setModalNoteFile] = useState<File | null>(null);
     const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -308,6 +326,37 @@ export const FillRequest: React.FC = () => {
             .map(id => customFindingCategories.find(c => c.id === id))
             .filter((c): c is CustomFindingCategory => !!c); // Remove undefined values
     }, [inspectionType, customFindingCategories]);
+
+    // Only categories present in this request
+    const requestCategories = useMemo(() => {
+        const cats: { id: string; name: string }[] = [];
+        visibleFindingCategories.forEach(c => {
+            if (!cats.some(existing => existing.id === c.id)) {
+                cats.push({ id: c.id, name: c.name });
+            }
+        });
+        Object.keys(categoryNotes).forEach(catId => {
+            if (!cats.some(existing => existing.id === catId)) {
+                const found = customFindingCategories.find(c => c.id === catId);
+                if (found) cats.push({ id: found.id, name: found.name });
+            }
+        });
+        return cats;
+    }, [visibleFindingCategories, categoryNotes, customFindingCategories]);
+
+    // Get target categories strictly within this request (plus general notes if from category)
+    const getTargetCategoriesForSection = useCallback((fromSectionId: string | 'general') => {
+        const targets: { id: string | 'general'; name: string }[] = [];
+        if (fromSectionId !== 'general') {
+            targets.push({ id: 'general', name: 'الملاحظات العامة' });
+        }
+        requestCategories.forEach(cat => {
+            if (cat.id !== fromSectionId) {
+                targets.push({ id: cat.id, name: cat.name });
+            }
+        });
+        return targets;
+    }, [requestCategories]);
 
     // Full tab sequence for navigation
     const allTabsInOrder = useMemo(() => [
@@ -668,23 +717,7 @@ export const FillRequest: React.FC = () => {
         // This prevents overwriting changes from other users (Realtime) with stale local state.
 
         if (loadedTabs.has('general')) {
-            const serverGeneralNotes = currentRequest.general_notes || [];
-            const localUnsavedGeneral = uploadedGeneralNotes.filter(n => n.status === 'saving' || n.status === 'error');
-            
-            // Start with server notes
-            const mergedGeneral = [...serverGeneralNotes];
-            
-            // Append local unsaved notes (avoid duplicates if they somehow exist)
-            localUnsavedGeneral.forEach(n => {
-                const index = mergedGeneral.findIndex(sn => sn.id === n.id);
-                if (index >= 0) {
-                    mergedGeneral[index] = n; // Update existing (if we are editing it)
-                } else {
-                    mergedGeneral.push(n); // Add new
-                }
-            });
-            
-            updates.general_notes = clean(mergedGeneral) as Note[];
+            updates.general_notes = clean(uploadedGeneralNotes) as Note[];
         }
 
         if (loadedTabs.has('categories')) {
@@ -693,17 +726,7 @@ export const FillRequest: React.FC = () => {
             const mergedCategoryNotes: Record<string, Note[]> = { ...serverCategoryNotes };
             
             for (const catId in uploadedCategoryNotes) {
-                const serverNotes = mergedCategoryNotes[catId] || [];
-                const localUnsaved = uploadedCategoryNotes[catId].filter(n => n.status === 'saving' || n.status === 'error');
-                
-                const mergedList = [...serverNotes];
-                localUnsaved.forEach(n => {
-                     const index = mergedList.findIndex(sn => sn.id === n.id);
-                     if (index >= 0) mergedList[index] = n;
-                     else mergedList.push(n);
-                });
-                
-                mergedCategoryNotes[catId] = mergedList;
+                mergedCategoryNotes[catId] = uploadedCategoryNotes[catId];
             }
             updates.category_notes = cleanCategoryNotes(mergedCategoryNotes);
 
@@ -1327,7 +1350,12 @@ export const FillRequest: React.FC = () => {
     const openEditNoteModal = (note: Note, categoryId: string | 'general') => {
         if (isLocked) return;
         setEditingNote({ note, categoryId });
-        setModalNoteData({ text: note.text, image: note.image || null, highlightColor: note.highlightColor || null });
+        setModalNoteData({
+            text: note.text,
+            image: note.image || null,
+            highlightColor: note.highlightColor || null,
+            targetCategoryId: categoryId
+        });
         setModalNoteFile(null);
         setIsEditNoteModalOpen(true);
     };
@@ -1407,8 +1435,10 @@ export const FillRequest: React.FC = () => {
             const textChanged = originalNote.text !== modalNoteData.text;
             const imageChanged = originalNote.image !== finalImageUrl;
             const colorChanged = originalNote.highlightColor !== modalNoteData.highlightColor;
+            const targetCat = modalNoteData.targetCategoryId || categoryId;
+            const categoryChanged = targetCat !== categoryId;
 
-            if (!textChanged && !imageChanged && !colorChanged) {
+            if (!textChanged && !imageChanged && !colorChanged && !categoryChanged) {
                 setIsEditNoteModalOpen(false);
                 setEditingNote(null);
                 setIsUploading(false);
@@ -1425,13 +1455,52 @@ export const FillRequest: React.FC = () => {
             }
 
             if (isMounted.current) {
-                if (categoryId === 'general') {
-                    setGeneralNotes(prev => prev.map(n => n.id === originalNote.id ? updatedNote : n));
-                    addActivityLogEntry('تعديل ملاحظة عامة', logDetails, finalImageUrl, originalNote.id);
+                if (categoryChanged) {
+                    let newGeneralNotes = [...generalNotes];
+                    let newCategoryNotes = { ...categoryNotes };
+
+                    if (categoryId === 'general') {
+                        newGeneralNotes = newGeneralNotes.filter(n => n.id !== originalNote.id);
+                    } else {
+                        newCategoryNotes[categoryId] = (newCategoryNotes[categoryId] || []).filter(n => n.id !== originalNote.id);
+                    }
+
+                    if (targetCat === 'general') {
+                        newGeneralNotes.push(updatedNote);
+                    } else {
+                        newCategoryNotes[targetCat] = [...(newCategoryNotes[targetCat] || []), updatedNote];
+                    }
+
+                    const fromName = categoryId === 'general' ? 'الملاحظات العامة' : customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
+                    const toName = targetCat === 'general' ? 'الملاحظات العامة' : customFindingCategories.find(c => c.id === targetCat)?.name || 'غير معروف';
+                    const transferDetails = `${logDetails} وتم نقلها من قسم "${fromName}" إلى قسم "${toName}"`;
+
+                    addActivityLogEntry('تعديل ونقل ملاحظة', transferDetails, finalImageUrl, originalNote.id);
+                    setGeneralNotes(newGeneralNotes);
+                    setCategoryNotes(newCategoryNotes);
+
+                    if (request) {
+                        const newLog = createActivityLog('تعديل ونقل ملاحظة', transferDetails, finalImageUrl, originalNote.id);
+                        const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
+                        const updatedRequest: Partial<InspectionRequest> & { id: string } = {
+                            id: request.id,
+                            general_notes: clean(newGeneralNotes) as Note[],
+                            category_notes: cleanCategoryNotes(newCategoryNotes),
+                            activity_log: newActivityLog,
+                            updated_at: new Date().toISOString()
+                        };
+                        updateRequest(updatedRequest).catch(err => console.error("Failed to save moved note:", err));
+                    }
                 } else {
-                    setCategoryNotes(prev => ({ ...prev, [categoryId]: prev[categoryId].map(n => n.id === originalNote.id ? updatedNote : n) }));
-                    const categoryName = customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
-                    addActivityLogEntry('تعديل ملاحظة', `${logDetails} في قسم "${categoryName}"`, finalImageUrl, originalNote.id);
+                    if (categoryId === 'general') {
+                        setGeneralNotes(prev => prev.map(n => n.id === originalNote.id ? updatedNote : n));
+                        addActivityLogEntry('تعديل ملاحظة عامة', logDetails, finalImageUrl, originalNote.id);
+                    } else {
+                        setCategoryNotes(prev => ({ ...prev, [categoryId]: prev[categoryId].map(n => n.id === originalNote.id ? updatedNote : n) }));
+                        const categoryName = customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
+                        addActivityLogEntry('تعديل ملاحظة', `${logDetails} في قسم "${categoryName}"`, finalImageUrl, originalNote.id);
+                    }
+                    debouncedSave();
                 }
 
                 setIsEditNoteModalOpen(false);
@@ -2164,42 +2233,492 @@ export const FillRequest: React.FC = () => {
         debouncedSave();
     };
 
+    const handleToggleSelectAll = (sectionId: string, notes: Note[]) => {
+        const validNotes = notes.filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+        setSelectedNoteIds(prev => {
+            const currentSelected = prev[sectionId] || new Set();
+            if (currentSelected.size === validNotes.length && validNotes.length > 0) {
+                return { ...prev, [sectionId]: new Set() };
+            } else {
+                return { ...prev, [sectionId]: new Set(validNotes.map(n => n.id)) };
+            }
+        });
+    };
+
+    const handleStartReorder = (sectionId: string | 'general', currentNotes: Note[]) => {
+        if (isLocked) return;
+        const validNotes = currentNotes.filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+        setReorderBackup(prev => ({
+            ...prev,
+            [sectionId]: [...validNotes]
+        }));
+        setReorderMode(prev => ({ ...prev, [sectionId]: true }));
+        // Close move mode if open
+        setMoveMode(prev => ({ ...prev, [sectionId]: false }));
+        setMultiSelectMode(prev => ({ ...prev, [sectionId]: false }));
+    };
+
+    const handleCancelReorder = (sectionId: string | 'general') => {
+        const backup = reorderBackup[sectionId];
+        if (backup) {
+            if (sectionId === 'general') {
+                const systemNotes = generalNotes.filter(n => n.text === '__HANDWRITTEN_REPORT_TRUE__');
+                setGeneralNotes([...backup, ...systemNotes]);
+            } else {
+                setCategoryNotes(prev => ({ ...prev, [sectionId]: backup }));
+            }
+        }
+        setReorderMode(prev => ({ ...prev, [sectionId]: false }));
+        setDraggedNoteInfo(null);
+        setDragOverTarget(null);
+    };
+
+    const handleSaveReorder = async (sectionId: string | 'general') => {
+        if (isLocked) return;
+        setReorderMode(prev => ({ ...prev, [sectionId]: false }));
+        setDraggedNoteInfo(null);
+        setDragOverTarget(null);
+
+        const catName = sectionId === 'general' ? 'الملاحظات العامة' : (requestCategories.find(c => c.id === sectionId)?.name || 'غير معروف');
+        const details = `تم حفظ ترتيب الملاحظات في قسم "${catName}"`;
+        addActivityLogEntry('حفظ ترتيب الملاحظات', details);
+
+        if (request) {
+            const updatedGeneral = clean(generalNotes) as Note[];
+            const updatedCategories = cleanCategoryNotes(categoryNotes);
+
+            const updatedRequest: Partial<InspectionRequest> & { id: string } = {
+                id: request.id,
+                general_notes: updatedGeneral,
+                category_notes: updatedCategories,
+                updated_at: new Date().toISOString()
+            };
+
+            try {
+                await updateRequest(updatedRequest);
+                addNotification({ title: 'تم حفظ الترتيب', message: `تم حفظ ترتيب الملاحظات في قسم ${catName} بنجاح`, type: 'success' });
+            } catch (err) {
+                console.error("Failed to save reordered notes:", err);
+                addNotification({ title: 'خطأ', message: 'فشل حفظ ترتيب الملاحظات.', type: 'error' });
+            }
+        }
+    };
+
+    const toggleMoveMode = (sectionId: string | 'general') => {
+        if (isLocked) return;
+        setMoveMode(prev => {
+            const next = !prev[sectionId];
+            if (!next) {
+                setSelectedNoteIds(s => ({ ...s, [sectionId]: new Set() }));
+            }
+            return { ...prev, [sectionId]: next };
+        });
+        // Close reorder mode if open
+        setReorderMode(prev => ({ ...prev, [sectionId]: false }));
+        setMultiSelectMode(prev => ({ ...prev, [sectionId]: false }));
+    };
+
+    const handleReorderNote = (categoryId: string | 'general', fromIndex: number, toIndex: number) => {
+        if (isLocked) return;
+        const notesList = categoryId === 'general' ? generalNotes : (categoryNotes[categoryId] || []);
+        const filteredList = notesList.filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
+        if (fromIndex < 0 || fromIndex >= filteredList.length || toIndex < 0 || toIndex >= filteredList.length || fromIndex === toIndex) {
+            return;
+        }
+
+        const reordered = [...filteredList];
+        const [movedItem] = reordered.splice(fromIndex, 1);
+        reordered.splice(toIndex, 0, movedItem);
+
+        if (categoryId === 'general') {
+            const systemNotes = generalNotes.filter(n => n.text === '__HANDWRITTEN_REPORT_TRUE__');
+            setGeneralNotes([...reordered, ...systemNotes]);
+        } else {
+            setCategoryNotes(prev => ({ ...prev, [categoryId]: reordered }));
+        }
+
+        // Only auto-save if not in reorder mode (e.g. if invoked outside)
+        if (!reorderMode[categoryId]) {
+            const catName = categoryId === 'general' ? 'الملاحظات العامة' : customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
+            addActivityLogEntry('إعادة ترتيب ملاحظة', `تم تغيير ترتيب الملاحظة "${movedItem.text.substring(0, 30)}..." في قسم "${catName}"`, undefined, movedItem.id);
+            debouncedSave();
+        }
+    };
+
+    const handleDragStart = (e: React.DragEvent, id: string, categoryId: string | 'general', index: number) => {
+        if (isLocked || !reorderMode[categoryId]) return;
+        e.dataTransfer.setData('text/plain', id);
+        e.dataTransfer.effectAllowed = 'move';
+        setDraggedNoteInfo({ id, categoryId, index });
+    };
+
+    const handleDragOver = (e: React.DragEvent, categoryId: string | 'general', index: number) => {
+        if (isLocked || !reorderMode[categoryId] || !draggedNoteInfo) return;
+        if (draggedNoteInfo.categoryId !== categoryId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (draggedNoteInfo.index !== index) {
+            handleReorderNote(categoryId, draggedNoteInfo.index, index);
+            setDraggedNoteInfo({ id: draggedNoteInfo.id, categoryId, index });
+        }
+        if (!dragOverTarget || dragOverTarget.index !== index) {
+            setDragOverTarget({ categoryId, index });
+        }
+    };
+
+    const handleDragLeave = () => {
+        // Handled naturally on drop or end
+    };
+
+    const handleDrop = (e: React.DragEvent, categoryId: string | 'general', dropIndex: number) => {
+        e.preventDefault();
+        if (isLocked || !reorderMode[categoryId] || !draggedNoteInfo) return;
+        if (draggedNoteInfo.categoryId === categoryId && draggedNoteInfo.index !== dropIndex) {
+            handleReorderNote(categoryId, draggedNoteInfo.index, dropIndex);
+        }
+        setDraggedNoteInfo(null);
+        setDragOverTarget(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedNoteInfo(null);
+        setDragOverTarget(null);
+    };
+
+    const handleMoveSingleNote = async (noteId: string, fromCategoryId: string | 'general', toCategoryId: string | 'general') => {
+        if (isLocked || fromCategoryId === toCategoryId) return;
+
+        let noteToMove: Note | undefined;
+        let newFromGeneral = [...generalNotes];
+        let newFromCategories = { ...categoryNotes };
+
+        if (fromCategoryId === 'general') {
+            noteToMove = newFromGeneral.find(n => n.id === noteId);
+            newFromGeneral = newFromGeneral.filter(n => n.id !== noteId);
+        } else {
+            noteToMove = (newFromCategories[fromCategoryId] || []).find(n => n.id === noteId);
+            newFromCategories[fromCategoryId] = (newFromCategories[fromCategoryId] || []).filter(n => n.id !== noteId);
+        }
+
+        if (!noteToMove) return;
+
+        const updatedMovedNote: Note = {
+            ...noteToMove,
+            categoryId: toCategoryId,
+            status: 'saving'
+        };
+
+        if (toCategoryId === 'general') {
+            newFromGeneral.push(updatedMovedNote);
+        } else {
+            newFromCategories[toCategoryId] = [...(newFromCategories[toCategoryId] || []), updatedMovedNote];
+        }
+
+        const fromName = fromCategoryId === 'general' ? 'الملاحظات العامة' : customFindingCategories.find(c => c.id === fromCategoryId)?.name || 'غير معروف';
+        const toName = toCategoryId === 'general' ? 'الملاحظات العامة' : customFindingCategories.find(c => c.id === toCategoryId)?.name || 'غير معروف';
+        const details = `تم نقل ملاحظة "${noteToMove.text.substring(0, 30)}..." من قسم "${fromName}" إلى قسم "${toName}"`;
+
+        addActivityLogEntry('نقل ملاحظة', details, noteToMove.image, noteToMove.id);
+        setGeneralNotes(newFromGeneral);
+        setCategoryNotes(newFromCategories);
+
+        if (request) {
+            const newLog = createActivityLog('نقل ملاحظة', details, noteToMove.image, noteToMove.id);
+            const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
+            const updatedRequest: Partial<InspectionRequest> & { id: string } = {
+                id: request.id,
+                general_notes: clean(newFromGeneral) as Note[],
+                category_notes: cleanCategoryNotes(newFromCategories),
+                activity_log: newActivityLog,
+                updated_at: new Date().toISOString()
+            };
+            try {
+                await updateRequest(updatedRequest);
+                addNotification({ title: 'تم النقل بنجاح', message: `تم نقل الملاحظة إلى ${toName}`, type: 'success' });
+            } catch (err) {
+                console.error("Failed to move note:", err);
+                addNotification({ title: 'خطأ', message: 'فشل حفظ نقل الملاحظة.', type: 'error' });
+            }
+        }
+    };
+
+    const handleBulkMoveNotes = async (fromCategoryId: string | 'general', toCategoryId: string | 'general') => {
+        if (isLocked || fromCategoryId === toCategoryId || !toCategoryId) return;
+
+        const selectedSet = selectedNoteIds[fromCategoryId];
+        if (!selectedSet || selectedSet.size === 0) {
+            addNotification({ title: 'تنبيه', message: 'يرجى تحديد ملاحظة واحدة على الأقل لنقلها.', type: 'info' });
+            return;
+        }
+
+        let newFromGeneral = [...generalNotes];
+        let newFromCategories = { ...categoryNotes };
+        const notesToMove: Note[] = [];
+
+        if (fromCategoryId === 'general') {
+            newFromGeneral = newFromGeneral.filter(n => {
+                if (selectedSet.has(n.id)) {
+                    notesToMove.push({ ...n, categoryId: toCategoryId, status: 'saving' });
+                    return false;
+                }
+                return true;
+            });
+        } else {
+            newFromCategories[fromCategoryId] = (newFromCategories[fromCategoryId] || []).filter(n => {
+                if (selectedSet.has(n.id)) {
+                    notesToMove.push({ ...n, categoryId: toCategoryId, status: 'saving' });
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        if (notesToMove.length === 0) return;
+
+        if (toCategoryId === 'general') {
+            newFromGeneral = [...newFromGeneral, ...notesToMove];
+        } else {
+            newFromCategories[toCategoryId] = [...(newFromCategories[toCategoryId] || []), ...notesToMove];
+        }
+
+        const fromName = fromCategoryId === 'general' ? 'الملاحظات العامة' : (requestCategories.find(c => c.id === fromCategoryId)?.name || 'غير معروف');
+        const toName = toCategoryId === 'general' ? 'الملاحظات العامة' : (requestCategories.find(c => c.id === toCategoryId)?.name || 'غير معروف');
+        const details = `تم نقل ${notesToMove.length} ملاحظة من قسم "${fromName}" إلى قسم "${toName}"`;
+
+        addActivityLogEntry('نقل ملاحظات جماعي', details);
+        setGeneralNotes(newFromGeneral);
+        setCategoryNotes(newFromCategories);
+
+        // Clear multi-select state and move mode
+        setSelectedNoteIds(prev => ({ ...prev, [fromCategoryId]: new Set() }));
+        setMultiSelectMode(prev => ({ ...prev, [fromCategoryId]: false }));
+        setMoveMode(prev => ({ ...prev, [fromCategoryId]: false }));
+        setSelectedMoveTargetCategory(prev => ({ ...prev, [fromCategoryId]: '' }));
+        setIsBulkMoveDropdownOpen(false);
+
+        if (request) {
+            const newLog = createActivityLog('نقل ملاحظات جماعي', details);
+            const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
+            const updatedRequest: Partial<InspectionRequest> & { id: string } = {
+                id: request.id,
+                general_notes: clean(newFromGeneral) as Note[],
+                category_notes: cleanCategoryNotes(newFromCategories),
+                activity_log: newActivityLog,
+                updated_at: new Date().toISOString()
+            };
+            try {
+                await updateRequest(updatedRequest);
+                addNotification({ title: 'تم النقل بنجاح', message: `تم نقل ${notesToMove.length} ملاحظة إلى قسم ${toName}`, type: 'success' });
+            } catch (err) {
+                console.error("Failed to move notes in bulk:", err);
+                addNotification({ title: 'خطأ', message: 'فشل حفظ النقل الجماعي للملاحظات.', type: 'error' });
+            }
+        }
+    };
+
     const renderNotes = (notesArray: Note[], categoryId: string | 'general') => {
         const filteredArray = notesArray.filter(note => note.text !== '__HANDWRITTEN_REPORT_TRUE__');
-        return filteredArray.map((note) => {
+        const isReordering = !!reorderMode[categoryId];
+        const isMoving = !!moveMode[categoryId];
+        const isInMultiSelectMode = !!multiSelectMode[categoryId] || isMoving;
+        const selectedSet = selectedNoteIds[categoryId] || new Set();
+
+        return filteredArray.map((note, index) => {
             const isDeleting = deletingNoteIds.has(note.id);
             const colorStyle = note.highlightColor ? highlightColors[note.highlightColor] : null;
+            const isSelected = selectedSet.has(note.id);
+            const isDragTarget = isReordering && dragOverTarget?.categoryId === categoryId && dragOverTarget?.index === index;
+            const isBeingDragged = isReordering && draggedNoteInfo?.id === note.id;
 
             return (
-                <div key={note.id} className="flex items-start gap-3 w-full">
+                <div key={note.id} className="flex items-center gap-2 w-full">
+                    {/* Multi-Select / Move Checkbox */}
+                    {isInMultiSelectMode && (
+                        <div
+                            className="flex items-center justify-center p-1.5 flex-shrink-0 cursor-pointer"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleNoteSelection(categoryId, note.id);
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleNoteSelection(categoryId, note.id)}
+                                className="w-5 h-5 text-blue-600 rounded border-slate-300 dark:border-slate-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                            />
+                        </div>
+                    )}
+
+                    {/* Android-style Drag Grip & Up/Down Arrows (Visible ONLY in Reorder Mode) */}
+                    {isReordering && (
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                            <div
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, note.id, categoryId, index)}
+                                onDragEnd={handleDragEnd}
+                                className="cursor-grab active:cursor-grabbing p-1.5 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-700 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center shadow-sm"
+                                title="اسحب لإعادة الترتيب"
+                            >
+                                <Equal className="w-4 h-4" />
+                            </div>
+
+                            <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-[11px] font-bold border border-slate-200 dark:border-slate-600">
+                                {index + 1}
+                            </div>
+
+                            <div className="flex flex-col">
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleReorderNote(categoryId, index, index - 1);
+                                    }}
+                                    disabled={index === 0}
+                                    className={`p-0.5 rounded transition-colors ${
+                                        index === 0
+                                            ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                                            : 'text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-slate-700'
+                                    }`}
+                                    title="تحريك لأعلى"
+                                >
+                                    <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleReorderNote(categoryId, index, index + 1);
+                                    }}
+                                    disabled={index === filteredArray.length - 1}
+                                    className={`p-0.5 rounded transition-colors ${
+                                        index === filteredArray.length - 1
+                                            ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                                            : 'text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-slate-700'
+                                    }`}
+                                    title="تحريك لأسفل"
+                                >
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <li
                         id={`note-${note.id}`}
-                        className={`relative flex flex-col sm:flex-row sm:items-start p-3 border rounded-lg gap-3 animate-slide-in-down hover:shadow-md transition-all w-full h-auto ${colorStyle ? colorStyle.cardBg : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'} ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
+                        draggable={isReordering}
+                        onDragStart={(e) => handleDragStart(e, note.id, categoryId, index)}
+                        onDragOver={(e) => handleDragOver(e, categoryId, index)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, categoryId, index)}
+                        onDragEnd={handleDragEnd}
+                        className={`relative flex flex-col sm:flex-row sm:items-start p-3 border rounded-xl gap-3 animate-slide-in-down transition-all duration-150 w-full h-auto ${
+                            colorStyle ? colorStyle.cardBg : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                        } ${isDeleting ? 'opacity-50 pointer-events-none' : ''} ${
+                            isBeingDragged ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50/90 dark:bg-blue-900/60 shadow-xl opacity-90 scale-[1.01]' : 'hover:shadow-md'
+                        } ${
+                            isDragTarget ? 'ring-2 ring-blue-400 border-blue-400 bg-blue-100/80 dark:bg-blue-900/40 scale-[1.01] shadow-lg' : ''
+                        } ${
+                            isSelected ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50/40 dark:bg-blue-900/30' : ''
+                        }`}
+                        onClick={() => {
+                            if (isInMultiSelectMode) {
+                                handleNoteSelection(categoryId, note.id);
+                            }
+                        }}
                     >
-                        <div className="flex items-start gap-3 flex-grow min-w-0 cursor-pointer color-picker-trigger" onClick={() => !isLocked && setColorPickerOpenFor(note.id)}>
-                            {note.image && <img src={note.image} alt="صورة ملاحظة" className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-md cursor-pointer border p-0.5 flex-shrink-0" onClick={(e) => { e.stopPropagation(); openImagePreview(note.image!) }} />}
+                        <div
+                            className="flex items-start gap-3 flex-grow min-w-0 cursor-pointer color-picker-trigger"
+                            onClick={(e) => {
+                                if (isInMultiSelectMode) {
+                                    e.stopPropagation();
+                                    handleNoteSelection(categoryId, note.id);
+                                    return;
+                                }
+                                if (!isLocked && !isReordering) setColorPickerOpenFor(note.id);
+                            }}
+                        >
+                            {note.image && (
+                                <img
+                                    src={note.image}
+                                    alt="صورة ملاحظة"
+                                    className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-md cursor-pointer border p-0.5 flex-shrink-0"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        openImagePreview(note.image!);
+                                    }}
+                                />
+                            )}
                             <div className="flex-grow pt-0.5 overflow-hidden w-full">
-                                <p className="break-words text-base sm:text-lg dark:text-slate-200 whitespace-pre-wrap leading-relaxed w-full min-w-0">{note.text}</p>
-                                {note.authorName && <span className="block text-[10px] text-gray-500 mt-1">أضافها: {note.authorName}</span>}
+                                <p className="break-words text-base sm:text-lg dark:text-slate-200 whitespace-pre-wrap leading-relaxed w-full min-w-0">
+                                    {note.text}
+                                </p>
+                                {note.authorName && (
+                                    <span className="block text-[10px] text-gray-500 mt-1">
+                                        أضافها: {note.authorName}
+                                    </span>
+                                )}
                             </div>
                             <StatusIndicator status={note.status} onRetry={() => handleRetryItem(note.id, 'note', categoryId)} />
                         </div>
-                        {can('manage_notes') && !isLocked && (
-                            <div className="flex sm:flex-col items-center justify-end gap-2 mt-2 sm:mt-0 sm:border-r pt-2 sm:pt-0 sm:pr-2 dark:border-slate-700">
-                                <button onClick={(e) => { e.stopPropagation(); openEditNoteModal(note, categoryId); }} disabled={isDeleting} className="text-yellow-500 hover:text-yellow-700 p-1"><Icon name="edit" className="w-4 h-4" /></button>
-                                <button onClick={(e) => { e.stopPropagation(); if (categoryId === 'general') handleRemoveGeneralNote(note.id); else handleRemoveCategoryNote(categoryId, note.id); }} disabled={isDeleting} className="text-red-500 hover:text-red-700 p-1">
+
+                        {/* Normal Action Buttons (hidden during reordering or multi-select) */}
+                        {can('manage_notes') && !isLocked && !isInMultiSelectMode && !isReordering && (
+                            <div className="flex sm:flex-col items-center justify-end gap-1.5 mt-2 sm:mt-0 sm:border-r pt-2 sm:pt-0 sm:pr-2 dark:border-slate-700 flex-shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        openEditNoteModal(note, categoryId);
+                                    }}
+                                    disabled={isDeleting}
+                                    className="text-yellow-500 hover:text-yellow-700 p-1 rounded hover:bg-yellow-50 dark:hover:bg-slate-700"
+                                    title="تعديل الملاحظة"
+                                >
+                                    <Icon name="edit" className="w-4 h-4" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (categoryId === 'general') handleRemoveGeneralNote(note.id);
+                                        else handleRemoveCategoryNote(categoryId, note.id);
+                                    }}
+                                    disabled={isDeleting}
+                                    className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-slate-700"
+                                    title="حذف الملاحظة"
+                                >
                                     {isDeleting ? <Icon name="refresh-cw" className="w-4 h-4 animate-spin" /> : <Icon name="delete" className="w-4 h-4" />}
                                 </button>
                             </div>
                         )}
 
-                        {colorPickerOpenFor === note.id && (
-                            <div ref={colorPickerRef} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-white dark:bg-slate-700 shadow-2xl rounded-2xl border-2 border-blue-100 dark:border-slate-600 p-2 flex flex-row items-center gap-2 animate-scale-in" onClick={e => e.stopPropagation()}>
-                                {(Object.keys(highlightColors) as HighlightColor[]).map(color => (
-                                    <button key={color} type="button" onClick={() => handleHighlightColorChange(note.id, categoryId, color)} className={`w-6 h-6 rounded-full transition-all ${highlightColors[color].bg} ${note.highlightColor === color ? `ring-2 ring-offset-2 dark:ring-offset-slate-700 ${highlightColors[color].ring}` : 'hover:scale-125 border border-white dark:border-slate-500'}`} title={highlightColors[color].name} />
+                        {colorPickerOpenFor === note.id && !isReordering && (
+                            <div
+                                ref={colorPickerRef}
+                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-white dark:bg-slate-700 shadow-2xl rounded-2xl border-2 border-blue-100 dark:border-slate-600 p-2 flex flex-row items-center gap-2 animate-scale-in"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {(Object.keys(highlightColors) as HighlightColor[]).map((color) => (
+                                    <button
+                                        key={color}
+                                        type="button"
+                                        onClick={() => handleHighlightColorChange(note.id, categoryId, color)}
+                                        className={`w-6 h-6 rounded-full transition-all ${highlightColors[color].bg} ${
+                                            note.highlightColor === color ? `ring-2 ring-offset-2 dark:ring-offset-slate-800 ${highlightColors[color].ring}` : 'hover:scale-125'
+                                        }`}
+                                        title={highlightColors[color].name}
+                                    />
                                 ))}
                                 <div className="w-px h-6 bg-slate-200 dark:bg-slate-600 mx-1"></div>
-                                <button type="button" onClick={() => handleHighlightColorChange(note.id, categoryId, null)} className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-slate-500 bg-white dark:bg-slate-600 flex items-center justify-center hover:scale-125 transition-transform" title="إزالة اللون"><XIcon className="w-4 h-4 text-slate-500 dark:text-slate-300" /></button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleHighlightColorChange(note.id, categoryId, null)}
+                                    className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-slate-500 bg-white dark:bg-slate-600 flex items-center justify-center hover:scale-125 transition-transform"
+                                    title="إزالة اللون"
+                                >
+                                    <XIcon className="w-4 h-4 text-slate-500 dark:text-slate-300" />
+                                </button>
                             </div>
                         )}
                     </li>
@@ -2253,7 +2772,47 @@ export const FillRequest: React.FC = () => {
                         {/* We could add subtabs here if voice memos are needed per category */}
                     </div>
 
-                    <div className="flex items-center gap-3 self-end sm:self-center">
+                    <div className="flex items-center flex-wrap gap-2.5 self-end sm:self-center">
+                        {/* Move Notes Toggle Button */}
+                        {!isLocked && can('manage_notes') && (
+                            <button
+                                type="button"
+                                onClick={() => toggleMoveMode(categoryId)}
+                                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all border shadow-xs ${
+                                    moveMode[categoryId]
+                                        ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-300 dark:ring-blue-900 shadow-sm'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600'
+                                }`}
+                                title="تفعيل تحديد ونقل الملاحظات"
+                            >
+                                <FolderInput className="w-3.5 h-3.5" />
+                                <span>{moveMode[categoryId] ? 'إلغاء وضع النقل' : 'نقل ملاحظات'}</span>
+                            </button>
+                        )}
+
+                        {/* Reorder Notes Toggle Button */}
+                        {!isLocked && can('manage_notes') && currentCategoryNotes.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (reorderMode[categoryId]) {
+                                        handleSaveReorder(categoryId);
+                                    } else {
+                                        handleStartReorder(categoryId, currentCategoryNotes);
+                                    }
+                                }}
+                                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all border shadow-xs ${
+                                    reorderMode[categoryId]
+                                        ? 'bg-amber-600 text-white border-amber-600 ring-2 ring-amber-300 dark:ring-amber-900 shadow-sm'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-600'
+                                }`}
+                                title="تفعيل ترتيب الملاحظات"
+                            >
+                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                <span>{reorderMode[categoryId] ? 'حفظ الترتيب' : 'ترتيب الملاحظات'}</span>
+                            </button>
+                        )}
+
                         {/* Handwritten Mode Toggle Switch */}
                         {!isLockedByStatus && (
                             <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700 px-3 py-1.5 rounded-full shadow-sm text-xs select-none">
@@ -2373,13 +2932,122 @@ export const FillRequest: React.FC = () => {
                                 )}
                             </div>
                             {can('manage_notes') && !isLocked && currentCategoryNotes.length > 0 && (
-                                <Button size="sm" variant="secondary" onClick={() => toggleMultiSelect(categoryId)}>
-                                    {isInMultiSelectMode ? 'إلغاء' : 'تحديد متعدد'}
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    {isInMultiSelectMode && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleToggleSelectAll(categoryId, currentCategoryNotes)}
+                                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-bold px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-lg transition-colors"
+                                        >
+                                            {selectedNoteIds[categoryId]?.size === currentCategoryNotes.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                                        </button>
+                                    )}
+                                    <Button size="sm" variant={isInMultiSelectMode ? 'primary' : 'secondary'} onClick={() => toggleMultiSelect(categoryId)}>
+                                        {isInMultiSelectMode ? 'إلغاء التحديد' : 'تحديد متعدد'}
+                                    </Button>
+                                </div>
                             )}
                         </div>
 
                         <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl border-slate-200 dark:border-slate-700/50 h-auto custom-scrollbar overflow-x-hidden pb-12">
+                            {/* Reorder Mode Banner */}
+                            {reorderMode[categoryId] && (
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/60 rounded-xl p-3 mb-4 shadow-sm animate-slide-in-down">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                        <div>
+                                            <span className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-100">
+                                                وضع ترتيب الملاحظات نشط
+                                            </span>
+                                            <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                                                اسحب الملاحظة من المقبض = أو استخدم الأسهم ↑ ↓ لتعديل الترتيب، ثم اضغط حفظ
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSaveReorder(categoryId)}
+                                            className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer"
+                                        >
+                                            <Check className="w-4 h-4" />
+                                            <span>حفظ الترتيب</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCancelReorder(categoryId)}
+                                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg transition-colors cursor-pointer"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                            <span>إلغاء</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Move Mode Toolbar */}
+                            {moveMode[categoryId] && (
+                                <div className="bg-blue-50/90 dark:bg-blue-950/40 border-2 border-blue-300 dark:border-blue-700/60 rounded-xl p-3 mb-4 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-slide-in-down">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                id={`select-all-move-${categoryId}`}
+                                                checked={(selectedNoteIds[categoryId]?.size || 0) === currentCategoryNotes.length && currentCategoryNotes.length > 0}
+                                                onChange={() => handleToggleSelectAll(categoryId, currentCategoryNotes)}
+                                                className="w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-slate-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                                            />
+                                            <label htmlFor={`select-all-move-${categoryId}`} className="text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
+                                                تحديد الكل
+                                            </label>
+                                        </div>
+                                        <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-bold">
+                                            تم تحديد {selectedNoteIds[categoryId]?.size || 0} ملاحظة
+                                        </span>
+                                    </div>
+
+                                    <div className="flex items-center flex-wrap gap-2">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">نقل إلى:</span>
+                                            <select
+                                                value={selectedMoveTargetCategory[categoryId] || ''}
+                                                onChange={(e) => setSelectedMoveTargetCategory(prev => ({ ...prev, [categoryId]: e.target.value }))}
+                                                className="text-xs font-semibold bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                                            >
+                                                <option value="">-- اختر القسم المستهدف --</option>
+                                                {getTargetCategoriesForSection(categoryId).map(target => (
+                                                    <option key={target.id} value={target.id}>
+                                                        {target.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            disabled={!selectedNoteIds[categoryId]?.size || !selectedMoveTargetCategory[categoryId]}
+                                            onClick={() => handleBulkMoveNotes(categoryId, selectedMoveTargetCategory[categoryId])}
+                                            className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg transition-all shadow-sm ${
+                                                selectedNoteIds[categoryId]?.size && selectedMoveTargetCategory[categoryId]
+                                                    ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-95 cursor-pointer'
+                                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                            }`}
+                                        >
+                                            <FolderInput className="w-3.5 h-3.5" />
+                                            <span>تنفيذ النقل</span>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleMoveMode(categoryId)}
+                                            className="text-xs font-semibold px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg border border-slate-200 dark:border-slate-600 transition-colors cursor-pointer"
+                                        >
+                                            إلغاء
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {currentCategoryNotes.length > 0 ? (
                                 <ul className="space-y-3">
                                     {renderNotes(currentCategoryNotes, categoryId)}
@@ -2632,12 +3300,164 @@ export const FillRequest: React.FC = () => {
                                         <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200">الملاحظات العامة ({visibleGeneralNotes.length})</h4>
                                         {visibleGeneralNotes.length > 0 && can('manage_notes') && !isLocked && (
                                             <>
-                                                <button onClick={handleDeleteAllGeneralNotes} className="text-red-500"><Icon name="delete" className="w-5 h-5" /></button>
+                                                <button onClick={handleDeleteAllGeneralNotes} className="text-red-500" title="حذف جميع الملاحظات العامة"><Icon name="delete" className="w-5 h-5" /></button>
                                             </>
                                         )}
                                     </div>
+                                    {can('manage_notes') && !isLocked && visibleGeneralNotes.length > 0 && (
+                                        <div className="flex items-center gap-2">
+                                            {/* Reorder Button */}
+                                            {visibleGeneralNotes.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (reorderMode['general']) {
+                                                            handleSaveReorder('general');
+                                                        } else {
+                                                            handleStartReorder('general', generalNotes);
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all border shadow-xs ${
+                                                        reorderMode['general']
+                                                            ? 'bg-amber-600 text-white border-amber-600 ring-2 ring-amber-300 dark:ring-amber-900 shadow-sm'
+                                                            : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-600'
+                                                    }`}
+                                                    title="ترتيب الملاحظات"
+                                                >
+                                                    <ArrowUpDown className="w-3.5 h-3.5" />
+                                                    <span>{reorderMode['general'] ? 'حفظ الترتيب' : 'ترتيب الملاحظات'}</span>
+                                                </button>
+                                            )}
+
+                                            {/* Move Button */}
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleMoveMode('general')}
+                                                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all border shadow-xs ${
+                                                    moveMode['general']
+                                                        ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-300 dark:ring-blue-900 shadow-sm'
+                                                        : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600'
+                                                }`}
+                                                title="نقل ملاحظات"
+                                            >
+                                                <FolderInput className="w-3.5 h-3.5" />
+                                                <span>{moveMode['general'] ? 'إلغاء وضع النقل' : 'نقل ملاحظات'}</span>
+                                            </button>
+
+                                            {multiSelectMode['general'] && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleToggleSelectAll('general', visibleGeneralNotes)}
+                                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-bold px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-lg transition-colors"
+                                                >
+                                                    {selectedNoteIds['general']?.size === visibleGeneralNotes.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                                                </button>
+                                            )}
+                                            <Button size="sm" variant={multiSelectMode['general'] ? 'primary' : 'secondary'} onClick={() => toggleMultiSelect('general')}>
+                                                {multiSelectMode['general'] ? 'إلغاء التحديد' : 'تحديد متعدد'}
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl h-auto custom-scrollbar pb-12">
+                                    {/* Reorder Mode Banner for General Notes */}
+                                    {reorderMode['general'] && (
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/60 rounded-xl p-3 mb-4 shadow-sm animate-slide-in-down">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                                <div>
+                                                    <span className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-100">
+                                                        وضع ترتيب الملاحظات العامة نشط
+                                                    </span>
+                                                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                                                        اسحب الملاحظة من المقبض = أو استخدم الأسهم ↑ ↓ لتعديل الترتيب، ثم اضغط حفظ
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSaveReorder('general')}
+                                                    className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer"
+                                                >
+                                                    <Check className="w-4 h-4" />
+                                                    <span>حفظ الترتيب</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleCancelReorder('general')}
+                                                    className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg transition-colors cursor-pointer"
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                    <span>إلغاء</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Move Mode Toolbar for General Notes */}
+                                    {moveMode['general'] && (
+                                        <div className="bg-blue-50/90 dark:bg-blue-950/40 border-2 border-blue-300 dark:border-blue-700/60 rounded-xl p-3 mb-4 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-slide-in-down">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        id="select-all-move-general"
+                                                        checked={(selectedNoteIds['general']?.size || 0) === visibleGeneralNotes.length && visibleGeneralNotes.length > 0}
+                                                        onChange={() => handleToggleSelectAll('general', visibleGeneralNotes)}
+                                                        className="w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-slate-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                                                    />
+                                                    <label htmlFor="select-all-move-general" className="text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
+                                                        تحديد الكل
+                                                    </label>
+                                                </div>
+                                                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-bold">
+                                                    تم تحديد {selectedNoteIds['general']?.size || 0} ملاحظة
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-center flex-wrap gap-2">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">نقل إلى:</span>
+                                                    <select
+                                                        value={selectedMoveTargetCategory['general'] || ''}
+                                                        onChange={(e) => setSelectedMoveTargetCategory(prev => ({ ...prev, general: e.target.value }))}
+                                                        className="text-xs font-semibold bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    >
+                                                        <option value="">-- اختر القسم المستهدف --</option>
+                                                        {getTargetCategoriesForSection('general').map(target => (
+                                                            <option key={target.id} value={target.id}>
+                                                                {target.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    disabled={!selectedNoteIds['general']?.size || !selectedMoveTargetCategory['general']}
+                                                    onClick={() => handleBulkMoveNotes('general', selectedMoveTargetCategory['general'])}
+                                                    className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg transition-all shadow-sm ${
+                                                        selectedNoteIds['general']?.size && selectedMoveTargetCategory['general']
+                                                            ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-95 cursor-pointer'
+                                                            : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                                    }`}
+                                                >
+                                                    <FolderInput className="w-3.5 h-3.5" />
+                                                    <span>تنفيذ النقل</span>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleMoveMode('general')}
+                                                    className="text-xs font-semibold px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg border border-slate-200 dark:border-slate-600 transition-colors cursor-pointer"
+                                                >
+                                                    إلغاء
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {visibleGeneralNotes.length > 0 ? (
                                         <ul className="space-y-3 mt-4">
                                             {renderNotes(generalNotes, 'general')}
@@ -2666,17 +3486,87 @@ export const FillRequest: React.FC = () => {
             <div ref={footerRef} className="fixed bottom-0 left-0 right-0 z-40">
                 {isMultiSelectActive && activeMultiSelectSection ? (
                     <div className="bg-white dark:bg-slate-800 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] border-t dark:border-slate-700 p-3 animate-slide-in-up">
-                        <div className="container mx-auto flex justify-between items-center max-w-6xl">
-                            <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                                {numSelectedInActiveSection > 0 ? `${numSelectedInActiveSection} ملاحظة محددة` : 'حدد الملاحظات لتلوينها'}
-                            </span>
+                        <div className="container mx-auto flex flex-wrap justify-between items-center max-w-6xl gap-3">
                             <div className="flex items-center gap-2">
-                                {(Object.keys(highlightColors) as HighlightColor[]).map(color => (
-                                    <button key={color} type="button" onClick={() => applyColorToSelectedNotes(color)} className={`w-7 h-7 rounded-full transition-all ${highlightColors[color].bg} hover:scale-110 ring-2 ring-transparent hover:ring-slate-400`} title={highlightColors[color].name} />
-                                ))}
-                                <button type="button" onClick={() => applyColorToSelectedNotes(null)} className="w-7 h-7 rounded-full border dark:border-slate-500 bg-white dark:bg-slate-600 flex items-center justify-center hover:scale-110 transition-transform ring-2 ring-transparent hover:ring-slate-400" title="إزالة اللون"><XIcon className="w-5 h-5 text-slate-500 dark:text-slate-300" /></button>
-                                <div className="h-6 w-px bg-slate-200 dark:bg-slate-600 mx-2"></div>
-                                <Button size="sm" onClick={() => toggleMultiSelect(activeMultiSelectSection)}>تم</Button>
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                    {numSelectedInActiveSection > 0
+                                        ? `تم تحديد ${numSelectedInActiveSection} ملاحظة`
+                                        : 'حدد الملاحظات للنقل أو التلوين'}
+                                </span>
+                            </div>
+
+                            <div className="flex items-center flex-wrap gap-2 sm:gap-3">
+                                {/* Bulk Move to Category Dropdown */}
+                                <div className="relative bulk-move-dropdown-container">
+                                    <button
+                                        type="button"
+                                        disabled={numSelectedInActiveSection === 0}
+                                        onClick={() => setIsBulkMoveDropdownOpen(prev => !prev)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
+                                            numSelectedInActiveSection > 0
+                                                ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+                                                : 'bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500 cursor-not-allowed'
+                                        }`}
+                                        title="نقل الملاحظات المحددة إلى قسم آخر"
+                                    >
+                                        <FolderInput className="w-4 h-4" />
+                                        <span>نقل إلى قسم</span>
+                                        <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${isBulkMoveDropdownOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {isBulkMoveDropdownOpen && numSelectedInActiveSection > 0 && (
+                                        <div
+                                            className="absolute bottom-full mb-2 right-0 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 animate-scale-in"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <div className="px-3 py-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 border-b dark:border-slate-700 mb-1">
+                                                نقل {numSelectedInActiveSection} ملاحظة إلى:
+                                            </div>
+                                            <div className="max-h-56 overflow-y-auto custom-scrollbar">
+                                                {getTargetCategoriesForSection(activeMultiSelectSection).map(target => (
+                                                    <button
+                                                        key={target.id}
+                                                        type="button"
+                                                        onClick={() => handleBulkMoveNotes(activeMultiSelectSection, target.id)}
+                                                        className="w-full text-right px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-between transition-colors"
+                                                    >
+                                                        <span>{target.name}</span>
+                                                        <ArrowLeft className="w-3.5 h-3.5 text-slate-400" />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
+
+                                {/* Highlight Colors Palette */}
+                                <div className="flex items-center gap-1.5">
+                                    {(Object.keys(highlightColors) as HighlightColor[]).map(color => (
+                                        <button
+                                            key={color}
+                                            type="button"
+                                            onClick={() => applyColorToSelectedNotes(color)}
+                                            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full transition-all ${highlightColors[color].bg} hover:scale-110 ring-2 ring-transparent hover:ring-slate-400`}
+                                            title={highlightColors[color].name}
+                                        />
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => applyColorToSelectedNotes(null)}
+                                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border dark:border-slate-500 bg-white dark:bg-slate-600 flex items-center justify-center hover:scale-110 transition-transform ring-2 ring-transparent hover:ring-slate-400"
+                                        title="إزالة اللون"
+                                    >
+                                        <XIcon className="w-4 h-4 text-slate-500 dark:text-slate-300" />
+                                    </button>
+                                </div>
+
+                                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
+
+                                <Button size="sm" variant="secondary" onClick={() => toggleMultiSelect(activeMultiSelectSection)}>
+                                    تم
+                                </Button>
                             </div>
                         </div>
                     </div>
