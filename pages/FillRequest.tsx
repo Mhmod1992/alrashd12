@@ -3247,16 +3247,6 @@ export const FillRequest: React.FC = () => {
                         <button key="gallery" onClick={() => handleTabSwitch('gallery')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-4 rounded-lg font-semibold text-sm transition-all duration-200 ${activeTab === 'gallery' ? `bg-${themeColor}-600 text-white shadow-md transform scale-105 animate-active-tab` : 'bg-white border border-slate-200 dark:border-slate-600 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'}`}>
                             <span>المعرض</span>
                         </button>
-                        <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 self-center mx-1"></div>
-                        <button
-                            type="button"
-                            onClick={() => setIsTodayRequestsDrawerOpen(true)}
-                            className="flex items-center gap-2 whitespace-nowrap py-2 px-3.5 rounded-lg font-bold text-sm bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all shadow-xs cursor-pointer"
-                            title="عرض درج استعلام طلبات اليوم"
-                        >
-                            <ClipboardListIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                            <span>طلبات اليوم</span>
-                        </button>
                     </nav>
                 </div>
             </div>
@@ -3985,11 +3975,11 @@ export const FillRequest: React.FC = () => {
                 </div>
             </Drawer>
 
-            {/* Floating Collapsible Side Drawer Handle Button for Today's Requests (Positioned aligned in center below Current Request Drawer - Hidden on mobile) */}
+            {/* Floating Collapsible Side Drawer Handle Button for Today's Requests */}
             <button
                 type="button"
                 onClick={() => setIsTodayRequestsDrawerOpen(true)}
-                className="hidden md:flex fixed left-0 top-[calc(50%+46px)] -translate-y-1/2 z-40 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-2.5 rounded-r-2xl shadow-2xl items-center gap-2 transition-all duration-300 hover:pr-3.5 group cursor-pointer border-y border-r border-blue-400/40"
+                className="hidden md:flex fixed left-0 top-60 sm:top-64 z-40 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-2.5 rounded-r-2xl shadow-2xl items-center gap-2 transition-all duration-300 hover:pr-3.5 group cursor-pointer border-y border-r border-blue-400/40"
                 title="فتح درج استعلام طلبات اليوم"
             >
                 <ClipboardListIcon className="w-5 h-5 animate-pulse" />

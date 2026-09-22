@@ -125,7 +125,7 @@ export const CurrentRequestDrawer: React.FC<CurrentRequestDrawerProps> = ({
     const inspectionTypeName = inspectionType?.name || 'فحص عام';
 
     return (
-        <div className="hidden md:flex fixed left-0 top-[calc(50%-46px)] -translate-y-1/2 z-[160] items-start select-none">
+        <div className="hidden md:flex fixed left-0 top-32 z-[160] items-start select-none">
             {/* 1. Closed State: Soft Pastel Side Tab (مستوحى من تصميم الصورة الناعم) */}
             {!isExpanded && (
                 <div
