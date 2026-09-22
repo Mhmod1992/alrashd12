@@ -38,6 +38,8 @@ import AudioPlayer from '../components/AudioPlayer';
 import StatusIndicator from '../components/StatusIndicator';
 import MiniPlateDisplay from '../components/MiniPlateDisplay';
 import { StickyNoteInput } from '../components/StickyNoteInput';
+import TodayRequestsDrawer from '../components/TodayRequestsDrawer';
+import CurrentRequestDrawer from '../components/CurrentRequestDrawer';
 
 // FillRequest Components
 
@@ -102,6 +104,7 @@ export const FillRequest: React.FC = () => {
     const [findingsViewMode, setFindingsViewMode] = useState<'grid' | 'list'>('grid');
     const [isGroupedView, setIsGroupedView] = useState(true);
     const [isFloatingInfoVisible, setIsFloatingInfoVisible] = useState(true);
+    const [isTodayRequestsDrawerOpen, setIsTodayRequestsDrawerOpen] = useState(false);
     // Main Accordion Control
     const [isFindingsSectionOpen, setIsFindingsSectionOpen] = useState(true);
 
@@ -239,6 +242,8 @@ export const FillRequest: React.FC = () => {
 
     const [activeFindingGroup, setActiveFindingGroup] = useState<string | null>(null);
     const [categorySubTab, setCategorySubTab] = useState<'main' | 'voice'>('main');
+    const [lastMovedNoteId, setLastMovedNoteId] = useState<string | null>(null);
+    const [lastMoveDirection, setLastMoveDirection] = useState<'up' | 'down' | null>(null);
 
     const visibleGeneralNotes = useMemo(() => {
         return generalNotes.filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__');
@@ -2271,6 +2276,8 @@ export const FillRequest: React.FC = () => {
         setReorderMode(prev => ({ ...prev, [sectionId]: false }));
         setDraggedNoteInfo(null);
         setDragOverTarget(null);
+        setLastMovedNoteId(null);
+        setLastMoveDirection(null);
     };
 
     const handleSaveReorder = async (sectionId: string | 'general') => {
@@ -2278,6 +2285,8 @@ export const FillRequest: React.FC = () => {
         setReorderMode(prev => ({ ...prev, [sectionId]: false }));
         setDraggedNoteInfo(null);
         setDragOverTarget(null);
+        setLastMovedNoteId(null);
+        setLastMoveDirection(null);
 
         const catName = sectionId === 'general' ? 'الملاحظات العامة' : (requestCategories.find(c => c.id === sectionId)?.name || 'غير معروف');
         const details = `تم حفظ ترتيب الملاحظات في قسم "${catName}"`;
@@ -2336,6 +2345,18 @@ export const FillRequest: React.FC = () => {
         } else {
             setCategoryNotes(prev => ({ ...prev, [categoryId]: reordered }));
         }
+
+        // Set last moved note and direction for clear visual highlighting
+        setLastMovedNoteId(movedItem.id);
+        setLastMoveDirection(toIndex < fromIndex ? 'up' : 'down');
+
+        // Smoothly scroll the moved note into view if it moves out of view
+        setTimeout(() => {
+            const noteEl = document.getElementById(`note-${movedItem.id}`);
+            if (noteEl) {
+                noteEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }, 50);
 
         // Only auto-save if not in reorder mode (e.g. if invoked outside)
         if (!reorderMode[categoryId]) {
@@ -2529,6 +2550,7 @@ export const FillRequest: React.FC = () => {
             const isSelected = selectedSet.has(note.id);
             const isDragTarget = isReordering && dragOverTarget?.categoryId === categoryId && dragOverTarget?.index === index;
             const isBeingDragged = isReordering && draggedNoteInfo?.id === note.id;
+            const isJustMoved = isReordering && lastMovedNoteId === note.id;
 
             return (
                 <div key={note.id} className="flex items-center gap-2 w-full">
@@ -2612,12 +2634,14 @@ export const FillRequest: React.FC = () => {
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, categoryId, index)}
                         onDragEnd={handleDragEnd}
-                        className={`relative flex flex-col sm:flex-row sm:items-start p-3 border rounded-xl gap-3 animate-slide-in-down transition-all duration-150 w-full h-auto ${
+                        className={`relative flex flex-col sm:flex-row sm:items-start p-3 border rounded-xl gap-3 animate-slide-in-down transition-all duration-200 w-full h-auto ${
                             colorStyle ? colorStyle.cardBg : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
                         } ${isDeleting ? 'opacity-50 pointer-events-none' : ''} ${
                             isBeingDragged ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50/90 dark:bg-blue-900/60 shadow-xl opacity-90 scale-[1.01]' : 'hover:shadow-md'
                         } ${
                             isDragTarget ? 'ring-2 ring-blue-400 border-blue-400 bg-blue-100/80 dark:bg-blue-900/40 scale-[1.01] shadow-lg' : ''
+                        } ${
+                            isJustMoved ? 'ring-2 ring-amber-500 border-amber-500 bg-amber-50 dark:bg-amber-950/80 shadow-xl scale-[1.01]' : ''
                         } ${
                             isSelected ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50/40 dark:bg-blue-900/30' : ''
                         }`}
@@ -2653,11 +2677,19 @@ export const FillRequest: React.FC = () => {
                                 <p className="break-words text-base sm:text-lg dark:text-slate-200 whitespace-pre-wrap leading-relaxed w-full min-w-0">
                                     {note.text}
                                 </p>
-                                {note.authorName && (
-                                    <span className="block text-[10px] text-gray-500 mt-1">
-                                        أضافها: {note.authorName}
-                                    </span>
-                                )}
+                                <div className="flex items-center gap-2 flex-wrap mt-1">
+                                    {note.authorName && (
+                                        <span className="text-[10px] text-gray-500">
+                                            أضافها: {note.authorName}
+                                        </span>
+                                    )}
+                                    {isJustMoved && (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-sm animate-pulse">
+                                            {lastMoveDirection === 'up' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                                            <span>تم نقلها هنا</span>
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <StatusIndicator status={note.status} onRetry={() => handleRetryItem(note.id, 'note', categoryId)} />
                         </div>
@@ -2952,23 +2984,23 @@ export const FillRequest: React.FC = () => {
                         <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl border-slate-200 dark:border-slate-700/50 h-auto custom-scrollbar overflow-x-hidden pb-12">
                             {/* Reorder Mode Banner */}
                             {reorderMode[categoryId] && (
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/60 rounded-xl p-3 mb-4 shadow-sm animate-slide-in-down">
+                                <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto max-w-2xl bg-amber-50/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-amber-500 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-in-down">
                                     <div className="flex items-center gap-2">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                        <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
                                         <div>
                                             <span className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-100">
                                                 وضع ترتيب الملاحظات نشط
                                             </span>
                                             <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                                                اسحب الملاحظة من المقبض = أو استخدم الأسهم ↑ ↓ لتعديل الترتيب، ثم اضغط حفظ
+                                                اسحب الملاحظة من المقبض = أو استخدم الأسهم ↑ ↓ لتعديل الترتيب
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                                    <div className="flex items-center gap-2">
                                         <button
                                             type="button"
                                             onClick={() => handleSaveReorder(categoryId)}
-                                            className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer"
+                                            className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
                                         >
                                             <Check className="w-4 h-4" />
                                             <span>حفظ الترتيب</span>
@@ -2976,7 +3008,7 @@ export const FillRequest: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => handleCancelReorder(categoryId)}
-                                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg transition-colors cursor-pointer"
+                                            className="flex items-center gap-1 text-xs font-semibold px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-xl transition-colors cursor-pointer"
                                         >
                                             <X className="w-3.5 h-3.5" />
                                             <span>إلغاء</span>
@@ -2987,9 +3019,9 @@ export const FillRequest: React.FC = () => {
 
                             {/* Move Mode Toolbar */}
                             {moveMode[categoryId] && (
-                                <div className="bg-blue-50/90 dark:bg-blue-950/40 border-2 border-blue-300 dark:border-blue-700/60 rounded-xl p-3 mb-4 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-slide-in-down">
+                                <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto max-w-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-blue-500 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-in-down">
                                     <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/40 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800">
                                             <input
                                                 type="checkbox"
                                                 id={`select-all-move-${categoryId}`}
@@ -3001,7 +3033,7 @@ export const FillRequest: React.FC = () => {
                                                 تحديد الكل
                                             </label>
                                         </div>
-                                        <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-bold">
+                                        <span className="text-xs px-3 py-1.5 rounded-xl bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800">
                                             تم تحديد {selectedNoteIds[categoryId]?.size || 0} ملاحظة
                                         </span>
                                     </div>
@@ -3012,7 +3044,7 @@ export const FillRequest: React.FC = () => {
                                             <select
                                                 value={selectedMoveTargetCategory[categoryId] || ''}
                                                 onChange={(e) => setSelectedMoveTargetCategory(prev => ({ ...prev, [categoryId]: e.target.value }))}
-                                                className="text-xs font-semibold bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
                                             >
                                                 <option value="">-- اختر القسم المستهدف --</option>
                                                 {getTargetCategoriesForSection(categoryId).map(target => (
@@ -3027,7 +3059,7 @@ export const FillRequest: React.FC = () => {
                                             type="button"
                                             disabled={!selectedNoteIds[categoryId]?.size || !selectedMoveTargetCategory[categoryId]}
                                             onClick={() => handleBulkMoveNotes(categoryId, selectedMoveTargetCategory[categoryId])}
-                                            className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg transition-all shadow-sm ${
+                                            className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-md ${
                                                 selectedNoteIds[categoryId]?.size && selectedMoveTargetCategory[categoryId]
                                                     ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-95 cursor-pointer'
                                                     : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
@@ -3040,7 +3072,7 @@ export const FillRequest: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => toggleMoveMode(categoryId)}
-                                            className="text-xs font-semibold px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg border border-slate-200 dark:border-slate-600 transition-colors cursor-pointer"
+                                            className="text-xs font-semibold px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-300 dark:border-slate-600 transition-colors cursor-pointer"
                                         >
                                             إلغاء
                                         </button>
@@ -3134,80 +3166,18 @@ export const FillRequest: React.FC = () => {
     return (
         <div className="flex flex-col h-full relative">
 
-            {/* Desktop Floating Info Card */}
-            {request && isFloatingInfoVisible && (
-                <div className="hidden lg:flex fixed left-6 top-32 z-50 flex-col gap-3 pointer-events-none">
-                    <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-2xl animate-floating-pulse pointer-events-auto min-w-[180px] max-w-[220px] relative overflow-hidden group text-center">
-                        {/* Close Button */}
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); setIsFloatingInfoVisible(false); }}
-                            className="absolute top-1 right-1 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors z-10"
-                            title="إخفاء البطاقة"
-                        >
-                            <Icon name="close" className="w-4 h-4" />
-                        </button>
-
-                        <div className="flex flex-col gap-4">
-                            <div>
-                                <p className="text-[9px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest mb-0.5 opacity-70">رقم الطلب</p>
-                                <p className="text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">
-                                    {request.request_number || request.id.slice(0, 8)}
-                                </p>
-                            </div>
-                            
-                            <div className="h-px bg-slate-100 dark:bg-slate-700/50 w-full"></div>
-
-                            <div className="space-y-3">
-                                <div>
-                                    <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">السيارة</p>
-                                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight">
-                                        {carDetails.makeNameEn} <br/>
-                                        <span className="text-slate-600 dark:text-slate-400 text-xs">{carDetails.modelNameEn} {carDetails.year}</span>
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">العميل</p>
-                                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate px-2">{client?.name || 'Unknown'}</p>
-                                    {client?.phone && (
-                                        <p className="text-[10px] text-slate-500 font-mono mt-0.5" dir="ltr">{
-                                            client.phone.replace(/\D/g, '').length === 10 
-                                            ? `${client.phone.replace(/\D/g, '').slice(0, 3)}-${client.phone.replace(/\D/g, '').slice(3, 6)}-${client.phone.replace(/\D/g, '').slice(6)}`
-                                            : client.phone
-                                        }</p>
-                                    )}
-                                </div>
-                                
-                                {can('view_request_price_in_fill') && request.price !== undefined && (
-                                    <>
-                                        <div className="h-px bg-slate-100 dark:bg-slate-700/50 w-full"></div>
-                                        <div className="flex justify-between items-center px-1">
-                                            <div className="text-right flex-1">
-                                                <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">السعر</p>
-                                                <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{request.price} ر.س</p>
-                                            </div>
-                                            <div className="text-left flex-1">
-                                                <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-0.5">الدفع</p>
-                                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap ${
-                                                    request.payment_type === 'نقدي' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                                                    request.payment_type === 'بطاقة' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                                                    request.payment_type === 'تحويل' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                                                    request.payment_type === 'غير مدفوع' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' :
-                                                    'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                                }`}>
-                                                    {request.payment_type || 'غير محدد'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        
-                        {/* Decorative background accent */}
-                        <div className="absolute -bottom-6 -right-6 w-16 h-16 bg-blue-500/5 rounded-full blur-2xl"></div>
-                    </div>
-                </div>
+            {/* Current Request Collapsible Side Drawer */}
+            {request && (
+                <CurrentRequestDrawer
+                    request={request}
+                    carDetails={{
+                        ...carDetails,
+                        plateNumber: car?.plate_number,
+                    }}
+                    client={client}
+                    inspectionType={inspectionType}
+                    canViewPrice={can('view_request_price_in_fill')}
+                />
             )}
 
             <FillRequestHeader
@@ -3276,6 +3246,16 @@ export const FillRequest: React.FC = () => {
                         </button>
                         <button key="gallery" onClick={() => handleTabSwitch('gallery')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-4 rounded-lg font-semibold text-sm transition-all duration-200 ${activeTab === 'gallery' ? `bg-${themeColor}-600 text-white shadow-md transform scale-105 animate-active-tab` : 'bg-white border border-slate-200 dark:border-slate-600 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'}`}>
                             <span>المعرض</span>
+                        </button>
+                        <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 self-center mx-1"></div>
+                        <button
+                            type="button"
+                            onClick={() => setIsTodayRequestsDrawerOpen(true)}
+                            className="flex items-center gap-2 whitespace-nowrap py-2 px-3.5 rounded-lg font-bold text-sm bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all shadow-xs cursor-pointer"
+                            title="عرض درج استعلام طلبات اليوم"
+                        >
+                            <ClipboardListIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <span>طلبات اليوم</span>
                         </button>
                     </nav>
                 </div>
@@ -3362,7 +3342,7 @@ export const FillRequest: React.FC = () => {
                                 <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl h-auto custom-scrollbar pb-12">
                                     {/* Reorder Mode Banner for General Notes */}
                                     {reorderMode['general'] && (
-                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/60 rounded-xl p-3 mb-4 shadow-sm animate-slide-in-down">
+                                        <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto max-w-2xl bg-amber-50/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-amber-500 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-in-down">
                                             <div className="flex items-center gap-2">
                                                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
                                                 <div>
@@ -3397,7 +3377,7 @@ export const FillRequest: React.FC = () => {
 
                                     {/* Move Mode Toolbar for General Notes */}
                                     {moveMode['general'] && (
-                                        <div className="bg-blue-50/90 dark:bg-blue-950/40 border-2 border-blue-300 dark:border-blue-700/60 rounded-xl p-3 mb-4 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-slide-in-down">
+                                        <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto max-w-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-blue-500 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-in-down">
                                             <div className="flex items-center gap-3">
                                                 <div className="flex items-center gap-2">
                                                     <input
@@ -4004,6 +3984,26 @@ export const FillRequest: React.FC = () => {
                     )}
                 </div>
             </Drawer>
+
+            {/* Floating Collapsible Side Drawer Handle Button for Today's Requests (Positioned aligned in center below Current Request Drawer - Hidden on mobile) */}
+            <button
+                type="button"
+                onClick={() => setIsTodayRequestsDrawerOpen(true)}
+                className="hidden md:flex fixed left-0 top-[calc(50%+46px)] -translate-y-1/2 z-40 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-2.5 rounded-r-2xl shadow-2xl items-center gap-2 transition-all duration-300 hover:pr-3.5 group cursor-pointer border-y border-r border-blue-400/40"
+                title="فتح درج استعلام طلبات اليوم"
+            >
+                <ClipboardListIcon className="w-5 h-5 animate-pulse" />
+                <span className="hidden group-hover:inline text-xs font-bold whitespace-nowrap transition-all">
+                    طلبات اليوم
+                </span>
+            </button>
+
+            {/* Today Requests Side Drawer */}
+            <TodayRequestsDrawer
+                isOpen={isTodayRequestsDrawerOpen}
+                onClose={() => setIsTodayRequestsDrawerOpen(false)}
+                currentRequestId={request.id}
+            />
         </div>
     );
 };
