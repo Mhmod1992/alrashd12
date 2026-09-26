@@ -8,6 +8,7 @@ import SearchIcon from './icons/SearchIcon';
 import ChevronDownIcon from './icons/ChevronDownIcon';
 import LogOutIcon from './icons/LogOutIcon';
 import RefreshCwIcon from './icons/RefreshCwIcon';
+import SettingsIcon from './icons/SettingsIcon';
 import BellIcon from './icons/BellIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import WifiOffIcon from './icons/WifiOffIcon';
@@ -41,6 +42,40 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notificationTab, setNotificationTab] = useState<'all' | 'unread' | 'logins'>('all');
+  const [isHardRefreshing, setIsHardRefreshing] = useState(false);
+
+  const handleHardRefresh = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsHardRefreshing(true);
+    try {
+      // 1. Clear all CacheStorage (PWA & static assets)
+      if ('caches' in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((name) => caches.delete(name)));
+      }
+
+      // 2. Unregister all service workers to force fresh installation
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((reg) => reg.unregister()));
+      }
+
+      // 3. Clear transient storage
+      try {
+        sessionStorage.clear();
+      } catch (err) {
+        console.warn('Could not clear sessionStorage:', err);
+      }
+
+      // 4. Force hard reload with timestamp query param to bypass all proxy/browser caches
+      const url = new URL(window.location.href);
+      url.searchParams.set('_nocache', Date.now().toString());
+      window.location.href = url.toString();
+    } catch (err) {
+      console.error('Hard refresh failed:', err);
+      window.location.reload();
+    }
+  };
   
   const menuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -565,19 +600,29 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                         onClick={(e) => { e.preventDefault(); setPage('settings'); setIsMenuOpen(false); }}
                         className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                         >
-                            <RefreshCwIcon className="w-5 h-5 text-slate-400" />
+                            <SettingsIcon className="w-5 h-5 text-slate-400" />
                             <span>الإعدادات</span>
                         </a>
                     )}
                     
-                    <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); refreshSessionAndReload(); setIsMenuOpen(false); }}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                    <button
+                        type="button"
+                        onClick={handleHardRefresh}
+                        disabled={isHardRefreshing}
+                        className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors text-right group disabled:opacity-60"
+                        title="جلب أحدث نسخة وتفريغ ذاكرة الكاش (Ctrl + F5)"
                     >
-                        <RefreshCwIcon className="w-5 h-5" />
-                        <span>تحديث النظام</span>
-                    </a>
+                        <div className="flex items-center gap-3">
+                            <RefreshCwIcon className={`w-5 h-5 text-blue-600 dark:text-blue-400 transition-transform ${isHardRefreshing ? 'animate-spin' : 'group-hover:rotate-180 duration-500'}`} />
+                            <div className="flex flex-col text-right">
+                                <span className="font-semibold">{isHardRefreshing ? 'جاري جلب أحدث نسخة...' : 'جلب أحدث نسخة'}</span>
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500">بديل Ctrl + F5 ومسح الكاش</span>
+                            </div>
+                        </div>
+                        <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-mono px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 flex-shrink-0">
+                            F5 ⚡
+                        </span>
+                    </button>
 
                     <a
                     href="#"
