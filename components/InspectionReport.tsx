@@ -533,6 +533,14 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         });
 
                         const textOnlyNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !note.image);
+                        const workshopNotes = textOnlyNotes.filter(note => !note.isFieldNote && note.stage !== 'field');
+                        const fieldNotes = textOnlyNotes.filter(note => note.isFieldNote || note.stage === 'field');
+                        const isFieldNotesConfigured = !!reportSettings.categoryFieldNotesEnabled?.[catId];
+                        const fieldTestStatus = request.inspection_data?.field_tested_categories?.[catId];
+                        const isFieldTestClear = isFieldNotesConfigured && fieldNotes.length === 0 && (fieldTestStatus === 'tested_clear' || fieldTestStatus === true);
+                        const isFieldTestNotTested = isFieldNotesConfigured && fieldNotes.length === 0 && fieldTestStatus === 'not_tested';
+                        const hasFieldTestStatus = isFieldTestClear || isFieldTestNotTested;
+
                         const techNames = getAssignedTechnicians(catId);
                         const watermarkStyle = generateWatermarkStyle(category.name, reportSettings, isCustomerRequestIncomplete, reportDirection);
 
@@ -540,7 +548,14 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         const excludedFindingsList = reportSettings.excludedNoticeFindings || [];
                         const shouldShowNotice = categoryNoticeText && sortedFindings.some(({ predefined }) => !predefined || !excludedFindingsList.includes(predefined.id));
 
-                        if (allFindingsForCategory.length === 0 && textOnlyNotes.length === 0) {
+                        const renderNoteItem = (note: Note) => {
+                            const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
+                            const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
+                            const textClassName = note.highlightColor ? `highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
+                            return <div key={note.id} className={`py-0.5 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>;
+                        };
+
+                        if (allFindingsForCategory.length === 0 && textOnlyNotes.length === 0 && !hasFieldTestStatus) {
                             if (isCustomerRequestIncomplete) {
                                 return (
                                     <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}>
@@ -560,14 +575,53 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                                     </div>
                                 )}
                                 {sortedFindings.length > 0 && <div className={`flex flex-wrap justify-center ${isPrintView ? 'gap-1.5' : 'gap-4'}`}>{sortedFindings.map(({ finding, predefined }) => <div key={finding.findingId} className={getCardWidthClass(reportSettings.findingCardSize, !!isPrintView)}><FindingItem finding={finding} predefinedFinding={predefined} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection} /></div>)}</div>}
-                                {textOnlyNotes.length > 0 && (
+                                {(textOnlyNotes.length > 0 || hasFieldTestStatus) && (
                                     <div data-setting-section="text-disclaimer" className={`w-full mt-2 rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', zIndex: 10, breakInside: 'auto', ...watermarkStyle }}>
-                                        <div className="relative z-10"><h4 className={`font-bold border-b pb-1 mb-2 ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: reportSettings.primaryColor, borderColor: reportSettings.borderColor }}>{reportDirection === 'ltr' ? (allFindingsForCategory.length > 0 ? 'Technician Notes:' : 'Notes:') : (allFindingsForCategory.length > 0 ? 'ملاحظات الفني:' : 'ملاحظات:')}</h4><div className="space-y-1 p-0 m-0">{textOnlyNotes.map(note => {
-                                            const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
-                                            const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
-                                            const textClassName = note.highlightColor ? `highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
-                                            return <div key={note.id} className={`py-0.5 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>;
-                                        })}</div></div>
+                                        <div className="relative z-10">
+                                            {/* Technical Notes */}
+                                            {workshopNotes.length > 0 && (
+                                                <div className={(fieldNotes.length > 0 || hasFieldTestStatus) ? "mb-3" : ""}>
+                                                    <h4 className={`font-bold border-b pb-1 mb-2 ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: reportSettings.primaryColor, borderColor: reportSettings.borderColor }}>
+                                                        {reportDirection === 'ltr' ? (allFindingsForCategory.length > 0 ? 'Technician Notes:' : 'Notes:') : (allFindingsForCategory.length > 0 ? 'ملاحظات الفني:' : 'ملاحظات:')}
+                                                    </h4>
+                                                    <div className="space-y-1 p-0 m-0">
+                                                        {workshopNotes.map(renderNoteItem)}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Field Inspection / Road Test Notes */}
+                                            {(fieldNotes.length > 0 || hasFieldTestStatus) && (
+                                                <div className={workshopNotes.length > 0 ? "mt-3 pt-2" : ""}>
+                                                    <div className="inline-flex items-center gap-1.5 border-b pb-0.5 mb-2" style={{ borderColor: reportSettings.borderColor }}>
+                                                        <h4 className={`font-bold ${isPrintView ? 'text-xs' : 'text-sm'}`} style={{ color: '#047857' }}>
+                                                            {reportSettings.categoryFieldNotesTitles?.[catId] ? `${reportSettings.categoryFieldNotesTitles[catId]}:` : (reportDirection === 'ltr' ? 'Field Inspection / Road Test Notes:' : 'الملاحظات الميدانية (تجربة الطريق):')}
+                                                        </h4>
+                                                    </div>
+                                                    {fieldNotes.length > 0 ? (
+                                                        <div className="space-y-1 p-0 m-0">
+                                                            {fieldNotes.map(renderNoteItem)}
+                                                        </div>
+                                                    ) : isFieldTestClear ? (
+                                                        <div className={`flex items-center gap-2 py-1 ${isPrintView ? 'text-xs' : 'text-sm'} text-emerald-700 font-bold`}>
+                                                            <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                            <span>{reportDirection === 'ltr' ? 'Field test completed — No issues found' : 'تمت التجربة الميدانية — سليمة ولا توجد ملاحظات'}</span>
+                                                        </div>
+                                                    ) : isFieldTestNotTested ? (
+                                                        <div className={`py-1 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
+                                                            <span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={{ ...getBulletStyle(), backgroundColor: '#ef4444' }}></span>
+                                                            <div className="flex-1 min-w-0 break-words whitespace-pre-wrap">
+                                                                <span className="highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60" style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)' }}>
+                                                                    {reportDirection === 'ltr' ? 'Road test not conducted' : 'بدون تجربة ميدانية'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </FindingCategorySection>

@@ -937,11 +937,32 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                     <HighlightText text={clientInfo.phone} tokens={expandedSearchTokens} />
                                                 </div>
                                             )}
-                                            {creator && (
-                                                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                                                    بواسطة: {creator.name}
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                const creatorName = request.inspection_data?.created_by_employee_name || creator?.name;
+                                                const collectorName = request.inspection_data?.collected_by_employee_name;
+                                                const hasDistinctCollector = collectorName && creatorName && collectorName !== creatorName;
+
+                                                if (!creatorName && !collectorName) return null;
+
+                                                return (
+                                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 flex flex-col items-start gap-0.5">
+                                                        {hasDistinctCollector ? (
+                                                            <>
+                                                                <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                                                                    <span className="text-slate-400 dark:text-slate-500">أنشئ:</span>
+                                                                    <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[140px]">{creatorName}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                                                                    <span className="text-emerald-700/70 dark:text-emerald-400/70">تحصيل:</span>
+                                                                    <span className="truncate max-w-[140px]">{collectorName}</span>
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <span>بواسطة: {creatorName || collectorName}</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </td>
                                         <td className={`px-6 py-4 sticky right-0 md:static z-10 shadow-sm md:shadow-none transition-colors duration-150 ${(request.status === RequestStatus.WAITING_PAYMENT || request.payment_type === PaymentType.WaitingPayment) ? 'bg-purple-50/60 dark:bg-purple-900/20' : request.payment_type === PaymentType.Unpaid ? 'bg-rose-50 dark:bg-rose-900/20' : request.payment_type === PaymentType.Transfer ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30'}`}>
                                             <div className="flex items-center gap-2">

@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { HighlightColor, CustomFindingCategory, Note } from '../types';
 import { useAppContext } from '../context/AppContext';
 import Icon from './Icon';
@@ -16,8 +16,51 @@ import PaintBrushIcon from './icons/PaintBrushIcon';
 import Modal from './Modal';
 import ClipboardListIcon from './icons/ClipboardListIcon';
 
+export const detectQuoteHighlight = (rawText: string): { color: HighlightColor | null; formattedText: string; isMatched: boolean } => {
+    const trimmed = rawText.trim();
+    if (!trimmed) return { color: null, formattedText: rawText, isMatched: false };
+
+    // Normalize various quote types to standard double quote
+    const normalizeQuotes = (str: string) => str.replace(/[“”„‟«»]/g, '"');
+    const normalized = normalizeQuotes(trimmed);
+
+    // Must start with quotation mark " (in the beginning)
+    if (!normalized.startsWith('"')) {
+        return { color: null, formattedText: rawText, isMatched: false };
+    }
+
+    // Strip leading quotes to get remaining body
+    const bodyWithoutLeadingQuotes = normalized.replace(/^"+/, '');
+
+    // Rule 1: Ends with 3 double quotes """ -> Green (أخضر)
+    if (normalized.endsWith('"""') && normalized.length >= 4) {
+        const withoutTrailing = bodyWithoutLeadingQuotes.slice(0, -3).trim();
+        if (withoutTrailing.length > 0) {
+            return { color: 'green', formattedText: `"${withoutTrailing}"`, isMatched: true };
+        }
+    }
+
+    // Rule 2: Ends with 2 double quotes "" -> Red (أحمر)
+    if (normalized.endsWith('""') && normalized.length >= 3) {
+        const withoutTrailing = bodyWithoutLeadingQuotes.slice(0, -2).trim();
+        if (withoutTrailing.length > 0) {
+            return { color: 'red', formattedText: `"${withoutTrailing}"`, isMatched: true };
+        }
+    }
+
+    // Rule 3: Ends with 1 double quote " -> Yellow (أصفر)
+    if (normalized.endsWith('"') && normalized.length >= 2) {
+        const withoutTrailing = bodyWithoutLeadingQuotes.slice(0, -1).trim();
+        if (withoutTrailing.length > 0) {
+            return { color: 'yellow', formattedText: `"${withoutTrailing}"`, isMatched: true };
+        }
+    }
+
+    return { color: null, formattedText: rawText, isMatched: false };
+};
+
 interface StickyNoteInputProps {
-    onAddNote: (noteData: { text: string; file: File | null; color: HighlightColor | null }) => Promise<void>;
+    onAddNote: (noteData: { text: string; file: File | null; color: HighlightColor | null; stage?: 'workshop' | 'field'; isFieldNote?: boolean }) => Promise<void>;
     activeTabId: string;
     customFindingCategories: CustomFindingCategory[];
     canManageNotes: boolean;
@@ -36,6 +79,8 @@ interface StickyNoteInputProps {
     onToggleStamp?: (stamp: import('../types').ReportStamp) => void;
     reportStamps?: import('../types').ReportStamp[];
     isCompleting?: boolean;
+    activeNoteStage?: 'workshop' | 'field';
+    onChangeNoteStage?: (stage: 'workshop' | 'field') => void;
 }
 
 interface SpeechRecognition {
@@ -142,15 +187,34 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
     onPrevTab,
     onToggleStamp,
     reportStamps = [],
-    isCompleting = false
+    isCompleting = false,
+    activeNoteStage,
+    onChangeNoteStage
 }) => {
-    const { addNotification } = useAppContext();
+    const { addNotification, settings } = useAppContext();
     const isMounted = useRef(true);
 
     const [note, setNote] = useState<{ text: string; image: string | null }>({ text: '', image: null });
     const [noteFile, setNoteFile] = useState<File | null>(null);
-    const [highlightColor, setHighlightColor] = useState<HighlightColor | null>(null);
+    const [manualHighlightColor, setManualHighlightColor] = useState<HighlightColor | null>(null);
+    const quoteDetection = useMemo(() => detectQuoteHighlight(note.text), [note.text]);
+    const highlightColor = manualHighlightColor !== null ? manualHighlightColor : quoteDetection.color;
+    const isAutoDetectedColor = manualHighlightColor === null && quoteDetection.isMatched;
+
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [internalStage, setInternalStage] = useState<'workshop' | 'field'>('workshop');
+
+    // Check if field notes section is enabled in Settings for this category
+    const isFieldNotesConfigured = !!settings.reportSettings.categoryFieldNotesEnabled?.[activeTabId];
+    const customFieldTitle = settings.reportSettings.categoryFieldNotesTitles?.[activeTabId] || 'الملاحظات الميدانية (تجربة الطريق)';
+
+    const effectiveStage = isFieldNotesConfigured ? (activeNoteStage !== undefined ? activeNoteStage : internalStage) : 'workshop';
+    const currentStage = effectiveStage;
+
+    const handleStageChange = (stage: 'workshop' | 'field') => {
+        setInternalStage(stage);
+        onChangeNoteStage?.(stage);
+    };
     
     // Bulk Input State
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -306,10 +370,20 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
 
         setIsSubmitting(true);
         try {
-            await onAddNote({ text: note.text.trim(), file: noteFile, color: highlightColor });
+            const detected = detectQuoteHighlight(note.text);
+            const finalText = detected.isMatched ? detected.formattedText : note.text.trim();
+            const finalColor = manualHighlightColor !== null ? manualHighlightColor : detected.color;
+
+            await onAddNote({
+                text: finalText,
+                file: noteFile,
+                color: finalColor,
+                stage: isGeneral ? 'workshop' : currentStage,
+                isFieldNote: !isGeneral && currentStage === 'field'
+            });
             setNote({ text: '', image: null });
             setNoteFile(null);
-            setHighlightColor(null); // Reset color after send
+            setManualHighlightColor(null); // Reset color after send
             if (textareaRef.current) {
                 textareaRef.current.style.height = 'auto';
             }
@@ -328,11 +402,21 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
         try {
             // Process lines sequentially
             for (const line of lines) {
-                await onAddNote({ text: line, file: null, color: highlightColor });
+                const detected = detectQuoteHighlight(line);
+                const lineText = detected.isMatched ? detected.formattedText : line;
+                const lineColor = manualHighlightColor !== null ? manualHighlightColor : detected.color;
+
+                await onAddNote({
+                    text: lineText,
+                    file: null,
+                    color: lineColor,
+                    stage: isGeneral ? 'workshop' : currentStage,
+                    isFieldNote: !isGeneral && currentStage === 'field'
+                });
             }
             setBulkText('');
             setIsBulkModalOpen(false);
-            setHighlightColor(null);
+            setManualHighlightColor(null);
             addNotification({ title: 'تمت الإضافة', message: `تم إضافة ${lines.length} ملاحظات بنجاح.`, type: 'success' });
         } catch (error) {
             addNotification({ title: 'خطأ', message: 'فشل إضافة بعض الملاحظات.', type: 'error' });
@@ -345,7 +429,13 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
         if (isLocked || !canManageNotes || isSubmitting) return;
         setIsSubmitting(true);
         try {
-            await onAddNote({ text: quickNote.text, file: null, color: quickNote.color });
+            await onAddNote({
+                text: quickNote.text,
+                file: null,
+                color: quickNote.color,
+                stage: isGeneral ? 'workshop' : currentStage,
+                isFieldNote: !isGeneral && currentStage === 'field'
+            });
             addNotification({ title: 'تمت الإضافة', message: 'تم إضافة الملاحظة السريعة بنجاح.', type: 'success' });
         } catch (error) {
             addNotification({ title: 'خطأ', message: 'فشل إضافة الملاحظة السريعة.', type: 'error' });
@@ -390,11 +480,17 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
     const currentCategoryName = customFindingCategories.find(c => c.id === activeTabId)?.name || (isGeneral ? 'ملاحظات عامة' : '...');
     
     // Updated Placeholder
-    let placeholder = `اكتب ملاحظة...`;
+    let placeholder = isGeneral
+        ? 'اكتب ملاحظة عامة...'
+        : (isFieldNotesConfigured && currentStage === 'field')
+            ? `اكتب في قسم (${customFieldTitle})...`
+            : 'اكتب ملاحظة الفحص الفني (الورشة)...';
 
     const inputStyleClass = highlightColor
         ? highlightColors[highlightColor].inputBg
-        : 'bg-slate-100 dark:bg-slate-900';
+        : (isFieldNotesConfigured && currentStage === 'field' && !isGeneral)
+            ? 'bg-emerald-50/70 dark:bg-emerald-950/25 border-emerald-300 dark:border-emerald-800'
+            : 'bg-slate-100 dark:bg-slate-900';
 
     if (isLocked || activeTabId === 'gallery') return null;
 
@@ -526,6 +622,36 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                          </div>
                     </div>
 
+                    {/* Stage Selector (فحص فني / القسم الميداني) - Only show if enabled in Settings for this category */}
+                    {!isGeneral && isFieldNotesConfigured && (
+                        <div className="flex items-center justify-start px-1 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                            <div className="inline-flex items-center p-0.5 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <button
+                                    type="button"
+                                    onClick={() => handleStageChange('workshop')}
+                                    className={`flex items-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
+                                        currentStage === 'workshop'
+                                            ? 'bg-blue-600 text-white shadow-xs'
+                                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                                    }`}
+                                >
+                                    <span>فحص فني</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleStageChange('field')}
+                                    className={`flex items-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
+                                        currentStage === 'field'
+                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                                    }`}
+                                >
+                                    <span>{customFieldTitle}</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* BOTTOM BAR: Input Area */}
                     <div className="flex items-end gap-2">
                          {/* Color Palette Button */}
@@ -542,15 +668,15 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
                             {isColorMenuOpen && !isHandwritten && (
                                 <div className="absolute bottom-full mb-2 right-0 bg-white dark:bg-slate-800 p-2 rounded-xl shadow-xl border dark:border-slate-700 flex flex-col gap-2 z-50 animate-scale-in origin-bottom-right min-w-[40px]">
                                     {(Object.keys(highlightColors) as HighlightColor[]).map(c => (
-                                        <button key={c} onClick={() => { setHighlightColor(c); setIsColorMenuOpen(false); }} className={`w-8 h-8 rounded-full ${highlightColors[c].bg} border-2 border-white dark:border-slate-600 hover:scale-110 transition-transform`} title={highlightColors[c].name} />
+                                        <button key={c} onClick={() => { setManualHighlightColor(c); setIsColorMenuOpen(false); }} className={`w-8 h-8 rounded-full ${highlightColors[c].bg} border-2 border-white dark:border-slate-600 hover:scale-110 transition-transform`} title={highlightColors[c].name} />
                                     ))}
-                                    <button onClick={() => { setHighlightColor(null); setIsColorMenuOpen(false); }} className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center hover:bg-slate-300 dark:hover:bg-slate-500" title="إلغاء اللون"><XIcon className="w-4 h-4 text-slate-500 dark:text-slate-300"/></button>
+                                    <button onClick={() => { setManualHighlightColor(null); setIsColorMenuOpen(false); }} className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center hover:bg-slate-300 dark:hover:bg-slate-500" title="إلغاء اللون"><XIcon className="w-4 h-4 text-slate-500 dark:text-slate-300"/></button>
                                 </div>
                             )}
                          </div>
 
                          {/* Text Input Wrapper */}
-                         <div className={`flex-1 relative rounded-3xl transition-all duration-300 border border-transparent focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 ${inputStyleClass}`}>
+                         <div className={`flex-1 relative rounded-3xl transition-all duration-300 border border-transparent focus-within:border-${currentStage === 'field' && !isGeneral ? 'emerald' : 'blue'}-500 focus-within:ring-1 focus-within:ring-${currentStage === 'field' && !isGeneral ? 'emerald' : 'blue'}-500 ${inputStyleClass}`}>
                              {/* Color Badge/Hint */}
                              {highlightColor && (
                                 <span className={`absolute top-[-12px] right-4 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm z-10 animate-scale-in border ${highlightColors[highlightColor].badge}`}>

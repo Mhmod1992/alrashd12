@@ -1,9 +1,11 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Icon from '../components/Icon';
 import Button from '../components/Button';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import MiniPlateDisplay from '../components/MiniPlateDisplay';
+import { supabase } from '../lib/supabaseClient';
+import { Client, Car, CarMake, CarModel, InspectionType, InspectionRequest } from '../types';
 
 // Satisfy TS that this is on the window object from the script tag
 declare const QRCodeStyling: any;
@@ -97,16 +99,23 @@ const DraftWatermark: React.FC<{ text?: string }> = ({ text }) => {
 };
 
 // This component contains only the content to be printed/displayed on the "paper".
-const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType }) => {
+const PrintablePage: React.FC<{
+    request: InspectionRequest;
+    client?: Client;
+    car?: Car;
+    carMake?: CarMake;
+    carModel?: CarModel;
+    inspectionType: InspectionType;
+}> = ({ request, client, car, carMake, carModel, inspectionType }) => {
     const { settings } = useAppContext();
     
-    const carDetails = React.useMemo(() => {
+    const carDetails = useMemo(() => {
         let logoUrl = carMake?.logo_url || '';
         
         if (request.car_snapshot) {
             return {
-                makeNameEn: request.car_snapshot.make_en,
-                modelNameEn: request.car_snapshot.model_en,
+                makeNameEn: request.car_snapshot.make_en || 'Unknown',
+                modelNameEn: request.car_snapshot.model_en || 'Unknown',
                 year: request.car_snapshot.year,
                 logoUrl,
             };
@@ -114,7 +123,7 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
         return {
             makeNameEn: carMake?.name_en || 'Unknown',
             modelNameEn: carModel?.name_en || 'Unknown',
-            year: car.year,
+            year: car?.year || new Date().getFullYear(),
             logoUrl,
         };
     }, [request.car_snapshot, car, carMake, carModel]);
@@ -128,7 +137,7 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
     // Determine layout mode: 'float' (default if undefined) or 'absolute'
     const isFloatMode = draftSettings?.imageStyle !== 'absolute';
 
-    const visibleSignatures = React.useMemo(() => {
+    const visibleSignatures = useMemo(() => {
         if (!draftSettings?.signatureFields) return [];
         return draftSettings.signatureFields.filter(field => 
             !field.applicableInspectionTypeIds || 
@@ -137,14 +146,15 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
         );
     }, [draftSettings?.signatureFields, inspectionType.id]);
 
-    const plateToDisplay = car.vin ? `شاصي: ${car.vin}` : (car.plate_number || '');
+    const plateToDisplay = car?.vin ? `شاصي: ${car.vin}` : (car?.plate_number || '');
 
     return (
         <div 
-            className="printable-content relative bg-white dark:bg-slate-800 flex flex-col w-[210mm] min-h-[297mm] p-[15mm] box-border text-black overflow-hidden"
+            className="printable-content relative bg-white dark:bg-slate-800 flex flex-col w-full max-w-[210mm] sm:w-[210mm] min-h-auto sm:min-h-[297mm] p-4 sm:p-[15mm] box-border text-black overflow-hidden print:w-[210mm] print:min-h-[297mm] print:p-[15mm] print:m-0"
         >
             {/* Full-Page Slanted Transparent Watermark for Inspection Type */}
             <DraftWatermark text={inspectionType?.name} />
+            
              {/* ABSOLUTE POSITIONED IMAGE (Rendered outside normal flow if mode is absolute) */}
              {showImage && !isFloatMode && (
                 <div
@@ -185,9 +195,9 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                     
                     {/* LEFT SIDE (Start in RTL): Inspection Type, Request Number & Vehicle Name */}
                     <div className="flex flex-col gap-1 max-w-[60%]">
-                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-300">#{request.request_number}</h1>
+                        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-300">#{request.request_number}</h1>
                         <div className="flex items-center gap-3">
-                            <div className="border border-black dark:border-slate-400 rounded px-2 py-1 text-center font-bold text-sm bg-transparent">
+                            <div className="border border-black dark:border-slate-400 rounded px-2 py-1 text-center font-bold text-xs sm:text-sm bg-transparent">
                                <span className="me-1 text-slate-800 dark:text-slate-300">نوع الفحص:</span>
                                <span className="bg-yellow-300 border border-black px-1 rounded text-black inline-block">{inspectionType.name}</span>
                             </div>
@@ -202,24 +212,24 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                 />
                             )}
-                            <p className="text-lg break-words leading-tight"><strong className="font-bold">{carDetails.makeNameEn}</strong> {carDetails.modelNameEn} {carDetails.year}</p>
+                            <p className="text-base sm:text-lg break-words leading-tight"><strong className="font-bold">{carDetails.makeNameEn}</strong> {carDetails.modelNameEn} {carDetails.year}</p>
                         </div>
                     </div>
 
                     {/* RIGHT SIDE: Group containing [Date+Plate Column] and [QR Code] */}
-                    <div className="flex items-end gap-4 flex-shrink-0">
+                    <div className="flex items-end gap-2 sm:gap-4 flex-shrink-0">
                         
                         {/* Column 1: Date/Time (Top) -> Plate (Bottom) */}
                         <div className="flex flex-col items-center gap-1">
                             {/* Date & Time Row */}
-                            <div className="text-xs font-bold flex flex-row items-center gap-2 text-slate-700">
+                            <div className="text-[10px] sm:text-xs font-bold flex flex-row items-center gap-1 sm:gap-2 text-slate-700">
                                 <span className="font-mono">{new Date(request.created_at).toLocaleDateString('en-GB')}</span>
                                 <span className="text-slate-400">|</span>
                                 <span className="font-mono">{new Date(request.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                             
                             {/* Plate Component */}
-                            <div className="transform scale-90 origin-bottom">
+                            <div className="transform scale-75 sm:scale-90 origin-bottom">
                                 <MiniPlateDisplay plateNumber={plateToDisplay} settings={settings} />
                             </div>
                         </div>
@@ -235,11 +245,11 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
 
             <section className="mt-4 flex-grow flex flex-col z-10">
                 <div className="flex justify-between items-end mb-2">
-                    <h2 className="text-lg font-bold">ملاحظات الفحص</h2>
+                    <h2 className="text-base sm:text-lg font-bold">ملاحظات الفحص</h2>
                     {visibleSignatures.length > 0 && (
-                        <div className="flex gap-6 items-end text-sm">
+                        <div className="flex gap-4 sm:gap-6 items-end text-xs sm:text-sm">
                             {visibleSignatures.map(field => (
-                                <div key={field.id} className="flex items-baseline gap-2">
+                                <div key={field.id} className="flex items-baseline gap-1 sm:gap-2">
                                     <span className="font-bold" style={{ 
                                         fontSize: field.fontSize ? `${field.fontSize}px` : '14px',
                                         color: field.textColor || '#000000'
@@ -250,7 +260,7 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                         </div>
                     )}
                 </div>
-                <div className="flex-grow p-2 lined-paper border border-gray-300 dark:border-slate-600 rounded-md">
+                <div className="flex-grow p-2 lined-paper border border-gray-300 dark:border-slate-600 rounded-md min-h-[300px]">
                     {/* FLOAT POSITIONED IMAGE (Rendered inside flow if mode is float) */}
                     {showImage && isFloatMode && (
                         <div
@@ -283,7 +293,6 @@ const PrintablePage = ({ request, client, car, carMake, carModel, inspectionType
                             )}
                         </div>
                     )}
-                    {/* This div will have the lined background and will expand */}
                 </div>
             </section>
         </div>
@@ -313,6 +322,11 @@ const RequestDraft: React.FC = () => {
     const [isDraftQuality, setIsDraftQuality] = useState(settings.draftSettings?.defaultPrintAsDraft ?? true);
     const [isFetchingRequest, setIsFetchingRequest] = useState(false);
 
+    // Direct fetched entities for missing local state
+    const [directRequest, setDirectRequest] = useState<InspectionRequest | null>(null);
+    const [directClient, setDirectClient] = useState<Client | null>(null);
+    const [directCar, setDirectCar] = useState<Car | null>(null);
+
     // Update isDraftQuality when settings loaded (if not already set)
     useEffect(() => {
         if (settings.draftSettings) {
@@ -320,34 +334,80 @@ const RequestDraft: React.FC = () => {
         }
     }, [settings.draftSettings]);
 
-    // Fetch specific request if not in local list
+    // Active fetch request if not found in local requests
     useEffect(() => {
-        if (selectedRequestId && !requests.find(r => r.id === selectedRequestId) && !isFetchingRequest) {
-            setIsFetchingRequest(true);
-            fetchAndUpdateSingleRequest(selectedRequestId).finally(() => {
+        if (!selectedRequestId) return;
+        const localReq = requests.find(r => r.id === selectedRequestId);
+        if (localReq) {
+            setDirectRequest(localReq);
+            return;
+        }
+
+        setIsFetchingRequest(true);
+        // Fetch via context updater and direct query
+        supabase.from('inspection_requests').select('*').eq('id', selectedRequestId).maybeSingle()
+            .then(({ data }) => {
+                if (data) setDirectRequest(data as InspectionRequest);
+            });
+
+        fetchAndUpdateSingleRequest(selectedRequestId)
+            .catch(err => {
+                console.error("Failed to fetch request for draft:", err);
+            })
+            .finally(() => {
                 setIsFetchingRequest(false);
             });
-        }
-    }, [selectedRequestId, requests, fetchAndUpdateSingleRequest, isFetchingRequest]);
+    }, [selectedRequestId, requests, fetchAndUpdateSingleRequest]);
 
-    const request = requests.find(r => r.id === selectedRequestId);
-    
-    // Data fetching logic
-    const client = request ? clients.find(c => c.id === request.client_id) : undefined;
-    const car = request ? cars.find(c => c.id === request.car_id) : undefined;
-    const carModel = car ? carModels.find(m => m.id === car.model_id) : undefined;
-    const carMake = car ? carMakes.find(m => m.id === car.make_id) : undefined;
-    const inspectionType = request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined;
+    const activeRequest = directRequest || requests.find(r => r.id === selectedRequestId);
 
-    // Loading State (While fetching data OR while preloading image)
-    const isDataMissing = !request || !client || !car || !inspectionType;
-
-    // Image Preloading Logic
+    // Ensure client & car are available (fetch directly if missing from local memory on mobile)
     useEffect(() => {
-        // Collect all potential image URLs that need to be loaded
+        if (!activeRequest) return;
+
+        // Fetch client if missing
+        if (activeRequest.client_id) {
+            const localClient = clients.find(c => c.id === activeRequest.client_id);
+            if (localClient) {
+                setDirectClient(localClient);
+            } else {
+                supabase.from('clients').select('*').eq('id', activeRequest.client_id).maybeSingle()
+                    .then(({ data }) => {
+                        if (data) setDirectClient(data as Client);
+                    });
+            }
+        }
+
+        // Fetch car if missing
+        if (activeRequest.car_id) {
+            const localCar = cars.find(c => c.id === activeRequest.car_id);
+            if (localCar) {
+                setDirectCar(localCar);
+            } else {
+                supabase.from('cars').select('*').eq('id', activeRequest.car_id).maybeSingle()
+                    .then(({ data }) => {
+                        if (data) setDirectCar(data as Car);
+                    });
+            }
+        }
+    }, [activeRequest, clients, cars]);
+
+    const activeClient = directClient || (activeRequest ? clients.find(c => c.id === activeRequest.client_id) : undefined);
+    const activeCar = directCar || (activeRequest ? cars.find(c => c.id === activeRequest.car_id) : undefined);
+    const activeCarModel = activeCar ? carModels.find(m => m.id === activeCar.model_id) : undefined;
+    const activeCarMake = activeCar ? carMakes.find(m => m.id === activeCar.make_id) : undefined;
+    const activeInspectionType = activeRequest 
+        ? (inspectionTypes.find(i => i.id === activeRequest.inspection_type_id) || { id: activeRequest.inspection_type_id, name: 'فحص' } as InspectionType)
+        : undefined;
+
+    // Fail-safe: Data is considered ready as long as we have activeRequest and activeInspectionType
+    const isDataMissing = !activeRequest || !activeInspectionType;
+
+    // Image Preloading Logic with fast 2.5s maximum timeout
+    useEffect(() => {
         const urlsToLoad = [
             settings.logoUrl,
-            carMake?.logo_url,
+            activeCarMake?.logo_url,
             settings.draftSettings?.customImageUrl
         ].filter(Boolean) as string[];
         
@@ -360,8 +420,7 @@ const RequestDraft: React.FC = () => {
             const handleImageLoad = () => {
                 loadedCount++;
                 if (loadedCount >= total) {
-                    // Small additional buffer to ensure browser rendering cycle is ready
-                    setTimeout(() => setIsContentReady(true), 300);
+                    setTimeout(() => setIsContentReady(true), 200);
                 }
             };
 
@@ -370,34 +429,31 @@ const RequestDraft: React.FC = () => {
                 img.src = url;
                 img.onload = handleImageLoad;
                 img.onerror = () => {
-                    console.warn(`Failed to preload image: ${url}`);
                     handleImageLoad();
                 };
             });
 
-            // Fail-safe timeout (7 seconds) to not keep the user stuck forever if an image is very slow
+            // Fast fail-safe timeout (2.5 seconds) so user NEVER gets stuck on mobile
             const timeout = setTimeout(() => {
                 setIsContentReady(true);
-            }, 7000);
+            }, 2500);
 
             return () => clearTimeout(timeout);
         } else {
-            // No images to load, wait for a tick to ensure data is stable
-            const timer = setTimeout(() => setIsContentReady(true), 100);
+            const timer = setTimeout(() => setIsContentReady(true), 80);
             return () => clearTimeout(timer);
         }
-    }, [settings.logoUrl, carMake?.logo_url, settings.draftSettings?.customImageUrl]);
+    }, [settings.logoUrl, activeCarMake?.logo_url, settings.draftSettings?.customImageUrl]);
 
     // Printing Logic (Only when content is ready AND data is available)
-    React.useEffect(() => {
+    useEffect(() => {
         if (shouldPrintDraft && isContentReady && !isDataMissing && !isFetchingRequest && !isRefreshing) {
-            // Delay to allow DOM render after isContentReady becomes true
             const timer = setTimeout(() => {
                 window.print();
                 window.sessionStorage.setItem('skipScrollRestoration', 'true');
                 setShouldPrintDraft(false); 
                 goBack(); 
-            }, 800); // Trigger print once ready
+            }, 600);
 
             return () => clearTimeout(timer);
         }
@@ -405,28 +461,28 @@ const RequestDraft: React.FC = () => {
 
     if (isDataMissing || !isContentReady || isFetchingRequest) {
         return (
-             <div className="flex flex-col items-center justify-center h-screen text-center p-8 bg-slate-50 dark:bg-slate-900">
+             <div className="flex flex-col items-center justify-center h-screen text-center p-6 sm:p-8 bg-slate-50 dark:bg-slate-900" dir="rtl">
                 <div className="relative">
-                    <RefreshCwIcon className="w-16 h-16 text-blue-500 animate-spin mb-4" />
+                    <RefreshCwIcon className="w-14 h-14 sm:w-16 sm:h-16 text-blue-500 animate-spin mb-4" />
                     {!isContentReady && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <Icon name="gallery" className="w-6 h-6 text-blue-400 animate-pulse" />
                         </div>
                     )}
                 </div>
-                <p className="text-xl text-gray-800 dark:text-gray-200 font-bold mb-2">
-                    {(!isContentReady) ? 'جاري تحميل الصور والشعار...' : (isFetchingRequest || isRefreshing) ? 'جاري جلب البيانات من الخادم...' : 'جاري معالجة الطلب...'}
+                <p className="text-lg sm:text-xl text-gray-800 dark:text-gray-200 font-bold mb-2">
+                    {(!isContentReady) ? 'جاري تجهيز الطباعة...' : (isFetchingRequest || isRefreshing) ? 'جاري جلب البيانات من الخادم...' : 'جاري معالجة الطلب...'}
                 </p>
                 <div className="max-w-md">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                         {(!isContentReady) 
-                            ? 'يرجى الانتظار، نقوم بالتأكد من تحميل كافة المكونات (الشعار، صورة السيارة، والرسوم) لضمان طباعة سليمة واحترافية.' 
-                            : 'سيتم نقلك فوراً إلى نافذة الطباعة بمجرد جاهزية البيانات.'}
+                            ? 'يرجى الانتظار، نقوم بتحميل الشعار والرسوم لضمان طباعة سليمة واحترافية.' 
+                            : 'سيتم نقلك فوراً إلى نافذة الطباعة بمجرد اكتمال البيانات.'}
                     </p>
                 </div>
                 
-                {/* Allow aborting if stuck too long */}
-                {(!request && isContentReady && !isFetchingRequest && !isRefreshing) && (
+                {/* Allow aborting if stuck */}
+                {(!activeRequest && isContentReady && !isFetchingRequest && !isRefreshing) && (
                     <div className="flex flex-col items-center gap-2 mt-6">
                         <p className="text-red-500 text-sm mb-2">تعذر العثور على بيانات هذا الطلب.</p>
                         <Button onClick={() => setPage('requests')} variant="secondary">
@@ -445,28 +501,35 @@ const RequestDraft: React.FC = () => {
         goBack();
     };
 
-    const pageData = { request, client, car, carMake, carModel, inspectionType };
+    const pageData = {
+        request: activeRequest,
+        client: activeClient,
+        car: activeCar,
+        carMake: activeCarMake,
+        carModel: activeCarModel,
+        inspectionType: activeInspectionType
+    };
 
     return (
-        <div className={isDraftQuality ? 'draft-quality-print' : ''}>
+        <div className={isDraftQuality ? 'draft-quality-print' : ''} dir="rtl">
             
             {/* Action Header (No Print) */}
-            <div className="no-print sticky top-0 z-20 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
-                 <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-slate-700">
-                    <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                        مسودة طلب فحص يدوي
+            <div className="no-print sticky top-0 z-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md shadow-xs">
+                 <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between px-4 sm:px-6 py-3 sm:py-4 gap-2 border-b border-gray-200 dark:border-slate-700">
+                    <h2 className="text-base sm:text-xl font-bold text-gray-800 dark:text-gray-200">
+                        مسودة طلب فحص يدوي #{activeRequest.request_number}
                     </h2>
-                    <div className="flex items-center gap-4">
-                        <Button variant="secondary" onClick={handleBack} leftIcon={<Icon name="back" className="w-5 h-5 transform scale-x-[-1]" />}>
+                    <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+                        <Button variant="secondary" onClick={handleBack} leftIcon={<Icon name="back" className="w-4 h-4 sm:w-5 sm:h-5 transform scale-x-[-1]" />}>
                            العودة
                         </Button>
                         {!shouldPrintDraft && (
                             <>
-                                <Button onClick={handleStartFilling} variant="secondary" leftIcon={<Icon name="edit" className="w-5 h-5" />}>
+                                <Button onClick={handleStartFilling} variant="secondary" leftIcon={<Icon name="edit" className="w-4 h-4 sm:w-5 sm:h-5" />}>
                                    بدء التعبئة
                                 </Button>
-                                <div className="flex items-center gap-3 p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                                    <label htmlFor="draft-quality-toggle" className="flex items-center cursor-pointer gap-2">
+                                <div className="flex items-center gap-2 sm:gap-3 p-1 sm:p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                                    <label htmlFor="draft-quality-toggle" className="hidden sm:flex items-center cursor-pointer gap-2">
                                         <input
                                             type="checkbox"
                                             id="draft-quality-toggle"
@@ -474,11 +537,11 @@ const RequestDraft: React.FC = () => {
                                             onChange={(e) => setIsDraftQuality(e.target.checked)}
                                             className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                         />
-                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                            طباعة بجودة مسودة
+                                        <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            جودة مسودة
                                         </span>
                                     </label>
-                                    <Button onClick={handlePrint} leftIcon={<Icon name="print" className="w-5 h-5" />}>
+                                    <Button onClick={handlePrint} leftIcon={<Icon name="print" className="w-4 h-4 sm:w-5 sm:h-5" />}>
                                         طباعة
                                     </Button>
                                 </div>
@@ -508,9 +571,9 @@ const RequestDraft: React.FC = () => {
                     border: none !important;
                     box-shadow: none !important;
                     border-radius: 0 !important;
-                    width: 100%;
-                    height: 100vh; /* Fill the page */
-                    color: black;
+                    width: 100% !important;
+                    min-height: 100vh !important;
+                    color: black !important;
                 }
                 .printable-content, .printable-content *, .printable-content svg, .printable-content svg * {
                     -webkit-print-color-adjust: exact !important;
@@ -528,9 +591,9 @@ const RequestDraft: React.FC = () => {
             `}
             </style>
             
-            {/* Screen View (will be hidden on print) */}
-            <div className="no-print py-8 bg-gray-200 dark:bg-gray-800 flex justify-center">
-                 <div className="shadow-2xl">
+            {/* Screen View (Responsive Container on Mobile & Desktop) */}
+            <div className="no-print py-4 sm:py-8 px-2 sm:px-4 bg-gray-100 dark:bg-gray-900 flex justify-center overflow-x-auto">
+                 <div className="shadow-2xl rounded-lg overflow-hidden max-w-full">
                     <PrintablePage {...pageData} />
                 </div>
             </div>
@@ -542,4 +605,5 @@ const RequestDraft: React.FC = () => {
         </div>
     );
 };
+
 export default RequestDraft;

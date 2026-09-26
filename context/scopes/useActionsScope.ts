@@ -318,6 +318,15 @@ export const useActionsScope = (
             console.error("Failed to cleanup pending request in database:", delErr);
         }
         
+        // Preserve original creator ID and record collector info
+        const creatorId = pendingReq.employee_id || authUser?.id || '';
+        const collectorId = authUser?.id || '';
+        const creatorEmp = employees.find(e => e.id === creatorId);
+        const collectorEmp = employees.find(e => e.id === collectorId);
+
+        const creatorName = creatorEmp?.name || '';
+        const collectorName = collectorEmp?.name || authUser?.name || '';
+
         // Create official inspection request with clean SERIAL request_number
         const officialRequest = await addRequestOptimized({
             clientName: clientName,
@@ -335,13 +344,34 @@ export const useActionsScope = (
             splitPaymentDetails: splitPaymentDetails || null,
             price: finalPrice,
             status: RequestStatus.NEW,
-            employeeId: authUser?.id || pendingReq.employee_id || '',
+            employeeId: creatorId,
             broker: pendingReq.broker || null,
             createdAt: now,
         });
 
+        // Store creator & collector info in inspection_data
+        const updatedInspectionData = {
+            ...(officialRequest.inspection_data || {}),
+            created_by_employee_id: creatorId,
+            created_by_employee_name: creatorName,
+            collected_by_employee_id: collectorId,
+            collected_by_employee_name: collectorName,
+            collected_at: now
+        };
+
+        const { error: updateErr } = await supabase.from('inspection_requests').update({
+            inspection_data: updatedInspectionData,
+            employee_id: creatorId
+        }).eq('id', officialRequest.id);
+
+        if (!updateErr) {
+            officialRequest.inspection_data = updatedInspectionData;
+            officialRequest.employee_id = creatorId;
+            setRequests(prev => prev.map(r => r.id === officialRequest.id ? { ...r, inspection_data: updatedInspectionData, employee_id: creatorId } : r));
+        }
+
         return officialRequest;
-    }, [addRequestOptimized, authUser, setPendingRequests]);
+    }, [addRequestOptimized, authUser, employees, setPendingRequests, setRequests]);
 
 
     // --- CLIENTS ---

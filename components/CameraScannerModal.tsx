@@ -30,6 +30,12 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     const [step, setStep] = useState<'capture' | 'processing' | 'review'>('capture');
     const [error, setError] = useState<string | null>(null);
     const [scanLanguage, setScanLanguage] = useState<'ar' | 'en'>('en');
+
+    // Zoom & Camera Lens Controls
+    const [zoomLevel, setZoomLevel] = useState<number>(1);
+    const [hasHardwareZoom, setHasHardwareZoom] = useState<boolean>(false);
+    const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+    const [selectedCameraId, setSelectedCameraId] = useState<string>('');
     
     // --- Review State (For Car Mode) ---
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -65,24 +71,90 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         setSelectedMakeName('');
         setSelectedModelId('');
         setSelectedModelName('');
+        setZoomLevel(1);
     };
 
+    // Enumerate Available Back Cameras
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const getCameras = async () => {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                setAvailableCameras(videoDevices);
+            } catch (e) {
+                console.warn("Unable to enumerate media devices:", e);
+            }
+        };
+
+        getCameras();
+    }, [isOpen]);
+
+    // Apply Zoom to Track (Hardware) or Fallback
+    const applyZoom = useCallback(async (targetZoom: number) => {
+        setZoomLevel(targetZoom);
+        if (!streamRef.current) return;
+
+        const track = streamRef.current.getVideoTracks()[0];
+        if (!track) return;
+
+        try {
+            const capabilities = (track.getCapabilities && track.getCapabilities()) || {};
+            // @ts-ignore
+            if (capabilities.zoom) {
+                // @ts-ignore
+                const min = capabilities.zoom.min || 1;
+                // @ts-ignore
+                const max = capabilities.zoom.max || 5;
+                const safeZoom = Math.min(Math.max(targetZoom, min), max);
+
+                await track.applyConstraints({
+                    advanced: [{ zoom: safeZoom }] as any
+                });
+                setHasHardwareZoom(true);
+            }
+        } catch (e) {
+            // Hardware zoom not supported or failed, fallback to software digital crop/scale
+            setHasHardwareZoom(false);
+        }
+    }, []);
+
+    // Start Camera with Smart Constraint
     useEffect(() => {
         const startCamera = async () => {
             if (isOpen && step === 'capture') {
                 setError(null);
+                stopCamera();
                 try {
+                    const videoConstraints: MediaTrackConstraints = {
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        advanced: [{ focusMode: "continuous" }] as any
+                    };
+
+                    if (selectedCameraId) {
+                        videoConstraints.deviceId = { exact: selectedCameraId };
+                    } else {
+                        videoConstraints.facingMode = { ideal: 'environment' };
+                    }
+
                     const stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: { 
-                            facingMode: 'environment',
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 },
-                            advanced: [{ focusMode: "continuous" }] as any
-                        } 
+                        video: videoConstraints 
                     });
+
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
                         streamRef.current = stream;
+
+                        // Check hardware zoom capability on track
+                        const track = stream.getVideoTracks()[0];
+                        if (track && track.getCapabilities) {
+                            const capabilities = track.getCapabilities() as any;
+                            if (capabilities?.zoom) {
+                                setHasHardwareZoom(true);
+                            }
+                        }
                     }
                 } catch (err) {
                     console.error("Error accessing camera:", err);
@@ -99,7 +171,7 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         return () => {
             stopCamera();
         };
-    }, [isOpen, step, stopCamera, addNotification]);
+    }, [isOpen, step, selectedCameraId, stopCamera, addNotification]);
 
     // --- Smart Matching Logic ---
     useEffect(() => {
@@ -180,16 +252,23 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
             return;
         }
 
-        // Capture Logic
+        // Capture & Crop Logic taking Zoom Level into account
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
+        
+        // Base framing ratio
         const widthRatio = mode === 'plate' ? 0.8 : 0.9;
         const heightRatio = mode === 'plate' ? 0.4 : 0.7;
-        const cropWidth = videoWidth * widthRatio;
-        const cropHeight = videoHeight * heightRatio;
-        const cropX = (videoWidth - cropWidth) / 2;
-        const cropY = (videoHeight - cropHeight) / 2;
-        const MAX_DIMENSION = 800;
+
+        // If software digital zoom is active (not handled by hardware track)
+        const effectiveZoom = hasHardwareZoom ? 1 : zoomLevel;
+
+        const cropWidth = (videoWidth * widthRatio) / effectiveZoom;
+        const cropHeight = (videoHeight * heightRatio) / effectiveZoom;
+        const cropX = Math.max(0, (videoWidth - cropWidth) / 2);
+        const cropY = Math.max(0, (videoHeight - cropHeight) / 2);
+
+        const MAX_DIMENSION = 900;
         let canvasWidth = cropWidth;
         let canvasHeight = cropHeight;
 
@@ -209,7 +288,7 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         canvas.height = canvasHeight;
         context.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, canvasWidth, canvasHeight);
 
-        const base64Image = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+        const base64Image = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
         setCapturedImage(`data:image/jpeg;base64,${base64Image}`);
         
         try {
@@ -222,7 +301,6 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
             };
             
             if (mode === 'plate') {
-                // ... Existing Plate Logic ...
                  const prompt = scanLanguage === 'ar'
                     ? `Analyze this Saudi Arabian license plate. 
                        EXTRACT ONLY the primary large registration Arabic letters and the numbers.
@@ -266,7 +344,7 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                 
                 if (onScanComplete) onScanComplete({ letters, numbers });
                 resetState();
-                onClose(); // Close strictly for plate mode as we don't have review UI for it yet
+                onClose();
 
             } else if (mode === 'car') {
                 const prompt = `Identify the car manufacturer (make), model, and estimated year from this image. 
@@ -295,7 +373,7 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                 if (jsonText) {
                     const carData = JSON.parse(cleanJsonString(jsonText));
                     setAiRawData(carData);
-                    setStep('review'); // Switch to review mode
+                    setStep('review');
                 } else {
                     throw new Error("Empty response from AI");
                 }
@@ -310,7 +388,6 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
     const handleConfirmReview = () => {
         if (onCarIdentify) {
-            // Find selected make/model names from list if ID is selected, otherwise use text
             const makeObj = carMakes.find(m => m.id === selectedMakeId);
             const modelObj = carModels.find(m => m.id === selectedModelId);
 
@@ -334,47 +411,161 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         <Modal isOpen={isOpen} onClose={() => { resetState(); onClose(); }} title={mode === 'car' ? (step === 'review' ? "مراجعة وتأكيد" : "التعرف على السيارة") : "مسح لوحة السيارة"} size="3xl">
             {step === 'capture' && (
                 <>
-                    <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center">
+                    {/* Viewfinder Container */}
+                    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
                         {error ? (
                             <div className="text-center text-white p-4">
                                 <p className="font-semibold">حدث خطأ</p>
                                 <p className="text-sm">{error}</p>
                             </div>
                         ) : (
-                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                            <div className="w-full h-full overflow-hidden flex items-center justify-center">
+                                <video 
+                                    ref={videoRef} 
+                                    autoPlay 
+                                    playsInline 
+                                    className="w-full h-full object-cover transition-transform duration-300 ease-out"
+                                    style={{
+                                        transform: !hasHardwareZoom && zoomLevel > 1 ? `scale(${zoomLevel})` : 'scale(1)'
+                                    }}
+                                />
+                            </div>
                         )}
 
+                        {/* Scanner Target Guide Box */}
                         {!error && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                 <div 
-                                    className={`border-4 border-white/50 rounded-xl shadow-lg transition-all duration-300 ${mode === 'car' ? 'w-[90%] h-[70%]' : 'w-4/5 h-2/5'}`} 
-                                    style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }}
-                                ></div>
+                                    className={`relative border-2 border-amber-400 rounded-xl transition-all duration-300 ${mode === 'car' ? 'w-[90%] h-[70%]' : 'w-4/5 h-2/5'}`} 
+                                    style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)' }}
+                                >
+                                    {/* Corner Accent Brackets */}
+                                    <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-amber-400 rounded-tl-sm" />
+                                    <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-amber-400 rounded-tr-sm" />
+                                    <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-amber-400 rounded-bl-sm" />
+                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-amber-400 rounded-br-sm" />
+                                    
+                                    {/* Subtle Center Guide */}
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-40">
+                                        <div className="w-6 h-6 border border-white/60 rounded-full flex items-center justify-center">
+                                            <div className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
+
+                        {/* Floating Lens / Zoom Control Pill [ 0.5x | 1x | 2x ] */}
+                        {!error && (
+                            <div className="absolute bottom-3 inset-x-0 flex justify-center items-center z-20 pointer-events-auto">
+                                <div className="inline-flex items-center p-1 bg-black/70 backdrop-blur-md rounded-full border border-white/20 shadow-xl gap-1">
+                                    {/* 0.5x Button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => applyZoom(0.5)}
+                                        className={`px-3 py-1 rounded-full text-xs font-black transition-all ${
+                                            zoomLevel === 0.5
+                                                ? 'bg-amber-500 text-slate-950 shadow-md scale-105'
+                                                : 'text-white/80 hover:text-white hover:bg-white/10'
+                                        }`}
+                                    >
+                                        0.5x
+                                    </button>
+
+                                    {/* 1x Button (Default / Main Lens) */}
+                                    <button
+                                        type="button"
+                                        onClick={() => applyZoom(1)}
+                                        className={`px-3 py-1 rounded-full text-xs font-black transition-all ${
+                                            zoomLevel === 1
+                                                ? 'bg-amber-500 text-slate-950 shadow-md scale-105'
+                                                : 'text-white/80 hover:text-white hover:bg-white/10'
+                                        }`}
+                                    >
+                                        1x
+                                    </button>
+
+                                    {/* 2x Button (Telephoto / Zoom In) */}
+                                    <button
+                                        type="button"
+                                        onClick={() => applyZoom(2)}
+                                        className={`px-3 py-1 rounded-full text-xs font-black transition-all ${
+                                            zoomLevel === 2
+                                                ? 'bg-amber-500 text-slate-950 shadow-md scale-105'
+                                                : 'text-white/80 hover:text-white hover:bg-white/10'
+                                        }`}
+                                    >
+                                        2x
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <canvas ref={canvasRef} className="hidden"></canvas>
                     </div>
 
-                    {mode === 'plate' && (
-                        <div className="mt-4 text-center">
-                             <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">اختر لغة الأحرف على اللوحة:</p>
-                             <div className="inline-flex rounded-lg shadow-sm bg-slate-100 dark:bg-slate-700 p-1">
-                                <button onClick={() => setScanLanguage('ar')} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${scanLanguage === 'ar' ? 'bg-white dark:bg-slate-900 text-blue-600 shadow' : 'text-slate-500 dark:text-slate-300'}`}>حروف عربية</button>
-                                <button onClick={() => setScanLanguage('en')} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${scanLanguage === 'en' ? 'bg-white dark:bg-slate-900 text-blue-600 shadow' : 'text-slate-500 dark:text-slate-300'}`}>حروف إنجليزية</button>
+                    {/* Controls & Options Bar */}
+                    <div className="mt-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        
+                        {/* Language Selector for Plate */}
+                        {mode === 'plate' && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">لغة اللوحة:</span>
+                                <div className="inline-flex rounded-lg shadow-xs bg-slate-100 dark:bg-slate-700 p-0.5 border dark:border-slate-600">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setScanLanguage('ar')} 
+                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${
+                                            scanLanguage === 'ar' ? 'bg-white dark:bg-slate-900 text-blue-600 shadow-xs' : 'text-slate-500 dark:text-slate-300'
+                                        }`}
+                                    >
+                                        عربي
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setScanLanguage('en')} 
+                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${
+                                            scanLanguage === 'en' ? 'bg-white dark:bg-slate-900 text-blue-600 shadow-xs' : 'text-slate-500 dark:text-slate-300'
+                                        }`}
+                                    >
+                                        English
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    )}
-                    
+                        )}
+
+                        {/* Optional Camera Switcher if device has multiple video inputs */}
+                        {availableCameras.length > 1 && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">العدسة:</span>
+                                <select
+                                    value={selectedCameraId}
+                                    onChange={(e) => setSelectedCameraId(e.target.value)}
+                                    className="text-xs p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 max-w-[180px] truncate"
+                                >
+                                    <option value="">تلقائي (الرئيسية)</option>
+                                    {availableCameras.map((cam, idx) => (
+                                        <option key={cam.deviceId || idx} value={cam.deviceId}>
+                                            {cam.label || `كاميرا ${idx + 1}`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                    </div>
+
                     {mode === 'car' && (
-                        <div className="mt-4 text-center">
-                            <p className="text-sm text-slate-600 dark:text-slate-400">وجه الكاميرا نحو السيارة بالكامل.</p>
+                        <div className="mt-2 text-center">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">وجّه الكاميرا نحو السيارة بالكامل مع استخدام الزوم إذا لزم الأمر.</p>
                         </div>
                     )}
 
+                    {/* Action Capture Button */}
                     <div className="mt-4 flex justify-center">
-                        <Button onClick={handleCapture} size="md" className="py-4 px-8 rounded-full text-lg">
-                            <Icon name="camera" className="w-6 h-6"/>
-                            <span className="ms-2">التقاط</span>
+                        <Button onClick={handleCapture} size="md" className="py-3 px-8 rounded-full text-base font-bold shadow-lg">
+                            <Icon name="camera" className="w-5 h-5"/>
+                            <span className="ms-2">التقاط وقراءة</span>
                         </Button>
                     </div>
                 </>
@@ -383,7 +574,7 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
             {step === 'processing' && (
                 <div className="flex flex-col items-center justify-center py-12">
                     <RefreshCwIcon className="w-16 h-16 animate-spin text-blue-500 mb-4" />
-                    <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">جاري تحليل الصورة...</p>
+                    <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">جاري تحليل الصورة وقراءة اللوحة...</p>
                     <p className="text-sm text-slate-500 dark:text-slate-400">يرجى الانتظار بينما يقوم الذكاء الاصطناعي بالتعرف على البيانات.</p>
                 </div>
             )}
@@ -399,7 +590,6 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
                         <div>
                             <label className="block text-sm font-medium mb-1">الشركة المصنعة</label>
-                            {/* Make Select / Input Combo */}
                             <div className="relative">
                                 <select 
                                     value={selectedMakeId} 
@@ -411,7 +601,6 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                                             setSelectedMakeName(make.name_en);
                                             fetchCarModelsByMake(make.id);
                                         }
-                                        // Reset model when make changes
                                         setSelectedModelId('');
                                         setSelectedModelName('');
                                     }}
@@ -494,4 +683,5 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         </Modal>
     );
 };
+
 export default CameraScannerModal;

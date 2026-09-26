@@ -282,8 +282,15 @@ const ReportPdf: React.FC<ReportPdfProps> = ({
           
           const findings = (request.structured_findings || []).filter(f => f.categoryId === catId);
           const notes = ((request.category_notes?.[catId] as Note[]) || []).filter(n => !n.image);
+          const workshopNotes = notes.filter(n => !n.isFieldNote && n.stage !== 'field');
+          const fieldNotes = notes.filter(n => n.isFieldNote || n.stage === 'field');
+          const isFieldNotesConfigured = !!reportSettings.categoryFieldNotesEnabled?.[catId];
+          const fieldTestStatus = request.inspection_data?.field_tested_categories?.[catId];
+          const isFieldTestClear = isFieldNotesConfigured && fieldNotes.length === 0 && (fieldTestStatus === 'tested_clear' || fieldTestStatus === true);
+          const isFieldTestNotTested = isFieldNotesConfigured && fieldNotes.length === 0 && fieldTestStatus === 'not_tested';
+          const hasFieldTestStatus = isFieldTestClear || isFieldTestNotTested;
           
-          if (findings.length === 0 && notes.length === 0) return null;
+          if (findings.length === 0 && notes.length === 0 && !hasFieldTestStatus) return null;
 
           return (
             <View key={catId} style={styles.section} wrap={false}>
@@ -308,17 +315,50 @@ const ReportPdf: React.FC<ReportPdfProps> = ({
                 </View>
               )}
 
-              {notes.length > 0 && (
+              {(notes.length > 0 || hasFieldTestStatus) && (
                 <View style={{ marginTop: 10 }}>
-                  <Text style={[styles.label, { marginBottom: 4, textAlign: isLtr ? 'left' : 'right' }]}>
-                    {isLtr ? 'Notes:' : 'ملاحظات:'}
-                  </Text>
-                  {notes.map(note => (
-                    <View key={note.id} style={[styles.noteItem, { flexDirection: isLtr ? 'row' : 'row-reverse' }]}>
-                      <View style={[styles.noteBullet, { marginLeft: isLtr ? 0 : 6, marginRight: isLtr ? 6 : 0 }]} />
-                      <Text style={[styles.noteText, { textAlign: isLtr ? 'left' : 'right' }]}>{note.text}</Text>
+                  {workshopNotes.length > 0 && (
+                    <View style={{ marginBottom: (fieldNotes.length > 0 || hasFieldTestStatus) ? 6 : 0 }}>
+                      <Text style={[styles.label, { marginBottom: 4, textAlign: isLtr ? 'left' : 'right' }]}>
+                        {isLtr ? 'Notes:' : 'ملاحظات:'}
+                      </Text>
+                      {workshopNotes.map(note => (
+                        <View key={note.id} style={[styles.noteItem, { flexDirection: isLtr ? 'row' : 'row-reverse' }]}>
+                          <View style={[styles.noteBullet, { marginLeft: isLtr ? 0 : 6, marginRight: isLtr ? 6 : 0 }]} />
+                          <Text style={[styles.noteText, { textAlign: isLtr ? 'left' : 'right' }]}>{note.text}</Text>
+                        </View>
+                      ))}
                     </View>
-                  ))}
+                  )}
+
+                  {(fieldNotes.length > 0 || hasFieldTestStatus) && (
+                    <View style={{ marginTop: workshopNotes.length > 0 ? 6 : 0, paddingTop: workshopNotes.length > 0 ? 4 : 0, borderTopWidth: workshopNotes.length > 0 ? 1 : 0, borderTopColor: '#e2e8f0' }}>
+                      <Text style={[styles.label, { marginBottom: 4, textAlign: isLtr ? 'left' : 'right', color: '#047857' }]}>
+                        {reportSettings.categoryFieldNotesTitles?.[catId] ? `${reportSettings.categoryFieldNotesTitles[catId]}:` : (isLtr ? 'Field / Road Test Notes:' : 'الملاحظات الميدانية (تجربة الطريق):')}
+                      </Text>
+                      {fieldNotes.length > 0 ? (
+                        fieldNotes.map(note => (
+                          <View key={note.id} style={[styles.noteItem, { flexDirection: isLtr ? 'row' : 'row-reverse' }]}>
+                            <View style={[styles.noteBullet, { marginLeft: isLtr ? 0 : 6, marginRight: isLtr ? 6 : 0, backgroundColor: '#059669' }]} />
+                            <Text style={[styles.noteText, { textAlign: isLtr ? 'left' : 'right' }]}>{note.text}</Text>
+                          </View>
+                        ))
+                      ) : isFieldTestClear ? (
+                        <View style={[styles.noteItem, { flexDirection: isLtr ? 'row' : 'row-reverse', alignItems: 'center' }]}>
+                          <Text style={{ fontSize: 8, color: '#059669', fontFamily: 'Cairo', fontWeight: 'bold' }}>
+                            {isLtr ? '✓ Field Test Completed - No Issues Found' : '✓ تمت التجربة الميدانية - سليمة ولا توجد ملاحظات'}
+                          </Text>
+                        </View>
+                      ) : isFieldTestNotTested ? (
+                        <View style={[styles.noteItem, { flexDirection: isLtr ? 'row' : 'row-reverse', alignItems: 'center' }]}>
+                          <View style={[styles.noteBullet, { marginLeft: isLtr ? 0 : 6, marginRight: isLtr ? 6 : 0, backgroundColor: '#dc2626' }]} />
+                          <Text style={{ fontSize: 8, color: '#dc2626', fontFamily: 'Cairo', fontWeight: 'bold' }}>
+                            {isLtr ? 'Road Test Not Conducted' : 'بدون تجربة ميدانية'}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
                 </View>
               )}
             </View>

@@ -793,7 +793,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (isLoadingMore || !hasMoreRequests) return;
         setIsLoadingMore(true);
         const { data: nextBatch, error } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, report_stamps, attached_files, payment_note, split_payment_details')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, report_stamps, attached_files, payment_note, split_payment_details, inspection_data')
             .order('created_at', { ascending: false })
             .range(requestsOffset, requestsOffset + REQUESTS_PAGE_SIZE - 1);
         if (!error && nextBatch) {
@@ -2099,12 +2099,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [settings.whatsappMode, settings.whatsappApiUrl, settings.whatsappApiKey]);
 
-    // Periodically check WhatsApp status
+    // Periodically and on focus check WhatsApp status
     useEffect(() => {
         if (settings.whatsappMode === 'api' && settings.whatsappApiUrl && authUser) {
             checkWhatsAppStatus();
-            const interval = setInterval(checkWhatsAppStatus, 5 * 60 * 1000); // Check every 5 minutes
-            return () => clearInterval(interval);
+            const interval = setInterval(checkWhatsAppStatus, 2 * 60 * 1000); // Check every 2 minutes
+
+            const handleVisibilityOrFocus = () => {
+                if (document.visibilityState === 'visible') {
+                    checkWhatsAppStatus();
+                }
+            };
+
+            document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+            window.addEventListener('focus', handleVisibilityOrFocus);
+
+            return () => {
+                clearInterval(interval);
+                document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+                window.removeEventListener('focus', handleFocusOrVisibility => {});
+                window.removeEventListener('focus', handleVisibilityOrFocus);
+            };
         }
     }, [settings.whatsappMode, settings.whatsappApiUrl, authUser, checkWhatsAppStatus]);
 

@@ -16,7 +16,7 @@ const InspectionSettingsTab: React.FC = () => {
         inspectionTypes, addInspectionType, updateInspectionType, deleteInspectionType,
         customFindingCategories, addFindingCategory, updateFindingCategory, deleteFindingCategory,
         predefinedFindings, addPredefinedFinding, updatePredefinedFinding, deletePredefinedFinding,
-        settings, addNotification, showConfirmModal, uploadImage
+        settings, updateSettings, addNotification, showConfirmModal, uploadImage
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState<'packages' | 'findings'>('packages');
@@ -191,6 +191,19 @@ const InspectionSettingsTab: React.FC = () => {
         deleteFindingCategory(id);
         if (selectedCategoryId === id) {
             setSelectedCategoryId(null);
+        }
+        if (settings.reportSettings.categoryFieldNotesEnabled?.[id] || settings.reportSettings.categoryFieldNotesTitles?.[id]) {
+            const newEnabled = { ...(settings.reportSettings.categoryFieldNotesEnabled || {}) };
+            const newTitles = { ...(settings.reportSettings.categoryFieldNotesTitles || {}) };
+            delete newEnabled[id];
+            delete newTitles[id];
+            updateSettings({
+                reportSettings: {
+                    ...settings.reportSettings,
+                    categoryFieldNotesEnabled: newEnabled,
+                    categoryFieldNotesTitles: newTitles
+                }
+            });
         }
     }
 
@@ -475,7 +488,10 @@ const InspectionSettingsTab: React.FC = () => {
                                     التبويبات ({customFindingCategories.length})
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                                    {customFindingCategories.map(cat => (
+                                    {customFindingCategories.map(cat => {
+                                        const isFieldNotesEnabled = !!settings.reportSettings.categoryFieldNotesEnabled?.[cat.id];
+                                        const fieldTitle = settings.reportSettings.categoryFieldNotesTitles?.[cat.id] || 'ميداني';
+                                        return (
                                         <div 
                                             key={cat.id} 
                                             className={`group flex justify-between items-center p-2.5 rounded-xl cursor-pointer transition-all ${
@@ -485,13 +501,27 @@ const InspectionSettingsTab: React.FC = () => {
                                             }`}
                                             onClick={() => setSelectedCategoryId(cat.id)}
                                         >
-                                            <span className="text-sm font-bold truncate">{cat.name}</span>
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <span className="text-sm font-bold truncate">{cat.name}</span>
+                                                {isFieldNotesEnabled && (
+                                                    <span
+                                                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 flex-shrink-0 ${
+                                                            selectedCategoryId === cat.id
+                                                                ? 'bg-emerald-500 text-white'
+                                                                : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                                                        }`}
+                                                        title={`مفعل به قسم إضافي: ${fieldTitle}`}
+                                                    >
+                                                        <span className="max-w-[80px] truncate">{fieldTitle}</span>
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="flex items-center">
                                                 <div className={`flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${selectedCategoryId === cat.id ? 'opacity-100' : ''}`}>
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleEditCategory(cat); }}
                                                         className={`p-1.5 rounded-lg hover:bg-white/20 ${selectedCategoryId === cat.id ? 'text-white' : 'text-slate-400 hover:text-blue-600'}`}
-                                                        title="تعديل"
+                                                        title="تعديل التبويب وإعدادات القسم الداخلي"
                                                     >
                                                         <Icon name="edit" className="w-3.5 h-3.5" />
                                                     </button>
@@ -506,7 +536,8 @@ const InspectionSettingsTab: React.FC = () => {
                                                 <Icon name="chevron-right" className={`w-3.5 h-3.5 rtl:rotate-180 transform ${selectedCategoryId === cat.id ? 'text-white' : 'text-slate-400 opacity-0 group-hover:opacity-100'} lg:hidden ms-2`} />
                                             </div>
                                         </div>
-                                    ))}
+                                    );
+                                    })}
                                 </div>
                             </div>
 
@@ -527,6 +558,46 @@ const InspectionSettingsTab: React.FC = () => {
                                                     <Icon name="findings" className="w-4 h-4 text-blue-500" />
                                                     <span className="truncate max-w-[150px] sm:max-w-none">{selectedCategoryName}</span>
                                                     <span className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] py-0.5 px-2 rounded-full font-bold">{filteredFindings.length}</span>
+                                                    {selectedCategoryId && (
+                                                        <div className="flex items-center gap-1.5 ms-1">
+                                                            <button
+                                                                onClick={() => {
+                                                                    const cat = customFindingCategories.find(c => c.id === selectedCategoryId);
+                                                                    if (cat) handleEditCategory(cat);
+                                                                }}
+                                                                className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-bold px-2 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
+                                                                title="تعديل اسم التبويب أو تفعيل/تسمية القسم الداخلي"
+                                                            >
+                                                                <Icon name="edit" className="w-3 h-3" />
+                                                                <span>تعديل التبويب</span>
+                                                            </button>
+                                                            {settings.reportSettings.categoryFieldNotesEnabled?.[selectedCategoryId] ? (
+                                                                <span
+                                                                    onClick={() => {
+                                                                        const cat = customFindingCategories.find(c => c.id === selectedCategoryId);
+                                                                        if (cat) handleEditCategory(cat);
+                                                                    }}
+                                                                    className="cursor-pointer text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 hover:bg-emerald-200 transition-colors"
+                                                                    title="انقر لتعديل تسمية القسم الداخلي أو إلغاء تفعيله"
+                                                                >
+                                                                    <span>القسم الداخلي: {settings.reportSettings.categoryFieldNotesTitles?.[selectedCategoryId] || 'ميداني'}</span>
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const cat = customFindingCategories.find(c => c.id === selectedCategoryId);
+                                                                        if (cat) handleEditCategory(cat);
+                                                                    }}
+                                                                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-1"
+                                                                    title="تفعيل قسم فرعي (ملاحظات ميدانية) لهذا التبويب"
+                                                                >
+                                                                    <span>+</span>
+                                                                    <span>تفعيل قسم ميداني داخلي</span>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </h4>
                                             </div>
                                             <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
@@ -973,33 +1044,51 @@ const TypeForm: React.FC<{ type?: InspectionType, onClose: () => void, onSave: (
     );
 };
 
-const CategoryForm: React.FC<{ category?: CustomFindingCategory, onClose: () => void, onSave: (data: any) => void }> = ({ category, onClose, onSave }) => {
+const CategoryForm: React.FC<{ category?: CustomFindingCategory, onClose: () => void, onSave: (data: any) => Promise<any> | void }> = ({ category, onClose, onSave }) => {
     const { settings, updateSettings } = useAppContext();
     const [name, setName] = useState(category?.name || '');
     const [noticeText, setNoticeText] = useState(category ? (settings.reportSettings.categoryNotices?.[category.id] || '') : '');
+    
+    // Field notes section toggle & custom title
+    const [enableFieldNotes, setEnableFieldNotes] = useState<boolean>(
+        category ? !!settings.reportSettings.categoryFieldNotesEnabled?.[category.id] : false
+    );
+    const [fieldNotesTitle, setFieldNotesTitle] = useState<string>(
+        category ? (settings.reportSettings.categoryFieldNotesTitles?.[category.id] || 'الملاحظات الميدانية (تجربة الطريق)') : 'الملاحظات الميدانية (تجربة الطريق)'
+    );
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({ name });
-        if (category) {
-            const currentNotices = settings.reportSettings.categoryNotices || {};
+        const savedCat = await onSave({ name });
+        const targetCatId = category ? category.id : (savedCat && typeof savedCat === 'object' && 'id' in savedCat ? (savedCat as any).id : null);
+
+        if (targetCatId) {
+            const currentNotices = { ...(settings.reportSettings.categoryNotices || {}) };
+            const currentEnabled = { ...(settings.reportSettings.categoryFieldNotesEnabled || {}) };
+            const currentTitles = { ...(settings.reportSettings.categoryFieldNotesTitles || {}) };
+
             if (noticeText.trim()) {
-                await updateSettings({
-                    reportSettings: {
-                        ...settings.reportSettings,
-                        categoryNotices: { ...currentNotices, [category.id]: noticeText.trim() }
-                    }
-                });
-            } else if (currentNotices[category.id]) {
-                const newNotices = { ...currentNotices };
-                delete newNotices[category.id];
-                await updateSettings({
-                    reportSettings: {
-                        ...settings.reportSettings,
-                        categoryNotices: newNotices
-                    }
-                });
+                currentNotices[targetCatId] = noticeText.trim();
+            } else {
+                delete currentNotices[targetCatId];
             }
+
+            if (enableFieldNotes) {
+                currentEnabled[targetCatId] = true;
+                currentTitles[targetCatId] = fieldNotesTitle.trim() || 'الملاحظات الميدانية (تجربة الطريق)';
+            } else {
+                delete currentEnabled[targetCatId];
+                delete currentTitles[targetCatId];
+            }
+
+            await updateSettings({
+                reportSettings: {
+                    ...settings.reportSettings,
+                    categoryNotices: currentNotices,
+                    categoryFieldNotesEnabled: currentEnabled,
+                    categoryFieldNotesTitles: currentTitles
+                }
+            });
         }
         onClose();
     };
@@ -1007,22 +1096,64 @@ const CategoryForm: React.FC<{ category?: CustomFindingCategory, onClose: () => 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-                <label className="block text-sm font-medium">اسم التبويب</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"/>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-200">اسم التبويب</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full p-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600 font-semibold"/>
             </div>
-            {category && (
-                <div>
-                    <label className="block text-sm font-medium">النص التوضيحي في التقرير (اختياري)</label>
-                    <p className="text-xs text-gray-500 mb-1">سيظهر هذا النص في تقرير الفحص أعلى البطاقات الخاصة بهذا التبويب.</p>
-                    <textarea 
-                        value={noticeText} 
-                        onChange={e => setNoticeText(e.target.value)} 
-                        rows={2} 
-                        className="mt-1 block w-full p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-                        placeholder="مثال: يرجى العلم بأن البطاقات أدناه توضح أماكن وجود رش أو معجون..."
-                    />
+
+            {/* Field Notes Section Feature */}
+            <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="font-bold text-sm text-emerald-950 dark:text-emerald-200">
+                            تفعيل قسم إضافي داخل التبويب (ملاحظات ميدانية / تجربة الطريق)
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            عند التفعيل، سيظهر قسم فرعي مخصص للملاحظات الميدانية داخل هذا التبويب في شاشة تعبئة الطلب والتقرير و الـ PDF.
+                        </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ms-3">
+                        <input
+                            type="checkbox"
+                            checked={enableFieldNotes}
+                            onChange={(e) => setEnableFieldNotes(e.target.checked)}
+                            className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
                 </div>
-            )}
+
+                {enableFieldNotes && (
+                    <div className="pt-2 border-t border-emerald-200/80 dark:border-emerald-800/50 animate-fade-in">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                            تسمية القسم داخل التبويب (الملاحظات الميدانية):
+                        </label>
+                        <input
+                            type="text"
+                            value={fieldNotesTitle}
+                            onChange={(e) => setFieldNotesTitle(e.target.value)}
+                            placeholder="مثال: الملاحظات الميدانية (تجربة الطريق) أو فحص الطريق"
+                            className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-xl dark:bg-gray-700 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
+                            required
+                        />
+                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block mt-1">
+                            ستظهر هذه التسمية في تعبئة الطلب، معاينة التقرير، وملف الـ PDF لهذا التبويب.
+                        </span>
+                    </div>
+                )}
+            </div>
+
+            <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-200">النص التوضيحي في التقرير (اختياري)</label>
+                <p className="text-xs text-gray-500 mb-1">سيظهر هذا النص في تقرير الفحص أعلى البطاقات الخاصة بهذا التبويب.</p>
+                <textarea 
+                    value={noticeText} 
+                    onChange={e => setNoticeText(e.target.value)} 
+                    rows={2} 
+                    className="mt-1 block w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm"
+                    placeholder="مثال: يرجى العلم بأن البطاقات أدناه توضح أماكن وجود رش أو معجون..."
+                />
+            </div>
+
             <div className="flex justify-end gap-2 pt-4 border-t dark:border-gray-700"><Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button><Button type="submit">حفظ</Button></div>
         </form>
     );

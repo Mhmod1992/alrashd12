@@ -223,6 +223,8 @@ export interface Note {
   translations?: Record<string, string>;
   displayTranslation?: { lang: 'ar' | 'en' | 'hi' | 'ur'; isActive: boolean; };
   categoryId?: string | 'general';
+  stage?: 'workshop' | 'field';
+  isFieldNote?: boolean;
 }
 
 export interface CustomFindingCategory {
@@ -457,6 +459,8 @@ export interface ReportSettings {
   showTechnicianName: boolean;
   categoryNotices?: Record<string, string>;
   excludedNoticeFindings?: string[];
+  categoryFieldNotesEnabled?: Record<string, boolean>;
+  categoryFieldNotesTitles?: Record<string, string>;
 }
 
 export interface CustomReportTemplate {

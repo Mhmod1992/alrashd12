@@ -222,6 +222,7 @@ export const FillRequest: React.FC = () => {
     const [categoryNotes, setCategoryNotes] = useState<Record<string, Note[]>>({});
     const [voiceMemos, setVoiceMemos] = useState<Record<string, VoiceMemo[]>>({});
     const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
+    const [fieldTestedCategories, setFieldTestedCategories] = useState<Record<string, string | boolean>>({});
 
     const [isFindingModalOpen, setIsFindingModalOpen] = useState(false);
     const [findingSearchTerm, setFindingSearchTerm] = useState('');
@@ -229,7 +230,8 @@ export const FillRequest: React.FC = () => {
 
     const [isEditNoteModalOpen, setIsEditNoteModalOpen] = useState(false);
     const [editingNote, setEditingNote] = useState<{ note: Note; categoryId: string | 'general' } | null>(null);
-    const [modalNoteData, setModalNoteData] = useState<{ text: string; image: string | null; highlightColor: HighlightColor | null; targetCategoryId?: string | 'general' }>({ text: '', image: null, highlightColor: null, targetCategoryId: 'general' });
+    const [modalNoteData, setModalNoteData] = useState<{ text: string; image: string | null; highlightColor: HighlightColor | null; targetCategoryId?: string | 'general'; stage?: 'workshop' | 'field' }>({ text: '', image: null, highlightColor: null, targetCategoryId: 'general', stage: 'workshop' });
+    const [activeNoteStage, setActiveNoteStage] = useState<'workshop' | 'field'>('workshop');
     const [modalNoteFile, setModalNoteFile] = useState<File | null>(null);
     const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -589,7 +591,12 @@ export const FillRequest: React.FC = () => {
 
 
     const latestRequestRef = useRef(request);
-    useEffect(() => { latestRequestRef.current = request; }, [request]);
+    useEffect(() => { 
+        latestRequestRef.current = request; 
+        if (request?.inspection_data?.field_tested_categories) {
+            setFieldTestedCategories(request.inspection_data.field_tested_categories);
+        }
+    }, [request]);
 
     const performSave = useCallback(async (isFinalSave = false, finalStatus?: RequestStatus, overrides?: { activityLog?: ActivityLog[], structuredFindings?: StructuredFinding[], deletedFindingIds?: string[] }) => {
         const currentRequest = latestRequestRef.current;
@@ -1062,7 +1069,7 @@ export const FillRequest: React.FC = () => {
         };
     }, [request?.car_snapshot, car, carMake, carModel]);
 
-    const handleAddNote = useCallback(async (noteData: { text: string; file: File | null; color: HighlightColor | null }) => {
+    const handleAddNote = useCallback(async (noteData: { text: string; file: File | null; color: HighlightColor | null; stage?: 'workshop' | 'field'; isFieldNote?: boolean }) => {
         if (isLocked || !authUser) return;
 
         // Mark interaction to pause sync
@@ -1073,6 +1080,9 @@ export const FillRequest: React.FC = () => {
 
         const noteId = uuidv4();
         const { text, file, color } = noteData;
+        const isFieldConfiguredForCat = !isGeneral && !!settings.reportSettings.categoryFieldNotesEnabled?.[categoryId];
+        const isField = isFieldConfiguredForCat && (noteData.isFieldNote ?? (noteData.stage === 'field' || activeNoteStage === 'field'));
+        const noteStage: 'workshop' | 'field' = isField ? 'field' : 'workshop';
 
         // Optimistic UI update
         const previewUrl = file ? URL.createObjectURL(file) : undefined;
@@ -1087,6 +1097,8 @@ export const FillRequest: React.FC = () => {
             highlightColor: color || undefined,
             displayTranslation: { lang: 'ar', isActive: false }, // Default to Arabic, inactive
             categoryId: categoryId,
+            stage: noteStage,
+            isFieldNote: isField,
             localFile: file || undefined // Store file locally for retry
         };
 
@@ -1115,7 +1127,8 @@ export const FillRequest: React.FC = () => {
             }
 
             const categoryName = isGeneral ? 'عامة' : customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
-            addActivityLogEntry(isGeneral ? 'إضافة ملاحظة عامة' : 'إضافة ملاحظة', `"${text}"${isGeneral ? '' : ` في قسم "${categoryName}"`}`, imageUrl, noteId);
+            const actionName = isGeneral ? 'إضافة ملاحظة عامة' : isField ? 'إضافة ملاحظة ميدانية' : 'إضافة ملاحظة فنية';
+            addActivityLogEntry(actionName, `"${text}"${isGeneral ? '' : ` في قسم "${categoryName}"${isField ? ' (ميداني)' : ' (ورشة)'}`}`, imageUrl, noteId);
 
             // Update to saved state with real image URL
             const finalNote: Note = { ...placeholderNote, image: imageUrl, status: 'saving', localFile: undefined }; // keep 'saving' until performSave confirms
@@ -1145,7 +1158,144 @@ export const FillRequest: React.FC = () => {
                 }
             }
         }
-    }, [isLocked, authUser, activeTab, customFindingCategories, addActivityLogEntry, debouncedSave, trackDataTransfer, uploadImage, addNotification, scrollToBottom]); // Fixed: activeTab
+    }, [isLocked, authUser, activeTab, activeNoteStage, customFindingCategories, addActivityLogEntry, debouncedSave, trackDataTransfer, uploadImage, addNotification, scrollToBottom]); // Fixed: activeTab
+
+    const handleToggleNoteStage = (categoryId: string, noteId: string) => {
+        if (isLocked) return;
+        lastInteractionRef.current = Date.now();
+        setCategoryNotes(prev => {
+            const catNotes = prev[categoryId] || [];
+            const targetNote = catNotes.find(n => n.id === noteId);
+            if (!targetNote) return prev;
+            const newIsField = !(targetNote.isFieldNote || targetNote.stage === 'field');
+            const updated = catNotes.map(n => {
+                if (n.id === noteId) {
+                    return {
+                        ...n,
+                        isFieldNote: newIsField,
+                        stage: (newIsField ? 'field' : 'workshop') as 'workshop' | 'field',
+                        status: 'saving' as const
+                    };
+                }
+                return n;
+            });
+            const catName = customFindingCategories.find(c => c.id === categoryId)?.name || 'القسم';
+            const fieldTitle = settings.reportSettings.categoryFieldNotesTitles?.[categoryId] || 'ميداني';
+            addActivityLogEntry(
+                'تعديل تصنيف ملاحظة',
+                `تم نقل الملاحظة "${targetNote.text.substring(0, 30)}..." في قسم "${catName}" إلى (${newIsField ? fieldTitle : 'فحص فني'})`,
+                targetNote.image,
+                noteId
+            );
+            return { ...prev, [categoryId]: updated };
+        });
+        debouncedSave();
+        addNotification({ title: 'تم النقل', message: 'تم نقل تصنيف الملاحظة بنجاح.', type: 'success' });
+    };
+
+    const handleSetNoteStage = (categoryId: string, noteId: string, newStage: 'workshop' | 'field') => {
+        if (isLocked) return;
+        lastInteractionRef.current = Date.now();
+        setCategoryNotes(prev => {
+            const catNotes = prev[categoryId] || [];
+            const targetNote = catNotes.find(n => n.id === noteId);
+            if (!targetNote) return prev;
+            const currentStage = (targetNote.isFieldNote || targetNote.stage === 'field') ? 'field' : 'workshop';
+            if (currentStage === newStage) {
+                setColorPickerOpenFor(null);
+                return prev;
+            }
+            const isField = newStage === 'field';
+            const updated = catNotes.map(n => {
+                if (n.id === noteId) {
+                    return {
+                        ...n,
+                        isFieldNote: isField,
+                        stage: newStage,
+                        status: 'saving' as const
+                    };
+                }
+                return n;
+            });
+            const catName = customFindingCategories.find(c => c.id === categoryId)?.name || 'القسم';
+            const fieldTitle = settings.reportSettings.categoryFieldNotesTitles?.[categoryId] || 'ميداني';
+            addActivityLogEntry(
+                'تعديل تصنيف ملاحظة',
+                `تم نقل الملاحظة "${targetNote.text.substring(0, 30)}..." في قسم "${catName}" إلى (${isField ? fieldTitle : 'فحص فني'})`,
+                targetNote.image,
+                noteId
+            );
+            return { ...prev, [categoryId]: updated };
+        });
+        debouncedSave();
+        setColorPickerOpenFor(null);
+        addNotification({ title: 'تم النقل', message: 'تم نقل الملاحظة بنجاح.', type: 'success' });
+    };
+
+    const handleDeleteNotesByStage = (categoryId: string, stage: 'workshop' | 'field') => {
+        if (isLocked) return;
+        const fieldTitle = settings.reportSettings.categoryFieldNotesTitles?.[categoryId] || 'الملاحظات الميدانية (تجربة الطريق)';
+        const stageLabel = stage === 'field' ? fieldTitle : 'الملاحظات الفنية (الورشة)';
+        showConfirmModal({
+            title: `حذف ${stageLabel}`,
+            message: `هل أنت متأكد من حذف جميع ${stageLabel} في هذا القسم؟ لا يمكن التراجع عن هذا الإجراء.`,
+            icon: 'warning',
+            onConfirm: async () => {
+                lastInteractionRef.current = Date.now();
+                const catNotes = categoryNotes[categoryId] || [];
+                const notesToDelete = catNotes.filter(n => (stage === 'field' ? (n.isFieldNote || n.stage === 'field') : (!n.isFieldNote && n.stage !== 'field')));
+                notesToDelete.forEach(n => {
+                    if (n.image) deleteImage(n.image).catch(() => {});
+                });
+                const remainingNotes = catNotes.filter(n => (stage === 'field' ? (!n.isFieldNote && n.stage !== 'field') : (n.isFieldNote || n.stage === 'field')));
+                setCategoryNotes(prev => ({ ...prev, [categoryId]: remainingNotes }));
+                const catName = customFindingCategories.find(c => c.id === categoryId)?.name || 'القسم';
+                addActivityLogEntry(`حذف ${stageLabel}`, `تم حذف جميع ${stageLabel} في قسم "${catName}"`);
+                debouncedSave();
+                addNotification({ title: 'نجاح', message: `تم حذف جميع ${stageLabel}.`, type: 'success' });
+            }
+        });
+    };
+
+    const handleSetFieldTestStatus = useCallback(async (categoryId: string, status: 'tested_clear' | 'not_tested' | null) => {
+        if (isLocked) return;
+        lastInteractionRef.current = Date.now();
+        setFieldTestedCategories(prev => ({ ...prev, [categoryId]: status || false }));
+
+        const fieldTitle = settings.reportSettings.categoryFieldNotesTitles?.[categoryId] || 'ميداني';
+        const catName = customFindingCategories.find(c => c.id === categoryId)?.name || 'القسم';
+        const logAction = status === 'tested_clear'
+            ? `تم تأكيد إتمام ${fieldTitle} (سليمة بدون ملاحظات)`
+            : status === 'not_tested'
+            ? `تم تحديد قسم ${fieldTitle} بـ (بدون تجربة ميدانية)`
+            : `تم إلغاء حالة ${fieldTitle}`;
+
+        addActivityLogEntry('تعديل فحص التجربة الميدانية', `${logAction} في قسم "${catName}"`);
+
+        try {
+            const currentReq = latestRequestRef.current;
+            if (currentReq) {
+                const currentInspectionData = currentReq.inspection_data || {};
+                const nextFieldTested = { ...(currentInspectionData.field_tested_categories || {}), [categoryId]: status };
+                const updatedRequest: Partial<InspectionRequest> & { id: string } = {
+                    id: currentReq.id,
+                    inspection_data: {
+                        ...currentInspectionData,
+                        field_tested_categories: nextFieldTested
+                    },
+                    updated_at: new Date().toISOString()
+                };
+                await updateRequest(updatedRequest);
+                addNotification({
+                    title: status === 'tested_clear' ? 'تم تأكيد التجربة' : status === 'not_tested' ? 'بدون تجربة ميدانية' : 'تم الإلغاء',
+                    message: logAction,
+                    type: 'success'
+                });
+            }
+        } catch (e) {
+            console.error("Failed to update field tested status:", e);
+        }
+    }, [isLocked, settings, customFindingCategories, addActivityLogEntry, updateRequest, addNotification]);
 
     const handleRemoveGeneralNote = async (idToRemove: string) => {
         if (isLocked) return;
@@ -1355,11 +1505,13 @@ export const FillRequest: React.FC = () => {
     const openEditNoteModal = (note: Note, categoryId: string | 'general') => {
         if (isLocked) return;
         setEditingNote({ note, categoryId });
+        const isField = !!(note.isFieldNote || note.stage === 'field');
         setModalNoteData({
             text: note.text,
             image: note.image || null,
             highlightColor: note.highlightColor || null,
-            targetCategoryId: categoryId
+            targetCategoryId: categoryId,
+            stage: isField ? 'field' : 'workshop'
         });
         setModalNoteFile(null);
         setIsEditNoteModalOpen(true);
@@ -1428,12 +1580,16 @@ export const FillRequest: React.FC = () => {
                 });
             }
 
+            const isFieldConfigured = editingNote?.categoryId !== 'general' && !!settings.reportSettings.categoryFieldNotesEnabled?.[editingNote.categoryId];
+            const isField = isFieldConfigured && modalNoteData.stage === 'field';
             const updatedNote: Note = {
                 ...originalNote,
                 text: modalNoteData.text,
                 originalText: originalNote.originalText || originalNote.text, // Ensure originalText is preserved before modification
                 image: finalImageUrl,
                 highlightColor: modalNoteData.highlightColor || undefined,
+                stage: isField ? 'field' : 'workshop',
+                isFieldNote: isField,
                 status: 'saving'
             };
 
@@ -1442,8 +1598,9 @@ export const FillRequest: React.FC = () => {
             const colorChanged = originalNote.highlightColor !== modalNoteData.highlightColor;
             const targetCat = modalNoteData.targetCategoryId || categoryId;
             const categoryChanged = targetCat !== categoryId;
+            const stageChanged = (originalNote.stage || (originalNote.isFieldNote ? 'field' : 'workshop')) !== modalNoteData.stage;
 
-            if (!textChanged && !imageChanged && !colorChanged && !categoryChanged) {
+            if (!textChanged && !imageChanged && !colorChanged && !categoryChanged && !stageChanged) {
                 setIsEditNoteModalOpen(false);
                 setEditingNote(null);
                 setIsUploading(false);
@@ -2683,6 +2840,11 @@ export const FillRequest: React.FC = () => {
                                             أضافها: {note.authorName}
                                         </span>
                                     )}
+                                    {categoryId !== 'general' && !!settings.reportSettings.categoryFieldNotesEnabled?.[categoryId] && (note.isFieldNote || note.stage === 'field') && (
+                                        <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                                            <span>{settings.reportSettings.categoryFieldNotesTitles?.[categoryId] || 'ميداني (تجربة الطريق)'}</span>
+                                        </span>
+                                    )}
                                     {isJustMoved && (
                                         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-sm animate-pulse">
                                             {lastMoveDirection === 'up' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
@@ -2728,29 +2890,64 @@ export const FillRequest: React.FC = () => {
                         {colorPickerOpenFor === note.id && !isReordering && (
                             <div
                                 ref={colorPickerRef}
-                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-white dark:bg-slate-700 shadow-2xl rounded-2xl border-2 border-blue-100 dark:border-slate-600 p-2 flex flex-row items-center gap-2 animate-scale-in"
+                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-white dark:bg-slate-800 shadow-2xl rounded-2xl border-2 border-slate-200 dark:border-slate-600 p-2.5 flex flex-col sm:flex-row items-center gap-2.5 animate-scale-in max-w-[95vw]"
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {(Object.keys(highlightColors) as HighlightColor[]).map((color) => (
+                                <div className="flex items-center gap-1.5">
+                                    {(Object.keys(highlightColors) as HighlightColor[]).map((color) => (
+                                        <button
+                                            key={color}
+                                            type="button"
+                                            onClick={() => handleHighlightColorChange(note.id, categoryId, color)}
+                                            className={`w-6 h-6 rounded-full transition-all ${highlightColors[color].bg} ${
+                                                note.highlightColor === color ? `ring-2 ring-offset-2 dark:ring-offset-slate-800 ${highlightColors[color].ring}` : 'hover:scale-125'
+                                            }`}
+                                            title={highlightColors[color].name}
+                                        />
+                                    ))}
+                                    <div className="w-px h-6 bg-slate-200 dark:bg-slate-600 mx-1"></div>
                                     <button
-                                        key={color}
                                         type="button"
-                                        onClick={() => handleHighlightColorChange(note.id, categoryId, color)}
-                                        className={`w-6 h-6 rounded-full transition-all ${highlightColors[color].bg} ${
-                                            note.highlightColor === color ? `ring-2 ring-offset-2 dark:ring-offset-slate-800 ${highlightColors[color].ring}` : 'hover:scale-125'
-                                        }`}
-                                        title={highlightColors[color].name}
-                                    />
-                                ))}
-                                <div className="w-px h-6 bg-slate-200 dark:bg-slate-600 mx-1"></div>
-                                <button
-                                    type="button"
-                                    onClick={() => handleHighlightColorChange(note.id, categoryId, null)}
-                                    className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-slate-500 bg-white dark:bg-slate-600 flex items-center justify-center hover:scale-125 transition-transform"
-                                    title="إزالة اللون"
-                                >
-                                    <XIcon className="w-4 h-4 text-slate-500 dark:text-slate-300" />
-                                </button>
+                                        onClick={() => handleHighlightColorChange(note.id, categoryId, null)}
+                                        className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-slate-500 bg-white dark:bg-slate-600 flex items-center justify-center hover:scale-125 transition-transform"
+                                        title="إزالة اللون"
+                                    >
+                                        <XIcon className="w-4 h-4 text-slate-500 dark:text-slate-300" />
+                                    </button>
+                                </div>
+
+                                {categoryId !== 'general' && !!settings.reportSettings.categoryFieldNotesEnabled?.[categoryId] && (
+                                    <>
+                                        <div className="hidden sm:block w-px h-6 bg-slate-200 dark:bg-slate-600"></div>
+                                        <div className="block sm:hidden w-full h-px bg-slate-200 dark:bg-slate-600"></div>
+                                        <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-700">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSetNoteStage(categoryId, note.id, 'workshop')}
+                                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                                    !note.isFieldNote && note.stage !== 'field'
+                                                        ? 'bg-blue-600 text-white shadow-xs'
+                                                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                                                }`}
+                                                title="نقل إلى فحص فني"
+                                            >
+                                                فحص فني
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSetNoteStage(categoryId, note.id, 'field')}
+                                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                                    note.isFieldNote || note.stage === 'field'
+                                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                                                }`}
+                                                title={`نقل إلى ${settings.reportSettings.categoryFieldNotesTitles?.[categoryId] || 'ميداني'}`}
+                                            >
+                                                {settings.reportSettings.categoryFieldNotesTitles?.[categoryId] || 'ميداني'}
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                     </li>
@@ -2765,7 +2962,16 @@ export const FillRequest: React.FC = () => {
         const activeCategory = customFindingCategories.find(c => c.id === categoryId);
         if (!activeCategory) return null;
 
+        const isFieldNotesConfigured = !!settings.reportSettings.categoryFieldNotesEnabled?.[categoryId];
+        const fieldNotesSectionTitle = settings.reportSettings.categoryFieldNotesTitles?.[categoryId] || 'الملاحظات الميدانية (تجربة الطريق)';
+
         const currentCategoryNotes = categoryNotes[categoryId] || [];
+        const workshopNotes = isFieldNotesConfigured
+            ? currentCategoryNotes.filter(n => !n.isFieldNote && n.stage !== 'field')
+            : currentCategoryNotes;
+        const fieldNotes = isFieldNotesConfigured
+            ? currentCategoryNotes.filter(n => n.isFieldNote || n.stage === 'field')
+            : [];
         const rawFindings = structuredFindings.filter(sf => sf.categoryId === categoryId);
 
         // Deduplication Logic: Ensure only one card per findingId is rendered.
@@ -2953,144 +3159,267 @@ export const FillRequest: React.FC = () => {
 
 
                     {/* Notes Section */}
-                    <div className="flex flex-col h-auto">
-                        <div className="p-3 bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-t-xl shadow-sm flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200">الملاحظات النصية ({currentCategoryNotes.length})</h4>
-                                {currentCategoryNotes.length > 0 && can('manage_notes') && !isLocked && (
-                                    <>
-                                        <button onClick={() => handleDeleteAllCategoryNotes(categoryId)} className="text-red-500"><Icon name="delete" className="w-5 h-5" /></button>
-                                    </>
-                                )}
-                            </div>
-                            {can('manage_notes') && !isLocked && currentCategoryNotes.length > 0 && (
-                                <div className="flex items-center gap-2">
-                                    {isInMultiSelectMode && (
+                    <div className="flex flex-col gap-4">
+                        {/* Section 1: Technical Notes */}
+                        <div className="flex flex-col h-auto">
+                            <div className="p-3 bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-t-xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                <div className="flex items-center gap-3">
+                                    <h4 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-200">
+                                        {isFieldNotesConfigured && fieldNotes.length > 0 ? `الملاحظات الفنية (${workshopNotes.length})` : `الملاحظات (${workshopNotes.length})`}
+                                    </h4>
+                                    {workshopNotes.length > 0 && can('manage_notes') && !isLocked && (
                                         <button
                                             type="button"
-                                            onClick={() => handleToggleSelectAll(categoryId, currentCategoryNotes)}
-                                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-bold px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-lg transition-colors"
+                                            onClick={() => isFieldNotesConfigured ? handleDeleteNotesByStage(categoryId, 'workshop') : handleDeleteAllCategoryNotes(categoryId)}
+                                            className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-slate-700"
+                                            title="حذف جميع الملاحظات"
                                         >
-                                            {selectedNoteIds[categoryId]?.size === currentCategoryNotes.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                                            <Icon name="delete" className="w-4 h-4" />
                                         </button>
                                     )}
-                                    <Button size="sm" variant={isInMultiSelectMode ? 'primary' : 'secondary'} onClick={() => toggleMultiSelect(categoryId)}>
-                                        {isInMultiSelectMode ? 'إلغاء التحديد' : 'تحديد متعدد'}
-                                    </Button>
                                 </div>
-                            )}
-                        </div>
-
-                        <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl border-slate-200 dark:border-slate-700/50 h-auto custom-scrollbar overflow-x-hidden pb-12">
-                            {/* Reorder Mode Banner */}
-                            {reorderMode[categoryId] && (
-                                <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto max-w-2xl bg-amber-50/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-amber-500 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-in-down">
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
-                                        <div>
-                                            <span className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-100">
-                                                وضع ترتيب الملاحظات نشط
-                                            </span>
-                                            <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                                                اسحب الملاحظة من المقبض = أو استخدم الأسهم ↑ ↓ لتعديل الترتيب
-                                            </p>
+                                <div className="flex items-center gap-2 self-end sm:self-center">
+                                    {can('manage_notes') && !isLocked && currentCategoryNotes.length > 0 && (
+                                        <div className="flex items-center gap-2">
+                                            {isInMultiSelectMode && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleToggleSelectAll(categoryId, currentCategoryNotes)}
+                                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-bold px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-lg transition-colors"
+                                                >
+                                                    {selectedNoteIds[categoryId]?.size === currentCategoryNotes.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                                                </button>
+                                            )}
+                                            <Button size="sm" variant={isInMultiSelectMode ? 'primary' : 'secondary'} onClick={() => toggleMultiSelect(categoryId)}>
+                                                {isInMultiSelectMode ? 'إلغاء التحديد' : 'تحديد متعدد'}
+                                            </Button>
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSaveReorder(categoryId)}
-                                            className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
-                                        >
-                                            <Check className="w-4 h-4" />
-                                            <span>حفظ الترتيب</span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleCancelReorder(categoryId)}
-                                            className="flex items-center gap-1 text-xs font-semibold px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-xl transition-colors cursor-pointer"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                            <span>إلغاء</span>
-                                        </button>
-                                    </div>
+                                    )}
                                 </div>
-                            )}
+                            </div>
 
-                            {/* Move Mode Toolbar */}
-                            {moveMode[categoryId] && (
-                                <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto max-w-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-blue-500 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-in-down">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/40 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800">
-                                            <input
-                                                type="checkbox"
-                                                id={`select-all-move-${categoryId}`}
-                                                checked={(selectedNoteIds[categoryId]?.size || 0) === currentCategoryNotes.length && currentCategoryNotes.length > 0}
-                                                onChange={() => handleToggleSelectAll(categoryId, currentCategoryNotes)}
-                                                className="w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-slate-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
-                                            />
-                                            <label htmlFor={`select-all-move-${categoryId}`} className="text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
-                                                تحديد الكل
-                                            </label>
+                            <div className="bg-[#f8fafc] dark:bg-slate-900/50 p-2 sm:p-4 border-x border-b rounded-b-xl border-slate-200 dark:border-slate-700/50 h-auto custom-scrollbar overflow-x-hidden">
+                                {/* Reorder Mode Banner */}
+                                {reorderMode[categoryId] && (
+                                    <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto max-w-2xl bg-amber-50/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-amber-500 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-in-down">
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
+                                            <div>
+                                                <span className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-100">
+                                                    وضع ترتيب الملاحظات نشط
+                                                </span>
+                                                <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                                                    اسحب الملاحظة من المقبض = أو استخدم الأسهم ↑ ↓ لتعديل الترتيب
+                                                </p>
+                                            </div>
                                         </div>
-                                        <span className="text-xs px-3 py-1.5 rounded-xl bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800">
-                                            تم تحديد {selectedNoteIds[categoryId]?.size || 0} ملاحظة
-                                        </span>
-                                    </div>
-
-                                    <div className="flex items-center flex-wrap gap-2">
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">نقل إلى:</span>
-                                            <select
-                                                value={selectedMoveTargetCategory[categoryId] || ''}
-                                                onChange={(e) => setSelectedMoveTargetCategory(prev => ({ ...prev, [categoryId]: e.target.value }))}
-                                                className="text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSaveReorder(categoryId)}
+                                                className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
                                             >
-                                                <option value="">-- اختر القسم المستهدف --</option>
-                                                {getTargetCategoriesForSection(categoryId).map(target => (
-                                                    <option key={target.id} value={target.id}>
-                                                        {target.name}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                <Check className="w-4 h-4" />
+                                                <span>حفظ الترتيب</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCancelReorder(categoryId)}
+                                                className="flex items-center gap-1 text-xs font-semibold px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-xl transition-colors cursor-pointer"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                                <span>إلغاء</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Move Mode Toolbar */}
+                                {moveMode[categoryId] && (
+                                    <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto max-w-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-blue-500 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-in-down">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/40 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`select-all-move-${categoryId}`}
+                                                    checked={(selectedNoteIds[categoryId]?.size || 0) === currentCategoryNotes.length && currentCategoryNotes.length > 0}
+                                                    onChange={() => handleToggleSelectAll(categoryId, currentCategoryNotes)}
+                                                    className="w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-slate-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                                                />
+                                                <label htmlFor={`select-all-move-${categoryId}`} className="text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
+                                                    تحديد الكل
+                                                </label>
+                                            </div>
+                                            <span className="text-xs px-3 py-1.5 rounded-xl bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800">
+                                                تم تحديد {selectedNoteIds[categoryId]?.size || 0} ملاحظة
+                                            </span>
                                         </div>
 
-                                        <button
-                                            type="button"
-                                            disabled={!selectedNoteIds[categoryId]?.size || !selectedMoveTargetCategory[categoryId]}
-                                            onClick={() => handleBulkMoveNotes(categoryId, selectedMoveTargetCategory[categoryId])}
-                                            className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-md ${
-                                                selectedNoteIds[categoryId]?.size && selectedMoveTargetCategory[categoryId]
-                                                    ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-95 cursor-pointer'
-                                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                                            }`}
-                                        >
-                                            <FolderInput className="w-3.5 h-3.5" />
-                                            <span>تنفيذ النقل</span>
-                                        </button>
+                                        <div className="flex items-center flex-wrap gap-2">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">نقل إلى:</span>
+                                                <select
+                                                    value={selectedMoveTargetCategory[categoryId] || ''}
+                                                    onChange={(e) => setSelectedMoveTargetCategory(prev => ({ ...prev, [categoryId]: e.target.value }))}
+                                                    className="text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                                                >
+                                                    <option value="">-- اختر القسم المستهدف --</option>
+                                                    {getTargetCategoriesForSection(categoryId).map(target => (
+                                                        <option key={target.id} value={target.id}>
+                                                            {target.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleMoveMode(categoryId)}
-                                            className="text-xs font-semibold px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-300 dark:border-slate-600 transition-colors cursor-pointer"
-                                        >
-                                            إلغاء
-                                        </button>
+                                            <button
+                                                type="button"
+                                                disabled={!selectedNoteIds[categoryId]?.size || !selectedMoveTargetCategory[categoryId]}
+                                                onClick={() => handleBulkMoveNotes(categoryId, selectedMoveTargetCategory[categoryId])}
+                                                className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-md ${
+                                                    selectedNoteIds[categoryId]?.size && selectedMoveTargetCategory[categoryId]
+                                                        ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-95 cursor-pointer'
+                                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                                }`}
+                                            >
+                                                <FolderInput className="w-3.5 h-3.5" />
+                                                <span>تنفيذ النقل</span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleMoveMode(categoryId)}
+                                                className="text-xs font-semibold px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-300 dark:border-slate-600 transition-colors cursor-pointer"
+                                            >
+                                                إلغاء
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
 
-                            {currentCategoryNotes.length > 0 ? (
-                                <ul className="space-y-3">
-                                    {renderNotes(currentCategoryNotes, categoryId)}
-                                </ul>
-                            ) : (
-                                <div className="text-center py-8 text-slate-400 flex flex-col items-center justify-center h-full">
-                                    <Icon name="document-report" className="w-12 h-12 mb-2 opacity-20" />
-                                    <p className="text-sm">لا توجد ملاحظات نصية.</p>
-                                </div>
-                            )}
+                                {workshopNotes.length > 0 ? (
+                                    <ul className="space-y-3">
+                                        {renderNotes(workshopNotes, categoryId)}
+                                    </ul>
+                                ) : (
+                                    <div className="text-center py-6 text-slate-400 flex flex-col items-center justify-center">
+                                        <p className="text-xs sm:text-sm">لا توجد ملاحظات.</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
+
+                        {/* Section 2: Field Notes / Road Test */}
+                        {isFieldNotesConfigured && (
+                            <div className="flex flex-col h-auto">
+                                {fieldNotes.length > 0 ? (
+                                    <>
+                                        <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-t-xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                            <div className="flex items-center gap-3">
+                                                <h4 className="text-base sm:text-lg font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+                                                    <span>{fieldNotesSectionTitle}</span>
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-emerald-600 text-white">
+                                                        {fieldNotes.length}
+                                                    </span>
+                                                </h4>
+                                                {can('manage_notes') && !isLocked && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteNotesByStage(categoryId, 'field')}
+                                                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-slate-700"
+                                                        title={`حذف جميع ملاحظات ${fieldNotesSectionTitle}`}
+                                                    >
+                                                        <Icon name="delete" className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-[#f0fdf4]/50 dark:bg-emerald-950/20 p-2 sm:p-4 border-x border-b rounded-b-xl border-emerald-200/80 dark:border-emerald-800/40 h-auto custom-scrollbar overflow-x-hidden pb-8">
+                                            <ul className="space-y-3">
+                                                {renderNotes(fieldNotes, categoryId)}
+                                            </ul>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                                        fieldTestedCategories[categoryId] === 'tested_clear' || fieldTestedCategories[categoryId] === true
+                                            ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 shadow-xs'
+                                            : fieldTestedCategories[categoryId] === 'not_tested'
+                                            ? 'bg-red-50/90 dark:bg-red-950/40 border-red-300 dark:border-red-800 shadow-xs'
+                                            : 'bg-slate-50 dark:bg-slate-800/60 border-dashed border-slate-300 dark:border-slate-700'
+                                    }`}>
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-base ${
+                                                fieldTestedCategories[categoryId] === 'tested_clear' || fieldTestedCategories[categoryId] === true
+                                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                                    : fieldTestedCategories[categoryId] === 'not_tested'
+                                                    ? 'bg-red-600 text-white shadow-xs'
+                                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                                            }`}>
+                                                {fieldTestedCategories[categoryId] === 'tested_clear' || fieldTestedCategories[categoryId] === true
+                                                    ? '✓'
+                                                    : fieldTestedCategories[categoryId] === 'not_tested'
+                                                    ? '✕'
+                                                    : '—'}
+                                            </div>
+                                            <div>
+                                                <h5 className={`text-sm font-bold ${
+                                                    fieldTestedCategories[categoryId] === 'tested_clear' || fieldTestedCategories[categoryId] === true
+                                                        ? 'text-emerald-950 dark:text-emerald-200'
+                                                        : fieldTestedCategories[categoryId] === 'not_tested'
+                                                        ? 'text-red-950 dark:text-red-200'
+                                                        : 'text-slate-700 dark:text-slate-300'
+                                                }`}>
+                                                    {fieldNotesSectionTitle}
+                                                </h5>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                    {fieldTestedCategories[categoryId] === 'tested_clear' || fieldTestedCategories[categoryId] === true
+                                                        ? 'تم الاعتماد: ستظهر في التقرير كـ (تمت التجربة الميدانية — سليمة ولا توجد ملاحظات)'
+                                                        : fieldTestedCategories[categoryId] === 'not_tested'
+                                                        ? 'تم الاعتماد: ستظهر في التقرير كـ (ملاحظة حمراء: بدون تجربة ميدانية)'
+                                                        : 'غير محدد (لن يظهر هذا القسم في التقرير حتى يتم تحديد خيار أو كتابة ملاحظات)'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 flex-wrap self-end sm:self-center">
+                                            <button
+                                                type="button"
+                                                disabled={isLocked}
+                                                onClick={() => {
+                                                    const isCurrentlyClear = fieldTestedCategories[categoryId] === 'tested_clear' || fieldTestedCategories[categoryId] === true;
+                                                    handleSetFieldTestStatus(categoryId, isCurrentlyClear ? null : 'tested_clear');
+                                                }}
+                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                                                    fieldTestedCategories[categoryId] === 'tested_clear' || fieldTestedCategories[categoryId] === true
+                                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-400/40'
+                                                        : 'bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 shadow-2xs'
+                                                }`}
+                                            >
+                                                <span>✓ تمت التجربة (سليمة)</span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                disabled={isLocked}
+                                                onClick={() => {
+                                                    const isCurrentlyNotTested = fieldTestedCategories[categoryId] === 'not_tested';
+                                                    handleSetFieldTestStatus(categoryId, isCurrentlyNotTested ? null : 'not_tested');
+                                                }}
+                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                                                    fieldTestedCategories[categoryId] === 'not_tested'
+                                                        ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm ring-2 ring-red-400/40'
+                                                        : 'bg-white dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 shadow-2xs'
+                                                }`}
+                                            >
+                                                <span>✕ بدون تجربة ميدانية</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -3590,6 +3919,8 @@ export const FillRequest: React.FC = () => {
                         allTabsInOrder={allTabsInOrder}
                         onNextTab={handleNextTab}
                         onPrevTab={handlePrevTab}
+                        activeNoteStage={activeNoteStage}
+                        onChangeNoteStage={setActiveNoteStage}
                     />
                 )}
             </div>
@@ -3612,6 +3943,41 @@ export const FillRequest: React.FC = () => {
             <Modal isOpen={isEditNoteModalOpen} onClose={() => setIsEditNoteModalOpen(false)} title="تعديل الملاحظة" size="lg">
                 <div>
                     <textarea value={modalNoteData.text} onChange={e => setModalNoteData(p => ({ ...p, text: e.target.value.toUpperCase() }))} className="w-full p-2 border rounded-md dark:bg-slate-900/50 dark:border-slate-600 text-lg uppercase" rows={4} />
+
+                    {/* Stage Selection if enabled in settings for this category */}
+                    {editingNote?.categoryId && editingNote.categoryId !== 'general' && !!settings.reportSettings.categoryFieldNotesEnabled?.[editingNote.categoryId] && (
+                        <div className="mt-4 flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-200">تصنيف القسم داخل التبويب:</label>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">حدد هل تتبع الملاحظة الفحص الفني أم قسم ({settings.reportSettings.categoryFieldNotesTitles?.[editingNote.categoryId] || 'الملاحظات الميدانية'})</span>
+                            </div>
+                            <div className="inline-flex items-center p-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+                                <button
+                                    type="button"
+                                    onClick={() => setModalNoteData(p => ({ ...p, stage: 'workshop' }))}
+                                    className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                                        modalNoteData.stage !== 'field'
+                                            ? 'bg-blue-600 text-white shadow-xs'
+                                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                                    }`}
+                                >
+                                    <span>فحص فني</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setModalNoteData(p => ({ ...p, stage: 'field' }))}
+                                    className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                                        modalNoteData.stage === 'field'
+                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                                    }`}
+                                >
+                                    <span>{settings.reportSettings.categoryFieldNotesTitles?.[editingNote.categoryId] || 'ميداني'}</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex items-center gap-4 mt-4">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300 font-bold">لون التمييز:</label>
                         <div className="flex items-center gap-2">

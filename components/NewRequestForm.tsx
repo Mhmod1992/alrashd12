@@ -57,8 +57,15 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
         fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation, page,
-        sendWhatsAppMessage, whatsappApiStatus, requests, reservations, searchReservations
+        sendWhatsAppMessage, whatsappApiStatus, checkWhatsAppStatus, requests, reservations, searchReservations
     } = useAppContext();
+
+    // Trigger immediate WhatsApp check when opening new request form
+    useEffect(() => {
+        if (settings.whatsappMode === 'api' && settings.whatsappApiUrl) {
+            checkWhatsAppStatus?.();
+        }
+    }, [settings.whatsappMode, settings.whatsappApiUrl, checkWhatsAppStatus]);
 
     // Responsive Logic
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);

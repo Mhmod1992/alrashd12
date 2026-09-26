@@ -1101,6 +1101,8 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
           });
 
           const textOnlyNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !note.image);
+          const workshopNotes = textOnlyNotes.filter(note => !note.isFieldNote && note.stage !== 'field');
+          const fieldNotes = textOnlyNotes.filter(note => note.isFieldNote || note.stage === 'field');
 
           const categoryNoticeText = reportSettings.categoryNotices?.[catId];
           const excludedFindingsList = reportSettings.excludedNoticeFindings || [];
@@ -1178,36 +1180,75 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
 
                 {textOnlyNotes.length > 0 && (
                   <View style={styles.notesSection}>
-                    <Text
-                      style={{ fontSize: layoutSettings.sections.fontSize.technicianNotesHeader, fontWeight: 'bold', color: reportSettings.primaryColor, marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 2, textAlign: 'right' }}
-                      minPresenceAhead={20}
-                    >
-                      {reportDirection === 'ltr' ? 'Technician Notes:' : 'ملاحظات الفني:'}
-                    </Text>
-                    {textOnlyNotes.map(note => {
-                      const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang])
-                        ? note.translations[note.displayTranslation.lang]
-                        : note.text;
+                    {workshopNotes.length > 0 && (
+                      <View style={{ marginBottom: fieldNotes.length > 0 ? 8 : 0 }}>
+                        <Text
+                          style={{ fontSize: layoutSettings.sections.fontSize.technicianNotesHeader, fontWeight: 'bold', color: reportSettings.primaryColor, marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 2, textAlign: 'right' }}
+                          minPresenceAhead={20}
+                        >
+                          {fieldNotes.length > 0 ? (reportDirection === 'ltr' ? 'Technical Notes (Workshop):' : 'ملاحظات الفحص الفني (الورشة):') : (reportDirection === 'ltr' ? 'Technician Notes:' : 'ملاحظات الفني:')}
+                        </Text>
+                        {workshopNotes.map(note => {
+                          const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang])
+                            ? note.translations[note.displayTranslation.lang]
+                            : note.text;
 
-                      const highlight = note.highlightColor ? highlightBaseColors[note.highlightColor] : null;
+                          const highlight = note.highlightColor ? highlightBaseColors[note.highlightColor] : null;
 
-                      return (
-                        <View key={note.id} style={styles.noteItem} wrap={false}>
-                          <View style={styles.noteBullet} />
-                          <Text style={styles.noteText}>
-                            <Text style={highlight ? {
-                              backgroundColor: `rgba(${highlight.rgb}, 0.1)`,
-                              color: highlight.text,
-                              paddingHorizontal: 4,
-                              borderRadius: 2,
-                              fontWeight: 'bold'
-                            } : {}}>
-                              {displayText}
-                            </Text>
-                          </Text>
-                        </View>
-                      );
-                    })}
+                          return (
+                            <View key={note.id} style={styles.noteItem} wrap={false}>
+                              <View style={styles.noteBullet} />
+                              <Text style={styles.noteText}>
+                                <Text style={highlight ? {
+                                  backgroundColor: `rgba(${highlight.rgb}, 0.1)`,
+                                  color: highlight.text,
+                                  paddingHorizontal: 4,
+                                  borderRadius: 2,
+                                  fontWeight: 'bold'
+                                } : {}}>
+                                  {displayText}
+                                </Text>
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {fieldNotes.length > 0 && (
+                      <View style={{ marginTop: workshopNotes.length > 0 ? 6 : 0, paddingTop: workshopNotes.length > 0 ? 6 : 0, borderTopWidth: workshopNotes.length > 0 ? 1 : 0, borderTopColor: '#e2e8f0', borderTopStyle: 'dashed' }}>
+                        <Text
+                          style={{ fontSize: layoutSettings.sections.fontSize.technicianNotesHeader, fontWeight: 'bold', color: '#047857', marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 2, textAlign: 'right' }}
+                          minPresenceAhead={20}
+                        >
+                          {reportDirection === 'ltr' ? 'Field / Road Test Notes:' : 'الملاحظات الميدانية (تجربة الطريق):'}
+                        </Text>
+                        {fieldNotes.map(note => {
+                          const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang])
+                            ? note.translations[note.displayTranslation.lang]
+                            : note.text;
+
+                          const highlight = note.highlightColor ? highlightBaseColors[note.highlightColor] : null;
+
+                          return (
+                            <View key={note.id} style={styles.noteItem} wrap={false}>
+                              <View style={[styles.noteBullet, { backgroundColor: '#059669' }]} />
+                              <Text style={styles.noteText}>
+                                <Text style={highlight ? {
+                                  backgroundColor: `rgba(${highlight.rgb}, 0.1)`,
+                                  color: highlight.text,
+                                  paddingHorizontal: 4,
+                                  borderRadius: 2,
+                                  fontWeight: 'bold'
+                                } : {}}>
+                                  {displayText}
+                                </Text>
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 )}
                 

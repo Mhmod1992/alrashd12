@@ -504,8 +504,15 @@ const InspectionReportPdf: React.FC<InspectionReportPdfProps> = ({
           
           const findings = (request.structured_findings || []).filter(f => f.categoryId === catId);
           const textOnlyNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !note.image);
+          const workshopNotes = textOnlyNotes.filter(note => !note.isFieldNote && note.stage !== 'field');
+          const fieldNotes = textOnlyNotes.filter(note => note.isFieldNote || note.stage === 'field');
+          const isFieldNotesConfigured = !!reportSettings.categoryFieldNotesEnabled?.[catId];
+          const fieldTestStatus = request.inspection_data?.field_tested_categories?.[catId];
+          const isFieldTestClear = isFieldNotesConfigured && fieldNotes.length === 0 && (fieldTestStatus === 'tested_clear' || fieldTestStatus === true);
+          const isFieldTestNotTested = isFieldNotesConfigured && fieldNotes.length === 0 && fieldTestStatus === 'not_tested';
+          const hasFieldTestStatus = isFieldTestClear || isFieldTestNotTested;
 
-          if (findings.length === 0 && textOnlyNotes.length === 0) {
+          if (findings.length === 0 && textOnlyNotes.length === 0 && !hasFieldTestStatus) {
             return (
               <View key={catId} style={styles.findingCategory}>
                 <View style={styles.findingCategoryHeader}>
@@ -544,17 +551,50 @@ const InspectionReportPdf: React.FC<InspectionReportPdfProps> = ({
                 })}
               </View>
               
-              {textOnlyNotes.length > 0 && (
+              {(textOnlyNotes.length > 0 || hasFieldTestStatus) && (
                 <View style={styles.noteSection}>
-                  <Text style={[styles.noteTitle, { textAlign: isRtl ? 'right' : 'left' }]}>
-                    {isRtl ? 'ملاحظات الفني:' : 'Technician Notes:'}
-                  </Text>
-                  {textOnlyNotes.map(note => (
-                    <View key={note.id} style={[styles.noteItem, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-                      <View style={styles.bullet} />
-                      <Text style={[styles.noteText, { textAlign: isRtl ? 'right' : 'left' }]}>{note.text}</Text>
+                  {workshopNotes.length > 0 && (
+                    <>
+                      <Text style={[styles.noteTitle, { textAlign: isRtl ? 'right' : 'left' }]}>
+                        {isRtl ? 'ملاحظات الفني:' : 'Technician Notes:'}
+                      </Text>
+                      {workshopNotes.map(note => (
+                        <View key={note.id} style={[styles.noteItem, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                          <View style={styles.bullet} />
+                          <Text style={[styles.noteText, { textAlign: isRtl ? 'right' : 'left' }]}>{note.text}</Text>
+                        </View>
+                      ))}
+                    </>
+                  )}
+
+                  {(fieldNotes.length > 0 || hasFieldTestStatus) && (
+                    <View style={{ marginTop: workshopNotes.length > 0 ? 6 : 0, paddingTop: workshopNotes.length > 0 ? 4 : 0, borderTopWidth: workshopNotes.length > 0 ? 1 : 0, borderTopColor: '#e2e8f0', borderTopStyle: 'dashed' }}>
+                      <Text style={[styles.noteTitle, { textAlign: isRtl ? 'right' : 'left', color: '#047857' }]}>
+                        {reportSettings.categoryFieldNotesTitles?.[catId] ? `${reportSettings.categoryFieldNotesTitles[catId]}:` : (isRtl ? 'الملاحظات الميدانية (تجربة الطريق):' : 'Field / Road Test Notes:')}
+                      </Text>
+                      {fieldNotes.length > 0 ? (
+                        fieldNotes.map(note => (
+                          <View key={note.id} style={[styles.noteItem, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                            <View style={[styles.bullet, { backgroundColor: '#059669' }]} />
+                            <Text style={[styles.noteText, { textAlign: isRtl ? 'right' : 'left' }]}>{note.text}</Text>
+                          </View>
+                        ))
+                      ) : isFieldTestClear ? (
+                        <View style={[styles.noteItem, { flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center' }]}>
+                          <Text style={{ fontSize: 8.5, color: '#059669', fontFamily: 'Cairo', fontWeight: 'bold' }}>
+                            {isRtl ? '✓ تمت التجربة الميدانية - سليمة ولا توجد ملاحظات' : '✓ Field Test Completed - No Issues Found'}
+                          </Text>
+                        </View>
+                      ) : isFieldTestNotTested ? (
+                        <View style={[styles.noteItem, { flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center' }]}>
+                          <View style={[styles.bullet, { backgroundColor: '#dc2626' }]} />
+                          <Text style={{ fontSize: 8.5, color: '#dc2626', fontFamily: 'Cairo', fontWeight: 'bold' }}>
+                            {isRtl ? 'بدون تجربة ميدانية' : 'Road Test Not Conducted'}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
-                  ))}
+                  )}
                 </View>
               )}
             </View>

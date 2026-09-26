@@ -2115,6 +2115,14 @@ const Requests: React.FC = () => {
                                 {creatorEmployee?.name || 'غير معروف'}
                             </span>
                         </div>
+                        {authUser?.name && authUser?.id !== paymentRequest?.employee_id && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-500 dark:text-slate-400">المحصل الحالي:</span>
+                                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                    {authUser.name}
+                                </span>
+                            </div>
+                        )}
                         <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
                             <span>⏱️ سيتم تحديث وقت الطلب إلى وقت التحصيل الفعلي فور التأكيد</span>
                         </div>
