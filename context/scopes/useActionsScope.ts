@@ -105,6 +105,13 @@ export const useActionsScope = (
 
         // Sync to TV after update ONLY if status is being changed
         if ('status' in updatedRequest) {
+            if (updatedRequest.status === RequestStatus.COMPLETE) {
+                try {
+                    localStorage.removeItem(`request_draft_${updatedRequest.id}`);
+                } catch (e) {
+                    console.warn('Failed to remove draft on completion', e);
+                }
+            }
             const fullRequest = requests.find(r => r.id === updatedRequest.id);
             if (fullRequest) {
                 syncToTvDisplay({ ...fullRequest, ...updatedRequest });
@@ -132,6 +139,7 @@ export const useActionsScope = (
         const reqNum = requestToDelete ? requestToDelete.request_number : '???';
         const { error } = await supabase.from('inspection_requests').delete().eq('id', id);
         if (error) throw error;
+        try { localStorage.removeItem(`request_draft_${id}`); } catch (e) {}
         setRequests(prev => prev.filter(r => r.id !== id));
         setSearchedRequests(prev => {
             if (!prev) return null;
@@ -151,6 +159,9 @@ export const useActionsScope = (
     const deleteRequestsBatch = useCallback(async (ids: string[]): Promise<void> => {
         const { error } = await supabase.from('inspection_requests').delete().in('id', ids);
         if (error) throw error;
+        ids.forEach(id => {
+            try { localStorage.removeItem(`request_draft_${id}`); } catch (e) {}
+        });
         setRequests(prev => prev.filter(r => !ids.includes(r.id)));
         setSearchedRequests(prev => {
             if (!prev) return null;

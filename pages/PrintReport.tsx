@@ -10,7 +10,7 @@ import SparklesIcon from '../components/icons/SparklesIcon';
 import ReportTranslationModal from '../components/ReportTranslationModal';
 import AiAnalysisModal from '../components/AiAnalysisModal';
 import Modal from '../components/Modal'; 
-import { InspectionRequest, ReportSettings, CustomFindingCategory, Note, RequestStatus, PaymentType } from '../types';
+import { InspectionRequest, ReportSettings, CustomFindingCategory, Note, RequestStatus, PaymentType, Client, Car, CarMake, CarModel, InspectionType } from '../types';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import CameraIcon from '../components/icons/CameraIcon';
@@ -282,11 +282,15 @@ const PrintReport: React.FC = () => {
 
     const reportRef = useRef<HTMLDivElement>(null);
     const [directRequest, setDirectRequest] = useState<InspectionRequest | null>(null);
+    const [directClient, setDirectClient] = useState<Client | null>(null);
+    const [directCar, setDirectCar] = useState<Car | null>(null);
     const storeRequest = requests.find(r => r.id === selectedRequestId);
     const originalRequest = directRequest || storeRequest;
 
     useEffect(() => {
         setDirectRequest(null);
+        setDirectClient(null);
+        setDirectCar(null);
     }, [selectedRequestId]);
     
     // Translation State
@@ -414,38 +418,69 @@ const PrintReport: React.FC = () => {
             return;
         }
 
-        const currentReq = directRequest || requests.find(r => r.id === selectedRequestId);
-        const isFullyLoaded = !!(currentReq && 
-            typeof currentReq.category_notes !== 'undefined' && 
-            typeof currentReq.general_notes !== 'undefined' && 
-            typeof currentReq.structured_findings !== 'undefined');
+        let isMounted = true;
 
-        if (isFullyLoaded) {
-            setIsDataReady(true);
-        } else {
-            setIsDataReady(false);
-            
-            // 1. Fetch complete record immediately from DB
-            supabase
-                .from('inspection_requests')
-                .select('*')
-                .eq('id', selectedRequestId)
-                .maybeSingle()
-                .then(({ data, error }) => {
-                    if (data && !error) {
-                        setDirectRequest(data as InspectionRequest);
+        const loadData = async () => {
+            try {
+                // Check if store already has a fully-loaded request with details
+                const storeReq = requests.find(r => r.id === selectedRequestId);
+                if (storeReq && typeof storeReq.category_notes !== 'undefined' && typeof storeReq.general_notes !== 'undefined') {
+                    if (isMounted) {
+                        setDirectRequest(storeReq);
                         setIsDataReady(true);
                     }
-                });
+                }
 
-            // 2. Also sync to AppContext global state
-            fetchAndUpdateSingleRequest(selectedRequestId)
-                .catch(err => console.error("Error loading single request in PrintReport:", err))
-                .finally(() => {
+                // Fetch authoritative full request directly from DB once
+                const { data, error } = await supabase
+                    .from('inspection_requests')
+                    .select('*')
+                    .eq('id', selectedRequestId)
+                    .maybeSingle();
+
+                if (!isMounted) return;
+
+                if (data && !error) {
+                    const fullReq = data as InspectionRequest;
+                    setDirectRequest(fullReq);
                     setIsDataReady(true);
-                });
-        }
-    }, [selectedRequestId, requests, directRequest, fetchAndUpdateSingleRequest]);
+
+                    // Fetch client if missing from local memory
+                    if (fullReq.client_id) {
+                        const localClient = clients.find(c => c.id === fullReq.client_id);
+                        if (localClient) {
+                            setDirectClient(localClient);
+                        } else {
+                            const { data: cData } = await supabase.from('clients').select('*').eq('id', fullReq.client_id).maybeSingle();
+                            if (isMounted && cData) setDirectClient(cData as Client);
+                        }
+                    }
+
+                    // Fetch car if missing from local memory
+                    if (fullReq.car_id) {
+                        const localCar = cars.find(c => c.id === fullReq.car_id);
+                        if (localCar) {
+                            setDirectCar(localCar);
+                        } else {
+                            const { data: carData } = await supabase.from('cars').select('*').eq('id', fullReq.car_id).maybeSingle();
+                            if (isMounted && carData) setDirectCar(carData as Car);
+                        }
+                    }
+                } else {
+                    setIsDataReady(true); // Don't hang forever
+                }
+            } catch (err) {
+                console.error("Error loading single request in PrintReport:", err);
+                if (isMounted) setIsDataReady(true);
+            }
+        };
+
+        loadData();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [selectedRequestId]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -696,11 +731,41 @@ const PrintReport: React.FC = () => {
     };
 
 
-    const client = request ? clients.find(c => c.id === request.client_id) : undefined;
-    const car = request ? cars.find(c => c.id === request.car_id) : undefined;
-    const carModel = car ? carModels.find(m => m.id === car.model_id) : undefined;
-    const carMake = car ? carMakes.find(m => m.id === car.make_id) : undefined;
-    const inspectionType = request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined;
+    const client = directClient || (request ? clients.find(c => c.id === request.client_id) : undefined) || (request?.client_id ? {
+        id: request.client_id,
+        name: 'العميل',
+        phone: '',
+        created_at: ''
+    } as Client : undefined);
+
+    const car = directCar || (request ? cars.find(c => c.id === request.car_id) : undefined) || (request?.car_snapshot ? {
+        id: request.car_id || 'fallback_car',
+        make_id: '',
+        model_id: '',
+        year: request.car_snapshot.year || 0,
+        plate_number: null,
+        plate_number_en: null,
+        vin: null
+    } as Car : undefined);
+
+    const carModel = car ? carModels.find(m => m.id === car.model_id) : (request?.car_snapshot ? {
+        id: '',
+        make_id: '',
+        name_ar: request.car_snapshot.model_ar || '',
+        name_en: request.car_snapshot.model_en || request.car_snapshot.model_ar || ''
+    } as CarModel : undefined);
+
+    const carMake = car ? carMakes.find(m => m.id === car.make_id) : (request?.car_snapshot ? {
+        id: '',
+        name_ar: request.car_snapshot.make_ar || '',
+        name_en: request.car_snapshot.make_en || request.car_snapshot.make_ar || ''
+    } as CarMake : undefined);
+
+    const inspectionType = (request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined) || {
+        id: request?.inspection_type_id || 'unknown',
+        name: 'فحص فني',
+        price: request?.price || 0
+    } as InspectionType;
 
     const handlePrint = () => {
         window.print();
@@ -1655,8 +1720,7 @@ ${reviewLink}
                 <div className="flex justify-center w-full min-h-full print:block print:!w-full print:!h-auto print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!overflow-visible">
                     <div className="origin-top transition-transform duration-200 print:transform-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!overflow-visible print:!h-auto print:!w-full" style={{ transform: `scale(${previewScale})`, marginBottom: `-${(1 - previewScale) * 100}%` }}>
                         <div className="report-wrapper bg-white shadow-2xl print:shadow-none mx-auto overflow-hidden print:!overflow-visible print:!h-auto print:!min-h-0 print:!w-full print:!max-w-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!ring-0" style={{ width: '210mm', minHeight: '297mm' }}>
-                            { client && car && inspectionType ?
-                                isHandwritten ? (
+                            { isHandwritten ? (
                                     <div className="w-full flex flex-col bg-white" ref={reportRef}>
                                         {paperImages.length > 0 ? (
                                             <div className="flex flex-col gap-4 print:gap-0 print:block">
@@ -1681,7 +1745,7 @@ ${reviewLink}
                                             </div>
                                         )}
                                     </div>
-                                ) : (
+                                ) : client && car && inspectionType ? (
                                     <>
                                         <InspectionReport
                                             ref={reportRef}
@@ -1713,7 +1777,7 @@ ${reviewLink}
                                         )}
                                     </>
                                 )
-                                 : <div className="p-8 text-center">جاري تحميل البيانات...</div>
+                                 : <div className="p-8 text-center text-slate-500">جاري تحميل البيانات...</div>
                             }
                         </div>
                     </div>

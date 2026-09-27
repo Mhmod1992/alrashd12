@@ -443,6 +443,50 @@ export const FillRequest: React.FC = () => {
     // Draft Keys for LocalStorage
     const getDraftKey = useCallback((id: string) => `request_draft_${id}`, []);
 
+    // --- Automatic Cleanup of Empty or Stale Drafts on Mount ---
+    useEffect(() => {
+        try {
+            const keysToRemove: string[] = [];
+            const now = Date.now();
+            const MAX_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours
+
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('request_draft_')) {
+                    try {
+                        const val = localStorage.getItem(key);
+                        if (!val) {
+                            keysToRemove.push(key);
+                            continue;
+                        }
+                        const parsed = JSON.parse(val);
+                        const hasNotes = (parsed.generalNotes && parsed.generalNotes.length > 0) ||
+                            (parsed.categoryNotes && Object.values(parsed.categoryNotes).some((arr: any) => arr && arr.length > 0)) ||
+                            (parsed.structuredFindings && parsed.structuredFindings.length > 0);
+
+                        if (!hasNotes) {
+                            keysToRemove.push(key);
+                            continue;
+                        }
+
+                        if (parsed.updatedAt) {
+                            const age = now - new Date(parsed.updatedAt).getTime();
+                            if (age > MAX_AGE_MS) {
+                                keysToRemove.push(key);
+                            }
+                        }
+                    } catch {
+                        keysToRemove.push(key);
+                    }
+                }
+            }
+
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+        } catch (e) {
+            console.warn('Drafts cleanup failed', e);
+        }
+    }, []);
+
     // --- Persist State to Local Storage on Change ---
     useEffect(() => {
         if (!request || !isInitialDataLoaded) return;
@@ -455,6 +499,18 @@ export const FillRequest: React.FC = () => {
             } catch (e) {
                 console.warn('Failed to clear draft for locked request', e);
             }
+            return;
+        }
+
+        // منع حفظ مسودة فارغة لا تحتوي على أي ملاحظات لتجنب تراكم السجلات
+        const hasContent = generalNotes.length > 0 || 
+            Object.values(categoryNotes).some(arr => arr && arr.length > 0) || 
+            structuredFindings.length > 0;
+
+        if (!hasContent) {
+            try {
+                localStorage.removeItem(getDraftKey(request.id));
+            } catch (e) {}
             return;
         }
 
