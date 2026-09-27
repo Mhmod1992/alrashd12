@@ -23,6 +23,7 @@ import TechnicianSelectionModal from '../components/TechnicianSelectionModal';
 import WhatsAppRecipientModal from '../components/WhatsAppRecipientModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { pdf } from '@react-pdf/renderer';
+import { supabase } from '../lib/supabaseClient';
 import OrderPdf from '../components/reports/OrderPdf';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
@@ -280,7 +281,13 @@ const PrintReport: React.FC = () => {
     } = useAppContext();
 
     const reportRef = useRef<HTMLDivElement>(null);
-    const originalRequest = requests.find(r => r.id === selectedRequestId);
+    const [directRequest, setDirectRequest] = useState<InspectionRequest | null>(null);
+    const storeRequest = requests.find(r => r.id === selectedRequestId);
+    const originalRequest = directRequest || storeRequest;
+
+    useEffect(() => {
+        setDirectRequest(null);
+    }, [selectedRequestId]);
     
     // Translation State
     const [translatedRequest, setTranslatedRequest] = useState<InspectionRequest | null>(null);
@@ -402,15 +409,43 @@ const PrintReport: React.FC = () => {
     }, [activeArchiveTab, paperImages, publicImages, internalImages]);
 
     useEffect(() => {
-        if (request && typeof request.inspection_data !== 'undefined') {
+        if (!selectedRequestId) {
+            setIsDataReady(false);
+            return;
+        }
+
+        const currentReq = directRequest || requests.find(r => r.id === selectedRequestId);
+        const isFullyLoaded = !!(currentReq && 
+            typeof currentReq.category_notes !== 'undefined' && 
+            typeof currentReq.general_notes !== 'undefined' && 
+            typeof currentReq.structured_findings !== 'undefined');
+
+        if (isFullyLoaded) {
             setIsDataReady(true);
         } else {
             setIsDataReady(false);
-            if (selectedRequestId) {
-                fetchAndUpdateSingleRequest(selectedRequestId);
-            }
+            
+            // 1. Fetch complete record immediately from DB
+            supabase
+                .from('inspection_requests')
+                .select('*')
+                .eq('id', selectedRequestId)
+                .maybeSingle()
+                .then(({ data, error }) => {
+                    if (data && !error) {
+                        setDirectRequest(data as InspectionRequest);
+                        setIsDataReady(true);
+                    }
+                });
+
+            // 2. Also sync to AppContext global state
+            fetchAndUpdateSingleRequest(selectedRequestId)
+                .catch(err => console.error("Error loading single request in PrintReport:", err))
+                .finally(() => {
+                    setIsDataReady(true);
+                });
         }
-    }, [request, selectedRequestId, fetchAndUpdateSingleRequest]);
+    }, [selectedRequestId, requests, directRequest, fetchAndUpdateSingleRequest]);
 
     useEffect(() => {
         const handleResize = () => {
