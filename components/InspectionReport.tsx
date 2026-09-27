@@ -319,7 +319,9 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
         };
     }, [request.car_snapshot, car, carMake, carModel]);
 
-    const visibleCategoryIds = inspectionType.finding_category_ids;
+    const visibleCategoryIds = (inspectionType && Array.isArray(inspectionType.finding_category_ids))
+        ? inspectionType.finding_category_ids
+        : customFindingCategories.map(c => c.id);
 
     const formatArabicDateTime = (date: Date) => {
         const year = date.getFullYear();
@@ -337,21 +339,23 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
     const reportWriters = useMemo(() => {
         const authors = new Set<string>();
         
-        if (request.general_notes) {
+        if (Array.isArray(request.general_notes)) {
             request.general_notes.forEach(note => {
-                if (note.authorName && !note.text.includes("__REPORT_READY_NOTIF_SENT__")) {
+                if (note && note.authorName && !note.text?.includes("__REPORT_READY_NOTIF_SENT__")) {
                     authors.add(note.authorName);
                 }
             });
         }
         
-        if (request.category_notes) {
+        if (request.category_notes && typeof request.category_notes === 'object') {
             Object.values(request.category_notes).forEach(notes => {
-                notes.forEach(note => {
-                    if (note.authorName) {
-                        authors.add(note.authorName);
-                    }
-                });
+                if (Array.isArray(notes)) {
+                    notes.forEach(note => {
+                        if (note && note.authorName) {
+                            authors.add(note.authorName);
+                        }
+                    });
+                }
             });
         }
         
@@ -363,20 +367,21 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
         const filteredGeneralNotes = (general_notes || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل'));
         if (structured_findings && structured_findings.length > 0) return true;
         if (filteredGeneralNotes.length > 0) return true;
-        if (category_notes && Object.values(category_notes).some(notes => notes && (notes as Note[]).length > 0)) return true;
+        if (category_notes && Object.values(category_notes).some(notes => Array.isArray(notes) && notes.length > 0)) return true;
         return false;
     }, [request]);
 
     const allImageNotes = useMemo(() => {
         const collectedNotes: { note: Note; categoryName: string }[] = [];
-        visibleCategoryIds.forEach(catId => {
+        (visibleCategoryIds || []).forEach(catId => {
             const category = customFindingCategories.find(c => c.id === catId);
             if (category) {
-                const imageNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !!note.image);
+                const notesList = request.category_notes?.[catId];
+                const imageNotes = Array.isArray(notesList) ? notesList.filter(note => !!note?.image) : [];
                 imageNotes.forEach(note => collectedNotes.push({ note, categoryName: category.name }));
             }
         });
-        ((request.general_notes as Note[]) || []).filter(note => !!note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل')).forEach(note => collectedNotes.push({ note, categoryName: reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة' }));
+        (Array.isArray(request.general_notes) ? request.general_notes : []).filter(note => !!note?.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل')).forEach(note => collectedNotes.push({ note, categoryName: reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة' }));
         return collectedNotes;
     }, [request.category_notes, request.general_notes, visibleCategoryIds, customFindingCategories, reportDirection]);
 

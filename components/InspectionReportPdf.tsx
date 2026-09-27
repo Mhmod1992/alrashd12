@@ -377,7 +377,7 @@ const InspectionReportPdf: React.FC<InspectionReportPdfProps> = ({
     year: request.car_snapshot?.year || car.year,
   };
 
-  const visibleCategoryIds = inspectionType.finding_category_ids;
+  const visibleCategoryIds = inspectionType?.finding_category_ids || [];
 
   const allImageNotes = (() => {
     const collectedNotes: { note: Note; categoryName: string }[] = [];

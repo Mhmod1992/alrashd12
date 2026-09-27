@@ -218,7 +218,7 @@ const ReportPdf: React.FC<ReportPdfProps> = ({
     year: request.car_snapshot?.year || car.year,
   };
 
-  const visibleCategoryIds = inspectionType.finding_category_ids;
+  const visibleCategoryIds = inspectionType?.finding_category_ids || [];
 
   return (
     <Document>

@@ -761,11 +761,18 @@ const PrintReport: React.FC = () => {
         name_en: request.car_snapshot.make_en || request.car_snapshot.make_ar || ''
     } as CarMake : undefined);
 
-    const inspectionType = (request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined) || {
+    const foundInspectionType = request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined;
+    const inspectionType: InspectionType = foundInspectionType ? {
+        ...foundInspectionType,
+        finding_category_ids: (foundInspectionType.finding_category_ids && foundInspectionType.finding_category_ids.length > 0)
+            ? foundInspectionType.finding_category_ids
+            : customFindingCategories.map(c => c.id)
+    } : {
         id: request?.inspection_type_id || 'unknown',
         name: 'فحص فني',
-        price: request?.price || 0
-    } as InspectionType;
+        price: request?.price || 0,
+        finding_category_ids: customFindingCategories.map(c => c.id)
+    };
 
     const handlePrint = () => {
         window.print();

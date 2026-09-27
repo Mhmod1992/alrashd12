@@ -815,7 +815,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
     year: request.car_snapshot?.year || car.year,
   };
 
-  const visibleCategoryIds = inspectionType.finding_category_ids;
+  const visibleCategoryIds = inspectionType?.finding_category_ids || [];
 
   const reportWriters = (() => {
     const authors = new Set<string>();
