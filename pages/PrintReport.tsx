@@ -285,6 +285,57 @@ const PrintReport: React.FC = () => {
     const [directClient, setDirectClient] = useState<Client | null>(null);
     const [directCar, setDirectCar] = useState<Car | null>(null);
     const storeRequest = requests.find(r => r.id === selectedRequestId);
+    
+    // Sync updates from storeRequest whenever AppContext updates via Realtime
+    useEffect(() => {
+        if (!storeRequest) return;
+        setDirectRequest(prev => {
+            if (!prev) return storeRequest;
+            return {
+                ...prev,
+                ...storeRequest,
+                category_notes: storeRequest.category_notes !== undefined ? storeRequest.category_notes : prev.category_notes,
+                general_notes: storeRequest.general_notes !== undefined ? storeRequest.general_notes : prev.general_notes,
+                structured_findings: storeRequest.structured_findings !== undefined ? storeRequest.structured_findings : prev.structured_findings,
+                attached_files: storeRequest.attached_files !== undefined ? storeRequest.attached_files : prev.attached_files,
+                technician_assignments: storeRequest.technician_assignments !== undefined ? storeRequest.technician_assignments : prev.technician_assignments,
+                report_stamps: storeRequest.report_stamps !== undefined ? storeRequest.report_stamps : prev.report_stamps,
+                activity_log: storeRequest.activity_log !== undefined ? storeRequest.activity_log : prev.activity_log,
+                inspection_data: storeRequest.inspection_data !== undefined ? storeRequest.inspection_data : prev.inspection_data,
+            };
+        });
+    }, [storeRequest]);
+
+    // Dedicated real-time Supabase postgres_changes channel for instant sync across devices without refresh
+    useEffect(() => {
+        if (!selectedRequestId) return;
+
+        const channel = supabase.channel(`print_report_realtime_${selectedRequestId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'inspection_requests',
+                    filter: `id=eq.${selectedRequestId}`
+                },
+                (payload) => {
+                    const updated = payload.new as InspectionRequest;
+                    if (updated && updated.id === selectedRequestId) {
+                        setDirectRequest(prev => ({
+                            ...(prev || {}),
+                            ...updated
+                        } as InspectionRequest));
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [selectedRequestId]);
+
     const originalRequest = directRequest || storeRequest;
 
     useEffect(() => {
@@ -387,13 +438,13 @@ const PrintReport: React.FC = () => {
 
     const isReportEmpty = useMemo(() => {
         if (!request) return true;
-        const hasFindings = request.structured_findings && request.structured_findings.length > 0;
-        const filteredGeneralNotes = (request.general_notes || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل') && (n.text || n.image));
+        const hasFindings = Array.isArray(request.structured_findings) && request.structured_findings.length > 0;
+        const filteredGeneralNotes = (Array.isArray(request.general_notes) ? request.general_notes : []).filter(n => n && n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل') && (n.text || n.image));
         const hasGeneralNotes = filteredGeneralNotes.length > 0;
         
         let hasCategoryNotes = false;
-        if (request.category_notes) {
-            hasCategoryNotes = Object.values(request.category_notes).some(notes => notes.length > 0);
+        if (request.category_notes && typeof request.category_notes === 'object' && !Array.isArray(request.category_notes)) {
+            hasCategoryNotes = Object.values(request.category_notes).some(notes => Array.isArray(notes) && notes.length > 0);
         }
         
         return !hasFindings && !hasGeneralNotes && !hasCategoryNotes;
@@ -761,17 +812,18 @@ const PrintReport: React.FC = () => {
         name_en: request.car_snapshot.make_en || request.car_snapshot.make_ar || ''
     } as CarMake : undefined);
 
+    const safeCategories = Array.isArray(customFindingCategories) ? customFindingCategories : [];
     const foundInspectionType = request ? inspectionTypes.find(i => i.id === request.inspection_type_id) : undefined;
     const inspectionType: InspectionType = foundInspectionType ? {
         ...foundInspectionType,
-        finding_category_ids: (foundInspectionType.finding_category_ids && foundInspectionType.finding_category_ids.length > 0)
+        finding_category_ids: (foundInspectionType.finding_category_ids && Array.isArray(foundInspectionType.finding_category_ids) && foundInspectionType.finding_category_ids.length > 0)
             ? foundInspectionType.finding_category_ids
-            : customFindingCategories.map(c => c.id)
+            : safeCategories.map(c => c.id)
     } : {
         id: request?.inspection_type_id || 'unknown',
         name: 'فحص فني',
         price: request?.price || 0,
-        finding_category_ids: customFindingCategories.map(c => c.id)
+        finding_category_ids: safeCategories.map(c => c.id)
     };
 
     const handlePrint = () => {
@@ -1401,27 +1453,32 @@ ${reviewLink}
 
         const result: { categoryName: string; names: string[]; style: typeof colorStyles[0] }[] = [];
         let colorIdx = 0;
+        const safeCategories = Array.isArray(customFindingCategories) ? customFindingCategories : [];
+        const techList = Array.isArray(technicians) ? technicians : [];
+        const empList = Array.isArray(employees) ? employees : [];
         
-        Object.entries(originalRequest.technician_assignments).forEach(([catId, assignedIds]) => {
-            if (!assignedIds || assignedIds.length === 0) return;
-            const category = customFindingCategories.find(c => c.id === catId);
-            const catName = category ? category.name : catId;
-            
-            const techNames = technicians.filter(t => assignedIds.includes(t.id)).map(t => t.name);
-            const empNames = employees.filter(e => assignedIds.includes(e.id)).map(e => e.name);
-            const allNames = [...techNames, ...empNames];
-            
-            if (allNames.length > 0) {
-                result.push({ 
-                    categoryName: catName, 
-                    names: allNames,
-                    style: colorStyles[colorIdx % colorStyles.length]
-                });
-                colorIdx++;
-            }
-        });
+        if (originalRequest?.technician_assignments && typeof originalRequest.technician_assignments === 'object') {
+            Object.entries(originalRequest.technician_assignments).forEach(([catId, assignedIds]) => {
+                if (!Array.isArray(assignedIds) || assignedIds.length === 0) return;
+                const category = safeCategories.find(c => c && c.id === catId);
+                const catName = category ? category.name : catId;
+                
+                const techNames = techList.filter(t => t && assignedIds.includes(t.id)).map(t => t.name);
+                const empNames = empList.filter(e => e && assignedIds.includes(e.id)).map(e => e.name);
+                const allNames = [...techNames, ...empNames];
+                
+                if (allNames.length > 0) {
+                    result.push({ 
+                        categoryName: catName, 
+                        names: allNames,
+                        style: colorStyles[colorIdx % colorStyles.length]
+                    });
+                    colorIdx++;
+                }
+            });
+        }
         return result;
-    }, [originalRequest, customFindingCategories, technicians, employees]);
+    }, [originalRequest?.technician_assignments, customFindingCategories, technicians, employees]);
 
     useEffect(() => {
         const handleWindowDragOver = (e: DragEvent) => {

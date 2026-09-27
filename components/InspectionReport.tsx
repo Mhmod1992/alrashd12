@@ -262,11 +262,17 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
 };
 
 const FormattedPlate: React.FC<{ plateNumber: string; settings: Settings; isPrintView?: boolean }> = ({ plateNumber, settings, isPrintView }) => {
-    const parts = plateNumber.split(' ').filter(Boolean);
+    const parts = (plateNumber || '').split(' ').filter(Boolean);
     const arabicLettersRaw = parts.filter(p => !/^\d+$/.test(p)).join('');
     const numbersRaw = parts.find(p => /^\d+$/.test(p)) || '';
     const arToEnMap = new Map<string, string>();
-    if (settings?.plateCharacters) { settings.plateCharacters.forEach(pc => { arToEnMap.set(pc.ar.replace('ـ', ''), pc.en); }); }
+    if (Array.isArray(settings?.plateCharacters)) { 
+        settings.plateCharacters.forEach(pc => { 
+            if (pc?.ar && pc?.en) {
+                arToEnMap.set(pc.ar.replace('ـ', ''), pc.en); 
+            }
+        }); 
+    }
     const englishLetters = arabicLettersRaw.split('').map(char => arToEnMap.get(char) || char).join('');
 
     return (
@@ -294,18 +300,18 @@ const FormattedPlate: React.FC<{ plateNumber: string; settings: Settings; isPrin
 };
 
 const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>((props, ref) => {
-    const { request, client, car, carMake, carModel, inspectionType, customFindingCategories, predefinedFindings, settings, isPrintView, reportDirection = 'rtl' } = props;
+    const { request, client, car, carMake, carModel, inspectionType, customFindingCategories = [], predefinedFindings = [], settings, isPrintView, reportDirection = 'rtl' } = props;
     const { appName, reportSettings } = settings;
     const { fontSizes } = reportSettings;
     const { technicians, employees, authUser } = useAppContext();
-    const isCustomerRequestIncomplete = (request.report_stamps || []).includes('CUSTOMER_REQUEST_INCOMPLETE');
+    const isCustomerRequestIncomplete = (request?.report_stamps || []).includes('CUSTOMER_REQUEST_INCOMPLETE');
 
-    const isGeneralClient = client.phone === '0000000000' || client.name === 'بدون اسم' || client.phone === '0';
-    const displayClientName = isGeneralClient ? (reportDirection === 'ltr' ? 'General Client' : 'عميل عام') : client.name;
+    const isGeneralClient = client?.phone === '0000000000' || client?.name === 'بدون اسم' || client?.phone === '0';
+    const displayClientName = isGeneralClient ? (reportDirection === 'ltr' ? 'General Client' : 'عميل عام') : (client?.name || '');
     const showClientPhone = !isGeneralClient;
 
     const carDetails = useMemo(() => {
-        if (request.car_snapshot) {
+        if (request?.car_snapshot) {
             return {
                 makeNameEn: request.car_snapshot.make_en, modelNameEn: request.car_snapshot.model_en,
                 makeNameAr: request.car_snapshot.make_ar, modelNameAr: request.car_snapshot.model_ar,
@@ -315,13 +321,20 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
         return {
             makeNameEn: carMake?.name_en || 'Unknown', modelNameEn: carModel?.name_en || 'Unknown',
             makeNameAr: carMake?.name_ar || 'غير معروف', modelNameAr: carModel?.name_ar || 'غير معروف',
-            year: car.year,
+            year: car?.year,
         };
-    }, [request.car_snapshot, car, carMake, carModel]);
+    }, [request?.car_snapshot, car, carMake, carModel]);
 
-    const visibleCategoryIds = (inspectionType && Array.isArray(inspectionType.finding_category_ids))
-        ? inspectionType.finding_category_ids
-        : customFindingCategories.map(c => c.id);
+    const safeCustomCategories = useMemo(() => {
+        return Array.isArray(customFindingCategories) ? customFindingCategories : [];
+    }, [customFindingCategories]);
+
+    const visibleCategoryIds = useMemo(() => {
+        if (inspectionType && Array.isArray(inspectionType.finding_category_ids) && inspectionType.finding_category_ids.length > 0) {
+            return inspectionType.finding_category_ids;
+        }
+        return safeCustomCategories.map(c => c.id);
+    }, [inspectionType, safeCustomCategories]);
 
     const formatArabicDateTime = (date: Date) => {
         const year = date.getFullYear();
@@ -339,7 +352,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
     const reportWriters = useMemo(() => {
         const authors = new Set<string>();
         
-        if (Array.isArray(request.general_notes)) {
+        if (Array.isArray(request?.general_notes)) {
             request.general_notes.forEach(note => {
                 if (note && note.authorName && !note.text?.includes("__REPORT_READY_NOTIF_SENT__")) {
                     authors.add(note.authorName);
@@ -347,7 +360,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
             });
         }
         
-        if (request.category_notes && typeof request.category_notes === 'object') {
+        if (request?.category_notes && typeof request.category_notes === 'object' && !Array.isArray(request.category_notes)) {
             Object.values(request.category_notes).forEach(notes => {
                 if (Array.isArray(notes)) {
                     notes.forEach(note => {
@@ -360,38 +373,45 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
         }
         
         return Array.from(authors);
-    }, [request.general_notes, request.category_notes]);
+    }, [request?.general_notes, request?.category_notes]);
 
     const hasAnyFindings = useMemo(() => {
+        if (!request) return false;
         const { structured_findings, general_notes, category_notes } = request;
-        const filteredGeneralNotes = (general_notes || []).filter(n => n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل'));
-        if (structured_findings && structured_findings.length > 0) return true;
+        const filteredGeneralNotes = (Array.isArray(general_notes) ? general_notes : []).filter(n => n && n.text !== '__HANDWRITTEN_REPORT_TRUE__' && !n.text?.includes('__REPORT_READY_NOTIF_SENT__') && !n.text?.includes('إشعار جاهزية التقرير للعميل'));
+        if (Array.isArray(structured_findings) && structured_findings.length > 0) return true;
         if (filteredGeneralNotes.length > 0) return true;
-        if (category_notes && Object.values(category_notes).some(notes => Array.isArray(notes) && notes.length > 0)) return true;
+        if (category_notes && typeof category_notes === 'object' && !Array.isArray(category_notes)) {
+            if (Object.values(category_notes).some(notes => Array.isArray(notes) && notes.length > 0)) return true;
+        }
         return false;
     }, [request]);
 
     const allImageNotes = useMemo(() => {
         const collectedNotes: { note: Note; categoryName: string }[] = [];
-        (visibleCategoryIds || []).forEach(catId => {
-            const category = customFindingCategories.find(c => c.id === catId);
+        const safeCatIds = Array.isArray(visibleCategoryIds) ? visibleCategoryIds : [];
+        safeCatIds.forEach(catId => {
+            const category = safeCustomCategories.find(c => c && c.id === catId);
             if (category) {
-                const notesList = request.category_notes?.[catId];
+                const notesList = request?.category_notes && typeof request.category_notes === 'object' ? (request.category_notes as any)[catId] : null;
                 const imageNotes = Array.isArray(notesList) ? notesList.filter(note => !!note?.image) : [];
                 imageNotes.forEach(note => collectedNotes.push({ note, categoryName: category.name }));
             }
         });
-        (Array.isArray(request.general_notes) ? request.general_notes : []).filter(note => !!note?.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل')).forEach(note => collectedNotes.push({ note, categoryName: reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة' }));
+        (Array.isArray(request?.general_notes) ? request.general_notes : []).filter(note => !!note?.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل')).forEach(note => collectedNotes.push({ note, categoryName: reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة' }));
         return collectedNotes;
-    }, [request.category_notes, request.general_notes, visibleCategoryIds, customFindingCategories, reportDirection]);
+    }, [request?.category_notes, request?.general_notes, visibleCategoryIds, safeCustomCategories, reportDirection]);
 
-    const generalTextOnlyNotes = ((request.general_notes as Note[]) || []).filter(note => !note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل'));
+    const generalTextOnlyNotes = (Array.isArray(request?.general_notes) ? (request.general_notes as Note[]) : []).filter(note => note && !note.image && note.text !== '__HANDWRITTEN_REPORT_TRUE__' && !note.text?.includes('__REPORT_READY_NOTIF_SENT__') && !note.text?.includes('إشعار جاهزية التقرير للعميل'));
 
     // Updated Logic: Get Technicians (Workers) AND Employees (System Users marked as Technicians)
     const getAssignedTechnicians = (categoryId: string) => {
-        const assignedIds = request.technician_assignments?.[categoryId] || [];
-        const techNames = technicians.filter(t => assignedIds.includes(t.id)).map(t => t.name);
-        const empNames = employees.filter(e => assignedIds.includes(e.id)).map(e => e.name);
+        const assignedIds = request?.technician_assignments?.[categoryId];
+        if (!Array.isArray(assignedIds) || assignedIds.length === 0) return [];
+        const techList = Array.isArray(technicians) ? technicians : [];
+        const empList = Array.isArray(employees) ? employees : [];
+        const techNames = techList.filter(t => t && assignedIds.includes(t.id)).map(t => t.name);
+        const empNames = empList.filter(e => e && assignedIds.includes(e.id)).map(e => e.name);
         return [...techNames, ...empNames];
     };
 
@@ -522,11 +542,12 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                     )}
 
                     {visibleCategoryIds.map(catId => {
-                        const category = customFindingCategories.find(c => c.id === catId);
+                        const category = safeCustomCategories.find(c => c && c.id === catId);
                         if (!category) return null;
-                        const allFindingsForCategory = (request.structured_findings || []).filter(f => f.categoryId === catId);
+                        const allFindingsForCategory = (Array.isArray(request?.structured_findings) ? request.structured_findings : []).filter(f => f && f.categoryId === catId);
+                        const safePredefinedFindings = Array.isArray(predefinedFindings) ? predefinedFindings : [];
                         const sortedFindings = allFindingsForCategory.map(finding => {
-                            const predefined = predefinedFindings.find(pf => pf.id === finding.findingId);
+                            const predefined = safePredefinedFindings.find(pf => pf && pf.id === finding.findingId);
                             let positionPriority = 2;
                             if (predefined?.report_position === 'right') positionPriority = reportDirection === 'ltr' ? 3 : 1;
                             else if (predefined?.report_position === 'left') positionPriority = reportDirection === 'ltr' ? 1 : 3;
@@ -537,7 +558,8 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                             return (a.predefined?.orderIndex ?? Number.MAX_SAFE_INTEGER) - (b.predefined?.orderIndex ?? Number.MAX_SAFE_INTEGER);
                         });
 
-                        const textOnlyNotes = ((request.category_notes?.[catId] as Note[]) || []).filter(note => !note.image);
+                        const notesRaw = request?.category_notes && typeof request.category_notes === 'object' ? (request.category_notes as any)[catId] : null;
+                        const textOnlyNotes = (Array.isArray(notesRaw) ? (notesRaw as Note[]) : []).filter(note => note && !note.image);
                         const workshopNotes = textOnlyNotes.filter(note => !note.isFieldNote && note.stage !== 'field');
                         const fieldNotes = textOnlyNotes.filter(note => note.isFieldNote || note.stage === 'field');
                         const isFieldNotesConfigured = !!reportSettings.categoryFieldNotesEnabled?.[catId];
