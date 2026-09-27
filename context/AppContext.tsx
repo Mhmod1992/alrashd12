@@ -700,7 +700,95 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [authUser, fetchRequests, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations]);
 
-    // Network Status & Reconnection
+    // Network Status & Real Internet Probe
+    const isOnlineRef = useRef(navigator.onLine);
+    const consecutiveFailuresRef = useRef(0);
+    const isProbingRef = useRef(false);
+
+    const checkRealInternetConnection = useCallback(async (): Promise<boolean> => {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            return false;
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+        try {
+            await fetch(`https://www.google.com/favicon.ico?_t=${Date.now()}`, {
+                method: 'HEAD',
+                mode: 'no-cors',
+                cache: 'no-store',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            return true;
+        } catch {
+            clearTimeout(timeoutId);
+            try {
+                const fbController = new AbortController();
+                const fbTimeout = setTimeout(() => fbController.abort(), 2500);
+                await fetch(`https://1.1.1.1/cdn-cgi/trace?_t=${Date.now()}`, {
+                    method: 'HEAD',
+                    mode: 'no-cors',
+                    cache: 'no-store',
+                    signal: fbController.signal
+                });
+                clearTimeout(fbTimeout);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+    }, []);
+
+    const verifyAndSyncInternetStatus = useCallback(async (isForced: boolean = false) => {
+        if (isProbingRef.current) return;
+        isProbingRef.current = true;
+
+        try {
+            const hasRealInternet = await checkRealInternetConnection();
+
+            if (hasRealInternet) {
+                consecutiveFailuresRef.current = 0;
+                const wasOffline = !isOnlineRef.current;
+                if (wasOffline || isForced) {
+                    isOnlineRef.current = true;
+                    setIsOnline(true);
+                    addNotification({
+                        title: 'تم استعادة الاتصال بالإنترنت',
+                        message: 'الإنترنت متصل الآن، وتم تحديث جدول البيانات تلقائياً.',
+                        type: 'success'
+                    });
+
+                    if (authUserRef.current) {
+                        supabase.auth.startAutoRefresh();
+                        retryConnection();
+                        // Automatically simulate manual table refresh behavior
+                        await fetchRequests();
+                    }
+                }
+            } else {
+                consecutiveFailuresRef.current += 1;
+                // Require 2 consecutive failed probes before flagging offline
+                if (consecutiveFailuresRef.current >= 2 || !navigator.onLine) {
+                    if (isOnlineRef.current) {
+                        isOnlineRef.current = false;
+                        setIsOnline(false);
+                        setRealtimeStatus('disconnected');
+                        addNotification({
+                            title: 'فقد الاتصال بالإنترنت',
+                            message: 'تعذر الاتصال بالشبكة الخارجية، أنت تعمل الآن في وضع عدم الاتصال.',
+                            type: 'warning'
+                        });
+                    }
+                }
+            }
+        } finally {
+            isProbingRef.current = false;
+        }
+    }, [checkRealInternetConnection, addNotification, retryConnection, fetchRequests]);
+
+    // Network Status & Reconnection Effect
     useEffect(() => {
         const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible') {
@@ -719,40 +807,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     if (realtimeStatusRef.current === 'disconnected') {
                         retryConnection();
                     }
-                    // Only fetch data on tab return for mobile devices
-                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-                    if (isMobile) {
-                        fetchRequests();
-                    }
+                    // Trigger real internet probe and table refresh
+                    verifyAndSyncInternetStatus();
                 }
             }
         };
 
         const handleOnline = () => {
-            setIsOnline(true);
-            addNotification({ title: 'تم استعادة الاتصال', message: 'لقد عدت متصلاً بالإنترنت.', type: 'info' });
-            if (authUserRef.current) {
-                supabase.auth.startAutoRefresh();
-                retryConnection();
-            }
+            verifyAndSyncInternetStatus(true);
         };
 
         const handleOffline = () => {
+            isOnlineRef.current = false;
             setIsOnline(false);
             setRealtimeStatus('disconnected');
-            addNotification({ title: 'فقد الاتصال', message: 'لا يوجد اتصال بالإنترنت.', type: 'warning' });
+            addNotification({ title: 'فقد الاتصال', message: 'لا يوجد اتصال بالشبكة.', type: 'warning' });
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
+        // Active probe every 15 seconds to catch router connection without internet
+        const probeInterval = setInterval(() => {
+            verifyAndSyncInternetStatus();
+        }, 15000);
+
+        // Initial background probe on mount
+        verifyAndSyncInternetStatus();
+
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
+            clearInterval(probeInterval);
         };
-    }, [retryConnection, addNotification, logout]);
+    }, [verifyAndSyncInternetStatus, retryConnection, addNotification, logout]);
 
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
