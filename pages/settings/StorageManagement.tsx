@@ -1489,6 +1489,8 @@ const StorageManagement: React.FC = () => {
                             <img
                                 src={previewImage.url}
                                 alt={previewImage.name}
+                                loading="lazy"
+                                decoding="async"
                                 className="object-contain max-h-[70vh] w-auto rounded-lg"
                                 referrerPolicy="no-referrer"
                             />

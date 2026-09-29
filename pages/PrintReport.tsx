@@ -1838,7 +1838,7 @@ ${reviewLink}
                                                 <div className="flex flex-col gap-4 print:gap-0 print:block">
                                                     {publicImages.map((file, idx) => (
                                                         <div key={idx} className="w-full print:break-before-page print:mb-0 mb-4 flex print:items-center print:justify-center print:h-[270mm] print:overflow-hidden relative">
-                                                            <img src={file.data} alt={`Attachment ${idx + 1}`} className="max-w-full h-auto object-contain print:border-none print:rounded-none border rounded-lg mx-auto print:max-h-[260mm] print:max-w-[190mm]" style={{ pageBreakInside: 'avoid' }} />
+                                                            <img src={file.data} alt={`Attachment ${idx + 1}`} loading="lazy" decoding="async" className="max-w-full h-auto object-contain print:border-none print:rounded-none border rounded-lg mx-auto print:max-h-[260mm] print:max-w-[190mm]" style={{ pageBreakInside: 'avoid' }} />
                                                         </div>
                                                     ))}
                                                 </div>

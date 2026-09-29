@@ -1586,7 +1586,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const fileName = customFileName ? `${customFileName}.${fileExt}` : `${uuidv4()}.${fileExt}`;
         const filePath = folder ? `${folder}/${fileName}` : fileName;
         
-        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, compressedFile);
+        // Cache-Control: 1 year immutable cache to prevent re-downloading images and reduce Supabase Egress
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, compressedFile, {
+            cacheControl: '31536000, public, immutable',
+            upsert: false
+        });
         if (uploadError) throw uploadError;
         const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
         return data.publicUrl;

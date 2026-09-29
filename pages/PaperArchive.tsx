@@ -1261,7 +1261,7 @@ const PaperArchive: React.FC = () => {
                                                                             if (globalIdx !== -1) openLightbox(allArchivedImages, globalIdx);
                                                                         }}
                                                                     >
-                                                                        <img src={img.data} alt="req-img" className="w-full h-full object-cover transform transition-transform duration-500 group-hover:scale-110" />
+                                                                        <img src={img.data} alt="req-img" loading="lazy" decoding="async" className="w-full h-full object-cover transform transition-transform duration-500 group-hover:scale-110" />
                                                                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
                                                                         
                                                                         {/* Discreet type indicator */}
@@ -1480,7 +1480,7 @@ const PaperArchive: React.FC = () => {
                                                     openLightbox(lightboxData, idx);
                                                 }
                                             }} className="w-full h-full cursor-pointer">
-                                                <img src={file.data} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
+                                                <img src={file.data} alt={`Page ${idx + 1}`} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                                             </div>
                                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
                                                 <button onClick={() => {
@@ -1745,7 +1745,7 @@ const PaperArchive: React.FC = () => {
                                             : 'border-transparent opacity-40 hover:opacity-100'
                                         }`}
                                     >
-                                        <img src={img.url} alt="" className="w-full h-full object-cover" />
+                                        <img src={img.url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                                     </button>
                                 ))}
                             </div>

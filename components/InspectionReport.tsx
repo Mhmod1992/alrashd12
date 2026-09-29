@@ -244,7 +244,7 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
         <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center overflow-hidden break-inside-avoid print:break-inside-avoid w-full min-w-0" style={{ borderColor: settings.borderColor, clipPath: 'inset(0)' }}>
             {note.image && (
                 <div className="relative w-full overflow-hidden flex-shrink-0 pt-[56.25%] bg-slate-50 print:bg-slate-50" style={{ borderBottom: `1px solid ${settings.noteImageBorderColor}`, clipPath: 'inset(0)' }}>
-                    <img src={note.image} alt="Note" className="absolute top-0 left-0 w-full h-full object-cover print:object-cover block" referrerPolicy="no-referrer" style={{ maxWidth: '100%', maxHeight: '100%', width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={note.image} alt="Note" loading="lazy" decoding="async" className="absolute top-0 left-0 w-full h-full object-cover print:object-cover block" referrerPolicy="no-referrer" style={{ maxWidth: '100%', maxHeight: '100%', width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
             )}
             <div className={`flex-grow flex flex-col w-full ${isPrintView ? 'p-2' : 'p-3'}`}>

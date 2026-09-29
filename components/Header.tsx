@@ -269,6 +269,17 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
       
       <div className="flex items-center gap-1 sm:gap-2">
          
+         {import.meta.env.DEV && (
+            <div 
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300 rounded-full text-xs font-bold border border-amber-500/25 shadow-sm"
+                title="أنت الآن في بيئة التطوير (DEV) - كاش حماية باقة سوبابيس مفعل"
+            >
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <span className="hidden sm:inline">🛠️ وضع التطوير</span>
+                <span className="sm:hidden">🛠️ DEV</span>
+            </div>
+         )}
+         
          <div className="hidden sm:flex items-center me-2">
             {!isOnline ? (
                 <div className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs font-bold animate-pulse shadow-sm border border-red-100 dark:border-red-900/50" title="لا يوجد اتصال بالإنترنت">

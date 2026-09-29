@@ -4048,7 +4048,7 @@ export const FillRequest: React.FC = () => {
                         <div className="flex items-center gap-4">
                             {modalNoteData.image ? (
                                 <div className="relative group">
-                                    <img src={modalNoteData.image} className="w-24 h-24 object-cover rounded-xl border shadow-md" alt="معاينة" />
+                                    <img src={modalNoteData.image} loading="lazy" decoding="async" className="w-24 h-24 object-cover rounded-xl border shadow-md" alt="معاينة" />
                                     <button onClick={() => { setModalNoteData(p => ({ ...p, image: null })); setModalNoteFile(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-lg hover:bg-red-600 hover:scale-110 transition-all border-2 border-white dark:border-slate-800">
                                         <XIcon className="w-4 h-4" />
                                     </button>

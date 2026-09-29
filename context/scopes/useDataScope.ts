@@ -443,6 +443,23 @@ export const useDataScope = (
     }, []);
 
     const fetchAllPaperArchiveRequests = useCallback(async (): Promise<InspectionRequest[]> => {
+        // Dev Environment Guard: check sessionStorage cache to avoid repeated queries on hot reload
+        if (import.meta.env.DEV) {
+            try {
+                const cached = sessionStorage.getItem('dev_paper_archive_cache');
+                const cacheTime = sessionStorage.getItem('dev_paper_archive_time');
+                if (cached && cacheTime && Date.now() - Number(cacheTime) < 15 * 60 * 1000) {
+                    const parsed = JSON.parse(cached) as InspectionRequest[];
+                    if (parsed.length > 0) {
+                        await ensureEntitiesLoaded(parsed);
+                        return parsed;
+                    }
+                }
+            } catch (e) {
+                // Ignore parse error and proceed to fetch
+            }
+        }
+
         // Fetches ALL requests up to a limit for archiving purposes
         const { data, error } = await supabase.from('inspection_requests')
             .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
@@ -459,6 +476,15 @@ export const useDataScope = (
         if (requestsData.length > 0) {
             await ensureEntitiesLoaded(requestsData);
         }
+
+        // Save to dev cache
+        if (import.meta.env.DEV && requestsData.length > 0) {
+            try {
+                sessionStorage.setItem('dev_paper_archive_cache', JSON.stringify(requestsData));
+                sessionStorage.setItem('dev_paper_archive_time', Date.now().toString());
+            } catch (e) {}
+        }
+
         return requestsData;
     }, [addNotification, ensureEntitiesLoaded]);
 
