@@ -17,7 +17,7 @@ import XIcon from '../components/icons/XIcon';
 import { SkeletonTable } from '../components/Skeleton';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import UserCircleIcon from '../components/icons/UserCircleIcon';
-import { formatBytes } from '../lib/utils';
+import { formatBytes, compressToTargetKilobytes } from '../lib/utils';
 import DocumentScannerModal from '../components/DocumentScannerModal';
 import CameraPage from '../components/CameraPage';
 import CustomDatePicker from '../components/CustomDatePicker';
@@ -31,65 +31,12 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 // Configure PDF.js worker using Vite's ?url import
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-// --- Image Optimization Helper ---
+// --- Image Optimization Helper: استهداف 34 - 44 KB ---
 const optimizeDocumentImage = async (file: File, grayscale: boolean = false): Promise<File> => {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.src = URL.createObjectURL(file);
-        img.onload = () => {
-            const maxWidth = 1400; // Max width for documents - slightly increased for better clarity
-            let width = img.width;
-            let height = img.height;
-
-            if (width > maxWidth) {
-                height = Math.round((height * maxWidth) / width);
-                width = maxWidth;
-            }
-
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                reject(new Error('Canvas context not available'));
-                return;
-            }
-
-            // Draw white background
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, width, height);
-
-            // Apply filters based on mode
-            if (grayscale) {
-                ctx.filter = 'grayscale(100%) contrast(120%) brightness(105%)';
-            } else {
-                // Slight contrast and saturation boost for color documents to keep text popping
-                ctx.filter = 'contrast(110%) saturate(110%)';
-            }
-            
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // Check for WebP support
-            const supportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
-            const format = supportsWebP ? 'image/webp' : 'image/jpeg';
-            const extension = supportsWebP ? '.webp' : '.jpg';
-            const quality = supportsWebP ? 0.6 : 0.7; // WebP manages quality better at lower percentages
-
-            canvas.toBlob((blob) => {
-                if (!blob) {
-                    reject(new Error('Blob creation failed'));
-                    return;
-                }
-                const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + extension, { type: format });
-                resolve(newFile);
-            }, format, quality);
-            
-            URL.revokeObjectURL(img.src);
-        };
-        img.onerror = (err) => {
-            URL.revokeObjectURL(img.src);
-            reject(err);
-        };
+    return compressToTargetKilobytes(file, {
+        targetMinKB: 34,
+        targetMaxKB: 44,
+        filterType: grayscale ? 'bw' : 'natural_compressed'
     });
 };
 
@@ -1888,6 +1835,13 @@ const PaperArchive: React.FC = () => {
                 request={lightboxCurrentRequest || undefined} 
                 categoryId="ALL" 
                 categoryName="تعيين الفنيين" 
+                onSaveSuccess={(updatedAssignments) => {
+                    if (lightboxCurrentRequest?.id) {
+                        const targetId = lightboxCurrentRequest.id;
+                        setRawRequests(prev => prev.map(r => r.id === targetId ? { ...r, technician_assignments: updatedAssignments } : r));
+                        setSelectedRequest(prev => prev && prev.id === targetId ? { ...prev, technician_assignments: updatedAssignments } : prev);
+                    }
+                }}
             />
         </div>
     );

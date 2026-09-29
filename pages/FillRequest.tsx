@@ -4099,7 +4099,18 @@ export const FillRequest: React.FC = () => {
             />
 
             <Modal isOpen={isPreviewModalOpen} onClose={() => setIsPreviewModalOpen(false)} size="4xl" title="معاينة الصورة">{previewImageUrl && <img src={previewImageUrl} alt="معاينة مكبرة" className="max-w-full max-h-[80vh] mx-auto" />}</Modal>
-            <TechnicianSelectionModal isOpen={isTechnicianModalOpen} onClose={() => setIsTechnicianModalOpen(false)} request={request} categoryId={technicianModalTarget?.id || ''} categoryName={technicianModalTarget?.name || ''} />
+            <TechnicianSelectionModal 
+                isOpen={isTechnicianModalOpen} 
+                onClose={() => setIsTechnicianModalOpen(false)} 
+                request={request} 
+                categoryId={technicianModalTarget?.id || ''} 
+                categoryName={technicianModalTarget?.name || ''} 
+                onSaveSuccess={() => {
+                    if (request?.id) {
+                        fetchAndUpdateSingleRequest(request.id);
+                    }
+                }}
+            />
             <Modal isOpen={isReviewPromptModalOpen} onClose={() => setIsReviewPromptModalOpen(false)} title="طلب تقييم من العميل" size="md">
                 <div className="space-y-4">
                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">

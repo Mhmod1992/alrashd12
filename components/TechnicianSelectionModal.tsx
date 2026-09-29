@@ -14,6 +14,7 @@ interface TechnicianSelectionModalProps {
     request: InspectionRequest;
     categoryId: string;
     categoryName: string;
+    onSaveSuccess?: (updatedAssignments: Record<string, string[]>) => void;
 }
 
 const parseTitles = (title?: string): string[] => {
@@ -23,7 +24,7 @@ const parseTitles = (title?: string): string[] => {
     return parts.length > 0 ? parts : ['أخرى'];
 };
 
-const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isOpen, onClose, request, categoryId, categoryName }) => {
+const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isOpen, onClose, request, categoryId, categoryName, onSaveSuccess }) => {
     const { technicians, employees, updateRequest, addNotification, inspectionTypes, customFindingCategories } = useAppContext();
     const [isSaving, setIsSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -139,6 +140,9 @@ const TechnicianSelectionModal: React.FC<TechnicianSelectionModalProps> = ({ isO
                 id: request.id,
                 technician_assignments: draftAssignments
             });
+            if (onSaveSuccess) {
+                onSaveSuccess(draftAssignments);
+            }
             addNotification({ title: 'نجاح', message: `تم تحديث تعيينات الفنيين بنجاح.`, type: 'success' });
             onClose();
         } catch (error) {

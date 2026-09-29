@@ -197,6 +197,184 @@ export const processScannerImageFile = (file: File, filterType: 'original' | 'do
     });
 };
 
+/**
+ * استراتيجية ضغط ذكية ومخصصة للمستندات والمسودات الورقية
+ * تهدف لضغط الصور الكبيرة لتصل بدقة إلى نطاق الكيلوبايتات المنخفضة (34 - 44 كيلوبايت تقريباً)
+ * مع الحفاظ على وضوح الخطوط والرموز والباركود وقراءة البيانات.
+ */
+export const compressToTargetKilobytes = (
+    file: File, 
+    options: {
+        targetMinKB?: number;
+        targetMaxKB?: number;
+        filterType?: 'original' | 'document' | 'bw' | 'magic_color' | 'natural_compressed';
+    } = {}
+): Promise<File> => {
+    const { targetMinKB = 34, targetMaxKB = 44, filterType = 'natural_compressed' } = options;
+
+    return new Promise((resolve) => {
+        if (!file.type.startsWith('image/') || filterType === 'original') {
+            return resolve(file);
+        }
+
+        const img = document.createElement('img');
+        const objectUrl = URL.createObjectURL(file);
+        img.src = objectUrl;
+
+        img.onload = async () => {
+            URL.revokeObjectURL(objectUrl);
+            try {
+                // أبعاد مثالية للمستندات الورقية وقسائم الفحص (عرض 960 - 1050 بكسل)
+                let baseMaxWidth = 960;
+                let baseMaxHeight = 1380;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > baseMaxWidth) {
+                        height = Math.round((height * baseMaxWidth) / width);
+                        width = baseMaxWidth;
+                    }
+                } else {
+                    if (height > baseMaxHeight) {
+                        width = Math.round((width * baseMaxHeight) / height);
+                        height = baseMaxHeight;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return resolve(file);
+
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+
+                // رسم الخلفية بيضاء لضمان عدم وجود شفافية تشوه الحجم
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // تطبيق الفلتر إذا تم اختياره (magic_color, document, bw)
+                if (filterType !== 'natural_compressed') {
+                    const imageData = ctx.getImageData(0, 0, width, height);
+                    const data = imageData.data;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+                        let v = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                        if (filterType === 'magic_color') {
+                            if (v > 150) {
+                                const blend = Math.min(1, (v - 150) / 40);
+                                data[i] = r + (255 - r) * blend;
+                                data[i + 1] = g + (255 - g) * blend;
+                                data[i + 2] = b + (255 - b) * blend;
+                            } else {
+                                data[i] = Math.max(0, r * 1.15 - 25);
+                                data[i + 1] = Math.max(0, g * 1.15 - 25);
+                                data[i + 2] = Math.max(0, b * 1.15 - 25);
+                            }
+                        } else if (filterType === 'document') {
+                            v = 255 * Math.pow(v / 255, 0.7);
+                            const contrast = 1.4;
+                            const intercept = 128 * (1 - contrast);
+                            v = Math.min(255, Math.max(0, v * contrast + intercept));
+                            data[i] = v;
+                            data[i + 1] = v;
+                            data[i + 2] = v;
+                        } else if (filterType === 'bw') {
+                            const contrast = 1.3;
+                            const intercept = 128 * (1 - contrast);
+                            let nv = v * contrast + intercept;
+                            if (nv > 220) nv = 255;
+                            if (nv < 40) nv = 0;
+                            nv = Math.min(255, Math.max(0, nv));
+                            data[i] = nv;
+                            data[i + 1] = nv;
+                            data[i + 2] = nv;
+                        }
+                    }
+                    ctx.putImageData(imageData, 0, 0);
+                }
+
+                // فحص دعم WebP
+                const supportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+                const format = supportsWebP ? 'image/webp' : 'image/jpeg';
+                const extension = supportsWebP ? '.webp' : '.jpg';
+
+                const generateBlob = (targetCanvas: HTMLCanvasElement, q: number): Promise<Blob | null> => {
+                    return new Promise((res) => {
+                        targetCanvas.toBlob((b) => res(b), format, q);
+                    });
+                };
+
+                // محاولة أولية مدروسة للوصول إلى النطاق المطلوب
+                let quality = supportsWebP ? 0.48 : 0.60;
+                let currentBlob = await generateBlob(canvas, quality);
+                if (!currentBlob) return resolve(file);
+
+                let currentSizeKB = currentBlob.size / 1024;
+
+                // التعديل التكيفي الذكي للوصول لنطاق 34 - 44 KB:
+                if (currentSizeKB > targetMaxKB) {
+                    const ratio = 38 / currentSizeKB;
+                    let newQuality = Math.max(supportsWebP ? 0.22 : 0.32, quality * ratio);
+                    
+                    if (currentSizeKB > 65) {
+                        const scale = Math.sqrt(40 / currentSizeKB);
+                        const scaledW = Math.max(680, Math.round(width * Math.min(0.88, Math.max(0.72, scale))));
+                        const scaledH = Math.round((height * scaledW) / width);
+                        const scaledCanvas = document.createElement('canvas');
+                        scaledCanvas.width = scaledW;
+                        scaledCanvas.height = scaledH;
+                        const sCtx = scaledCanvas.getContext('2d');
+                        if (sCtx) {
+                            sCtx.imageSmoothingEnabled = true;
+                            sCtx.imageSmoothingQuality = 'high';
+                            sCtx.drawImage(canvas, 0, 0, scaledW, scaledH);
+                            const adjustedBlob = await generateBlob(scaledCanvas, newQuality);
+                            if (adjustedBlob) {
+                                currentBlob = adjustedBlob;
+                            }
+                        }
+                    } else {
+                        const adjustedBlob = await generateBlob(canvas, newQuality);
+                        if (adjustedBlob) {
+                            currentBlob = adjustedBlob;
+                        }
+                    }
+                } else if (currentSizeKB < targetMinKB && quality < 0.85) {
+                    const ratio = 38 / Math.max(12, currentSizeKB);
+                    let boostQuality = Math.min(0.85, quality * Math.min(1.7, ratio));
+                    const boostedBlob = await generateBlob(canvas, boostQuality);
+                    if (boostedBlob && (boostedBlob.size / 1024) <= targetMaxKB + 5) {
+                        currentBlob = boostedBlob;
+                    }
+                }
+
+                const resultFile = new File(
+                    [currentBlob], 
+                    file.name.replace(/\.[^/.]+$/, "") + extension, 
+                    { type: format }
+                );
+
+                resolve(resultFile);
+            } catch (err) {
+                console.error('Target-size compression failed:', err);
+                resolve(file);
+            }
+        };
+
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(file);
+        };
+    });
+};
+
 export const compressImageToBase64 = (file: File, options: { maxWidth: number; maxHeight: number; quality: number; }): Promise<string> => {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {

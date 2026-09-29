@@ -322,9 +322,14 @@ const PrintReport: React.FC = () => {
                 (payload) => {
                     const updated = payload.new as InspectionRequest;
                     if (updated && updated.id === selectedRequestId) {
+                        let parsedAssignments = updated.technician_assignments;
+                        if (typeof parsedAssignments === 'string') {
+                            try { parsedAssignments = JSON.parse(parsedAssignments); } catch (e) {}
+                        }
                         setDirectRequest(prev => ({
                             ...(prev || {}),
-                            ...updated
+                            ...updated,
+                            technician_assignments: parsedAssignments !== undefined ? parsedAssignments : (prev?.technician_assignments || {})
                         } as InspectionRequest));
                     }
                 }
@@ -2259,6 +2264,25 @@ ${reviewLink}
                 request={originalRequest} 
                 categoryId="ALL" 
                 categoryName="تعيين الفنيين" 
+                onSaveSuccess={(updatedAssignments) => {
+                    setDirectRequest(prev => {
+                        if (!prev) return prev;
+                        return {
+                            ...prev,
+                            technician_assignments: updatedAssignments
+                        };
+                    });
+                    setTranslatedRequest(prev => {
+                        if (!prev) return prev;
+                        return {
+                            ...prev,
+                            technician_assignments: updatedAssignments
+                        };
+                    });
+                    if (originalRequest?.id) {
+                        fetchAndUpdateSingleRequest(originalRequest.id);
+                    }
+                }}
             />
 
             <WhatsAppRecipientModal
