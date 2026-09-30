@@ -8,8 +8,32 @@ import {
     InternalMessage, Technician, Reservation, RequestStatus, Page, WhatsAppMessage, PaymentType,
     FinancialStats
 } from '../../types';
+import { OnlineStaffInfo, ActiveStaffAlert } from '../types';
 import { REQUESTS_PAGE_SIZE } from '../constants';
 import { uuidv4 } from '../../lib/utils'; // You might need to adjust this import path if utils is elsewhere
+
+const getCachedMaster = <T>(key: string): T[] => {
+    try {
+        const item = localStorage.getItem(`master_cache_${key}`);
+        if (!item) return [];
+        const parsed = JSON.parse(item);
+        // Valid if cached within 24 hours
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000 && Array.isArray(parsed.data)) {
+            return parsed.data;
+        }
+        return [];
+    } catch {
+        return [];
+    }
+};
+
+const setCachedMaster = <T>(key: string, data: T[]) => {
+    try {
+        if (Array.isArray(data) && data.length > 0) {
+            localStorage.setItem(`master_cache_${key}`, JSON.stringify({ timestamp: Date.now(), data }));
+        }
+    } catch {}
+};
 
 export const useDataScope = (
     authUser: Employee | null
@@ -29,17 +53,17 @@ export const useDataScope = (
     const [clients, setClients] = useState<Client[]>([]);
     const [cars, setCars] = useState<Car[]>([]);
 
-    const [carMakes, setCarMakes] = useState<CarMake[]>([]);
+    const [carMakes, setCarMakes] = useState<CarMake[]>(() => getCachedMaster<CarMake>('car_makes'));
     const [carModels, setCarModels] = useState<CarModel[]>([]);
     const [loadedMakesForModels, setLoadedMakesForModels] = useState<Set<string>>(new Set());
 
-    const [brokers, setBrokers] = useState<Broker[]>([]);
+    const [brokers, setBrokers] = useState<Broker[]>(() => getCachedMaster<Broker>('brokers'));
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [technicians, setTechnicians] = useState<Technician[]>([]);
     const [expenses, setExpenses] = useState<Expense[]>([]);
-    const [inspectionTypes, setInspectionTypes] = useState<InspectionType[]>([]);
-    const [customFindingCategories, setCustomFindingCategories] = useState<CustomFindingCategory[]>([]);
-    const [predefinedFindings, setPredefinedFindings] = useState<PredefinedFinding[]>([]);
+    const [inspectionTypes, setInspectionTypes] = useState<InspectionType[]>(() => getCachedMaster<InspectionType>('inspection_types'));
+    const [customFindingCategories, setCustomFindingCategories] = useState<CustomFindingCategory[]>(() => getCachedMaster<CustomFindingCategory>('custom_finding_categories'));
+    const [predefinedFindings, setPredefinedFindings] = useState<PredefinedFinding[]>(() => getCachedMaster<PredefinedFinding>('predefined_findings'));
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [appNotifications, setAppNotifications] = useState<AppNotification[]>([]);
     const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -49,8 +73,15 @@ export const useDataScope = (
     const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
     const [unreadWhatsAppCount, setUnreadWhatsAppCount] = useState(0);
     const [latestWhatsAppMessage, setLatestWhatsAppMessage] = useState<WhatsAppMessage | null>(null);
+    const [onlineEmployeeIds, setOnlineEmployeeIds] = useState<Set<string>>(new Set());
+    const [onlineStaffMap, setOnlineStaffMap] = useState<Record<string, OnlineStaffInfo>>({});
+    const [activeStaffAlert, setActiveStaffAlert] = useState<ActiveStaffAlert | null>(null);
     const [financialReport, setFinancialReport] = useState<FinancialStats | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const dismissActiveStaffAlert = useCallback(() => {
+        setActiveStaffAlert(null);
+    }, []);
 
     const triggerHighlight = useCallback((requestId: string) => {
         setHighlightedRequestId(requestId);
@@ -71,17 +102,29 @@ export const useDataScope = (
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
 
-            // Added 'attached_files' to the select list
+            // Check if we already have valid cached master data
+            const cachedMakes = getCachedMaster<CarMake>('car_makes');
+            const cachedTypes = getCachedMaster<InspectionType>('inspection_types');
+            const cachedBrokers = getCachedMaster<Broker>('brokers');
+            const cachedCats = getCachedMaster<CustomFindingCategory>('custom_finding_categories');
+            const cachedFinds = getCachedMaster<PredefinedFinding>('predefined_findings');
+
+            const shouldFetchMakes = cachedMakes.length === 0;
+            const shouldFetchTypes = cachedTypes.length === 0;
+            const shouldFetchBrokers = cachedBrokers.length === 0;
+            const shouldFetchCats = cachedCats.length === 0;
+            const shouldFetchFinds = cachedFinds.length === 0;
+
             const results = await Promise.all([
                 supabase.from('inspection_requests')
                     .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps, payment_note, split_payment_details, inspection_data')
                     .order('created_at', { ascending: false })
                     .limit(REQUESTS_PAGE_SIZE),
-                supabase.from('car_makes').select('*'),
-                supabase.from('inspection_types').select('*'),
-                supabase.from('brokers').select('*'),
-                supabase.from('custom_finding_categories').select('*'),
-                supabase.from('predefined_findings').select('*'),
+                shouldFetchMakes ? supabase.from('car_makes').select('*') : Promise.resolve({ data: cachedMakes, error: null }),
+                shouldFetchTypes ? supabase.from('inspection_types').select('*') : Promise.resolve({ data: cachedTypes, error: null }),
+                shouldFetchBrokers ? supabase.from('brokers').select('*') : Promise.resolve({ data: cachedBrokers, error: null }),
+                shouldFetchCats ? supabase.from('custom_finding_categories').select('*') : Promise.resolve({ data: cachedCats, error: null }),
+                shouldFetchFinds ? supabase.from('predefined_findings').select('*') : Promise.resolve({ data: cachedFinds, error: null }),
                 supabase.from('expenses').select('*'),
                 supabase.from('clients').select('*, inspection_requests(count)').limit(100),
                 supabase.from('cars').select('*').limit(100),
@@ -103,9 +146,16 @@ export const useDataScope = (
                 { data: res },
                 { data: waMsgs, error: waError },
                 { data: pndData }
-            ] = results;
+            ] = results as any;
 
             if (waError) console.error("WA Error:", waError);
+
+            // Cache freshly fetched master tables
+            if (shouldFetchMakes && mks) setCachedMaster('car_makes', mks);
+            if (shouldFetchTypes && types) setCachedMaster('inspection_types', types);
+            if (shouldFetchBrokers && brks) setCachedMaster('brokers', brks);
+            if (shouldFetchCats && cats) setCachedMaster('custom_finding_categories', cats);
+            if (shouldFetchFinds && finds) setCachedMaster('predefined_findings', finds);
 
             // Cleanup old notifications (older than 30 days)
             // Only run cleanup once per day for admins/managers
@@ -533,6 +583,10 @@ export const useDataScope = (
         whatsappMessages, setWhatsappMessages,
         unreadWhatsAppCount, setUnreadWhatsAppCount,
         latestWhatsAppMessage, setLatestWhatsAppMessage,
+        onlineEmployeeIds, setOnlineEmployeeIds,
+        onlineStaffMap, setOnlineStaffMap,
+        activeStaffAlert, setActiveStaffAlert,
+        dismissActiveStaffAlert,
         financialReport, setFinancialReport,
         isRefreshing, setIsRefreshing,
         fetchRequests,

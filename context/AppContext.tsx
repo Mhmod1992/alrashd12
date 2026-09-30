@@ -56,6 +56,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const notificationsChannelRef = useRef<RealtimeChannel | null>(null);
     const messagesChannelRef = useRef<RealtimeChannel | null>(null);
     const whatsappChannelRef = useRef<RealtimeChannel | null>(null);
+    const presenceChannelRef = useRef<RealtimeChannel | null>(null);
 
     const [selectedRequestId, setSelectedRequestId] = useLocalStorage<string | null>('selectedRequestId', null);
     const [selectedClientId, setSelectedClientId] = useLocalStorage<string | null>('selectedClientId', null);
@@ -112,6 +113,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         whatsappMessages, setWhatsappMessages,
         unreadWhatsAppCount, setUnreadWhatsAppCount,
         latestWhatsAppMessage, setLatestWhatsAppMessage,
+        onlineEmployeeIds, setOnlineEmployeeIds,
+        onlineStaffMap, setOnlineStaffMap,
+        activeStaffAlert, setActiveStaffAlert,
+        dismissActiveStaffAlert,
         financialReport, setFinancialReport,
         isRefreshing, setIsRefreshing,
         fetchRequests,
@@ -435,7 +440,90 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
         whatsappChannelRef.current = waChannel;
 
-    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setPendingRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount, setLatestWhatsAppMessage]);
+        // Presence Channel to track active staff members in the app
+        const presence = supabase.channel('online_presence', {
+            config: { presence: { key: authUser?.id || 'guest' } }
+        });
+
+        presence
+            .on('presence', { event: 'sync' }, () => {
+                const state = presence.presenceState();
+                const activeIds = new Set<string>();
+                const staffMap: Record<string, OnlineStaffInfo> = {};
+
+                Object.values(state).forEach((presences: any) => {
+                    presences.forEach((p: any) => {
+                        if (p.employee_id) {
+                            activeIds.add(p.employee_id);
+                            staffMap[p.employee_id] = {
+                                employee_id: p.employee_id,
+                                name: p.name || 'موظف',
+                                role: p.role || 'employee',
+                                online_at: p.online_at || new Date().toISOString()
+                            };
+                        }
+                    });
+                });
+                setOnlineEmployeeIds(activeIds);
+                setOnlineStaffMap(staffMap);
+            })
+            .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+                if (!newPresences || newPresences.length === 0) return;
+                const joined = newPresences[0] as any;
+                if (!joined || !joined.employee_id) return;
+
+                // Update staffMap
+                setOnlineStaffMap(prev => ({
+                    ...prev,
+                    [joined.employee_id]: {
+                        employee_id: joined.employee_id,
+                        name: joined.name || 'موظف',
+                        role: joined.role || 'employee',
+                        online_at: joined.online_at || new Date().toISOString()
+                    }
+                }));
+                setOnlineEmployeeIds(prev => new Set(prev).add(joined.employee_id));
+
+                // If current logged-in user is General Manager and the joined staff is not the GM
+                const currentAuth = authUserRef.current;
+                if (currentAuth && currentAuth.role === 'general_manager' && joined.employee_id !== currentAuth.id) {
+                    setActiveStaffAlert({
+                        id: joined.employee_id,
+                        name: joined.name || 'موظف',
+                        role: joined.role || 'employee',
+                        time: joined.online_at || new Date().toISOString()
+                    });
+                }
+            })
+            .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+                if (!leftPresences || leftPresences.length === 0) return;
+                const left = leftPresences[0] as any;
+                if (!left || !left.employee_id) return;
+                
+                setOnlineEmployeeIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(left.employee_id);
+                    return next;
+                });
+                setOnlineStaffMap(prev => {
+                    const next = { ...prev };
+                    delete next[left.employee_id];
+                    return next;
+                });
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED' && authUser) {
+                    await presence.track({
+                        employee_id: authUser.id,
+                        name: authUser.name,
+                        role: authUser.role,
+                        online_at: new Date().toISOString()
+                    });
+                }
+            });
+        presenceChannelRef.current = presence;
+
+    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setPendingRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount, setLatestWhatsAppMessage, setOnlineEmployeeIds, setOnlineStaffMap, setActiveStaffAlert]);
 
     const retryConnection = useCallback(() => {
         const cleanup = async () => {
@@ -443,10 +531,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (notificationsChannelRef.current) await supabase.removeChannel(notificationsChannelRef.current);
             if (messagesChannelRef.current) await supabase.removeChannel(messagesChannelRef.current);
             if (whatsappChannelRef.current) await supabase.removeChannel(whatsappChannelRef.current);
+            if (presenceChannelRef.current) await supabase.removeChannel(presenceChannelRef.current);
             channelRef.current = null;
             notificationsChannelRef.current = null;
             messagesChannelRef.current = null;
             whatsappChannelRef.current = null;
+            presenceChannelRef.current = null;
         };
         cleanup().then(() => setupRealtimeSubscription());
     }, [setupRealtimeSubscription]);
@@ -685,20 +775,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } else {
             // Cleanup
             setRequests([]); setClients([]); setCars([]); setCarMakes([]); setCarModels([]); setExpenses([]); setAppNotifications([]); setTechnicians([]); setReservations([]);
+            setOnlineEmployeeIds(new Set());
             const cleanup = async () => {
                 if (channelRef.current) await supabase.removeChannel(channelRef.current);
                 if (notificationsChannelRef.current) await supabase.removeChannel(notificationsChannelRef.current);
                 if (messagesChannelRef.current) await supabase.removeChannel(messagesChannelRef.current);
                 if (whatsappChannelRef.current) await supabase.removeChannel(whatsappChannelRef.current);
+                if (presenceChannelRef.current) await supabase.removeChannel(presenceChannelRef.current);
                 channelRef.current = null;
                 notificationsChannelRef.current = null;
                 messagesChannelRef.current = null;
                 whatsappChannelRef.current = null;
+                presenceChannelRef.current = null;
             };
             cleanup();
             setRealtimeStatus('disconnected');
         }
-    }, [authUser, fetchRequests, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations]);
+    }, [authUser, fetchRequests, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations, setOnlineEmployeeIds]);
 
     // Network Status & Real Internet Probe
     const isOnlineRef = useRef(navigator.onLine);
@@ -794,11 +887,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (document.visibilityState === 'visible') {
                 const { data: { session }, error } = await supabase.auth.getSession();
                 if ((error || !session) && authUserRef.current) {
-                     // Try refresh
-                     const { error: refreshError } = await supabase.auth.refreshSession();
-                     if (refreshError) console.warn("Session refresh failed on visibility change.");
-                } else if (session && authUserRef.current && authUserRef.current.id !== session.user.id) {
-                     window.location.reload();
+                     // Try refresh silently
+                     const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+                     if (refreshError) {
+                         console.warn("Session refresh failed on visibility change:", refreshError);
+                     }
                 }
                 
                 supabase.auth.startAutoRefresh();
@@ -807,7 +900,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     if (realtimeStatusRef.current === 'disconnected') {
                         retryConnection();
                     }
-                    // Trigger real internet probe and table refresh
+                    // Trigger real internet probe and table refresh automatically
                     verifyAndSyncInternetStatus();
                 }
             }
@@ -815,6 +908,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const handleOnline = () => {
             verifyAndSyncInternetStatus(true);
+            if (authUserRef.current) {
+                retryConnection();
+            }
         };
 
         const handleOffline = () => {
@@ -997,12 +1093,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if ((exactOnly && isNumericQuery) || (!exactOnly && isNumericQuery && cleanQuery.length <= 8 && !isTenDigits)) {
                 const { data, error } = await supabase
                     .from('inspection_requests')
-                    .select('*')
+                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
                     .eq('request_number', Number(cleanQuery))
                     .order('created_at', { ascending: false });
                 
                 if (!error && data) {
-                    requestsByNumber = data;
+                    requestsByNumber = data as InspectionRequest[];
                 }
 
                 if (exactOnly) {
@@ -1184,14 +1280,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (requestOrConditions.length > 0) {
                 const { data: relatedRequests, error: reqError } = await supabase
                     .from('inspection_requests')
-                    .select('*')
+                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
                     .or(requestOrConditions.join(','))
                     .order('created_at', { ascending: false })
                     .limit(50);
 
                 if (!reqError && relatedRequests) {
                     const existingIds = new Set(finalRequests.map(r => r.id));
-                    relatedRequests.forEach(req => {
+                    (relatedRequests as InspectionRequest[]).forEach(req => {
                         if (!existingIds.has(req.id)) {
                             finalRequests.push(req);
                             existingIds.add(req.id);
@@ -1264,7 +1360,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Fetch all unpaid requests for Aged Debt calculation
             const { data: unpaid, error: unpaidError } = await supabase
                 .from('inspection_requests')
-                .select('*')
+                .select('id, request_number, client_id, car_id, car_snapshot, price, payment_type, status, created_at, payment_note')
                 .eq('client_id', clientId)
                 .eq('payment_type', PaymentType.Unpaid)
                 .neq('status', 'cancelled')
@@ -1293,7 +1389,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Get last visit separately to ensure we have it even if it's paid
             const { data: lastReq } = await supabase
                 .from('inspection_requests')
-                .select('*')
+                .select('id, request_number, client_id, car_id, car_snapshot, price, status, created_at')
                 .eq('client_id', clientId)
                 .order('created_at', { ascending: false })
                 .limit(1);
@@ -1345,7 +1441,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // 3. Fetch all requests for all matching car IDs
         const { data, error } = await supabase
             .from('inspection_requests')
-            .select('*')
+            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note')
             .in('car_id', carIds)
             .order('created_at', { ascending: false });
 
@@ -1437,7 +1533,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                 const { data: requestHistory } = await supabase
                     .from('inspection_requests')
-                    .select('*, client:clients(*)')
+                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, client:clients(id, name, phone)')
                     .in('car_id', carIds)
                     .order('created_at', { ascending: false })
                     .limit(10);
@@ -1564,16 +1660,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             startDate.setHours(0, 0, 0, 0);
         } else if (filter === 'month') startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         else startDate = new Date(now.getFullYear(), 0, 1);
-        const { data: requestsData } = await supabase.from('inspection_requests').select('*').eq('status', RequestStatus.COMPLETE).gte('created_at', startDate.toISOString());
-        const { data: expensesData } = await supabase.from('expenses').select('*').gte('date', startDate.toISOString());
+        
+        // Egress Optimization: only fetch accounting fields needed for sums and distributions
+        const { data: requestsData } = await supabase.from('inspection_requests')
+            .select('id, request_number, client_id, car_id, price, status, payment_type, split_payment_details, created_at')
+            .eq('status', RequestStatus.COMPLETE)
+            .gte('created_at', startDate.toISOString());
+            
+        const { data: expensesData } = await supabase.from('expenses')
+            .select('id, amount, category, date, description')
+            .gte('date', startDate.toISOString());
 
-        const finalRequests = requestsData || [];
-        if (finalRequests.length > 0) {
-            await ensureEntitiesLoaded(finalRequests);
-        }
-
-        return { requests: finalRequests, expenses: expensesData || [] };
-    }, [ensureEntitiesLoaded]);
+        return { requests: (requestsData as any) || [], expenses: (expensesData as any) || [] };
+    }, []);
 
     const uploadImage = useCallback(async (file: File, bucket: string, folder?: string, customFileName?: string): Promise<string> => {
         const { data: { session } } = await supabase.auth.getSession();
@@ -1764,7 +1863,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const forecastData: { date: string; value: number; label: string }[] = [];
         for (let i = 1; i <= 7; i++) { const nextX = 29 + i, predictedY = Math.max(0, slope * nextX + intercept), nextDate = new Date(); nextDate.setDate(today.getDate() + i); forecastData.push({ date: nextDate.toLocaleDateString('en-CA'), value: Math.round(predictedY), label: nextDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric' }) }); }
         const trendDirection = slope > 50 ? 'up' : slope < -50 ? 'down' : 'flat';
-        await ensureEntitiesLoaded(reqs);
         return {
             totalRevenue,
             totalOtherRevenue,
@@ -1789,7 +1887,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             filteredRevenues: revs,
             filteredAdvances: advancesEntries
         };
-    }, [brokers, ensureEntitiesLoaded]);
+    }, [brokers]);
 
     const fetchServerExpenses = useCallback(async (startDate: string, endDate: string): Promise<Expense[]> => {
         const { data, error } = await supabase.from('expenses')
@@ -2250,6 +2348,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchServerFinancials, fetchServerExpenses, fetchServerRevenues, addRevenue, deleteRevenue, fetchArchiveData, fetchCarMakes,
         fetchPayrollDraft, savePayrollDraft, checkIfEmployeePaidThisMonth, fetchEmployeeTransactionsForMonth,
         isSessionError,
+        onlineEmployeeIds,
+        onlineStaffMap,
+        activeStaffAlert,
+        dismissActiveStaffAlert,
         incomingRequest, setIncomingRequest,
         reservations, fetchReservations, addReservation, updateReservationStatus, updateReservation, deleteReservation, searchReservations, parseReservationText,
         fetchRequestTabContent, fetchFullRequestForSave, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,

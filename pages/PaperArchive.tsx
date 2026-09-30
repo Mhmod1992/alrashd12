@@ -272,9 +272,9 @@ const PaperArchive: React.FC = () => {
                 if (/^\d+$/.test(query)) {
                     const { data: byNum } = await supabase
                         .from('inspection_requests')
-                        .select('*')
+                        .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
                         .eq('request_number', Number(query));
-                    if (byNum) data = [...data, ...byNum];
+                    if (byNum) data = [...data, ...(byNum as any)];
                 }
 
                 // 2. Search by Client Name/Phone
@@ -288,11 +288,11 @@ const PaperArchive: React.FC = () => {
                     const clientIds = clientsFound.map(c => c.id);
                     const { data: byClient } = await supabase
                         .from('inspection_requests')
-                        .select('*')
+                        .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
                         .in('client_id', clientIds)
                         .order('created_at', { ascending: false })
                         .limit(50);
-                    if (byClient) data = [...data, ...byClient];
+                    if (byClient) data = [...data, ...(byClient as any)];
                 }
 
                 // 3. Search by Car (Plate/VIN) - Simplified for this view
@@ -306,11 +306,11 @@ const PaperArchive: React.FC = () => {
                     const carIds = carsFound.map(c => c.id);
                     const { data: byCar } = await supabase
                         .from('inspection_requests')
-                        .select('*')
+                        .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
                         .in('car_id', carIds)
                         .order('created_at', { ascending: false })
                         .limit(50);
-                    if (byCar) data = [...data, ...byCar];
+                    if (byCar) data = [...data, ...(byCar as any)];
                 }
 
                 // Deduplicate

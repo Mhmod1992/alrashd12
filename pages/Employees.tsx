@@ -19,6 +19,7 @@ import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import BanknotesIcon from '../components/icons/BanknotesIcon';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import { Award, PlusCircle, Edit3, Layers, UserCheck } from 'lucide-react';
+import { formatOnlineDuration } from '../lib/utils';
 
 // --- Helper Components for Stats ---
 const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; color: string; subValue?: string; trend?: number }> = ({ title, value, icon, color, subValue, trend }) => (
@@ -272,13 +273,13 @@ const PayrollManager: React.FC = () => {
 }
 
 const UnifiedDirectory: React.FC = () => {
-    const { employees, technicians } = useAppContext();
+    const { employees, technicians, onlineEmployeeIds, onlineStaffMap } = useAppContext();
     const [searchTerm, setSearchTerm] = useState('');
     const [financialModalTarget, setFinancialModalTarget] = useState<Employee | Technician | null>(null);
     const [financialModalType, setFinancialModalType] = useState<'employee' | 'technician'>('employee');
     
     // Filters
-    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'active' | 'inactive'>('active');
     const [roleFilter, setRoleFilter] = useState<string>('all');
 
     const allStaff = useMemo(() => {
@@ -288,13 +289,14 @@ const UnifiedDirectory: React.FC = () => {
     }, [employees, technicians]);
 
     const filteredStaff = useMemo(() => {
-        return allStaff.filter(person => {
+        const filtered = allStaff.filter(person => {
             // 1. Search Filter
             const matchesSearch = person.name.toLowerCase().includes(searchTerm.toLowerCase());
             
             // 2. Status Filter
             let matchesStatus = true;
-            if (statusFilter === 'active') matchesStatus = person.is_active;
+            if (statusFilter === 'online') matchesStatus = onlineEmployeeIds.has(person.id);
+            else if (statusFilter === 'active') matchesStatus = person.is_active;
             else if (statusFilter === 'inactive') matchesStatus = !person.is_active;
 
             // 3. Role Filter
@@ -312,7 +314,15 @@ const UnifiedDirectory: React.FC = () => {
 
             return matchesSearch && matchesStatus && matchesRole;
         });
-    }, [allStaff, searchTerm, statusFilter, roleFilter]);
+
+        // Always sort active/online users to the TOP of the directory!
+        return filtered.sort((a, b) => {
+            const aOnline = onlineEmployeeIds.has(a.id) ? 1 : 0;
+            const bOnline = onlineEmployeeIds.has(b.id) ? 1 : 0;
+            if (aOnline !== bOnline) return bOnline - aOnline;
+            return a.name.localeCompare(b.name, 'ar');
+        });
+    }, [allStaff, searchTerm, statusFilter, roleFilter, onlineEmployeeIds]);
 
     const openFinancials = (person: any) => {
         setFinancialModalTarget(person);
@@ -336,8 +346,15 @@ const UnifiedDirectory: React.FC = () => {
                 {/* Filters Row */}
                 <div className="flex items-center gap-2 flex-shrink-0 overflow-x-auto pb-1 md:pb-0">
                     <div className="flex bg-slate-200 dark:bg-slate-700 rounded-lg p-1">
-                        <button onClick={() => setStatusFilter('active')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${statusFilter === 'active' ? 'bg-white dark:bg-slate-600 shadow-sm text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>نشط</button>
-                        <button onClick={() => setStatusFilter('inactive')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${statusFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>غير نشط</button>
+                        <button 
+                            onClick={() => setStatusFilter('online')} 
+                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${statusFilter === 'online' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}
+                        >
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            النشطون ({onlineEmployeeIds.size})
+                        </button>
+                        <button onClick={() => setStatusFilter('active')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${statusFilter === 'active' ? 'bg-white dark:bg-slate-600 shadow-sm text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>مفعل</button>
+                        <button onClick={() => setStatusFilter('inactive')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${statusFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>معطل</button>
                         <button onClick={() => setStatusFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${statusFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>الكل</button>
                     </div>
 
@@ -366,19 +383,41 @@ const UnifiedDirectory: React.FC = () => {
                             <th className="px-6 py-4">الاسم</th>
                             <th className="px-6 py-4">النوع / الدور</th>
                             <th className="px-6 py-4">الراتب الأساسي</th>
-                            <th className="px-6 py-4">الحالة</th>
+                            <th className="px-6 py-4">الحالة والتواجد</th>
                             <th className="px-6 py-4">إجراءات</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {filteredStaff.map((person: any) => (
-                            <tr key={`${person.type}-${person.id}`} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                        {filteredStaff.map((person: any) => {
+                            const isPersonOnline = onlineEmployeeIds.has(person.id);
+                            const staffInfo = onlineStaffMap[person.id];
+                            const durationText = isPersonOnline 
+                                ? formatOnlineDuration(staffInfo?.online_at) 
+                                : null;
+
+                            return (
+                            <tr key={`${person.type}-${person.id}`} className={`transition-colors ${isPersonOnline ? 'bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 dark:hover:bg-emerald-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
                                 <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${person.type === 'employee' ? 'bg-blue-500' : 'bg-orange-500'}`}>
-                                            {person.name.charAt(0)}
+                                        <div className="relative">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${isPersonOnline ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-500/30' : person.type === 'employee' ? 'bg-blue-500 text-white' : 'bg-orange-500 text-white'}`}>
+                                                {person.name.charAt(0)}
+                                            </div>
+                                            {isPersonOnline && (
+                                                <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5" title="متواجد داخل التطبيق الآن">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white dark:border-slate-800"></span>
+                                                </span>
+                                            )}
                                         </div>
-                                        {person.name}
+                                        <div className="flex flex-col">
+                                            <span>{person.name}</span>
+                                            {isPersonOnline && (
+                                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                                    🟢 {durationText}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </td>
                                 <td className="px-6 py-4">
@@ -393,8 +432,18 @@ const UnifiedDirectory: React.FC = () => {
                                     {person.salary?.toLocaleString('en-US') || 0} ريال
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className={`w-2 h-2 rounded-full inline-block mr-2 ${person.is_active ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                    <span className="text-xs text-slate-500">{person.is_active ? 'نشط' : 'غير نشط'}</span>
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={`w-2 h-2 rounded-full inline-block ${person.is_active ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                            <span className="text-xs text-slate-500">{person.is_active ? 'حساب مفعل' : 'حساب معطل'}</span>
+                                        </div>
+                                        {isPersonOnline && (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full w-fit">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                {durationText}
+                                            </span>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4">
                                     <Button size="sm" variant="secondary" onClick={() => openFinancials(person)}>
@@ -403,7 +452,8 @@ const UnifiedDirectory: React.FC = () => {
                                     </Button>
                                 </td>
                             </tr>
-                        ))}
+                            );
+                        })}
                         {filteredStaff.length === 0 && (
                             <tr>
                                 <td colSpan={5} className="text-center py-8 text-slate-500">

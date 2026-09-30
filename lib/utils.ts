@@ -487,6 +487,34 @@ export const timeAgo = (dateParam: string | Date | undefined): string => {
     return `منذ ${years} سنة`;
 };
 
+export const formatOnlineDuration = (dateParam: string | Date | undefined): string => {
+    if (!dateParam) return 'متواجد الآن';
+    const date = typeof dateParam === 'string' ? new Date(dateParam) : dateParam;
+    if (isNaN(date.getTime())) return 'متواجد الآن';
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds <= 45) return 'متواجد الآن';
+    if (seconds < 60) return 'منذ لحظات';
+
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+
+    if (minutes < 60) {
+        if (minutes === 1) return 'متواجد منذ دقيقة';
+        if (minutes === 2) return 'متواجد منذ دقيقتين';
+        if (minutes <= 10) return `متواجد منذ ${minutes} دقائق`;
+        return `متواجد منذ ${minutes} دقيقة`;
+    }
+    if (hours < 24) {
+        if (hours === 1) return 'نشط منذ ساعة';
+        if (hours === 2) return 'نشط منذ ساعتين';
+        if (hours <= 10) return `نشط منذ ${hours} ساعات`;
+        return `نشط منذ ${hours} ساعة`;
+    }
+    return timeAgo(date);
+};
+
 export const urlToBase64 = async (url: string): Promise<string | null> => {
     if (!url) return null;
     if (url.startsWith('data:')) return url;

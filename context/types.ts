@@ -17,6 +17,20 @@ export interface CarHistoryResult {
     model_name_en?: string;
 }
 
+export interface OnlineStaffInfo {
+    employee_id: string;
+    name: string;
+    role: string;
+    online_at: string;
+}
+
+export interface ActiveStaffAlert {
+    id: string;
+    name: string;
+    role: string;
+    time: string;
+}
+
 export interface AppContextType {
     theme: 'light' | 'dark';
     toggleTheme: () => void;
@@ -237,6 +251,10 @@ export interface AppContextType {
     checkIfEmployeePaidThisMonth: (employeeId: string, month: number, year: number) => Promise<boolean>;
     fetchEmployeeTransactionsForMonth: (employeeId: string, month: number, year: number) => Promise<Expense[]>;
     isSessionError: boolean;
+    onlineEmployeeIds: Set<string>;
+    onlineStaffMap: Record<string, OnlineStaffInfo>;
+    activeStaffAlert: ActiveStaffAlert | null;
+    dismissActiveStaffAlert: () => void;
     incomingRequest: InspectionRequest | null;
     setIncomingRequest: React.Dispatch<React.SetStateAction<InspectionRequest | null>>;
     latestWhatsAppMessage: WhatsAppMessage | null;

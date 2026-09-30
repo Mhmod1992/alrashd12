@@ -49,15 +49,28 @@ const ExportRequestsModal: React.FC<ExportRequestsModalProps> = ({ isOpen, onClo
         setIsFetching(true);
         try {
             let query = supabase.from('inspection_requests').select(`
-                *,
-                client:clients(*),
+                id,
+                request_number,
+                created_at,
+                client_id,
+                car_id,
+                car_snapshot,
+                inspection_type_id,
+                payment_type,
+                price,
+                status,
+                broker,
+                client:clients(id, name, phone),
                 car:cars(
-                    *,
-                    make:car_makes(*),
-                    model:car_models(*)
+                    id,
+                    plate_number,
+                    plate_number_en,
+                    vin,
+                    year,
+                    make:car_makes(id, name_ar, name_en),
+                    model:car_models(id, name_ar, name_en)
                 ),
-                inspection_type:inspection_types(*),
-                employee:employees(*)
+                inspection_type:inspection_types(id, name)
             `);
 
             // Apply Date Filter

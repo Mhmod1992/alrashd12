@@ -21,7 +21,7 @@ import AlertTriangleIcon from './icons/AlertTriangleIcon';
 import TrashIcon from './icons/TrashIcon';
 import XIcon from './icons/XIcon';
 import { AppNotification } from '../types';
-import { timeAgo } from '../lib/utils';
+import { timeAgo, formatOnlineDuration } from '../lib/utils';
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -35,13 +35,13 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
     unreadMessagesCount, setIsMailboxOpen, searchRequestByNumber, clearSearchedRequests, searchedRequests,
     searchQuery, setSearchQuery, can,
     unreadWhatsAppCount, latestWhatsAppMessage, setLatestWhatsAppMessage,
-    whatsappApiStatus
+    whatsappApiStatus, onlineEmployeeIds, onlineStaffMap, activeStaffAlert, dismissActiveStaffAlert, employees, technicians
   } = useAppContext();
 
   const design = settings.design || 'aero';
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notificationTab, setNotificationTab] = useState<'all' | 'unread' | 'logins'>('all');
+  const [notificationTab, setNotificationTab] = useState<'all' | 'unread' | 'logins' | 'online'>('all');
   const [isHardRefreshing, setIsHardRefreshing] = useState(false);
 
   const handleHardRefresh = async (e: React.MouseEvent) => {
@@ -472,10 +472,76 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                         >
                             الدخول ({appNotifications.filter(n => n.type === 'login').length})
                         </button>
+                        <button 
+                            onClick={() => setNotificationTab('online')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${notificationTab === 'online' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                        >
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>النشطون ({onlineEmployeeIds.size})</span>
+                        </button>
                     </div>
                     
                     <div className="max-h-[60vh] md:max-h-[350px] overflow-y-auto custom-scrollbar bg-slate-50/30 dark:bg-slate-900/30">
-                        {filteredNotifications.length > 0 ? (
+                        {notificationTab === 'online' ? (
+                            <div className="p-2 space-y-1">
+                                {[...employees.filter(e => e.is_active)].sort((a, b) => {
+                                    const aOnline = onlineEmployeeIds.has(a.id) ? 1 : 0;
+                                    const bOnline = onlineEmployeeIds.has(b.id) ? 1 : 0;
+                                    if (aOnline !== bOnline) return bOnline - aOnline; // Online first
+                                    return a.name.localeCompare(b.name, 'ar');
+                                }).map(emp => {
+                                    const isEmpOnline = onlineEmployeeIds.has(emp.id);
+                                    const staffInfo = onlineStaffMap[emp.id];
+                                    const durationText = isEmpOnline 
+                                        ? formatOnlineDuration(staffInfo?.online_at)
+                                        : 'غير متصل';
+
+                                    return (
+                                        <div 
+                                            key={emp.id} 
+                                            className={`flex items-center justify-between p-2.5 rounded-xl transition-colors ${isEmpOnline ? 'bg-emerald-50/40 dark:bg-emerald-950/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30' : 'hover:bg-slate-100 dark:hover:bg-slate-700/50'}`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${isEmpOnline ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-500/30' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'}`}>
+                                                        {emp.name.charAt(0)}
+                                                    </div>
+                                                    {isEmpOnline ? (
+                                                        <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white dark:border-slate-800"></span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-600 border-2 border-white dark:border-slate-800"></span>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className={`text-xs font-bold ${isEmpOnline ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>{emp.name}</p>
+                                                        {emp.id === authUser?.id && (
+                                                            <span className="text-[9px] bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 px-1.5 py-0.5 rounded font-bold">أنت</span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-400">
+                                                        {emp.role === 'general_manager' ? 'مدير عام' : emp.role === 'manager' ? 'مدير' : emp.role === 'receptionist' ? 'استقبال' : emp.role === 'technician' ? 'فني' : 'موظف'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                {isEmpOnline ? (
+                                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-300/60 dark:border-emerald-700/50 shadow-sm">
+                                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                        <span>{durationText}</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-400">غير متصل</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : filteredNotifications.length > 0 ? (
                             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
                                 {filteredNotifications.slice(0, 20).map(notification => (
                                     <div 
@@ -649,6 +715,53 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
           </div>
         )}
       </div>
+
+      {/* Real-time Alert Toast for General Manager when staff joins */}
+      <AnimatePresence>
+        {authUser?.role === 'general_manager' && activeStaffAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: -25, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -25, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+            className="fixed top-20 left-4 sm:left-8 z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-80 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border-2 border-emerald-500/40 p-4 overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-green-500 animate-pulse"></div>
+            <div className="flex items-start gap-3">
+              <div className="relative flex-shrink-0 mt-0.5">
+                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-emerald-500/30">
+                  {activeStaffAlert.name.charAt(0)}
+                </div>
+                <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-slate-800"></span>
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    تنبيه المدير العام
+                  </span>
+                  <button
+                    onClick={dismissActiveStaffAlert}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+                  >
+                    <XIcon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 leading-snug">
+                  الموظف <span className="text-emerald-600 dark:text-emerald-400 font-black">{activeStaffAlert.name}</span> متواجد الآن داخل النظام
+                </p>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/50 text-[10px] text-slate-400">
+                  <span>الدور: {activeStaffAlert.role === 'general_manager' ? 'مدير عام' : activeStaffAlert.role === 'manager' ? 'مدير' : activeStaffAlert.role === 'receptionist' ? 'استقبال' : activeStaffAlert.role === 'technician' ? 'فني' : 'موظف'}</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">الآن 🟢</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 };
