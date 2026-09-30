@@ -115,6 +115,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         latestWhatsAppMessage, setLatestWhatsAppMessage,
         onlineEmployeeIds, setOnlineEmployeeIds,
         onlineStaffMap, setOnlineStaffMap,
+        lastSeenStaffMap, setLastSeenStaffMap,
         activeStaffAlert, setActiveStaffAlert,
         dismissActiveStaffAlert,
         financialReport, setFinancialReport,
@@ -440,10 +441,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
         whatsappChannelRef.current = waChannel;
 
+        // Clean up previous presence channel if any
+        if (presenceChannelRef.current) {
+            supabase.removeChannel(presenceChannelRef.current);
+            presenceChannelRef.current = null;
+        }
+
         // Presence Channel to track active staff members in the app
-        const presence = supabase.channel('online_presence', {
-            config: { presence: { key: authUser?.id || 'guest' } }
-        });
+        const presence = supabase.channel('online_presence');
 
         presence
             .on('presence', { event: 'sync' }, () => {
@@ -484,9 +489,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }));
                 setOnlineEmployeeIds(prev => new Set(prev).add(joined.employee_id));
 
-                // If current logged-in user is General Manager and the joined staff is not the GM
+                // If current logged-in user is General Manager on desktop/laptop (never on mobile devices)
+                const isMobile = typeof window !== 'undefined' && (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024);
                 const currentAuth = authUserRef.current;
-                if (currentAuth && currentAuth.role === 'general_manager' && joined.employee_id !== currentAuth.id) {
+                if (!isMobile && currentAuth && currentAuth.role === 'general_manager' && joined.employee_id !== currentAuth.id) {
                     setActiveStaffAlert({
                         id: joined.employee_id,
                         name: joined.name || 'موظف',
@@ -500,6 +506,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const left = leftPresences[0] as any;
                 if (!left || !left.employee_id) return;
                 
+                const leftTime = new Date().toISOString();
                 setOnlineEmployeeIds(prev => {
                     const next = new Set(prev);
                     next.delete(left.employee_id);
@@ -510,20 +517,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     delete next[left.employee_id];
                     return next;
                 });
+                setLastSeenStaffMap(prev => {
+                    const next = { ...prev, [left.employee_id]: leftTime };
+                    try {
+                        localStorage.setItem('last_seen_staff_map', JSON.stringify(next));
+                    } catch {}
+                    return next;
+                });
             })
             .subscribe(async (status) => {
-                if (status === 'SUBSCRIBED' && authUser) {
+                if (status === 'SUBSCRIBED' && authUserRef.current) {
                     await presence.track({
-                        employee_id: authUser.id,
-                        name: authUser.name,
-                        role: authUser.role,
+                        employee_id: authUserRef.current.id,
+                        name: authUserRef.current.name,
+                        role: authUserRef.current.role,
                         online_at: new Date().toISOString()
                     });
                 }
             });
         presenceChannelRef.current = presence;
 
-    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setPendingRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount, setLatestWhatsAppMessage, setOnlineEmployeeIds, setOnlineStaffMap, setActiveStaffAlert]);
+    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setPendingRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount, setLatestWhatsAppMessage, setOnlineEmployeeIds, setOnlineStaffMap, setLastSeenStaffMap, setActiveStaffAlert]);
 
     const retryConnection = useCallback(() => {
         const cleanup = async () => {
@@ -792,6 +806,60 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setRealtimeStatus('disconnected');
         }
     }, [authUser, fetchRequests, setupRealtimeSubscription, setRequests, setClients, setCars, setCarMakes, setCarModels, setExpenses, setAppNotifications, setTechnicians, setReservations, setOnlineEmployeeIds]);
+
+    // Live timer tick to update all relative time strings ("متواجد منذ...", "غير متصل منذ...") live without page reload
+    const [timeTick, setTimeTick] = useState(0);
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setTimeTick(t => t + 1);
+        }, 15000); // Ticks every 15s for live UI reactivity
+        return () => clearInterval(interval);
+    }, []);
+
+    // Re-track user presence dynamically when authUser is set or on visibility/focus
+    useEffect(() => {
+        if (!authUser) return;
+
+        const trackCurrentStaff = async () => {
+            if (presenceChannelRef.current) {
+                try {
+                    await presenceChannelRef.current.track({
+                        employee_id: authUser.id,
+                        name: authUser.name,
+                        role: authUser.role,
+                        online_at: new Date().toISOString()
+                    });
+                } catch (e) {
+                    console.error('Error tracking staff presence:', e);
+                }
+            }
+        };
+
+        trackCurrentStaff();
+
+        const handleFocus = () => {
+            if (document.visibilityState === 'visible') {
+                trackCurrentStaff();
+            }
+        };
+
+        window.addEventListener('visibilitychange', handleFocus);
+        window.addEventListener('focus', handleFocus);
+        return () => {
+            window.removeEventListener('visibilitychange', handleFocus);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [authUser]);
+
+    // Auto dismiss General Manager toast alert after 7 seconds
+    useEffect(() => {
+        if (activeStaffAlert) {
+            const timer = setTimeout(() => {
+                setActiveStaffAlert(null);
+            }, 7000);
+            return () => clearTimeout(timer);
+        }
+    }, [activeStaffAlert, setActiveStaffAlert]);
 
     // Network Status & Real Internet Probe
     const isOnlineRef = useRef(navigator.onLine);
@@ -2350,6 +2418,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isSessionError,
         onlineEmployeeIds,
         onlineStaffMap,
+        lastSeenStaffMap,
+        timeTick,
         activeStaffAlert,
         dismissActiveStaffAlert,
         incomingRequest, setIncomingRequest,

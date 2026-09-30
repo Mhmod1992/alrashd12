@@ -19,7 +19,7 @@ import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import BanknotesIcon from '../components/icons/BanknotesIcon';
 import RefreshCwIcon from '../components/icons/RefreshCwIcon';
 import { Award, PlusCircle, Edit3, Layers, UserCheck } from 'lucide-react';
-import { formatOnlineDuration } from '../lib/utils';
+import { formatOnlineDuration, formatOfflineDuration } from '../lib/utils';
 
 // --- Helper Components for Stats ---
 const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; color: string; subValue?: string; trend?: number }> = ({ title, value, icon, color, subValue, trend }) => (
@@ -273,7 +273,7 @@ const PayrollManager: React.FC = () => {
 }
 
 const UnifiedDirectory: React.FC = () => {
-    const { employees, technicians, onlineEmployeeIds, onlineStaffMap } = useAppContext();
+    const { employees, technicians, onlineEmployeeIds, onlineStaffMap, lastSeenStaffMap } = useAppContext();
     const [searchTerm, setSearchTerm] = useState('');
     const [financialModalTarget, setFinancialModalTarget] = useState<Employee | Technician | null>(null);
     const [financialModalType, setFinancialModalType] = useState<'employee' | 'technician'>('employee');
@@ -391,9 +391,8 @@ const UnifiedDirectory: React.FC = () => {
                         {filteredStaff.map((person: any) => {
                             const isPersonOnline = onlineEmployeeIds.has(person.id);
                             const staffInfo = onlineStaffMap[person.id];
-                            const durationText = isPersonOnline 
-                                ? formatOnlineDuration(staffInfo?.online_at) 
-                                : null;
+                            const onlineText = isPersonOnline ? formatOnlineDuration(staffInfo?.online_at) : null;
+                            const offlineText = !isPersonOnline ? formatOfflineDuration(lastSeenStaffMap[person.id]) : null;
 
                             return (
                             <tr key={`${person.type}-${person.id}`} className={`transition-colors ${isPersonOnline ? 'bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 dark:hover:bg-emerald-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
@@ -403,18 +402,24 @@ const UnifiedDirectory: React.FC = () => {
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${isPersonOnline ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-500/30' : person.type === 'employee' ? 'bg-blue-500 text-white' : 'bg-orange-500 text-white'}`}>
                                                 {person.name.charAt(0)}
                                             </div>
-                                            {isPersonOnline && (
+                                            {isPersonOnline ? (
                                                 <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5" title="متواجد داخل التطبيق الآن">
                                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white dark:border-slate-800"></span>
                                                 </span>
+                                            ) : (
+                                                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-600 border border-white dark:border-slate-800" title="غير متصل حالياً"></span>
                                             )}
                                         </div>
                                         <div className="flex flex-col">
                                             <span>{person.name}</span>
-                                            {isPersonOnline && (
+                                            {isPersonOnline ? (
                                                 <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                                                    🟢 {durationText}
+                                                    🟢 {onlineText}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                                    {offlineText}
                                                 </span>
                                             )}
                                         </div>
@@ -437,10 +442,14 @@ const UnifiedDirectory: React.FC = () => {
                                             <span className={`w-2 h-2 rounded-full inline-block ${person.is_active ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                             <span className="text-xs text-slate-500">{person.is_active ? 'حساب مفعل' : 'حساب معطل'}</span>
                                         </div>
-                                        {isPersonOnline && (
+                                        {isPersonOnline ? (
                                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full w-fit">
                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                                {durationText}
+                                                {onlineText}
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-full w-fit">
+                                                {offlineText}
                                             </span>
                                         )}
                                     </div>

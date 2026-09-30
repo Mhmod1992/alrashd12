@@ -515,6 +515,38 @@ export const formatOnlineDuration = (dateParam: string | Date | undefined): stri
     return timeAgo(date);
 };
 
+export const formatOfflineDuration = (dateParam: string | Date | undefined): string => {
+    if (!dateParam) return 'غير متصل';
+    const date = typeof dateParam === 'string' ? new Date(dateParam) : dateParam;
+    if (isNaN(date.getTime())) return 'غير متصل';
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 0 || seconds <= 45) return 'غير متصل منذ لحظات';
+    if (seconds < 60) return 'غير متصل منذ لحظات';
+
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const days = Math.floor(seconds / 86400);
+
+    if (minutes < 60) {
+        if (minutes === 1) return 'غير متصل منذ دقيقة';
+        if (minutes === 2) return 'غير متصل منذ دقيقتين';
+        if (minutes <= 10) return `غير متصل منذ ${minutes} دقائق`;
+        return `غير متصل منذ ${minutes} دقيقة`;
+    }
+    if (hours < 24) {
+        if (hours === 1) return 'غير متصل منذ ساعة';
+        if (hours === 2) return 'غير متصل منذ ساعتين';
+        if (hours <= 10) return `غير متصل منذ ${hours} ساعات`;
+        return `غير متصل منذ ${hours} ساعة`;
+    }
+    if (days === 1) return 'آخر ظهور أمس';
+    if (days === 2) return 'آخر ظهور منذ يومين';
+    if (days <= 10) return `آخر ظهور منذ ${days} أيام`;
+    return `آخر ظهور منذ ${days} يوم`;
+};
+
 export const urlToBase64 = async (url: string): Promise<string | null> => {
     if (!url) return null;
     if (url.startsWith('data:')) return url;

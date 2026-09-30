@@ -21,7 +21,7 @@ import AlertTriangleIcon from './icons/AlertTriangleIcon';
 import TrashIcon from './icons/TrashIcon';
 import XIcon from './icons/XIcon';
 import { AppNotification } from '../types';
-import { timeAgo, formatOnlineDuration } from '../lib/utils';
+import { timeAgo, formatOnlineDuration, formatOfflineDuration } from '../lib/utils';
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -35,7 +35,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
     unreadMessagesCount, setIsMailboxOpen, searchRequestByNumber, clearSearchedRequests, searchedRequests,
     searchQuery, setSearchQuery, can,
     unreadWhatsAppCount, latestWhatsAppMessage, setLatestWhatsAppMessage,
-    whatsappApiStatus, onlineEmployeeIds, onlineStaffMap, activeStaffAlert, dismissActiveStaffAlert, employees, technicians
+    whatsappApiStatus, onlineEmployeeIds, onlineStaffMap, lastSeenStaffMap, activeStaffAlert, dismissActiveStaffAlert, employees, technicians
   } = useAppContext();
 
   const design = settings.design || 'aero';
@@ -494,7 +494,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                                     const staffInfo = onlineStaffMap[emp.id];
                                     const durationText = isEmpOnline 
                                         ? formatOnlineDuration(staffInfo?.online_at)
-                                        : 'غير متصل';
+                                        : formatOfflineDuration(lastSeenStaffMap[emp.id]);
 
                                     return (
                                         <div 
@@ -534,7 +534,9 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                                                         <span>{durationText}</span>
                                                     </span>
                                                 ) : (
-                                                    <span className="text-[10px] text-slate-400">غير متصل</span>
+                                                    <span className="inline-flex items-center text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-200/60 dark:border-slate-700/50">
+                                                        {durationText}
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>
@@ -716,7 +718,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
         )}
       </div>
 
-      {/* Real-time Alert Toast for General Manager when staff joins */}
+      {/* Real-time Alert Toast for General Manager when staff joins (Desktop/Laptops only - hidden on mobile) */}
       <AnimatePresence>
         {authUser?.role === 'general_manager' && activeStaffAlert && (
           <motion.div
@@ -724,7 +726,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -25, scale: 0.95 }}
             transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-            className="fixed top-20 left-4 sm:left-8 z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-80 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border-2 border-emerald-500/40 p-4 overflow-hidden"
+            className="hidden lg:block fixed top-20 left-8 z-50 w-80 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border-2 border-emerald-500/40 p-4 overflow-hidden"
           >
             <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-green-500 animate-pulse"></div>
             <div className="flex items-start gap-3">

@@ -75,6 +75,14 @@ export const useDataScope = (
     const [latestWhatsAppMessage, setLatestWhatsAppMessage] = useState<WhatsAppMessage | null>(null);
     const [onlineEmployeeIds, setOnlineEmployeeIds] = useState<Set<string>>(new Set());
     const [onlineStaffMap, setOnlineStaffMap] = useState<Record<string, OnlineStaffInfo>>({});
+    const [lastSeenStaffMap, setLastSeenStaffMap] = useState<Record<string, string>>(() => {
+        try {
+            const saved = localStorage.getItem('last_seen_staff_map');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
     const [activeStaffAlert, setActiveStaffAlert] = useState<ActiveStaffAlert | null>(null);
     const [financialReport, setFinancialReport] = useState<FinancialStats | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -585,6 +593,7 @@ export const useDataScope = (
         latestWhatsAppMessage, setLatestWhatsAppMessage,
         onlineEmployeeIds, setOnlineEmployeeIds,
         onlineStaffMap, setOnlineStaffMap,
+        lastSeenStaffMap, setLastSeenStaffMap,
         activeStaffAlert, setActiveStaffAlert,
         dismissActiveStaffAlert,
         financialReport, setFinancialReport,

@@ -253,6 +253,8 @@ export interface AppContextType {
     isSessionError: boolean;
     onlineEmployeeIds: Set<string>;
     onlineStaffMap: Record<string, OnlineStaffInfo>;
+    lastSeenStaffMap: Record<string, string>;
+    timeTick: number;
     activeStaffAlert: ActiveStaffAlert | null;
     dismissActiveStaffAlert: () => void;
     incomingRequest: InspectionRequest | null;
