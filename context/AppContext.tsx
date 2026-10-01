@@ -480,6 +480,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 } else if (payload.action === 'DELETE' && payload.id) {
                     setRequests(prev => prev.filter(r => r.id !== payload.id));
                     setSearchedRequests(prev => prev ? prev.filter(r => r.id !== payload.id) : null);
+                    setLastRemoteDeleteId(payload.id);
+                    setTimeout(() => setLastRemoteDeleteId(null), 1000);
                 }
             })
             .on('broadcast', { event: 'client_change' }, ({ payload }) => {

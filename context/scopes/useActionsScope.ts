@@ -187,6 +187,10 @@ export const useActionsScope = (
             if (!prev) return null;
             return prev.filter(r => r.id !== id);
         });
+
+        // Broadcast delete to all other connected devices immediately
+        broadcastEvent('official_request_change', { action: 'DELETE', id });
+
         if (authUser) {
             setSystemLogs(prev => [{ id: uuidv4(), timestamp: new Date().toISOString(), employeeId: authUser.id, employeeName: authUser.name, action: 'حذف طلب', details: `تم حذف الطلب رقم #${reqNum}` }, ...prev]);
             sendSystemNotification({ 
@@ -196,13 +200,14 @@ export const useActionsScope = (
                 created_by_name: authUser.name
             });
         }
-    }, [requests, authUser, sendSystemNotification, setRequests, setSearchedRequests, setSystemLogs]);
+    }, [requests, authUser, sendSystemNotification, setRequests, setSearchedRequests, setSystemLogs, broadcastEvent]);
 
     const deleteRequestsBatch = useCallback(async (ids: string[]): Promise<void> => {
         const { error } = await supabase.from('inspection_requests').delete().in('id', ids);
         if (error) throw error;
         ids.forEach(id => {
             try { localStorage.removeItem(`request_draft_${id}`); } catch (e) {}
+            broadcastEvent('official_request_change', { action: 'DELETE', id });
         });
         setRequests(prev => prev.filter(r => !ids.includes(r.id)));
         setSearchedRequests(prev => {
@@ -212,7 +217,7 @@ export const useActionsScope = (
         if (authUser && ids.length > 0) {
             setSystemLogs(prev => [{ id: uuidv4(), timestamp: new Date().toISOString(), employeeId: authUser.id, employeeName: authUser.name, action: 'حذف جماعي', details: `تم حذف ${ids.length} طلبات` }, ...prev]);
         }
-    }, [authUser, setRequests, setSearchedRequests, setSystemLogs]);
+    }, [authUser, setRequests, setSearchedRequests, setSystemLogs, broadcastEvent]);
 
     const addRequest = useCallback(async (request: Omit<InspectionRequest, 'request_number'>): Promise<InspectionRequest> => {
         const { request_number, ...requestData } = request as any;
