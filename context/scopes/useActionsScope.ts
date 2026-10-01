@@ -36,8 +36,32 @@ export const useActionsScope = (
     setAuthUser: React.Dispatch<React.SetStateAction<Employee | null>>,
     addNotification: (notification: Omit<Notification, 'id'>) => void,
     createActivityLog: (action: string, details: string, imageUrl?: string, link_id?: string, link_page?: Page) => ActivityLog | null,
-    fetchRequests: () => Promise<void>
+    fetchRequests: () => Promise<void>,
+    channelRef?: React.MutableRefObject<any>,
+    setLastUpdatedRequest?: (req: InspectionRequest | null) => void,
+    setLastUpdatedClient?: (client: Client | null) => void,
+    setLastUpdatedCar?: (car: Car | null) => void
 ) => {
+
+    const broadcastEvent = useCallback((event: string, payload: any) => {
+        try {
+            if (channelRef?.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event,
+                    payload
+                });
+            } else {
+                supabase.channel('public:inspection_requests').send({
+                    type: 'broadcast',
+                    event,
+                    payload
+                });
+            }
+        } catch (e) {
+            console.warn(`Broadcast ${event} failed:`, e);
+        }
+    }, [channelRef]);
 
     const sendSystemNotification = useCallback(async (notification: {
         title: string;
@@ -95,13 +119,24 @@ export const useActionsScope = (
 
     // --- REQUESTS ---
     const updateRequest = useCallback(async (updatedRequest: Partial<InspectionRequest> & { id: string }): Promise<void> => {
+        const fullRequest = requests.find(r => r.id === updatedRequest.id);
+        const merged = { ...(fullRequest || {}), ...updatedRequest } as InspectionRequest;
+
         setRequests(prev => prev.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } : r));
         setSearchedRequests(prev => {
             if (!prev) return null;
             return prev.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } : r);
         });
+
+        if (setLastUpdatedRequest) {
+            setLastUpdatedRequest(merged);
+        }
+
         const { error } = await supabase.from('inspection_requests').update(updatedRequest).eq('id', updatedRequest.id);
         if (error) throw error;
+
+        // Broadcast to all other devices in real-time immediately via active channel
+        broadcastEvent('official_request_change', { action: 'UPDATE', record: merged });
 
         // Sync to TV after update ONLY if status is being changed
         if ('status' in updatedRequest) {
@@ -112,12 +147,11 @@ export const useActionsScope = (
                     console.warn('Failed to remove draft on completion', e);
                 }
             }
-            const fullRequest = requests.find(r => r.id === updatedRequest.id);
             if (fullRequest) {
-                syncToTvDisplay({ ...fullRequest, ...updatedRequest });
+                syncToTvDisplay(merged);
             }
         }
-    }, [setRequests, setSearchedRequests, requests, syncToTvDisplay]);
+    }, [setRequests, setSearchedRequests, requests, setLastUpdatedRequest, broadcastEvent, syncToTvDisplay]);
 
     const updateRequestAndAssociatedData = useCallback(async (payload: { originalRequest: InspectionRequest; formData: { client_id: string; car: Partial<Omit<Car, 'id'>>; request: any; } }) => {
         const { originalRequest, formData } = payload;
@@ -126,13 +160,21 @@ export const useActionsScope = (
             const { error: carError } = await supabase.from('cars').update(carData).eq('id', originalRequest.car_id);
             if (carError) throw carError;
             const { data: updatedCar } = await supabase.from('cars').select('*').eq('id', originalRequest.car_id).single();
-            if (updatedCar) setCars(prev => prev.map(c => c.id === updatedCar.id ? updatedCar : c));
+            if (updatedCar) {
+                setCars(prev => {
+                    const exists = prev.some(c => c.id === updatedCar.id);
+                    if (exists) return prev.map(c => c.id === updatedCar.id ? updatedCar : c);
+                    return [updatedCar, ...prev];
+                });
+                if (setLastUpdatedCar) setLastUpdatedCar(updatedCar);
+                broadcastEvent('car_change', { action: 'UPDATE', record: updatedCar });
+            }
         }
         const currentRequest = requests.find(r => r.id === originalRequest.id) || originalRequest;
         const newLog = createActivityLog('تعديل بيانات الطلب', `تم تحديث البيانات الأساسية للطلب #${originalRequest.request_number}`);
         const updatedLog = newLog ? [newLog, ...(currentRequest.activity_log || [])] : (currentRequest.activity_log || []);
         await updateRequest({ ...requestData, client_id, activity_log: updatedLog, id: originalRequest.id });
-    }, [createActivityLog, requests, updateRequest, setCars]);
+    }, [createActivityLog, requests, updateRequest, setCars, setLastUpdatedCar, broadcastEvent]);
 
     const deleteRequest = useCallback(async (id: string): Promise<void> => {
         const requestToDelete = requests.find(r => r.id === id);
@@ -145,6 +187,10 @@ export const useActionsScope = (
             if (!prev) return null;
             return prev.filter(r => r.id !== id);
         });
+
+        // Broadcast delete to all other connected devices immediately
+        broadcastEvent('official_request_change', { action: 'DELETE', id });
+
         if (authUser) {
             setSystemLogs(prev => [{ id: uuidv4(), timestamp: new Date().toISOString(), employeeId: authUser.id, employeeName: authUser.name, action: 'حذف طلب', details: `تم حذف الطلب رقم #${reqNum}` }, ...prev]);
             sendSystemNotification({ 
@@ -154,13 +200,14 @@ export const useActionsScope = (
                 created_by_name: authUser.name
             });
         }
-    }, [requests, authUser, sendSystemNotification, setRequests, setSearchedRequests, setSystemLogs]);
+    }, [requests, authUser, sendSystemNotification, setRequests, setSearchedRequests, setSystemLogs, broadcastEvent]);
 
     const deleteRequestsBatch = useCallback(async (ids: string[]): Promise<void> => {
         const { error } = await supabase.from('inspection_requests').delete().in('id', ids);
         if (error) throw error;
         ids.forEach(id => {
             try { localStorage.removeItem(`request_draft_${id}`); } catch (e) {}
+            broadcastEvent('official_request_change', { action: 'DELETE', id });
         });
         setRequests(prev => prev.filter(r => !ids.includes(r.id)));
         setSearchedRequests(prev => {
@@ -170,7 +217,7 @@ export const useActionsScope = (
         if (authUser && ids.length > 0) {
             setSystemLogs(prev => [{ id: uuidv4(), timestamp: new Date().toISOString(), employeeId: authUser.id, employeeName: authUser.name, action: 'حذف جماعي', details: `تم حذف ${ids.length} طلبات` }, ...prev]);
         }
-    }, [authUser, setRequests, setSearchedRequests, setSystemLogs]);
+    }, [authUser, setRequests, setSearchedRequests, setSystemLogs, broadcastEvent]);
 
     const addRequest = useCallback(async (request: Omit<InspectionRequest, 'request_number'>): Promise<InspectionRequest> => {
         const { request_number, ...requestData } = request as any;
@@ -252,6 +299,17 @@ export const useActionsScope = (
         
         // Sync to TV after creation
         syncToTvDisplay(newRequest);
+
+        // Broadcast to all other devices in real-time immediately
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'official_request_change',
+                payload: { action: 'INSERT', record: newRequest }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast official request insert failed:", bErr);
+        }
         
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return newRequest;
@@ -283,6 +341,18 @@ export const useActionsScope = (
         if (error) throw error;
         const newPending = data as PendingRequest;
         setPendingRequests(prev => [newPending, ...prev]);
+
+        // Broadcast to all other devices in real-time immediately
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'pending_change',
+                payload: { action: 'INSERT', record: newPending }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast pending insert failed:", bErr);
+        }
+
         addNotification({ title: 'نجاح', message: 'تم تسجيل الطلب بانتظار الدفع بنجاح.', type: 'success' });
         return newPending;
     }, [setPendingRequests, addNotification]);
@@ -291,6 +361,17 @@ export const useActionsScope = (
         const { error } = await supabase.from('pending_requests').delete().eq('id', id);
         if (error) throw error;
         setPendingRequests(prev => prev.filter(p => p.id !== id));
+
+        // Broadcast to all other devices in real-time immediately
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'pending_change',
+                payload: { action: 'DELETE', id }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast pending delete failed:", bErr);
+        }
     }, [setPendingRequests]);
 
     const updatePendingRequest = useCallback(async (id: string, updates: Partial<PendingRequest>): Promise<PendingRequest> => {
@@ -304,6 +385,18 @@ export const useActionsScope = (
         if (error) throw error;
         const updated = data as PendingRequest;
         setPendingRequests(prev => prev.map(p => p.id === id ? updated : p));
+
+        // Broadcast to all other devices in real-time immediately
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'pending_change',
+                payload: { action: 'UPDATE', record: updated }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast pending update failed:", bErr);
+        }
+
         addNotification({ title: 'نجاح', message: 'تم تحديث بيانات الطلب المعلق بنجاح.', type: 'success' });
         return updated;
     }, [setPendingRequests, addNotification]);
@@ -322,6 +415,17 @@ export const useActionsScope = (
         
         // Immediately remove from local pending state so UI updates instantly
         setPendingRequests(prev => prev.filter(p => p.id !== pendingReq.id));
+
+        // Broadcast to all other devices immediately so it disappears from pending lists
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'pending_change',
+                payload: { action: 'DELETE', id: pendingReq.id }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast pending convert failed:", bErr);
+        }
 
         // Delete from pending_requests DB table FIRST before adding official request
         const { error: delErr } = await supabase.from('pending_requests').delete().eq('id', pendingReq.id);
@@ -379,6 +483,17 @@ export const useActionsScope = (
             officialRequest.inspection_data = updatedInspectionData;
             officialRequest.employee_id = creatorId;
             setRequests(prev => prev.map(r => r.id === officialRequest.id ? { ...r, inspection_data: updatedInspectionData, employee_id: creatorId } : r));
+        }
+
+        // Broadcast to all other devices in real-time immediately with the full finalized official request
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'official_request_change',
+                payload: { action: 'INSERT', record: officialRequest }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast official request failed:", bErr);
         }
 
         return officialRequest;
@@ -443,7 +558,12 @@ export const useActionsScope = (
             }
             return newClients;
         });
-    }, [setClients]);
+
+        if (setLastUpdatedClient) setLastUpdatedClient(client);
+
+        // Broadcast to all other devices in real-time immediately
+        broadcastEvent('client_change', { action: 'UPDATE', record: client });
+    }, [setClients, setLastUpdatedClient, broadcastEvent]);
 
     const deleteClient = useCallback(async (id: string) => {
         const { count } = await supabase.from('inspection_requests').select('id', { count: 'exact', head: true }).eq('client_id', id);

@@ -1151,38 +1151,42 @@ const Dashboard: React.FC = () => {
         newClientsCount,
         prevNewClientsCount,
       ] = await Promise.all([
-        fetchServerFinancials(start.toISOString(), end.toISOString(), false),
+        fetchServerFinancials(start.toISOString(), end.toISOString(), false).catch(e => { console.error("currentStats fetch failed", e); return null; }),
         fetchServerFinancials(
           prevStart.toISOString(),
           prevEnd.toISOString(),
           false,
-        ),
+        ).catch(e => { console.error("previousStats fetch failed", e); return null; }),
         fetchServerFinancials(
           now.toLocaleDateString("en-CA") + "T00:00:00Z",
           pulseEnd.toISOString(),
           false,
-        ), // Today only
+        ).catch(e => { console.error("todayPulseStats fetch failed", e); return null; }), // Today only
         shouldFetchFullPulse
           ? fetchServerFinancials(
               pulseStart.toISOString(),
               pulseEnd.toISOString(),
               false,
-            )
+            ).catch(e => { console.error("fullPulseStats fetch failed", e); return null; })
           : Promise.resolve(null),
         fetchServerFinancials(
           currentMonthStart.toISOString(),
           currentMonthEnd.toISOString(),
           false,
-        ),
+        ).catch(e => { console.error("currentMonthStats fetch failed", e); return null; }),
         fetchServerFinancials(
           prevMonthStart.toISOString(),
           prevMonthEnd.toISOString(),
           false,
-        ),
-        fetchClientsCount(),
-        fetchClientsCount(start.toISOString(), end.toISOString()),
-        fetchClientsCount(prevStart.toISOString(), prevEnd.toISOString()),
+        ).catch(e => { console.error("prevMonthStats fetch failed", e); return null; }),
+        fetchClientsCount().catch(() => 0),
+        fetchClientsCount(start.toISOString(), end.toISOString()).catch(() => 0),
+        fetchClientsCount(prevStart.toISOString(), prevEnd.toISOString()).catch(() => 0),
       ]);
+
+      if (!currentStats || !todayPulseStats) {
+        throw new Error("Critical dashboard data failed to load");
+      }
 
       const uniqueClientIdsForPeriod = new Set(
         currentStats.filteredRequests
@@ -1331,8 +1335,8 @@ const Dashboard: React.FC = () => {
       }
 
       const [stats, { data: modelsData }] = await Promise.all([
-        fetchServerFinancials(start.toISOString(), end.toISOString(), false),
-        supabase.from("car_models").select("*"),
+        fetchServerFinancials(start.toISOString(), end.toISOString(), false).catch(e => { console.error("carStats fetch failed", e); return null; }),
+        Promise.resolve(supabase.from("car_models").select("*")).catch(e => { console.error("models fetch failed", e); return { data: null }; }),
       ]);
 
       if (modelsData) {
@@ -1340,11 +1344,13 @@ const Dashboard: React.FC = () => {
         safeSetItem("dashboard_car_models_cache", JSON.stringify(modelsData));
       }
 
-      setCarStats(stats);
-      safeSetItem(
-        "dashboard_car_stats_cache",
-        JSON.stringify({ timestamp: Date.now(), data: stats }),
-      );
+      if (stats) {
+        setCarStats(stats);
+        safeSetItem(
+          "dashboard_car_stats_cache",
+          JSON.stringify({ timestamp: Date.now(), data: stats }),
+        );
+      }
     } catch (error) {
       console.error("Car Data Load Error", error);
     } finally {

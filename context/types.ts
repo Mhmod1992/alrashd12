@@ -17,6 +17,20 @@ export interface CarHistoryResult {
     model_name_en?: string;
 }
 
+export interface OnlineStaffInfo {
+    employee_id: string;
+    name: string;
+    role: string;
+    online_at: string;
+}
+
+export interface ActiveStaffAlert {
+    id: string;
+    name: string;
+    role: string;
+    time: string;
+}
+
 export interface AppContextType {
     theme: 'light' | 'dark';
     toggleTheme: () => void;
@@ -28,6 +42,7 @@ export interface AppContextType {
     settingsPage: SettingsPage;
     setSettingsPage: (page: SettingsPage) => void;
     requests: InspectionRequest[];
+    setRequests: React.Dispatch<React.SetStateAction<InspectionRequest[]>>;
     pendingRequests: PendingRequest[];
     addPendingRequest: (payload: Omit<PendingRequest, 'id' | 'pending_number' | 'created_at'>) => Promise<PendingRequest>;
     updatePendingRequest: (id: string, updates: Partial<PendingRequest>) => Promise<PendingRequest>;
@@ -46,9 +61,11 @@ export interface AppContextType {
     isCreatingRequest: boolean;
     setIsCreatingRequest: (isCreating: boolean) => void;
     clients: Client[];
+    setClients: React.Dispatch<React.SetStateAction<Client[]>>;
     selectedClientId: string | null;
     setSelectedClientId: (id: string | null) => void;
     cars: Car[];
+    setCars: React.Dispatch<React.SetStateAction<Car[]>>;
     carMakes: CarMake[];
     carModels: CarModel[];
     fetchCarModelsByMake: (makeId: string) => Promise<void>;
@@ -192,6 +209,7 @@ export interface AppContextType {
     }>;
     fetchRequestsByCarId: (carId: string) => Promise<InspectionRequest[]>;
     fetchRequests: () => Promise<void>;
+    fetchPendingRequests?: () => Promise<void>;
     fetchRequestByRequestNumber: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestByRequestNumberForAuth: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestsByDateRange: (startDate: string, endDate: string, paymentType?: PaymentType) => Promise<InspectionRequest[]>;
@@ -237,6 +255,12 @@ export interface AppContextType {
     checkIfEmployeePaidThisMonth: (employeeId: string, month: number, year: number) => Promise<boolean>;
     fetchEmployeeTransactionsForMonth: (employeeId: string, month: number, year: number) => Promise<Expense[]>;
     isSessionError: boolean;
+    onlineEmployeeIds?: Set<string>;
+    onlineStaffMap?: Record<string, OnlineStaffInfo>;
+    lastSeenStaffMap?: Record<string, string>;
+    timeTick?: number;
+    activeStaffAlert?: ActiveStaffAlert | null;
+    dismissActiveStaffAlert?: () => void;
     incomingRequest: InspectionRequest | null;
     setIncomingRequest: React.Dispatch<React.SetStateAction<InspectionRequest | null>>;
     latestWhatsAppMessage: WhatsAppMessage | null;
@@ -257,10 +281,18 @@ export interface AppContextType {
     whatsappApiStatus: 'connected' | 'disconnected' | 'checking';
     setWhatsappApiStatus: (status: 'connected' | 'disconnected' | 'checking') => void;
     checkWhatsAppStatus: () => Promise<void>;
-    // --- Remote Deletion Event ---
+    // --- Remote Deletion & Update Events ---
     lastRemoteDeleteId: string | null;
     setLastRemoteDeleteId: (id: string | null) => void;
+    lastRemoteUpdateReq?: InspectionRequest | null;
+    lastUpdatedRequest?: InspectionRequest | null;
+    setLastUpdatedRequest?: (req: InspectionRequest | null) => void;
+    lastUpdatedClient?: Client | null;
+    setLastUpdatedClient?: (client: Client | null) => void;
+    lastUpdatedCar?: Car | null;
+    setLastUpdatedCar?: (car: Car | null) => void;
+    broadcastEvent?: (event: string, payload: any) => void;
     isSettingsLoaded: boolean;
     setIsSettingsLoaded: (loaded: boolean) => void;
-    isInitializedFromCache: boolean;
+    isInitializedFromCache?: boolean;
 }

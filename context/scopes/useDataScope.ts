@@ -8,8 +8,9 @@ import {
     InternalMessage, Technician, Reservation, RequestStatus, Page, WhatsAppMessage, PaymentType,
     FinancialStats
 } from '../../types';
+import { OnlineStaffInfo, ActiveStaffAlert } from '../types';
 import { REQUESTS_PAGE_SIZE } from '../constants';
-import { uuidv4 } from '../../lib/utils'; // You might need to adjust this import path if utils is elsewhere
+import { uuidv4, getCurrentShiftRange } from '../../lib/utils';
 
 const getCachedMaster = <T>(key: string): T[] => {
     try {
@@ -48,6 +49,9 @@ export const useDataScope = (
     const [highlightedRequestId, setHighlightedRequestId] = useState<string | null>(null);
     const [incomingRequest, setIncomingRequest] = useState<InspectionRequest | null>(null);
     const [lastRemoteDeleteId, setLastRemoteDeleteId] = useState<string | null>(null);
+    const [lastUpdatedRequest, setLastUpdatedRequest] = useState<InspectionRequest | null>(null);
+    const [lastUpdatedClient, setLastUpdatedClient] = useState<Client | null>(null);
+    const [lastUpdatedCar, setLastUpdatedCar] = useState<Car | null>(null);
 
     const [clients, setClients] = useState<Client[]>([]);
     const [cars, setCars] = useState<Car[]>([]);
@@ -72,8 +76,23 @@ export const useDataScope = (
     const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
     const [unreadWhatsAppCount, setUnreadWhatsAppCount] = useState(0);
     const [latestWhatsAppMessage, setLatestWhatsAppMessage] = useState<WhatsAppMessage | null>(null);
+    const [onlineEmployeeIds, setOnlineEmployeeIds] = useState<Set<string>>(new Set());
+    const [onlineStaffMap, setOnlineStaffMap] = useState<Record<string, OnlineStaffInfo>>({});
+    const [lastSeenStaffMap, setLastSeenStaffMap] = useState<Record<string, string>>(() => {
+        try {
+            const saved = localStorage.getItem('last_seen_staff_map');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+    const [activeStaffAlert, setActiveStaffAlert] = useState<ActiveStaffAlert | null>(null);
     const [financialReport, setFinancialReport] = useState<FinancialStats | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const dismissActiveStaffAlert = useCallback(() => {
+        setActiveStaffAlert(null);
+    }, []);
 
     const triggerHighlight = useCallback((requestId: string) => {
         setHighlightedRequestId(requestId);
@@ -94,6 +113,8 @@ export const useDataScope = (
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
 
+            const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
+
             // Check if we already have valid cached master data
             const cachedMakes = getCachedMaster<CarMake>('car_makes');
             const cachedTypes = getCachedMaster<InspectionType>('inspection_types');
@@ -110,6 +131,8 @@ export const useDataScope = (
             const results = await Promise.all([
                 supabase.from('inspection_requests')
                     .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps, payment_note, split_payment_details, inspection_data')
+                    .gte('created_at', shiftStartIso)
+                    .lt('created_at', shiftEndIso)
                     .order('created_at', { ascending: false })
                     .limit(REQUESTS_PAGE_SIZE),
                 shouldFetchMakes ? supabase.from('car_makes').select('*') : Promise.resolve({ data: cachedMakes, error: null }),
@@ -486,7 +509,7 @@ export const useDataScope = (
 
     const fetchAllPaperArchiveRequests = useCallback(async (): Promise<InspectionRequest[]> => {
         // Dev Environment Guard: check sessionStorage cache to avoid repeated queries on hot reload
-        if (import.meta.env.DEV) {
+        if ((import.meta as any).env?.DEV) {
             try {
                 const cached = sessionStorage.getItem('dev_paper_archive_cache');
                 const cacheTime = sessionStorage.getItem('dev_paper_archive_time');
@@ -520,7 +543,7 @@ export const useDataScope = (
         }
 
         // Save to dev cache
-        if (import.meta.env.DEV && requestsData.length > 0) {
+        if ((import.meta as any).env?.DEV && requestsData.length > 0) {
             try {
                 sessionStorage.setItem('dev_paper_archive_cache', JSON.stringify(requestsData));
                 sessionStorage.setItem('dev_paper_archive_time', Date.now().toString());
@@ -544,9 +567,24 @@ export const useDataScope = (
         }
     }, []);
 
+    const fetchPendingRequests = useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('pending_requests')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (!error && data) {
+                setPendingRequests(data);
+            }
+        } catch (e) {
+            console.error("fetchPendingRequests error:", e);
+        }
+    }, []);
+
     return {
         requests, setRequests,
         pendingRequests, setPendingRequests,
+        fetchPendingRequests,
         requestsOffset, setRequestsOffset,
         hasMoreRequests, setHasMoreRequests,
         isLoadingMore, setIsLoadingMore,
@@ -555,6 +593,9 @@ export const useDataScope = (
         highlightedRequestId, triggerHighlight,
         incomingRequest, setIncomingRequest,
         lastRemoteDeleteId, setLastRemoteDeleteId,
+        lastUpdatedRequest, setLastUpdatedRequest,
+        lastUpdatedClient, setLastUpdatedClient,
+        lastUpdatedCar, setLastUpdatedCar,
         clients, setClients,
         cars, setCars,
         carMakes, setCarMakes,
@@ -575,6 +616,11 @@ export const useDataScope = (
         whatsappMessages, setWhatsappMessages,
         unreadWhatsAppCount, setUnreadWhatsAppCount,
         latestWhatsAppMessage, setLatestWhatsAppMessage,
+        onlineEmployeeIds, setOnlineEmployeeIds,
+        onlineStaffMap, setOnlineStaffMap,
+        lastSeenStaffMap, setLastSeenStaffMap,
+        activeStaffAlert, setActiveStaffAlert,
+        dismissActiveStaffAlert,
         financialReport, setFinancialReport,
         isRefreshing, setIsRefreshing,
         fetchRequests,

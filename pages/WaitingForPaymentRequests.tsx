@@ -38,6 +38,8 @@ const WaitingForPaymentRequests: React.FC = () => {
         showNewRequestSuccessModal,
         createActivityLog,
         searchClients,
+        lastRemoteUpdateReq,
+        setRequests
     } = useAppContext();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,6 +54,24 @@ const WaitingForPaymentRequests: React.FC = () => {
     const [serverCarsWithHistory, setServerCarsWithHistory] = useState<Set<string>>(new Set());
 
     const { fetchRequestsByCarId, triggerHighlight, setSelectedRequestId, setPage: navigateToPage } = useAppContext();
+
+    // Handle remote updates for requests not in the main batch
+    useEffect(() => {
+        if (lastRemoteUpdateReq) {
+            // If the request was WAITING_PAYMENT but now it's NEW or something else,
+            // we should make sure it's reflected in the global requests state so dataToDisplay updates
+            setRequests(prev => {
+                const exists = prev.some(r => r.id === lastRemoteUpdateReq.id);
+                if (exists) {
+                    return prev.map(r => r.id === lastRemoteUpdateReq.id ? { ...r, ...lastRemoteUpdateReq } : r);
+                } else if (lastRemoteUpdateReq.status === RequestStatus.WAITING_PAYMENT) {
+                    // If it's a "waiting payment" request that we didn't have before, add it
+                    return [lastRemoteUpdateReq, ...prev];
+                }
+                return prev;
+            });
+        }
+    }, [lastRemoteUpdateReq, setRequests]);
 
     // Handle search from URL
     useEffect(() => {

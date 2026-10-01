@@ -42,68 +42,80 @@ const SmartRowWrapper: React.FC<{
         let isMounted = true;
         
         const checkClient = async () => {
-            if (initialHasClientHistory || client?.is_system_default) return;
+            if (initialHasClientHistory || client?.is_system_default || !request.client_id) return;
             try {
                 const { count, error } = await supabase
                     .from('inspection_requests')
                     .select('id', { count: 'exact', head: true })
                     .eq('client_id', request.client_id);
                 
-                if (error) console.error("Error checking client history:", error);
-                
-                if (isMounted && count && count > 1) {
+                if (!error && isMounted && count && count > 1) {
                     setDynamicClientHistory(true);
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) {}
         };
 
         const checkCar = async () => {
-            if (initialHasCarHistory || !car) return;
+            if (initialHasCarHistory) return;
             try {
-                 let carIds: string[] = [car.id];
-                 
-                 if (car.vin || car.plate_number || car.plate_number_en) {
-                     let q = supabase.from('cars').select('id');
-                     if (car.vin) {
-                         q = q.eq('vin', car.vin.trim());
-                     } else {
-                         // Or conditions must be properly formatted string
-                         const conditions = [];
-                         if (car.plate_number) conditions.push(`plate_number.eq."${car.plate_number.trim()}"`, `plate_number_en.eq."${car.plate_number.trim()}"`);
-                         if (car.plate_number_en) conditions.push(`plate_number_en.eq."${car.plate_number_en.trim()}"`, `plate_number.eq."${car.plate_number_en.trim()}"`);
-                         
-                         if (conditions.length > 0) {
-                             q = q.or(conditions.join(','));
+                 const plate = (car?.plate_number || request.car_snapshot?.plate_number || '').trim();
+                 const plateEn = (car?.plate_number_en || request.car_snapshot?.plate_number_en || '').trim();
+                 const vin = (car?.vin || request.car_snapshot?.vin || '').trim();
+                 const targetCarId = car?.id || request.car_id;
+
+                 const hasValidPlate = Boolean(plate && plate !== 'بدون لوحة' && plate.length > 1);
+                 const hasValidPlateEn = Boolean(plateEn && plateEn !== 'بدون لوحة' && plateEn.length > 1);
+                 const hasValidVin = Boolean(vin && vin.length > 3);
+
+                 let matchingCarIds: string[] = targetCarId ? [targetCarId] : [];
+
+                 // 1. If plate is present, search for matching cars via fuzzy plate search
+                 if (hasValidPlate || hasValidPlateEn) {
+                     const rawP = hasValidPlate ? plate : plateEn;
+                     const cleanP = rawP.replace(/\s/g, '');
+                     if (cleanP.length > 1) {
+                         const fuzzy = '%' + cleanP.split('').join('%') + '%';
+                         const { data: carsFound } = await supabase
+                             .from('cars')
+                             .select('id')
+                             .or(`plate_number.ilike.${fuzzy},plate_number_en.ilike.${fuzzy}`);
+                         if (carsFound && carsFound.length > 0) {
+                             matchingCarIds = Array.from(new Set([...matchingCarIds, ...carsFound.map(c => c.id)]));
                          }
                      }
-                     const { data, error } = await q;
-                     if (data) {
-                         const uniqueIds = Array.from(new Set(data.map(c => c.id)));
-                         carIds = uniqueIds.length > 0 ? uniqueIds : carIds;
+                 }
+
+                 // 2. If VIN is present, search for matching cars via VIN
+                 if (hasValidVin) {
+                     const cleanVin = vin.replace(/\s/g, '');
+                     const { data: vinCars } = await supabase
+                         .from('cars')
+                         .select('id')
+                         .ilike('vin', `%${cleanVin}%`);
+                     if (vinCars && vinCars.length > 0) {
+                         matchingCarIds = Array.from(new Set([...matchingCarIds, ...vinCars.map(c => c.id)]));
                      }
                  }
-                 
-                 const { count, error } = await supabase
-                    .from('inspection_requests')
-                    .select('id', { count: 'exact', head: true })
-                    .in('car_id', carIds);
-                    
-                if (isMounted && count && count > 1) {
-                    setDynamicCarHistory(true);
-                }
-            } catch (e) { console.error(e); }
+
+                 // 3. Count total inspection requests for all matched car IDs
+                 if (matchingCarIds.length > 0) {
+                     const { count, error } = await supabase
+                        .from('inspection_requests')
+                        .select('id', { count: 'exact', head: true })
+                        .in('car_id', matchingCarIds);
+                        
+                    if (!error && isMounted && count && count > 1) {
+                        setDynamicCarHistory(true);
+                    }
+                 }
+            } catch (e) {}
         };
 
-        const timer = setTimeout(() => {
-            if (isMounted) {
-                checkClient();
-                checkCar();
-            }
-        }, 300); // 300ms delay to prevent hammering during render
+        checkClient();
+        checkCar();
 
         return () => { 
             isMounted = false; 
-            clearTimeout(timer);
         };
     }, [request.id, request.client_id, request.car_id, initialHasClientHistory, initialHasCarHistory, car, client]);
 
@@ -494,40 +506,39 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
     };
   };
   
-  const getCarInfo = (carId: string) => {
+  const getCarInfo = (carId: string, req?: InspectionRequest) => {
     const car = cars.find(c => c.id === carId);
-    if (!car) return { name: 'غير معروف', plate: '', raw: null };
-    
-    const makeObj = carMakes.find(m => m.id === car.make_id);
-    const modelObj = carModels.find(m => m.id === car.model_id);
+    const snap = req?.car_snapshot;
 
-    const makeEn = makeObj?.name_en;
-    const makeAr = makeObj?.name_ar;
-    const modelEn = modelObj?.name_en;
-    const modelAr = modelObj?.name_ar;
+    const makeObj = car ? carMakes.find(m => m.id === car.make_id) : undefined;
+    const modelObj = car ? carModels.find(m => m.id === car.model_id) : undefined;
 
-    // Prefer English for search query, fallback to Arabic
-    const searchMake = makeEn || makeAr || '';
-    const searchModel = modelEn || modelAr || '';
+    const finalMake = makeObj?.name_en || makeObj?.name_ar || snap?.make_en || snap?.make_ar || '';
+    const finalModel = modelObj?.name_en || modelObj?.name_ar || snap?.model_en || snap?.model_ar || '';
+    const finalYear = car?.year || snap?.year || '';
+
+    const displayName = `${finalMake} ${finalModel} ${finalYear ? `(${finalYear})` : ''}`.trim() || 'غير معروف';
 
     const raw = {
-        make: searchMake,
-        model: searchModel,
-        year: car.year
+        make: finalMake,
+        model: finalModel,
+        year: finalYear || 0
     };
 
-    const displayName = `${makeEn || makeAr || ''} ${modelEn || modelAr || ''} (${car.year})`;
+    const targetVin = (car?.vin || snap?.vin || '').trim();
+    const targetPlate = (car?.plate_number || snap?.plate_number || '').trim();
+    const targetPlateEn = (car?.plate_number_en || snap?.plate_number_en || '').trim();
 
     // VIN Display Logic
-    if (car.vin) {
+    if (targetVin) {
         return {
           name: displayName,
-          plate: `شاصي: ${car.vin}`,
+          plate: `شاصي: ${targetVin}`,
           raw
         };
     }
 
-    if (!car.plate_number) {
+    if (!targetPlate) {
          return {
           name: displayName,
           plate: 'بدون لوحة',
@@ -536,24 +547,24 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
     }
 
     // Support legacy "شاصي" in plate_number just in case
-    if (car.plate_number.startsWith('شاصي')) {
+    if (targetPlate.startsWith('شاصي')) {
         return {
           name: displayName,
-          plate: car.plate_number,
+          plate: targetPlate,
           raw
         };
     }
 
     // Normal Plate Display
-    const plateParts = car.plate_number.split(' ');
+    const plateParts = targetPlate.split(' ');
     const plateLettersString = plateParts.filter(part => !/^\d+$/.test(part)).join('');
     const plateNumbers = plateParts.find(part => /^\d+$/.test(part)) || '';
     
     let finalPlateLetters = '';
     
-    if (plateDisplayLanguage === 'en' && car.plate_number_en) {
+    if (plateDisplayLanguage === 'en' && targetPlateEn) {
         // Use the stored reversed English plate if available
-        const enParts = car.plate_number_en.split(' ');
+        const enParts = targetPlateEn.split(' ');
         const enLetters = enParts.filter(part => !/^\d+$/.test(part)).join(' ');
         finalPlateLetters = enLetters; // Already stored in correct visual order (e.g. R N B)
     } else {
@@ -809,21 +820,23 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                     {displayedRequests.length > 0 ? (
                         displayedRequests.map((request) => {
                             const clientInfo = getClientInfo(request.client_id, request);
-                        const carInfo = getCarInfo(request.car_id);
+                        const carInfo = getCarInfo(request.car_id, request);
                         const creator = employees.find(e => e.id === request.employee_id);
-                        const carDisplayName = request.car_snapshot
-                            ? `${request.car_snapshot.make_en} ${request.car_snapshot.model_en} (${request.car_snapshot.year})`
-                            : carInfo.name;
+                        const carDisplayName = carInfo.name !== 'غير معروف'
+                            ? carInfo.name
+                            : (request.car_snapshot
+                                ? `${request.car_snapshot.make_en || request.car_snapshot.make_ar || ''} ${request.car_snapshot.model_en || request.car_snapshot.model_ar || ''} (${request.car_snapshot.year})`.trim()
+                                : carInfo.name);
                         
                         // Construct search data prioritizing snapshot
-                        const searchData = request.car_snapshot ? {
+                        const searchData = carInfo.raw ? carInfo : (request.car_snapshot ? {
                             name: carDisplayName,
                             raw: {
                                 make: request.car_snapshot.make_en || request.car_snapshot.make_ar || '',
                                 model: request.car_snapshot.model_en || request.car_snapshot.model_ar || '',
                                 year: request.car_snapshot.year
                             }
-                        } : carInfo;
+                        } : carInfo);
 
                         const isWaitingPayment = request.status === RequestStatus.WAITING_PAYMENT;
                         const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);
@@ -835,12 +848,27 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                         const client = clients.find(c => c.id === request.client_id);
                         const hasHistory = (client?.inspection_requests?.[0]?.count || 0) > 1;
 
-                        // Check if car has history (same plate or VIN)
+                        // Check if car has history (same plate or VIN or car_id)
                         const car = cars.find(c => c.id === request.car_id);
-                        const hasCarHistory = carsWithHistory && car && (
-                            (car.plate_number && carsWithHistory.has(car.plate_number.trim())) ||
-                            (car.plate_number_en && carsWithHistory.has(car.plate_number_en.trim())) ||
-                            (car.vin && carsWithHistory.has(car.vin.trim()))
+                        const carPlate = (car?.plate_number || request.car_snapshot?.plate_number || '').trim();
+                        const carPlateEn = (car?.plate_number_en || request.car_snapshot?.plate_number_en || '').trim();
+                        const carVin = (car?.vin || request.car_snapshot?.vin || '').trim();
+
+                        const hasValidPlate = Boolean(carPlate && carPlate !== 'بدون لوحة' && carPlate.length > 1);
+                        const hasValidPlateEn = Boolean(carPlateEn && carPlateEn !== 'بدون لوحة' && carPlateEn.length > 1);
+                        const hasValidVin = Boolean(carVin && carVin.length > 3);
+
+                        const cleanP = carPlate.replace(/\s/g, '');
+                        const cleanPEn = carPlateEn.replace(/\s/g, '');
+                        const cleanV = carVin.replace(/\s/g, '');
+
+                        const hasCarHistory = Boolean(
+                            carsWithHistory && (
+                                (request.car_id && carsWithHistory.has(request.car_id)) ||
+                                (hasValidPlate && (carsWithHistory.has(carPlate) || carsWithHistory.has(cleanP))) ||
+                                (hasValidPlateEn && (carsWithHistory.has(carPlateEn) || carsWithHistory.has(cleanPEn))) ||
+                                (hasValidVin && (carsWithHistory.has(carVin) || carsWithHistory.has(cleanV)))
+                            )
                         );
 
                         // Price column payment icons & suffixes
@@ -969,10 +997,10 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                 {lazyHasCarHistory && onHistoryClick && (
                                                     <button
                                                         onClick={(e) => onHistoryClick(e, request.car_id, carDisplayName)}
-                                                        className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-800 transition-all hover:scale-110 shadow-sm border border-amber-200 dark:border-amber-800"
-                                                        title="عرض سجل الفحص لهذه السيارة"
+                                                        className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-800 transition-all hover:scale-110 shadow-sm border border-amber-200 dark:border-amber-800 shrink-0"
+                                                        title="فحصت لدينا سابقاً - اضغط لعرض سجل الفحص"
                                                     >
-                                                        <HistoryIcon className="w-5 h-5" />
+                                                        <HistoryIcon className="w-4 h-4" />
                                                     </button>
                                                 )}
                                         <div>

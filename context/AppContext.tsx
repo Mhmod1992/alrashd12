@@ -46,7 +46,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Only show global loading if we don't have a cached user. 
     // If we have a cached user, we show the UI immediately while verifying in background.
     const [isLoading, setIsLoading] = useState(!authUser);
-    
+
     const [isCreatingRequest, setIsCreatingRequest] = useState(false);
     const [isSessionError, setIsSessionError] = useState(false);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -181,7 +181,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         globalSettings, setGlobalSettings, isSetupComplete, setIsSetupComplete,
         isSettingsLoaded, setIsSettingsLoaded, isInitializedFromCache
     } = useThemeScope(authUser, setAuthUser, can);
-    
+
     const [initialRequestModalState, setInitialRequestModalState] = useState<'new' | null>(null);
     const [newRequestSuccessState, setNewRequestSuccessState] = useState<{ isOpen: boolean; requestNumber: number | string | null; requestId: string | null; showWhatsAppButton?: boolean; }>({ isOpen: false, requestNumber: null, requestId: null, showWhatsAppButton: false });
     const [whatsappSuccessModal, setWhatsappSuccessModal] = useState<{ isOpen: boolean; clientName: string; phone: string; }>({ isOpen: false, clientName: '', phone: '' });
@@ -222,13 +222,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 // Clear state
                 setAuthUser(null);
                 setHistory(['dashboard']);
-                
+
                 // Clear Persistence
                 window.sessionStorage.removeItem('pageHistory');
                 localStorage.removeItem('cached_authUser'); // Clear Cached User
                 localStorage.removeItem('loginDate');
                 localStorage.removeItem('lastActiveTime');
-                
+
                 // Clear Supabase tokens to ensure clean state
                 Object.keys(localStorage).forEach((key) => {
                     if (key.startsWith('sb-') || key.includes('supabase')) {
@@ -261,28 +261,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     useEffect(() => { ensureEntitiesLoadedRef.current = ensureEntitiesLoaded; }, [ensureEntitiesLoaded]);
 
 
-    const setupRealtimeSubscription = useCallback(() => {
+    const setupRealtimeSubscription = useCallback(async () => {
         if (channelRef.current) return;
 
         setRealtimeStatus('connecting');
 
-        const channel = supabase.channel('public:inspection_requests')
+        // Set Auth JWT token on Realtime client so RLS allows postgres_changes events
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+                await supabase.realtime.setAuth(session.access_token);
+            }
+        } catch (e) {
+            console.warn('Realtime setAuth warning:', e);
+        }
+
+        const channel = supabase.channel('app-realtime-main')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'inspection_requests' },
                 async (payload) => {
                     if (payload.eventType === 'INSERT') {
                         const newReq = payload.new as InspectionRequest;
                         await ensureEntitiesLoadedRef.current([newReq]);
                         setRequests(prev => {
-                            // If we already have this request, it might have an updated request_number from our optimistic override, 
-                            // so we should prefer our existing state or update it carefully.
                             const existingReqIndex = prev.findIndex(r => r.id === newReq.id);
                             if (existingReqIndex !== -1) {
                                 const updatedPrev = [...prev];
-                                // Only update if the incoming realtime event has a HIGHER request number, 
-                                // otherwise keep our optimistically set one.
-                                if (newReq.request_number > updatedPrev[existingReqIndex].request_number) {
-                                    updatedPrev[existingReqIndex] = { ...updatedPrev[existingReqIndex], ...newReq };
-                                }
+                                updatedPrev[existingReqIndex] = { ...updatedPrev[existingReqIndex], ...newReq };
                                 return updatedPrev.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                             }
                             return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -294,7 +298,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedReq = payload.new as InspectionRequest;
                         await ensureEntitiesLoadedRef.current([updatedReq]);
-                        setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
+                        setRequests(prev => {
+                            const exists = prev.some(r => r.id === updatedReq.id);
+                            if (exists) {
+                                return prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r);
+                            } else {
+                                return [updatedReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                            }
+                        });
+                        triggerHighlight(updatedReq.id);
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
                         setRequests(prev => prev.filter(r => r.id !== deletedId));
@@ -346,12 +358,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             if (prev.some(r => r.id === newRes.id)) return prev;
                             return [newRes, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                         });
-                        // Optional: Add a notification for new reservation
                         if (authUserRef.current) {
-                            addNotification({ 
-                                title: 'حجز جديد', 
-                                message: `تم استلام حجز جديد للعميل: ${newRes.client_name}`, 
-                                type: 'info' 
+                            addNotification({
+                                title: 'حجز جديد',
+                                message: `تم استلام حجز جديد للعميل: ${newRes.client_name}`,
+                                type: 'info'
                             });
                         }
                     } else if (payload.eventType === 'UPDATE') {
@@ -381,9 +392,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
             )
             .subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
-                else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                if (status === 'SUBSCRIBED') {
+                    setRealtimeStatus('connected');
+                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                     setRealtimeStatus('disconnected');
+                    if (channelRef.current) {
+                        supabase.removeChannel(channelRef.current);
+                        channelRef.current = null;
+                    }
+                    setTimeout(() => {
+                        setupRealtimeSubscription();
+                    }, 3000);
                 }
             });
         channelRef.current = channel;
@@ -413,7 +432,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             )
             .subscribe();
         messagesChannelRef.current = msgChannel;
-        
+
         const waChannel = supabase.channel('whatsapp-realtime')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'whatsapp_messages' },
                 (payload) => {
@@ -423,7 +442,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         if (exists) return prev;
                         return [newMessage, ...prev];
                     });
-                    
+
                     if (newMessage.direction === 'incoming' || !newMessage.direction) {
                         setUnreadWhatsAppCount(prev => prev + 1);
                         setLatestWhatsAppMessage(newMessage);
@@ -456,10 +475,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             // 1. Attempt to refresh the session token
             const { data, error } = await supabase.auth.refreshSession();
-            
+
             if (error) {
-                 console.warn("Session refresh failed", error);
-                 throw error;
+                console.warn("Session refresh failed", error);
+                throw error;
             }
 
             if (data.session) {
@@ -514,7 +533,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                 if (mounted) {
                     setGlobalSettings(finalGlobalSettings);
-                    
+
                     // Check LocalStorage for setup completion flag
                     const localSetupComplete = localStorage.getItem('app_setup_complete') === 'true';
                     const dbSetupComplete = !!finalGlobalSettings.setupCompleted;
@@ -539,7 +558,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 // 2. Background Session Verification
                 // If we have a cached user (authUser is set), we don't wait for this to render.
                 const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-                
+
                 if (sessionError || !session) {
                     if (authUser && mounted) {
                         console.warn("Cached user exists but session invalid. Logging out.");
@@ -547,7 +566,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         setAuthUser(null);
                         localStorage.removeItem('cached_authUser');
                     }
-                    if(mounted) setIsLoading(false);
+                    if (mounted) setIsLoading(false);
                     return;
                 }
 
@@ -576,10 +595,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         setAuthUser(employeeProfile);
                         localStorage.setItem('cached_authUser', JSON.stringify(employeeProfile));
                         localStorage.setItem('lastActiveTime', Date.now().toString());
-                        
+
                         const shiftDate = new Date(Date.now() - 4 * 3600 * 1000).toLocaleDateString('en-CA');
                         if (localStorage.getItem('loginDate') !== shiftDate) {
-                             localStorage.setItem('loginDate', shiftDate);
+                            localStorage.setItem('loginDate', shiftDate);
                         }
                     }
                 }
@@ -600,8 +619,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (!mounted) return;
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 if (session) {
-                     // Check if profile needs update
-                     if (!authUserRef.current || authUserRef.current.id !== session.user.id) {
+                    // Check if profile needs update
+                    if (!authUserRef.current || authUserRef.current.id !== session.user.id) {
                         const { data: employeeProfile } = await supabase.from('employees').select('*').eq('id', session.user.id).single();
                         if (employeeProfile) {
                             setAuthUser(employeeProfile);
@@ -624,7 +643,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             clearTimeout(timeoutId);
             subscription?.unsubscribe();
         };
-    }, []); 
+    }, []);
 
     // Session Inactivity Check
     useEffect(() => {
@@ -657,10 +676,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // If the shift date has changed (i.e. we crossed the 4:00 AM boundary)
             if (storedShiftDate && storedShiftDate !== currentShiftDate && authUserRef.current) {
                 logout();
-                addNotification({ 
-                    title: 'وردية جديدة', 
-                    message: 'تم تسجيل الخروج التلقائي لبداية يوم عمل جديد (4 فجراً). يرجى تسجيل الدخول من جديد.', 
-                    type: 'info' 
+                addNotification({
+                    title: 'وردية جديدة',
+                    message: 'تم تسجيل الخروج التلقائي لبداية يوم عمل جديد (4 فجراً). يرجى تسجيل الدخول من جديد.',
+                    type: 'info'
                 });
             }
         };
@@ -794,15 +813,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (document.visibilityState === 'visible') {
                 const { data: { session }, error } = await supabase.auth.getSession();
                 if ((error || !session) && authUserRef.current) {
-                     // Try refresh
-                     const { error: refreshError } = await supabase.auth.refreshSession();
-                     if (refreshError) console.warn("Session refresh failed on visibility change.");
+                    // Try refresh
+                    const { error: refreshError } = await supabase.auth.refreshSession();
+                    if (refreshError) console.warn("Session refresh failed on visibility change.");
                 } else if (session && authUserRef.current && authUserRef.current.id !== session.user.id) {
-                     window.location.reload();
+                    window.location.reload();
                 }
-                
+
                 supabase.auth.startAutoRefresh();
-                
+
                 if (authUserRef.current) {
                     if (realtimeStatusRef.current === 'disconnected') {
                         retryConnection();
@@ -902,7 +921,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const searchRequestByNumber = useCallback(async (queryRaw: string | number, exactOnly: boolean = false) => {
         // Normalize numerals to English immediately
         const query = arabicToEnglishNumerals(String(queryRaw).trim());
-        
+
         if (!query) {
             clearSearchedRequests();
             return;
@@ -949,11 +968,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
 
                 if (isNumericQuery && cleanQuery.length <= 4 && !isModelAndYear) {
-                     const isOrder = r.request_number === Number(cleanQuery);
-                     const plateNormalized = car?.plate_number?.replace(/\s/g, '').toLowerCase() || '';
-                     const plateEnNormalized = car?.plate_number_en?.replace(/\s/g, '').toLowerCase() || '';
-                     const isPlate = plateNormalized.includes(cleanQuery) || plateEnNormalized.includes(cleanQuery);
-                     return isOrder || isPlate;
+                    const isOrder = r.request_number === Number(cleanQuery);
+                    const plateNormalized = car?.plate_number?.replace(/\s/g, '').toLowerCase() || '';
+                    const plateEnNormalized = car?.plate_number_en?.replace(/\s/g, '').toLowerCase() || '';
+                    const isPlate = plateNormalized.includes(cleanQuery) || plateEnNormalized.includes(cleanQuery);
+                    return isOrder || isPlate;
                 }
 
                 if (isModelAndYear) {
@@ -997,12 +1016,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if ((exactOnly && isNumericQuery) || (!exactOnly && isNumericQuery && cleanQuery.length <= 8 && !isTenDigits)) {
                 const { data, error } = await supabase
                     .from('inspection_requests')
-                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
+                    .select('*')
                     .eq('request_number', Number(cleanQuery))
                     .order('created_at', { ascending: false });
-                
+
                 if (!error && data) {
-                    requestsByNumber = data as InspectionRequest[];
+                    requestsByNumber = data;
                 }
 
                 if (exactOnly) {
@@ -1021,54 +1040,54 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             // 2. Search Clients by Phone (if numeric) or Name
             let clientIds: string[] = [];
-            
+
             // Only search clients if it's not strictly a plate search (4 digits) and not a model+year search
             const shouldSearchClients = !isModelAndYear && !(isNumericQuery && cleanQuery.length <= 4);
 
             if (shouldSearchClients) {
                 if (isTenDigits || (isNumericQuery && cleanQuery.length >= 6)) {
-                     // Search by Phone specifically
-                     const { data: foundClients } = await supabase
+                    // Search by Phone specifically
+                    const { data: foundClients } = await supabase
                         .from('clients')
                         .select('id')
                         .ilike('phone', `%${cleanQuery}%`)
                         .limit(50);
-                     clientIds = foundClients?.map(c => c.id) || [];
+                    clientIds = foundClients?.map(c => c.id) || [];
                 } else if (!isNumericQuery) {
-                     // Search by Name or Phone
-                     let clientQuery = supabase.from('clients').select('id');
-                     const significantTokens = searchTokens.filter(t => t.length >= 2);
-                     const clientOrConditions: string[] = [];
-                     
-                     if (significantTokens.length > 0) {
-                         significantTokens.forEach(token => {
+                    // Search by Name or Phone
+                    let clientQuery = supabase.from('clients').select('id');
+                    const significantTokens = searchTokens.filter(t => t.length >= 2);
+                    const clientOrConditions: string[] = [];
+
+                    if (significantTokens.length > 0) {
+                        significantTokens.forEach(token => {
                             clientOrConditions.push(`name.ilike.%${token}%`);
                             clientOrConditions.push(`phone.ilike.%${token}%`);
-                         });
-                     } else if (searchTokens.length > 0) {
-                         clientOrConditions.push(`name.ilike.%${query}%`);
-                         clientOrConditions.push(`phone.ilike.%${query}%`);
-                     }
-                     
-                     if (clientOrConditions.length > 0) {
-                         clientQuery = clientQuery.or(clientOrConditions.join(','));
-                         const { data: foundClients } = await clientQuery.limit(50);
-                         clientIds = foundClients?.map(c => c.id) || [];
-                     }
+                        });
+                    } else if (searchTokens.length > 0) {
+                        clientOrConditions.push(`name.ilike.%${query}%`);
+                        clientOrConditions.push(`phone.ilike.%${query}%`);
+                    }
+
+                    if (clientOrConditions.length > 0) {
+                        clientQuery = clientQuery.or(clientOrConditions.join(','));
+                        const { data: foundClients } = await clientQuery.limit(50);
+                        clientIds = foundClients?.map(c => c.id) || [];
+                    }
                 }
             }
 
             // 3. Search Cars (Plate, VIN, Year)
             let carIds: string[] = [];
-            
+
             if (!isTenDigits && !isModelAndYear) {
                 const variations = new Set<string>();
                 variations.add(query.trim());
                 variations.add(cleanQuery);
-                
+
                 const letters = query.replace(/[0-9\s]/g, '');
                 const numbers = query.replace(/[^0-9]/g, '');
-                
+
                 if (letters && numbers) {
                     variations.add(`${letters}${numbers}`);
                     variations.add(`${letters} ${numbers}`);
@@ -1081,21 +1100,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         variations.add(`${spacedLetters}${numbers}`);
                     }
                 }
-                
+
                 const uniqueVariations = Array.from(variations).filter(v => v.length > 1);
                 const orConditions: string[] = [];
-                
+
                 if (uniqueVariations.length > 0) {
                     uniqueVariations.forEach(v => {
                         orConditions.push(`plate_number.ilike.%${v}%`);
                         orConditions.push(`plate_number_en.ilike.%${v}%`);
                     });
                 }
-                
+
                 if (cleanQuery.length > 4 && !isNumericQuery) {
                     orConditions.push(`vin.ilike.%${cleanQuery}%`);
                 }
-                
+
                 if (!isModelAndYear && yearTokens.length > 0) {
                     yearTokens.forEach(year => {
                         orConditions.push(`year.eq.${year}`);
@@ -1119,7 +1138,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     `name_ar.ilike.%${token}%`,
                     `name_en.ilike.%${token}%`
                 ]);
-                
+
                 let makesQuery = supabase.from('car_makes').select('id');
                 if (makeOrConditions.length > 0) {
                     makesQuery = makesQuery.or(makeOrConditions.join(','));
@@ -1132,14 +1151,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     `name_ar.ilike.%${token}%`,
                     `name_en.ilike.%${token}%`
                 ]);
-                
+
                 let modelsQuery = supabase.from('car_Models').select('id');
                 if (modelOrConditions.length > 0) {
                     modelsQuery = modelsQuery.or(modelOrConditions.join(','));
                 }
                 const { data: models, error: modelsError } = await modelsQuery;
                 let finalModels = models;
-                
+
                 if (modelsError) {
                     let fallbackQuery = supabase.from('car_models').select('id');
                     if (modelOrConditions.length > 0) {
@@ -1153,10 +1172,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (makeIds.length > 0 || modelIds.length > 0 || yearTokens.length > 0) {
                     let carQuery = supabase.from('cars').select('id');
                     let makeModelOrConditions: string[] = [];
-                    
+
                     if (makeIds.length > 0) makeModelOrConditions.push(`make_id.in.(${makeIds.join(',')})`);
                     if (modelIds.length > 0) makeModelOrConditions.push(`model_id.in.(${modelIds.join(',')})`);
-                    
+
                     if (makeModelOrConditions.length > 0 && yearTokens.length > 0) {
                         // (Make OR Model) AND Year
                         const yearConditions = yearTokens.map(y => `year.eq.${y}`).join(',');
@@ -1184,14 +1203,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (requestOrConditions.length > 0) {
                 const { data: relatedRequests, error: reqError } = await supabase
                     .from('inspection_requests')
-                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, updated_at, attached_files, payment_note, split_payment_details, technician_assignments')
+                    .select('*')
                     .or(requestOrConditions.join(','))
                     .order('created_at', { ascending: false })
                     .limit(50);
 
                 if (!reqError && relatedRequests) {
                     const existingIds = new Set(finalRequests.map(r => r.id));
-                    (relatedRequests as InspectionRequest[]).forEach(req => {
+                    relatedRequests.forEach(req => {
                         if (!existingIds.has(req.id)) {
                             finalRequests.push(req);
                             existingIds.add(req.id);
@@ -1240,7 +1259,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (startDate) query = query.gte('created_at', startDate);
         if (endDate) query = query.lte('created_at', endDate);
         if (onlyUnpaid) query = query.eq('payment_type', PaymentType.Unpaid).neq('status', RequestStatus.WAITING_PAYMENT);
-        
+
         if (limit) {
             query = query.limit(limit);
         } else if (!startDate && !endDate && !onlyUnpaid) {
@@ -1264,7 +1283,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Fetch all unpaid requests for Aged Debt calculation
             const { data: unpaid, error: unpaidError } = await supabase
                 .from('inspection_requests')
-                .select('id, request_number, client_id, car_id, car_snapshot, price, payment_type, status, created_at, payment_note')
+                .select('*')
                 .eq('client_id', clientId)
                 .eq('payment_type', PaymentType.Unpaid)
                 .neq('status', 'cancelled')
@@ -1293,7 +1312,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Get last visit separately to ensure we have it even if it's paid
             const { data: lastReq } = await supabase
                 .from('inspection_requests')
-                .select('id, request_number, client_id, car_id, car_snapshot, price, status, created_at')
+                .select('*')
                 .eq('client_id', clientId)
                 .order('created_at', { ascending: false })
                 .limit(1);
@@ -1339,7 +1358,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .from('cars')
             .select('id')
             .or(identifierConditions.join(','));
-        
+
         const carIds = matchingCars?.map(c => c.id) || [carId];
 
         // 3. Fetch all requests for all matching car IDs
@@ -1356,7 +1375,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         return results;
     }, [cars, ensureEntitiesLoaded]);
-    
+
     const fetchRequestByRequestNumberForAuth = useCallback(async (reqNum: number): Promise<InspectionRequest | null> => {
         const { data, error } = await supabase.from('inspection_requests').select('*').eq('request_number', reqNum).single();
         if (error || !data) return null;
@@ -1388,28 +1407,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (!plateNumber && !vin) return null;
         try {
             let foundCar: Car | null = null;
-            
+
             let query = supabase.from('cars').select('*').limit(1);
-            
+
             if (plateNumber) {
                 // Remove all spaces for a clean search string
                 const cleanPlate = plateNumber.replace(/\s/g, '');
-                
+
                 // Create a pattern that allows optional spaces between any character
                 // e.g., "ABC1234" -> "%A%B%C%1%2%3%4%"
                 const fuzzyPattern = '%' + cleanPlate.split('').join('%') + '%';
-                
+
                 // Search in both Arabic and English plate fields
                 query = query.or(`plate_number.ilike.${fuzzyPattern},plate_number_en.ilike.${fuzzyPattern}`);
             }
-            
+
             if (vin) {
                 const cleanVin = vin.replace(/\s/g, '');
                 query = query.or(`vin.ilike.%${cleanVin}%`);
             }
-            
+
             const { data, error } = await query;
-            
+
             if (error) {
                 console.error("Error searching for car history:", error);
                 return null;
@@ -1420,7 +1439,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 // Update local state if not already present
                 setCars(prev => prev.find(c => c.id === foundCar!.id) ? prev : [...prev, foundCar!]);
             }
-            
+
             if (foundCar) {
                 // Find all car records that share these identifiers to get consolidated history
                 let identifierConditions = [`id.eq.${foundCar.id}`];
@@ -1432,7 +1451,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     .from('cars')
                     .select('id')
                     .or(identifierConditions.join(','));
-                
+
                 const carIds = matchingCars?.map(c => c.id) || [foundCar.id];
 
                 const { data: requestHistory } = await supabase
@@ -1477,9 +1496,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     }
                 }
 
-                return { 
-                    car: foundCar, 
-                    previousRequests: requestHistory || [], 
+                return {
+                    car: foundCar,
+                    previousRequests: requestHistory || [],
                     lastClient,
                     make_name_ar,
                     make_name_en,
@@ -1520,16 +1539,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     await supabase.auth.signOut();
                     return { success: false, error: 'لا يوجد ملف موظف.' };
                 }
-                
+
                 // Cache user immediately on successful login
                 setAuthUser(employeeProfile);
                 localStorage.setItem('cached_authUser', JSON.stringify(employeeProfile));
                 localStorage.setItem('loginDate', new Date(Date.now() - 4 * 3600 * 1000).toLocaleDateString('en-CA'));
                 localStorage.setItem('lastActiveTime', Date.now().toString());
-                
-                await sendSystemNotification({ 
-                    title: 'تسجيل دخول', 
-                    message: `قام **${employeeProfile.name}** بتسجيل الدخول للنظام.`, 
+
+                await sendSystemNotification({
+                    title: 'تسجيل دخول',
+                    message: `قام **${employeeProfile.name}** بتسجيل الدخول للنظام.`,
                     type: 'login',
                     created_by_name: employeeProfile.name
                 });
@@ -1564,36 +1583,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             startDate.setHours(0, 0, 0, 0);
         } else if (filter === 'month') startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         else startDate = new Date(now.getFullYear(), 0, 1);
-        
-        // Egress Optimization: only fetch accounting fields needed for sums and distributions
-        const { data: requestsData } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, price, status, payment_type, split_payment_details, created_at')
-            .eq('status', RequestStatus.COMPLETE)
-            .gte('created_at', startDate.toISOString());
-            
-        const { data: expensesData } = await supabase.from('expenses')
-            .select('id, amount, category, date, description')
-            .gte('date', startDate.toISOString());
+        const { data: requestsData } = await supabase.from('inspection_requests').select('*').eq('status', RequestStatus.COMPLETE).gte('created_at', startDate.toISOString());
+        const { data: expensesData } = await supabase.from('expenses').select('*').gte('date', startDate.toISOString());
 
-        return { requests: (requestsData as any) || [], expenses: (expensesData as any) || [] };
-    }, []);
+        const finalRequests = requestsData || [];
+        if (finalRequests.length > 0) {
+            await ensureEntitiesLoaded(finalRequests);
+        }
+
+        return { requests: finalRequests, expenses: expensesData || [] };
+    }, [ensureEntitiesLoaded]);
 
     const uploadImage = useCallback(async (file: File, bucket: string, folder?: string, customFileName?: string): Promise<string> => {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("Not authenticated");
-        
+
         // Compress the image before uploading (max 1200px, 70% quality)
         const compressedFile = await compressImageFile(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
-        
+
         const fileExt = compressedFile.name.split('.').pop();
         const fileName = customFileName ? `${customFileName}.${fileExt}` : `${uuidv4()}.${fileExt}`;
         const filePath = folder ? `${folder}/${fileName}` : fileName;
-        
-        // Cache-Control: 1 year immutable cache to prevent re-downloading images and reduce Supabase Egress
-        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, compressedFile, {
-            cacheControl: '31536000, public, immutable',
-            upsert: false
-        });
+
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, compressedFile);
         if (uploadError) throw uploadError;
         const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
         return data.publicUrl;
@@ -1671,7 +1683,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         else query = query.neq('status', 'cancelled').neq('status', RequestStatus.WAITING_PAYMENT);
         const { data: requests, error: reqError } = await query;
         if (reqError) throw reqError;
-        
+
         // Process requests to ensure car_snapshot is populated if missing
         const reqs = (requests || []).map((r: any) => {
             const req = { ...r } as InspectionRequest;
@@ -1692,15 +1704,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data: revenuesData, error: revError } = await supabase.from('other_revenues').select('*').gte('date', startDate).lte('date', endDate);
         if (revError) throw revError;
         const exps = (expenses as Expense[]).filter(e => e.date >= startDate && e.date <= endDate);
-        const revs: Revenue[] = (revenuesData || []).map((r: any) => ({ 
-            id: r.id, 
-            date: r.date, 
-            category: r.category, 
-            description: r.description, 
-            amount: r.amount, 
-            payment_method: r.payment_method, 
-            employeeId: r.employee_id, 
-            employeeName: r.employee_name 
+        const revs: Revenue[] = (revenuesData || []).map((r: any) => ({
+            id: r.id,
+            date: r.date,
+            category: r.category,
+            description: r.description,
+            amount: r.amount,
+            payment_method: r.payment_method,
+            employeeId: r.employee_id,
+            employeeName: r.employee_name
         }));
         const totalRequestsRevenue = reqs.reduce((sum, r) => sum + r.price, 0);
         let cashTotal = 0, cardTotal = 0, transferTotal = 0, unpaidTotal = 0;
@@ -1767,6 +1779,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const forecastData: { date: string; value: number; label: string }[] = [];
         for (let i = 1; i <= 7; i++) { const nextX = 29 + i, predictedY = Math.max(0, slope * nextX + intercept), nextDate = new Date(); nextDate.setDate(today.getDate() + i); forecastData.push({ date: nextDate.toLocaleDateString('en-CA'), value: Math.round(predictedY), label: nextDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric' }) }); }
         const trendDirection = slope > 50 ? 'up' : slope < -50 ? 'down' : 'flat';
+        await ensureEntitiesLoaded(reqs);
         return {
             totalRevenue,
             totalOtherRevenue,
@@ -1791,7 +1804,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             filteredRevenues: revs,
             filteredAdvances: advancesEntries
         };
-    }, [brokers]);
+    }, [brokers, ensureEntitiesLoaded]);
 
     const fetchServerExpenses = useCallback(async (startDate: string, endDate: string): Promise<Expense[]> => {
         const { data, error } = await supabase.from('expenses')
@@ -1906,7 +1919,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const parseReservationText = useCallback(async (text: string): Promise<Partial<Reservation>> => {
         // Clean text from source tags like [المصدر: ...]
         const cleanText = text.replace(/\[المصدر:.*?\]/g, '').replace(/\[رداً على:.*?\]/g, '').trim();
-        
+
         // Try traditional format first
         const extract = (key: string) => {
             const regex = new RegExp(`\\*${key}:\\*\\s*([^\\n\\r]+)`);
@@ -1923,22 +1936,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Check for the new format with 📌
         if (text.includes('📌')) {
             const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-            
+
             // Find the line with 📌
             const carLineIndex = lines.findIndex(l => l.includes('📌'));
             if (carLineIndex !== -1) {
                 car_details = lines[carLineIndex].replace('📌', '').trim();
-                
+
                 // Usually the lines following are price and notes
                 for (let i = carLineIndex + 1; i < lines.length; i++) {
                     const line = lines[i];
                     if (line.includes('[المصدر:')) continue;
-                    
+
                     // Convert Arabic numerals to English
                     const engLine = arabicToEnglishNumerals(line);
                     // Check if it's a price (just numbers)
                     const numericMatch = engLine.match(/^(\d+(\.\d+)?)$/);
-                    
+
                     if (numericMatch && price === undefined) {
                         price = Number(numericMatch[1]);
                     }
@@ -1952,7 +1965,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (phoneMatch) {
                 client_phone = phoneMatch[0];
             }
-            
+
             // The user requested NOT to fill notes automatically for this format
             notes = '';
         } else {
@@ -1962,7 +1975,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const year = extract('سنة الصنع');
             const parts = [make, model, year].filter(p => p);
             car_details = parts.length > 0 ? parts.join(' - ') : '';
-            
+
             const priceStr = extract('السعر');
             if (priceStr) {
                 price = Number(arabicToEnglishNumerals(priceStr).replace(/[^0-9.]/g, ''));
@@ -2143,7 +2156,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const checkWhatsAppStatus = useCallback(async () => {
         const mode = settings.whatsappMode || 'manual';
         const apiUrl = settings.whatsappApiUrl;
-        
+
         if (mode !== 'api' || !apiUrl) {
             setWhatsappApiStatus('disconnected');
             return;
@@ -2184,7 +2197,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Avoid flooding the console with errors if the API is simply down or unreachable
             // This is common and not "dangerous", so we just set status to disconnected
             setWhatsappApiStatus('disconnected');
-            
+
             // Log as a warning instead of error to avoid red noise in console
             // only if it's a fetch/network error
             if (error instanceof Error && (error.message.includes('fetch') || error.message.includes('NetworkError'))) {
@@ -2213,7 +2226,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return () => {
                 clearInterval(interval);
                 document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
-                window.removeEventListener('focus', handleFocusOrVisibility => {});
+                window.removeEventListener('focus', handleFocusOrVisibility => { });
                 window.removeEventListener('focus', handleVisibilityOrFocus);
             };
         }

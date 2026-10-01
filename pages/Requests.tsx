@@ -350,30 +350,31 @@ const Requests: React.FC = () => {
         let hasChanges = false;
         let newData = [...serverFetchedData];
         
-        const todayStr = getBusinessDateStr(new Date());
+        // Calculate shift start timestamp for 'today' (4 AM shift start)
+        const now = new Date();
+        const shiftStart = new Date(now);
+        if (shiftStart.getHours() < 4) shiftStart.setDate(shiftStart.getDate() - 1);
+        shiftStart.setHours(4, 0, 0, 0);
 
-        // 1. Update Existing items
+        // 1. Update Existing items with latest data from Context requests
         newData = newData.map(localItem => {
             const freshItem = requests.find(r => r.id === localItem.id);
-            if (freshItem && (
-                freshItem.status !== localItem.status || 
-                freshItem.updated_at !== localItem.updated_at ||
-                JSON.stringify(freshItem.report_stamps) !== JSON.stringify(localItem.report_stamps) ||
-                JSON.stringify(freshItem.broker) !== JSON.stringify(localItem.broker) ||
-                freshItem.payment_type !== localItem.payment_type ||
-                freshItem.price !== localItem.price
-            )) {
-                hasChanges = true;
-                return freshItem;
+            if (freshItem) {
+                const merged = { ...localItem, ...freshItem };
+                if (JSON.stringify(localItem) !== JSON.stringify(merged)) {
+                    hasChanges = true;
+                    return merged;
+                }
             }
             return localItem;
         });
 
-        // 2. Insert New items (Only for 'Today' filter)
-        if (dateFilter === 'today') {
+        // 2. Insert New items (When 'today' or 'all' filter is active)
+        if (dateFilter === 'today' || dateFilter === 'all') {
             requests.forEach(req => {
-                const reqBusDate = getBusinessDateStr(req.created_at);
-                if (reqBusDate === todayStr && !newData.find(r => r.id === req.id)) {
+                const reqTime = new Date(req.created_at).getTime();
+                const isCurrentShift = dateFilter === 'today' ? reqTime >= shiftStart.getTime() : true;
+                if (isCurrentShift && !newData.some(r => r.id === req.id)) {
                     newData.unshift(req);
                     hasChanges = true;
                 }
@@ -392,7 +393,6 @@ const Requests: React.FC = () => {
 
                 const dateA = new Date(a.created_at);
                 const dateB = new Date(b.created_at);
-                // Adjust for 4 AM shift start: treat 00:00-03:59 as "next day" (add 24h) for sorting
                 if (dateA.getHours() < 4) dateA.setHours(dateA.getHours() + 24);
                 if (dateB.getHours() < 4) dateB.setHours(dateB.getHours() + 24);
                 return dateB.getTime() - dateA.getTime();
