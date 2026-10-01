@@ -1424,6 +1424,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [ensureEntitiesLoaded, addNotification]);
 
     const getClientFinancialSummary = useCallback(async (clientId: string) => {
+        if (!clientId || typeof clientId !== 'string' || clientId.trim() === '') {
+            return {
+                unpaidRequests: [],
+                totalRevenue: 0,
+                totalPaid: 0,
+                lastRequest: null
+            };
+        }
         try {
             // Fetch all unpaid requests for Aged Debt calculation
             const { data: unpaid, error: unpaidError } = await supabase
@@ -1607,7 +1615,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     .limit(10);
 
                 let lastClient: Client | undefined;
-                if (requestHistory && requestHistory.length > 0) {
+                if (requestHistory && requestHistory.length > 0 && requestHistory[0].client_id) {
                     const { data: clientData } = await supabase.from('clients').select('*, inspection_requests(count)').eq('id', requestHistory[0].client_id).single();
                     if (clientData) lastClient = clientData;
                 }
