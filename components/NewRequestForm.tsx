@@ -1601,12 +1601,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 // Find or Create Client (Only for Edit Mode)
                 let client: Client | undefined;
-                if (initialData.client_id) {
-                    client = clients.find(c => c.id === initialData.client_id);
-                }
-                if (!client) {
-                    client = clients.find(c => c.phone === clientPhone);
-                }
+                client = clients.find(c => c.phone === clientPhone);
 
                 if (!client) {
                     const existingClients = await searchClients(clientPhone);
@@ -1620,9 +1615,9 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     }
                 }
 
-                // Update client name or phone if changed
-                if (client && (client.name !== clientName || client.phone !== clientPhone)) {
-                    const updatedClient = { ...client, name: clientName, phone: clientPhone };
+                // Update client name if it changed
+                if (client && client.name !== clientName) {
+                    const updatedClient = { ...client, name: clientName };
                     await updateClient(updatedClient);
                     client = updatedClient;
                 }

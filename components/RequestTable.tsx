@@ -494,41 +494,9 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
     };
   };
   
-  const getCarInfo = (carId: string, req?: InspectionRequest) => {
+  const getCarInfo = (carId: string) => {
     const car = cars.find(c => c.id === carId);
-    if (!car) {
-      if (req?.car_snapshot) {
-        const snap = req.car_snapshot;
-        const displayName = `${snap.make_en || snap.make_ar || ''} ${snap.model_en || snap.model_ar || ''} (${snap.year || ''})`.trim();
-        let plateDisplay = '';
-        if (snap.vin) {
-          plateDisplay = `شاصي: ${snap.vin}`;
-        } else if (snap.plate_number) {
-          const plateParts = snap.plate_number.split(' ');
-          const plateLettersString = plateParts.filter((part: string) => !/^\d+$/.test(part)).join('');
-          const plateNumbers = plateParts.find((part: string) => /^\d+$/.test(part)) || '';
-          let finalPlateLetters = '';
-          if (plateDisplayLanguage === 'en' && snap.plate_number_en) {
-            finalPlateLetters = snap.plate_number_en.split(' ').filter((part: string) => !/^\d+$/.test(part)).join(' ');
-          } else {
-            finalPlateLetters = plateLettersString.split('').join(' ');
-          }
-          plateDisplay = [finalPlateLetters, plateNumbers].filter(Boolean).join('  ');
-        } else {
-          plateDisplay = 'بدون لوحة';
-        }
-        return {
-          name: displayName || 'غير معروف',
-          plate: plateDisplay,
-          raw: {
-            make: snap.make_en || snap.make_ar || '',
-            model: snap.model_en || snap.model_ar || '',
-            year: snap.year || 0
-          }
-        };
-      }
-      return { name: 'غير معروف', plate: '', raw: null };
-    }
+    if (!car) return { name: 'غير معروف', plate: '', raw: null };
     
     const makeObj = carMakes.find(m => m.id === car.make_id);
     const modelObj = carModels.find(m => m.id === car.model_id);
@@ -841,23 +809,21 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                     {displayedRequests.length > 0 ? (
                         displayedRequests.map((request) => {
                             const clientInfo = getClientInfo(request.client_id, request);
-                        const carInfo = getCarInfo(request.car_id, request);
+                        const carInfo = getCarInfo(request.car_id);
                         const creator = employees.find(e => e.id === request.employee_id);
-                        const carDisplayName = carInfo.name !== 'غير معروف'
-                            ? carInfo.name
-                            : (request.car_snapshot
-                                ? `${request.car_snapshot.make_en || request.car_snapshot.make_ar || ''} ${request.car_snapshot.model_en || request.car_snapshot.model_ar || ''} (${request.car_snapshot.year})`.trim()
-                                : carInfo.name);
+                        const carDisplayName = request.car_snapshot
+                            ? `${request.car_snapshot.make_en} ${request.car_snapshot.model_en} (${request.car_snapshot.year})`
+                            : carInfo.name;
                         
                         // Construct search data prioritizing snapshot
-                        const searchData = carInfo.raw ? carInfo : (request.car_snapshot ? {
+                        const searchData = request.car_snapshot ? {
                             name: carDisplayName,
                             raw: {
                                 make: request.car_snapshot.make_en || request.car_snapshot.make_ar || '',
                                 model: request.car_snapshot.model_en || request.car_snapshot.model_ar || '',
                                 year: request.car_snapshot.year
                             }
-                        } : carInfo);
+                        } : carInfo;
 
                         const isWaitingPayment = request.status === RequestStatus.WAITING_PAYMENT;
                         const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);

@@ -63,31 +63,33 @@ import {
 // --- Safe LocalStorage Helper ---
 const safeSetItem = (key: string, value: string) => {
   try {
-    if (!value || value.length > 300000) {
-      // Don't store oversized items (>300KB) to prevent storage bloat
-      return;
-    }
     localStorage.setItem(key, value);
   } catch (e) {
     if (
       e instanceof DOMException &&
       (e.name === "QuotaExceededError" ||
-        e.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
-        e.code === 22)
+        e.name === "NS_ERROR_DOM_QUOTA_REACHED")
     ) {
+      console.warn(
+        "Storage quota exceeded, clearing dashboard cache to free space",
+      );
       // Clear all dashboard related caches to free up space
-      try {
-        Object.keys(localStorage).forEach((k) => {
-          if (k.startsWith("dashboard_")) {
-            localStorage.removeItem(k);
-          }
-        });
-        if (value.length < 100000) {
-          localStorage.setItem(key, value);
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith("dashboard_")) {
+          localStorage.removeItem(k);
         }
-      } catch {
-        // Silently skip if still exceeding quota
+      });
+      // Try setting again after clearing
+      try {
+        localStorage.setItem(key, value);
+      } catch (retryError) {
+        console.error(
+          "Failed to set item even after clearing cache",
+          retryError,
+        );
       }
+    } else {
+      console.error("LocalStorage error", e);
     }
   }
 };

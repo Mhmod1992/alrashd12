@@ -296,9 +296,6 @@ export interface CarSnapshot {
   model_ar: string;
   model_en: string;
   year: number;
-  plate_number?: string;
-  plate_number_en?: string;
-  vin?: string;
 }
 
 export interface SplitPaymentDetails {
