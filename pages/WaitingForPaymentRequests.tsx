@@ -403,6 +403,7 @@ const WaitingForPaymentRequests: React.FC = () => {
                     }
                 }
 
+                window.sessionStorage.setItem('resetRequestsFilters', 'true');
                 addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب ورسمنة الرقم التسلسلي الجديد.', type: 'success' });
                 setIsPaymentModalOpen(false);
                 setPaymentRequest(null);

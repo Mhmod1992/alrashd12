@@ -252,6 +252,17 @@ export const useActionsScope = (
         
         // Sync to TV after creation
         syncToTvDisplay(newRequest);
+
+        // Broadcast to all other devices in real-time immediately
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'official_request_change',
+                payload: { action: 'INSERT', record: newRequest }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast official request insert failed:", bErr);
+        }
         
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return newRequest;
@@ -425,6 +436,17 @@ export const useActionsScope = (
             officialRequest.inspection_data = updatedInspectionData;
             officialRequest.employee_id = creatorId;
             setRequests(prev => prev.map(r => r.id === officialRequest.id ? { ...r, inspection_data: updatedInspectionData, employee_id: creatorId } : r));
+        }
+
+        // Broadcast to all other devices in real-time immediately with the full finalized official request
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'official_request_change',
+                payload: { action: 'INSERT', record: officialRequest }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast official request failed:", bErr);
         }
 
         return officialRequest;

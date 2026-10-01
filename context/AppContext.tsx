@@ -403,6 +403,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setPendingRequests(prev => prev.filter(p => p.id !== payload.id));
                 }
             })
+            .on('broadcast', { event: 'official_request_change' }, async ({ payload }) => {
+                if (!payload) return;
+                if (payload.action === 'INSERT' && payload.record) {
+                    const newReq = payload.record as InspectionRequest;
+                    await ensureEntitiesLoadedRef.current([newReq]);
+                    setRequests(prev => {
+                        const exists = prev.some(r => r.id === newReq.id);
+                        if (exists) return prev;
+                        return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                    });
+                    triggerHighlight(newReq.id);
+                    if (authUserRef.current && newReq.employee_id !== authUserRef.current.id) {
+                        setIncomingRequest(newReq);
+                    }
+                } else if (payload.action === 'UPDATE' && payload.record) {
+                    const updatedReq = payload.record as InspectionRequest;
+                    await ensureEntitiesLoadedRef.current([updatedReq]);
+                    setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
+                } else if (payload.action === 'DELETE' && payload.id) {
+                    setRequests(prev => prev.filter(r => r.id !== payload.id));
+                }
+            })
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
                 else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {

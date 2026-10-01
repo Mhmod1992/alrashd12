@@ -379,8 +379,10 @@ const Requests: React.FC = () => {
             requests.forEach(req => {
                 const reqBusDate = getBusinessDateStr(req.created_at);
                 if (reqBusDate === todayStr && !newData.find(r => r.id === req.id)) {
-                    newData.unshift(req);
-                    hasChanges = true;
+                    if (paymentFilter === 'الكل' || req.payment_type === paymentFilter) {
+                        newData.unshift(req);
+                        hasChanges = true;
+                    }
                 }
             });
         }
@@ -405,7 +407,7 @@ const Requests: React.FC = () => {
             setServerFetchedData(newData);
         }
 
-    }, [requests, dateFilter, disableAutoSortRequests]); 
+    }, [requests, dateFilter, paymentFilter, disableAutoSortRequests, getBusinessDateStr]); 
 
     // --- Listen for Remote Deletion Events ---
     useEffect(() => {
@@ -1052,6 +1054,27 @@ const Requests: React.FC = () => {
                     }
                 }
 
+                // Immediately update local display and module cache so it appears without delay
+                setServerFetchedData(prev => {
+                    const base = prev || [];
+                    if (base.some(r => r.id === officialReq.id)) {
+                        return base.map(r => r.id === officialReq.id ? officialReq : r);
+                    }
+                    return [officialReq, ...base];
+                });
+                if (moduleCachedServerData) {
+                    if (moduleCachedServerData.some(r => r.id === officialReq.id)) {
+                        moduleCachedServerData = moduleCachedServerData.map(r => r.id === officialReq.id ? officialReq : r);
+                    } else {
+                        moduleCachedServerData = [officialReq, ...moduleCachedServerData];
+                    }
+                }
+
+                if (dateFilter !== 'today') {
+                    setDateFilter('today');
+                    setPaymentFilter('الكل');
+                }
+
                 addNotification({ title: 'نجاح', message: 'تم استلام الدفعة وتفعيل الطلب ورسمنة الرقم التسلسلي الجديد.', type: 'success' });
                 setIsPaymentModalOpen(false);
                 setPaymentRequest(null);
@@ -1085,8 +1108,8 @@ const Requests: React.FC = () => {
             const newLog = createActivityLog ? createActivityLog('تحصيل وتفعيل الطلب', `تم تحصيل المبلغ (${editablePrice} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي`) : null;
             const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
 
-            await updateRequest({
-                id: paymentRequest.id,
+            const updatedItem: InspectionRequest = {
+                ...currentReq,
                 status: RequestStatus.NEW,
                 payment_type: paymentMethod,
                 price: editablePrice,
@@ -1094,7 +1117,30 @@ const Requests: React.FC = () => {
                 created_at: now,
                 activity_log: updatedLog,
                 ...(targetClientId ? { client_id: targetClientId } : {})
+            };
+
+            // Immediately update local display and cache
+            setServerFetchedData(prev => {
+                const base = prev || [];
+                if (base.some(r => r.id === paymentRequest.id)) {
+                    return base.map(r => r.id === paymentRequest.id ? updatedItem : r);
+                }
+                return [updatedItem, ...base];
             });
+            if (moduleCachedServerData) {
+                if (moduleCachedServerData.some(r => r.id === paymentRequest.id)) {
+                    moduleCachedServerData = moduleCachedServerData.map(r => r.id === paymentRequest.id ? updatedItem : r);
+                } else {
+                    moduleCachedServerData = [updatedItem, ...moduleCachedServerData];
+                }
+            }
+
+            if (dateFilter !== 'today') {
+                setDateFilter('today');
+                setPaymentFilter('الكل');
+            }
+
+            await updateRequest(updatedItem);
 
             if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected') {
                 const client = targetClientId ? clients.find(c => c.id === targetClientId) : null;
