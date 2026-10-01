@@ -85,6 +85,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const {
         requests, setRequests,
         pendingRequests, setPendingRequests,
+        fetchPendingRequests,
         requestsOffset, setRequestsOffset,
         hasMoreRequests, setHasMoreRequests,
         isLoadingMore, setIsLoadingMore,
@@ -386,6 +387,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     }
                 }
             )
+            .on('broadcast', { event: 'pending_change' }, ({ payload }) => {
+                if (!payload) return;
+                if (payload.action === 'INSERT' && payload.record) {
+                    const newPending = payload.record as PendingRequest;
+                    setPendingRequests(prev => {
+                        if (prev.some(p => p.id === newPending.id)) return prev;
+                        return [newPending, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                    });
+                    triggerHighlight(newPending.id);
+                } else if (payload.action === 'UPDATE' && payload.record) {
+                    const updatedPending = payload.record as PendingRequest;
+                    setPendingRequests(prev => prev.map(p => p.id === updatedPending.id ? { ...p, ...updatedPending } : p));
+                } else if (payload.action === 'DELETE' && payload.id) {
+                    setPendingRequests(prev => prev.filter(p => p.id !== payload.id));
+                }
+            })
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
                 else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -956,6 +973,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     if (realtimeStatusRef.current === 'disconnected') {
                         retryConnection();
                     }
+                    // Fetch fresh pending requests in background (very light payload < 1KB)
+                    fetchPendingRequests();
                 }
             }
         };
@@ -966,6 +985,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (authUserRef.current) {
                 supabase.auth.startAutoRefresh();
                 retryConnection();
+                fetchPendingRequests();
             }
         };
 
@@ -979,10 +999,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
-        // Passive probe every 60 seconds (lightweight, no table re-fetch)
+        // Passive probe every 30 seconds for pending requests (instant safety net)
         const probeInterval = setInterval(() => {
-            verifyAndSyncInternetStatus();
-        }, 60000);
+            if (authUserRef.current && isOnlineRef.current) {
+                fetchPendingRequests();
+            }
+        }, 30000);
 
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -990,7 +1012,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             window.removeEventListener('offline', handleOffline);
             clearInterval(probeInterval);
         };
-    }, [verifyAndSyncInternetStatus, retryConnection]);
+    }, [verifyAndSyncInternetStatus, retryConnection, fetchPendingRequests]);
 
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
@@ -2422,6 +2444,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchAllPaperArchiveRequests,
         fetchClientsWithDebtIds,
         fetchRequests,
+        fetchPendingRequests,
         isCreatingRequest,
         setIsCreatingRequest,
         isSettingsLoaded,

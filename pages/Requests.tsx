@@ -68,7 +68,7 @@ let moduleCachedRangeEnd = '';
 
 const Requests: React.FC = () => {
     const {
-        requests, pendingRequests, convertPendingToOfficialRequest, clients, cars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings, updateSettings,
+        requests, pendingRequests, fetchPendingRequests, convertPendingToOfficialRequest, clients, cars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings, updateSettings,
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests, searchQuery, setSearchQuery,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
@@ -240,6 +240,11 @@ const Requests: React.FC = () => {
                 }
             }
             isFirstMount.current = false;
+        }
+
+        // Always fetch fresh pending requests when opening Active Requests page
+        if (fetchPendingRequests) {
+            fetchPendingRequests();
         }
 
         if (initialRequestModalState === 'new') {
@@ -1249,14 +1254,12 @@ const Requests: React.FC = () => {
 
         const legacyWaiting = sourceData.filter(r => r.status === RequestStatus.WAITING_PAYMENT);
 
-        let waitingReqs: InspectionRequest[] = [];
-        let otherReqs: InspectionRequest[] = [];
+        let waitingReqs: InspectionRequest[] = [...formattedPending, ...legacyWaiting];
+        let otherReqs: InspectionRequest[] = sourceData.filter(r => r.status !== RequestStatus.WAITING_PAYMENT);
 
-        if (authUser?.role !== 'receptionist') {
-            waitingReqs = [...formattedPending, ...legacyWaiting];
-            otherReqs = sourceData.filter(r => r.status !== RequestStatus.WAITING_PAYMENT);
-        } else {
-            otherReqs = sourceData;
+        // If user specifically filters by WAITING_PAYMENT in the dropdown:
+        if (statusFilter === RequestStatus.WAITING_PAYMENT) {
+            otherReqs = [...formattedPending, ...legacyWaiting];
         }
 
         if (waitingSearchTerm.trim()) {
@@ -1831,6 +1834,7 @@ const Requests: React.FC = () => {
                                     >
                                         <option value="الكل">فلترة حسب الحالة (الكل)</option>
                                         <option value="active">نشط (جديد + قيد التنفيذ)</option>
+                                        <option value={RequestStatus.WAITING_PAYMENT}>بانتظار الدفع</option>
                                         <option value={RequestStatus.NEW}>جديد</option>
                                         <option value={RequestStatus.IN_PROGRESS}>قيد التنفيذ</option>
                                         <option value={RequestStatus.COMPLETE}>مكتمل</option>
@@ -1919,7 +1923,7 @@ const Requests: React.FC = () => {
                 </div>
             )}
 
-            {!isFetchingDateRange && !isMainSearchActive && authUser?.role !== 'receptionist' && can('view_waiting_requests') && (waitingPaymentRequests.length > 0 || waitingSearchTerm) && (
+            {!isFetchingDateRange && !isMainSearchActive && (authUser?.role === 'receptionist' || can('view_waiting_requests') || authUser?.role === 'general_manager') && (waitingPaymentRequests.length > 0 || waitingSearchTerm) && (
                 <div className="mb-8 animate-fade-in">
                     {/* Refined Soft Purple Search Banner for Waiting for Payment Requests */}
                     <div className="mb-4 bg-purple-50/40 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-800/40 rounded-2xl p-3.5 sm:p-4 shadow-xs relative overflow-hidden">

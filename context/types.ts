@@ -206,6 +206,7 @@ export interface AppContextType {
     }>;
     fetchRequestsByCarId: (carId: string) => Promise<InspectionRequest[]>;
     fetchRequests: () => Promise<void>;
+    fetchPendingRequests: () => Promise<void>;
     fetchRequestByRequestNumber: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestByRequestNumberForAuth: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestsByDateRange: (startDate: string, endDate: string, paymentType?: PaymentType) => Promise<InspectionRequest[]>;

@@ -283,6 +283,18 @@ export const useActionsScope = (
         if (error) throw error;
         const newPending = data as PendingRequest;
         setPendingRequests(prev => [newPending, ...prev]);
+
+        // Broadcast to all other devices in real-time immediately
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'pending_change',
+                payload: { action: 'INSERT', record: newPending }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast pending insert failed:", bErr);
+        }
+
         addNotification({ title: 'نجاح', message: 'تم تسجيل الطلب بانتظار الدفع بنجاح.', type: 'success' });
         return newPending;
     }, [setPendingRequests, addNotification]);
@@ -291,6 +303,17 @@ export const useActionsScope = (
         const { error } = await supabase.from('pending_requests').delete().eq('id', id);
         if (error) throw error;
         setPendingRequests(prev => prev.filter(p => p.id !== id));
+
+        // Broadcast to all other devices in real-time immediately
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'pending_change',
+                payload: { action: 'DELETE', id }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast pending delete failed:", bErr);
+        }
     }, [setPendingRequests]);
 
     const updatePendingRequest = useCallback(async (id: string, updates: Partial<PendingRequest>): Promise<PendingRequest> => {
@@ -304,6 +327,18 @@ export const useActionsScope = (
         if (error) throw error;
         const updated = data as PendingRequest;
         setPendingRequests(prev => prev.map(p => p.id === id ? updated : p));
+
+        // Broadcast to all other devices in real-time immediately
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'pending_change',
+                payload: { action: 'UPDATE', record: updated }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast pending update failed:", bErr);
+        }
+
         addNotification({ title: 'نجاح', message: 'تم تحديث بيانات الطلب المعلق بنجاح.', type: 'success' });
         return updated;
     }, [setPendingRequests, addNotification]);
@@ -322,6 +357,17 @@ export const useActionsScope = (
         
         // Immediately remove from local pending state so UI updates instantly
         setPendingRequests(prev => prev.filter(p => p.id !== pendingReq.id));
+
+        // Broadcast to all other devices immediately so it disappears from pending lists
+        try {
+            supabase.channel('public:inspection_requests').send({
+                type: 'broadcast',
+                event: 'pending_change',
+                payload: { action: 'DELETE', id: pendingReq.id }
+            });
+        } catch (bErr) {
+            console.warn("Broadcast pending convert failed:", bErr);
+        }
 
         // Delete from pending_requests DB table FIRST before adding official request
         const { error: delErr } = await supabase.from('pending_requests').delete().eq('id', pendingReq.id);

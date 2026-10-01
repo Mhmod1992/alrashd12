@@ -560,9 +560,24 @@ export const useDataScope = (
         }
     }, []);
 
+    const fetchPendingRequests = useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('pending_requests')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (!error && data) {
+                setPendingRequests(data);
+            }
+        } catch (e) {
+            console.error("fetchPendingRequests error:", e);
+        }
+    }, []);
+
     return {
         requests, setRequests,
         pendingRequests, setPendingRequests,
+        fetchPendingRequests,
         requestsOffset, setRequestsOffset,
         hasMoreRequests, setHasMoreRequests,
         isLoadingMore, setIsLoadingMore,
