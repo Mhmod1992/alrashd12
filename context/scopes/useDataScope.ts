@@ -49,6 +49,9 @@ export const useDataScope = (
     const [highlightedRequestId, setHighlightedRequestId] = useState<string | null>(null);
     const [incomingRequest, setIncomingRequest] = useState<InspectionRequest | null>(null);
     const [lastRemoteDeleteId, setLastRemoteDeleteId] = useState<string | null>(null);
+    const [lastUpdatedRequest, setLastUpdatedRequest] = useState<InspectionRequest | null>(null);
+    const [lastUpdatedClient, setLastUpdatedClient] = useState<Client | null>(null);
+    const [lastUpdatedCar, setLastUpdatedCar] = useState<Car | null>(null);
 
     const [clients, setClients] = useState<Client[]>([]);
     const [cars, setCars] = useState<Car[]>([]);
@@ -502,7 +505,7 @@ export const useDataScope = (
 
     const fetchAllPaperArchiveRequests = useCallback(async (): Promise<InspectionRequest[]> => {
         // Dev Environment Guard: check sessionStorage cache to avoid repeated queries on hot reload
-        if (import.meta.env.DEV) {
+        if ((import.meta as any).env?.DEV) {
             try {
                 const cached = sessionStorage.getItem('dev_paper_archive_cache');
                 const cacheTime = sessionStorage.getItem('dev_paper_archive_time');
@@ -536,7 +539,7 @@ export const useDataScope = (
         }
 
         // Save to dev cache
-        if (import.meta.env.DEV && requestsData.length > 0) {
+        if ((import.meta as any).env?.DEV && requestsData.length > 0) {
             try {
                 sessionStorage.setItem('dev_paper_archive_cache', JSON.stringify(requestsData));
                 sessionStorage.setItem('dev_paper_archive_time', Date.now().toString());
@@ -586,6 +589,9 @@ export const useDataScope = (
         highlightedRequestId, triggerHighlight,
         incomingRequest, setIncomingRequest,
         lastRemoteDeleteId, setLastRemoteDeleteId,
+        lastUpdatedRequest, setLastUpdatedRequest,
+        lastUpdatedClient, setLastUpdatedClient,
+        lastUpdatedCar, setLastUpdatedCar,
         clients, setClients,
         cars, setCars,
         carMakes, setCarMakes,

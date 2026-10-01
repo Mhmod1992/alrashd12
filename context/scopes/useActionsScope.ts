@@ -36,8 +36,32 @@ export const useActionsScope = (
     setAuthUser: React.Dispatch<React.SetStateAction<Employee | null>>,
     addNotification: (notification: Omit<Notification, 'id'>) => void,
     createActivityLog: (action: string, details: string, imageUrl?: string, link_id?: string, link_page?: Page) => ActivityLog | null,
-    fetchRequests: () => Promise<void>
+    fetchRequests: () => Promise<void>,
+    channelRef?: React.MutableRefObject<any>,
+    setLastUpdatedRequest?: (req: InspectionRequest | null) => void,
+    setLastUpdatedClient?: (client: Client | null) => void,
+    setLastUpdatedCar?: (car: Car | null) => void
 ) => {
+
+    const broadcastEvent = useCallback((event: string, payload: any) => {
+        try {
+            if (channelRef?.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event,
+                    payload
+                });
+            } else {
+                supabase.channel('public:inspection_requests').send({
+                    type: 'broadcast',
+                    event,
+                    payload
+                });
+            }
+        } catch (e) {
+            console.warn(`Broadcast ${event} failed:`, e);
+        }
+    }, [channelRef]);
 
     const sendSystemNotification = useCallback(async (notification: {
         title: string;
@@ -95,13 +119,24 @@ export const useActionsScope = (
 
     // --- REQUESTS ---
     const updateRequest = useCallback(async (updatedRequest: Partial<InspectionRequest> & { id: string }): Promise<void> => {
+        const fullRequest = requests.find(r => r.id === updatedRequest.id);
+        const merged = { ...(fullRequest || {}), ...updatedRequest } as InspectionRequest;
+
         setRequests(prev => prev.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } : r));
         setSearchedRequests(prev => {
             if (!prev) return null;
             return prev.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } : r);
         });
+
+        if (setLastUpdatedRequest) {
+            setLastUpdatedRequest(merged);
+        }
+
         const { error } = await supabase.from('inspection_requests').update(updatedRequest).eq('id', updatedRequest.id);
         if (error) throw error;
+
+        // Broadcast to all other devices in real-time immediately via active channel
+        broadcastEvent('official_request_change', { action: 'UPDATE', record: merged });
 
         // Sync to TV after update ONLY if status is being changed
         if ('status' in updatedRequest) {
@@ -112,12 +147,11 @@ export const useActionsScope = (
                     console.warn('Failed to remove draft on completion', e);
                 }
             }
-            const fullRequest = requests.find(r => r.id === updatedRequest.id);
             if (fullRequest) {
-                syncToTvDisplay({ ...fullRequest, ...updatedRequest });
+                syncToTvDisplay(merged);
             }
         }
-    }, [setRequests, setSearchedRequests, requests, syncToTvDisplay]);
+    }, [setRequests, setSearchedRequests, requests, setLastUpdatedRequest, broadcastEvent, syncToTvDisplay]);
 
     const updateRequestAndAssociatedData = useCallback(async (payload: { originalRequest: InspectionRequest; formData: { client_id: string; car: Partial<Omit<Car, 'id'>>; request: any; } }) => {
         const { originalRequest, formData } = payload;
@@ -126,13 +160,21 @@ export const useActionsScope = (
             const { error: carError } = await supabase.from('cars').update(carData).eq('id', originalRequest.car_id);
             if (carError) throw carError;
             const { data: updatedCar } = await supabase.from('cars').select('*').eq('id', originalRequest.car_id).single();
-            if (updatedCar) setCars(prev => prev.map(c => c.id === updatedCar.id ? updatedCar : c));
+            if (updatedCar) {
+                setCars(prev => {
+                    const exists = prev.some(c => c.id === updatedCar.id);
+                    if (exists) return prev.map(c => c.id === updatedCar.id ? updatedCar : c);
+                    return [updatedCar, ...prev];
+                });
+                if (setLastUpdatedCar) setLastUpdatedCar(updatedCar);
+                broadcastEvent('car_change', { action: 'UPDATE', record: updatedCar });
+            }
         }
         const currentRequest = requests.find(r => r.id === originalRequest.id) || originalRequest;
         const newLog = createActivityLog('تعديل بيانات الطلب', `تم تحديث البيانات الأساسية للطلب #${originalRequest.request_number}`);
         const updatedLog = newLog ? [newLog, ...(currentRequest.activity_log || [])] : (currentRequest.activity_log || []);
         await updateRequest({ ...requestData, client_id, activity_log: updatedLog, id: originalRequest.id });
-    }, [createActivityLog, requests, updateRequest, setCars]);
+    }, [createActivityLog, requests, updateRequest, setCars, setLastUpdatedCar, broadcastEvent]);
 
     const deleteRequest = useCallback(async (id: string): Promise<void> => {
         const requestToDelete = requests.find(r => r.id === id);
@@ -511,7 +553,12 @@ export const useActionsScope = (
             }
             return newClients;
         });
-    }, [setClients]);
+
+        if (setLastUpdatedClient) setLastUpdatedClient(client);
+
+        // Broadcast to all other devices in real-time immediately
+        broadcastEvent('client_change', { action: 'UPDATE', record: client });
+    }, [setClients, setLastUpdatedClient, broadcastEvent]);
 
     const deleteClient = useCallback(async (id: string) => {
         const { count } = await supabase.from('inspection_requests').select('id', { count: 'exact', head: true }).eq('client_id', id);

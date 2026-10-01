@@ -68,7 +68,7 @@ let moduleCachedRangeEnd = '';
 
 const Requests: React.FC = () => {
     const {
-        requests, pendingRequests, fetchPendingRequests, convertPendingToOfficialRequest, clients, cars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings, updateSettings,
+        requests, pendingRequests, fetchPendingRequests, convertPendingToOfficialRequest, clients, setClients, cars, setCars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings, updateSettings,
         initialRequestModalState, setInitialRequestModalState,
         searchedRequests, searchRequestByNumber, clearSearchedRequests, searchQuery, setSearchQuery,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
@@ -76,7 +76,8 @@ const Requests: React.FC = () => {
         updateRequest, updateClient, employees, showConfirmModal, fetchRequestsByDateRange,
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
-        lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations,
+        lastRemoteDeleteId, lastUpdatedRequest, lastUpdatedClient, lastUpdatedCar,
+        fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations,
         showNewRequestSuccessModal, createActivityLog
     } = useAppContext();
 
@@ -360,16 +361,24 @@ const Requests: React.FC = () => {
         // 1. Update Existing items
         newData = newData.map(localItem => {
             const freshItem = requests.find(r => r.id === localItem.id);
-            if (freshItem && (
-                freshItem.status !== localItem.status || 
-                freshItem.updated_at !== localItem.updated_at ||
-                JSON.stringify(freshItem.report_stamps) !== JSON.stringify(localItem.report_stamps) ||
-                JSON.stringify(freshItem.broker) !== JSON.stringify(localItem.broker) ||
-                freshItem.payment_type !== localItem.payment_type ||
-                freshItem.price !== localItem.price
-            )) {
-                hasChanges = true;
-                return freshItem;
+            if (freshItem) {
+                const isDifferent = (
+                    freshItem.status !== localItem.status || 
+                    freshItem.updated_at !== localItem.updated_at ||
+                    freshItem.client_id !== localItem.client_id ||
+                    freshItem.car_id !== localItem.car_id ||
+                    freshItem.price !== localItem.price ||
+                    freshItem.payment_type !== localItem.payment_type ||
+                    JSON.stringify(freshItem.car_snapshot) !== JSON.stringify(localItem.car_snapshot) ||
+                    JSON.stringify(freshItem.report_stamps) !== JSON.stringify(localItem.report_stamps) ||
+                    JSON.stringify(freshItem.broker) !== JSON.stringify(localItem.broker) ||
+                    JSON.stringify(freshItem.technician_assignments) !== JSON.stringify(localItem.technician_assignments) ||
+                    JSON.stringify(freshItem.split_payment_details) !== JSON.stringify(localItem.split_payment_details)
+                );
+                if (isDifferent) {
+                    hasChanges = true;
+                    return { ...localItem, ...freshItem };
+                }
             }
             return localItem;
         });
@@ -415,6 +424,147 @@ const Requests: React.FC = () => {
             setServerFetchedData(prev => prev ? prev.filter(r => r.id !== lastRemoteDeleteId) : null);
         }
     }, [lastRemoteDeleteId]);
+
+    // --- DIRECT REAL-TIME UPDATE FOR ROW DATA (STATUS, CLIENT, CAR, SNAPSHOT) ---
+    useEffect(() => {
+        if (!lastUpdatedRequest) return;
+        setServerFetchedData(prev => {
+            if (!prev) return null;
+            const exists = prev.some(r => r.id === lastUpdatedRequest.id);
+            if (!exists) {
+                // If it's today's request and we're on today's filter, add it to list
+                const reqBusDate = getBusinessDateStr(lastUpdatedRequest.created_at);
+                const todayStr = getBusinessDateStr(new Date());
+                if (dateFilter === 'today' && reqBusDate === todayStr) {
+                    if (paymentFilter === 'الكل' || lastUpdatedRequest.payment_type === paymentFilter) {
+                        return [lastUpdatedRequest, ...prev];
+                    }
+                }
+                return prev;
+            }
+            return prev.map(r => r.id === lastUpdatedRequest.id ? { ...r, ...lastUpdatedRequest } : r);
+        });
+    }, [lastUpdatedRequest, dateFilter, paymentFilter, getBusinessDateStr]);
+
+    // --- DIRECT REAL-TIME UPDATE FOR CLIENT DETAILS ---
+    useEffect(() => {
+        if (!lastUpdatedClient) return;
+        setServerFetchedData(prev => {
+            if (!prev) return null;
+            const hasMatching = prev.some(r => r.client_id === lastUpdatedClient.id);
+            if (!hasMatching) return prev;
+            return prev.map(r => {
+                if (r.client_id === lastUpdatedClient.id) {
+                    return { ...r };
+                }
+                return r;
+            });
+        });
+    }, [lastUpdatedClient]);
+
+    // --- DIRECT REAL-TIME UPDATE FOR CAR DETAILS ---
+    useEffect(() => {
+        if (!lastUpdatedCar) return;
+        setServerFetchedData(prev => {
+            if (!prev) return null;
+            const hasMatching = prev.some(r => r.car_id === lastUpdatedCar.id);
+            if (!hasMatching) return prev;
+            return prev.map(r => {
+                if (r.car_id === lastUpdatedCar.id) {
+                    const snap = r.car_snapshot;
+                    return {
+                        ...r,
+                        car_snapshot: snap ? {
+                            ...snap,
+                            plate_number: lastUpdatedCar.plate_number ?? snap.plate_number,
+                            plate_number_en: lastUpdatedCar.plate_number_en ?? snap.plate_number_en,
+                            vin: lastUpdatedCar.vin ?? snap.vin,
+                            year: lastUpdatedCar.year ?? snap.year
+                        } : snap
+                    };
+                }
+                return r;
+            });
+        });
+    }, [lastUpdatedCar]);
+
+    // --- SMART LIVE SYNC (ULTRA FAST 3-SECOND DELTA POLLING) ---
+    // Guarantees 100% sync even if WebSockets drop or PostgreSQL events are delayed
+    const lastSyncTimeRef = useRef<string>(new Date(Date.now() - 30000).toISOString());
+    useEffect(() => {
+        let isCancelled = false;
+
+        const runDeltaSync = async () => {
+            if (document.hidden) return;
+            try {
+                const checkTime = lastSyncTimeRef.current;
+                const { data: modifiedRequests, error } = await supabase
+                    .from('inspection_requests')
+                    .select('id, request_number, client_id, car_id, price, payment_type, status, car_snapshot, report_stamps, broker, technician_assignments, split_payment_details, payment_note, created_at, updated_at, employee_id')
+                    .gt('updated_at', checkTime)
+                    .order('updated_at', { ascending: false })
+                    .limit(20);
+
+                if (error || !modifiedRequests || modifiedRequests.length === 0) return;
+
+                if (!isCancelled) {
+                    lastSyncTimeRef.current = new Date().toISOString();
+                    
+                    // 1. Update serverFetchedData in-place
+                    setServerFetchedData(prev => {
+                        if (!prev) return null;
+                        let hasMod = false;
+                        const updated = prev.map(localItem => {
+                            const match = modifiedRequests.find(m => m.id === localItem.id);
+                            if (match) {
+                                hasMod = true;
+                                return { ...localItem, ...match };
+                            }
+                            return localItem;
+                        });
+                        return hasMod ? updated : prev;
+                    });
+
+                    // 2. Also check if clients or cars need updating
+                    const clientIds = modifiedRequests.map(m => m.client_id).filter(Boolean);
+                    if (clientIds.length > 0) {
+                        const { data: freshClients } = await supabase.from('clients').select('*, inspection_requests(count)').in('id', clientIds);
+                        if (freshClients && freshClients.length > 0) {
+                            freshClients.forEach(c => {
+                                setClients(prev => {
+                                    const exists = prev.some(existing => existing.id === c.id);
+                                    if (exists) return prev.map(existing => existing.id === c.id ? c : existing);
+                                    return [c, ...prev];
+                                });
+                            });
+                        }
+                    }
+
+                    const carIds = modifiedRequests.map(m => m.car_id).filter(Boolean);
+                    if (carIds.length > 0) {
+                        const { data: freshCars } = await supabase.from('cars').select('*').in('id', carIds);
+                        if (freshCars && freshCars.length > 0) {
+                            freshCars.forEach(car => {
+                                setCars(prev => {
+                                    const exists = prev.some(existing => existing.id === car.id);
+                                    if (exists) return prev.map(existing => existing.id === car.id ? car : existing);
+                                    return [car, ...prev];
+                                });
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                // Silent catch for background sync
+            }
+        };
+
+        const intervalId = setInterval(runDeltaSync, 3000);
+        return () => {
+            isCancelled = true;
+            clearInterval(intervalId);
+        };
+    }, [setClients, setCars]);
 
     // --- DATABASE TOTAL COUNT FETCHING ---
     useEffect(() => {

@@ -60,6 +60,7 @@ const ExportRequestsModal: React.FC<ExportRequestsModalProps> = ({ isOpen, onClo
                 price,
                 status,
                 broker,
+                employee_id,
                 client:clients(id, name, phone),
                 car:cars(
                     id,

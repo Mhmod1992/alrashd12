@@ -269,7 +269,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
       
       <div className="flex items-center gap-1 sm:gap-2">
          
-         {import.meta.env.DEV && (
+         {(import.meta as any).env?.DEV && (
             <div 
                 className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300 rounded-full text-xs font-bold border border-amber-500/25 shadow-sm"
                 title="أنت الآن في بيئة التطوير (DEV) - كاش حماية باقة سوبابيس مفعل"
@@ -523,7 +523,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                                                         )}
                                                     </div>
                                                     <p className="text-[10px] text-slate-400">
-                                                        {emp.role === 'general_manager' ? 'مدير عام' : emp.role === 'manager' ? 'مدير' : emp.role === 'receptionist' ? 'استقبال' : emp.role === 'technician' ? 'فني' : 'موظف'}
+                                                        {(emp.role as string) === 'general_manager' ? 'مدير عام' : (emp.role as string) === 'manager' ? 'مدير' : (emp.role as string) === 'receptionist' ? 'استقبال' : (emp.role as string) === 'technician' ? 'فني' : 'موظف'}
                                                     </p>
                                                 </div>
                                             </div>

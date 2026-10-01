@@ -60,9 +60,11 @@ export interface AppContextType {
     isCreatingRequest: boolean;
     setIsCreatingRequest: (isCreating: boolean) => void;
     clients: Client[];
+    setClients: React.Dispatch<React.SetStateAction<Client[]>>;
     selectedClientId: string | null;
     setSelectedClientId: (id: string | null) => void;
     cars: Car[];
+    setCars: React.Dispatch<React.SetStateAction<Car[]>>;
     carMakes: CarMake[];
     carModels: CarModel[];
     fetchCarModelsByMake: (makeId: string) => Promise<void>;
@@ -278,9 +280,16 @@ export interface AppContextType {
     whatsappApiStatus: 'connected' | 'disconnected' | 'checking';
     setWhatsappApiStatus: (status: 'connected' | 'disconnected' | 'checking') => void;
     checkWhatsAppStatus: () => Promise<void>;
-    // --- Remote Deletion Event ---
+    // --- Remote Deletion & Update Events ---
     lastRemoteDeleteId: string | null;
     setLastRemoteDeleteId: (id: string | null) => void;
+    lastUpdatedRequest: InspectionRequest | null;
+    setLastUpdatedRequest: (req: InspectionRequest | null) => void;
+    lastUpdatedClient: Client | null;
+    setLastUpdatedClient: (client: Client | null) => void;
+    lastUpdatedCar: Car | null;
+    setLastUpdatedCar: (car: Car | null) => void;
+    broadcastEvent: (event: string, payload: any) => void;
     isSettingsLoaded: boolean;
     setIsSettingsLoaded: (loaded: boolean) => void;
     isInitializedFromCache: boolean;

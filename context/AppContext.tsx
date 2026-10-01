@@ -12,7 +12,7 @@ import {
 } from '../types';
 import { mockSettings } from '../data/mockData';
 import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile, arabicToEnglishNumerals } from '../lib/utils';
-import { AppContextType, CarHistoryResult } from './types';
+import { AppContextType, CarHistoryResult, OnlineStaffInfo } from './types';
 import { useNavigationScope } from './scopes/useNavigationScope';
 import { useThemeScope } from './scopes/useThemeScope';
 import { useDataScope } from './scopes/useDataScope';
@@ -94,6 +94,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         highlightedRequestId, triggerHighlight,
         incomingRequest, setIncomingRequest,
         lastRemoteDeleteId, setLastRemoteDeleteId,
+        lastUpdatedRequest, setLastUpdatedRequest,
+        lastUpdatedClient, setLastUpdatedClient,
+        lastUpdatedCar, setLastUpdatedCar,
         clients, setClients,
         cars, setCars,
         carMakes, setCarMakes,
@@ -162,7 +165,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setBrokers, employees, setEmployees, setTechnicians, setExpenses, setInspectionTypes,
         setCustomFindingCategories, setPredefinedFindings, setReservations, setUnreadMessagesCount,
         setWhatsappMessages, setUnreadWhatsAppCount,
-        setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchRequests
+        setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchRequests,
+        channelRef, setLastUpdatedRequest, setLastUpdatedClient, setLastUpdatedCar
     );
 
     // Override updateEmployee to sync with cache if we are updating the current user
@@ -267,26 +271,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const ensureEntitiesLoadedRef = useRef(ensureEntitiesLoaded);
     useEffect(() => { ensureEntitiesLoadedRef.current = ensureEntitiesLoaded; }, [ensureEntitiesLoaded]);
 
+    const broadcastEvent = useCallback((event: string, payload: any) => {
+        try {
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event,
+                    payload
+                });
+            }
+        } catch (e) {
+            console.warn("broadcastEvent failed:", e);
+        }
+    }, []);
 
     const setupRealtimeSubscription = useCallback(() => {
         if (channelRef.current) return;
 
         setRealtimeStatus('connecting');
 
-        const channel = supabase.channel('public:inspection_requests')
+        const channel = supabase.channel('public:inspection_requests', {
+            config: {
+                broadcast: { ack: true }
+            }
+        })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'inspection_requests' },
                 async (payload) => {
                     if (payload.eventType === 'INSERT') {
                         const newReq = payload.new as InspectionRequest;
-                        await ensureEntitiesLoadedRef.current([newReq]);
                         setRequests(prev => {
-                            // If we already have this request, it might have an updated request_number from our optimistic override, 
-                            // so we should prefer our existing state or update it carefully.
                             const existingReqIndex = prev.findIndex(r => r.id === newReq.id);
                             if (existingReqIndex !== -1) {
                                 const updatedPrev = [...prev];
-                                // Only update if the incoming realtime event has a HIGHER request number, 
-                                // otherwise keep our optimistically set one.
                                 if (newReq.request_number > updatedPrev[existingReqIndex].request_number) {
                                     updatedPrev[existingReqIndex] = { ...updatedPrev[existingReqIndex], ...newReq };
                                 }
@@ -294,14 +310,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             }
                             return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                         });
+                        setLastUpdatedRequest(newReq);
+                        ensureEntitiesLoadedRef.current([newReq]).catch(console.error);
                         if (authUserRef.current && newReq.employee_id !== authUserRef.current.id) {
                             setIncomingRequest(newReq);
                         }
                         triggerHighlight(newReq.id);
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedReq = payload.new as InspectionRequest;
-                        await ensureEntitiesLoadedRef.current([updatedReq]);
-                        setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
+                        setRequests(prev => {
+                            const exists = prev.some(r => r.id === updatedReq.id);
+                            if (exists) {
+                                return prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r);
+                            }
+                            return [updatedReq, ...prev];
+                        });
+                        setSearchedRequests(prev => {
+                            if (!prev) return null;
+                            return prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r);
+                        });
+                        setLastUpdatedRequest(updatedReq);
+                        ensureEntitiesLoadedRef.current([updatedReq]).catch(console.error);
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
                         setRequests(prev => prev.filter(r => r.id !== deletedId));
@@ -319,9 +348,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             if (prev.some(c => c.id === newClient.id)) return prev;
                             return [newClient, ...prev];
                         });
+                        setLastUpdatedClient(newClient);
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedClient = payload.new as Client;
-                        setClients(prev => prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c));
+                        setClients(prev => {
+                            const exists = prev.some(c => c.id === updatedClient.id);
+                            if (exists) {
+                                return prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c);
+                            }
+                            return [updatedClient, ...prev];
+                        });
+                        setLastUpdatedClient(updatedClient);
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
                         setClients(prev => prev.filter(c => c.id !== deletedId));
@@ -336,9 +373,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             if (prev.some(c => c.id === newCar.id)) return prev;
                             return [newCar, ...prev];
                         });
+                        setLastUpdatedCar(newCar);
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedCar = payload.new as Car;
-                        setCars(prev => prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c));
+                        setCars(prev => {
+                            const exists = prev.some(c => c.id === updatedCar.id);
+                            if (exists) {
+                                return prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c);
+                            }
+                            return [updatedCar, ...prev];
+                        });
+                        setLastUpdatedCar(updatedCar);
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
                         setCars(prev => prev.filter(c => c.id !== deletedId));
@@ -419,10 +464,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     }
                 } else if (payload.action === 'UPDATE' && payload.record) {
                     const updatedReq = payload.record as InspectionRequest;
-                    await ensureEntitiesLoadedRef.current([updatedReq]);
-                    setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
+                    setRequests(prev => {
+                        const exists = prev.some(r => r.id === updatedReq.id);
+                        if (exists) {
+                            return prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r);
+                        }
+                        return [updatedReq, ...prev];
+                    });
+                    setSearchedRequests(prev => {
+                        if (!prev) return null;
+                        return prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r);
+                    });
+                    setLastUpdatedRequest(updatedReq);
+                    ensureEntitiesLoadedRef.current([updatedReq]).catch(console.error);
                 } else if (payload.action === 'DELETE' && payload.id) {
                     setRequests(prev => prev.filter(r => r.id !== payload.id));
+                    setSearchedRequests(prev => prev ? prev.filter(r => r.id !== payload.id) : null);
+                }
+            })
+            .on('broadcast', { event: 'client_change' }, ({ payload }) => {
+                if (!payload) return;
+                if (payload.record) {
+                    const updatedClient = payload.record as Client;
+                    setClients(prev => {
+                        const exists = prev.some(c => c.id === updatedClient.id);
+                        if (exists) {
+                            return prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c);
+                        }
+                        return [updatedClient, ...prev];
+                    });
+                    setLastUpdatedClient(updatedClient);
+                }
+            })
+            .on('broadcast', { event: 'car_change' }, ({ payload }) => {
+                if (!payload) return;
+                if (payload.record) {
+                    const updatedCar = payload.record as Car;
+                    setCars(prev => {
+                        const exists = prev.some(c => c.id === updatedCar.id);
+                        if (exists) {
+                            return prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c);
+                        }
+                        return [updatedCar, ...prev];
+                    });
+                    setLastUpdatedCar(updatedCar);
                 }
             })
             .subscribe((status, err) => {
@@ -1464,7 +1549,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Fetch all unpaid requests for Aged Debt calculation
             const { data: unpaid, error: unpaidError } = await supabase
                 .from('inspection_requests')
-                .select('id, request_number, client_id, car_id, car_snapshot, price, payment_type, status, created_at, payment_note')
+                .select('id, request_number, client_id, car_id, car_snapshot, price, payment_type, status, created_at, payment_note, employee_id, inspection_type_id')
                 .eq('client_id', clientId)
                 .eq('payment_type', PaymentType.Unpaid)
                 .neq('status', 'cancelled')
@@ -1493,16 +1578,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Get last visit separately to ensure we have it even if it's paid
             const { data: lastReq } = await supabase
                 .from('inspection_requests')
-                .select('id, request_number, client_id, car_id, car_snapshot, price, status, created_at')
+                .select('id, request_number, client_id, car_id, car_snapshot, price, status, created_at, employee_id, inspection_type_id, payment_type')
                 .eq('client_id', clientId)
                 .order('created_at', { ascending: false })
                 .limit(1);
 
             return {
-                unpaidRequests: unpaid || [],
+                unpaidRequests: (unpaid as any) || [],
                 totalRevenue,
                 totalPaid,
-                lastRequest: (lastReq && lastReq.length > 0) ? lastReq[0] : null
+                lastRequest: (lastReq && lastReq.length > 0) ? (lastReq[0] as any) : null
             };
         } catch (e) {
             console.error("Failed to fetch client financial summary", e);
@@ -2462,6 +2547,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         reservations, fetchReservations, addReservation, updateReservationStatus, updateReservation, deleteReservation, searchReservations, parseReservationText,
         fetchRequestTabContent, fetchFullRequestForSave, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
         lastRemoteDeleteId, setLastRemoteDeleteId,
+        lastUpdatedRequest, setLastUpdatedRequest,
+        lastUpdatedClient, setLastUpdatedClient,
+        lastUpdatedCar, setLastUpdatedCar,
+        broadcastEvent,
+        setClients,
+        setCars,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
         fetchClientsWithDebtIds,
