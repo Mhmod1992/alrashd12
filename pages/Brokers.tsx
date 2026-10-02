@@ -99,7 +99,7 @@ const Brokers: React.FC = () => {
         try {
             const { data, error } = await supabase
                 .from('inspection_requests')
-                .select('*')
+                .select('id, request_number, client_id, car_id, car_snapshot, price, broker, created_at, status')
                 .not('broker', 'is', null)
                 .order('created_at', { ascending: false });
 
@@ -107,7 +107,7 @@ const Brokers: React.FC = () => {
 
             // Client-side filtering to be safe with JSON structures
             const filtered = (data || []).filter((r: any) => r.broker?.id === brokerId);
-            setBrokerRequests(filtered);
+            setBrokerRequests(filtered as InspectionRequest[]);
 
         } catch (error) {
             console.error("Error fetching details:", error);

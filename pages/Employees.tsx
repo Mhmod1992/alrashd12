@@ -295,7 +295,7 @@ const UnifiedDirectory: React.FC = () => {
             
             // 2. Status Filter
             let matchesStatus = true;
-            if (statusFilter === 'online') matchesStatus = onlineEmployeeIds.has(person.id);
+            if (statusFilter === 'online') matchesStatus = !!onlineEmployeeIds?.has(person.id);
             else if (statusFilter === 'active') matchesStatus = person.is_active;
             else if (statusFilter === 'inactive') matchesStatus = !person.is_active;
 
@@ -317,8 +317,8 @@ const UnifiedDirectory: React.FC = () => {
 
         // Always sort active/online users to the TOP of the directory!
         return filtered.sort((a, b) => {
-            const aOnline = onlineEmployeeIds.has(a.id) ? 1 : 0;
-            const bOnline = onlineEmployeeIds.has(b.id) ? 1 : 0;
+            const aOnline = onlineEmployeeIds?.has(a.id) ? 1 : 0;
+            const bOnline = onlineEmployeeIds?.has(b.id) ? 1 : 0;
             if (aOnline !== bOnline) return bOnline - aOnline;
             return a.name.localeCompare(b.name, 'ar');
         });
@@ -351,7 +351,7 @@ const UnifiedDirectory: React.FC = () => {
                             className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${statusFilter === 'online' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}
                         >
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            النشطون ({onlineEmployeeIds.size})
+                            النشطون ({onlineEmployeeIds?.size || 0})
                         </button>
                         <button onClick={() => setStatusFilter('active')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${statusFilter === 'active' ? 'bg-white dark:bg-slate-600 shadow-sm text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>مفعل</button>
                         <button onClick={() => setStatusFilter('inactive')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${statusFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>معطل</button>
@@ -389,10 +389,10 @@ const UnifiedDirectory: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                         {filteredStaff.map((person: any) => {
-                            const isPersonOnline = onlineEmployeeIds.has(person.id);
-                            const staffInfo = onlineStaffMap[person.id];
+                            const isPersonOnline = !!onlineEmployeeIds?.has(person.id);
+                            const staffInfo = onlineStaffMap?.[person.id];
                             const onlineText = isPersonOnline ? formatOnlineDuration(staffInfo?.online_at) : null;
-                            const offlineText = !isPersonOnline ? formatOfflineDuration(lastSeenStaffMap[person.id]) : null;
+                            const offlineText = !isPersonOnline ? formatOfflineDuration(lastSeenStaffMap?.[person.id]) : null;
 
                             return (
                             <tr key={`${person.type}-${person.id}`} className={`transition-colors ${isPersonOnline ? 'bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 dark:hover:bg-emerald-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>

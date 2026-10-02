@@ -15,6 +15,7 @@ import { supabase } from "../lib/supabaseClient";
 import LineChart from "../components/LineChart";
 import Icon from "../components/Icon";
 import RefreshCwIcon from "../components/icons/RefreshCwIcon";
+import ChevronDownIcon from "../components/icons/ChevronDownIcon";
 import TrendingUpIcon from "../components/icons/TrendingUpIcon";
 import DollarSignIcon from "../components/icons/DollarSignIcon";
 import UsersIcon from "../components/icons/UsersIcon";
@@ -60,7 +61,40 @@ import {
 } from "lucide-react";
 
 // --- Quick Actions Component ---
-// --- Safe LocalStorage Helper ---
+// --- Safe LocalStorage Helper & Sanitizer ---
+const sanitizeStatsForCache = (stats: FinancialStats | null): FinancialStats | null => {
+  if (!stats) return null;
+  return {
+    ...stats,
+    filteredRequests: (stats.filteredRequests || []).map((r: any) => ({
+      id: r.id,
+      request_number: r.request_number,
+      created_at: r.created_at,
+      price: r.price,
+      status: r.status,
+      payment_type: r.payment_type,
+      inspection_type_id: r.inspection_type_id,
+      employee_id: r.employee_id,
+      client_id: r.client_id,
+      car_id: r.car_id,
+    })) as any,
+    filteredExpenses: (stats.filteredExpenses || []).map((e: any) => ({
+      id: e.id,
+      amount: e.amount,
+      category: e.category,
+      date: e.date,
+      description: e.description,
+    })) as any,
+    filteredRevenues: (stats.filteredRevenues || []).map((rev: any) => ({
+      id: rev.id,
+      amount: rev.amount,
+      category: rev.category,
+      date: rev.date,
+      description: rev.description,
+    })) as any,
+  };
+};
+
 const safeSetItem = (key: string, value: string) => {
   try {
     localStorage.setItem(key, value);
@@ -68,28 +102,28 @@ const safeSetItem = (key: string, value: string) => {
     if (
       e instanceof DOMException &&
       (e.name === "QuotaExceededError" ||
-        e.name === "NS_ERROR_DOM_QUOTA_REACHED")
+        e.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+        e.code === 22)
     ) {
       console.warn(
-        "Storage quota exceeded, clearing dashboard cache to free space",
+        "Storage quota reached, clearing dashboard cache to free space",
       );
       // Clear all dashboard related caches to free up space
       Object.keys(localStorage).forEach((k) => {
-        if (k.startsWith("dashboard_")) {
-          localStorage.removeItem(k);
+        if (k.startsWith("dashboard_") || k.includes("_cache")) {
+          try {
+            localStorage.removeItem(k);
+          } catch (_) {}
         }
       });
       // Try setting again after clearing
       try {
         localStorage.setItem(key, value);
       } catch (retryError) {
-        console.error(
-          "Failed to set item even after clearing cache",
-          retryError,
-        );
+        // Quota still full - safely ignore non-critical cache
       }
     } else {
-      console.error("LocalStorage error", e);
+      console.warn("LocalStorage error", e);
     }
   }
 };
@@ -1022,6 +1056,12 @@ const Dashboard: React.FC = () => {
   const [prevMonthStats, setPrevMonthStats] = useState<FinancialStats | null>(
     null,
   );
+  const [hasLoadedVolumeComparison, setHasLoadedVolumeComparison] = useState<boolean>(() => {
+    return !!getSafeCachedStats("dashboard_month_stats_cache");
+  });
+  const [isVolumeComparisonOpen, setIsVolumeComparisonOpen] = useState(false);
+  const [isVolumeLoading, setIsVolumeLoading] = useState(false);
+
   const [carFilter, setCarFilter] = useState<
     "yesterday" | "week" | "month" | "all"
   >("month");
@@ -1032,13 +1072,97 @@ const Dashboard: React.FC = () => {
     const cached = localStorage.getItem("dashboard_car_models_cache");
     return cached ? JSON.parse(cached) : [];
   });
-  const [isCarLoading, setIsCarLoading] = useState(
-    !getSafeCachedStats("dashboard_car_stats_cache"),
-  );
+  const [hasLoadedCarData, setHasLoadedCarData] = useState<boolean>(() => {
+    return !!getSafeCachedStats("dashboard_car_stats_cache");
+  });
+  const [isTopCarsOpen, setIsTopCarsOpen] = useState(false);
+  const [isCarLoading, setIsCarLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(
     !getSafeCachedStats("dashboard_main_stats_cache"),
   );
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+
+  const loadVolumeComparisonData = async () => {
+    setIsVolumeLoading(true);
+    try {
+      const now = new Date();
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const currentMonthEnd = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999,
+      );
+      const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonthEnd = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        0,
+        23,
+        59,
+        59,
+        999,
+      );
+
+      const [currentMonthStatsData, prevMonthStatsData] = await Promise.all([
+        fetchServerFinancials(
+          currentMonthStart.toISOString(),
+          currentMonthEnd.toISOString(),
+          false,
+        ).catch((e) => {
+          console.error("currentMonthStats fetch failed", e);
+          return null;
+        }),
+        fetchServerFinancials(
+          prevMonthStart.toISOString(),
+          prevMonthEnd.toISOString(),
+          false,
+        ).catch((e) => {
+          console.error("prevMonthStats fetch failed", e);
+          return null;
+        }),
+      ]);
+
+      if (currentMonthStatsData) setMonthStats(currentMonthStatsData);
+      if (prevMonthStatsData) setPrevMonthStats(prevMonthStatsData);
+      if (currentMonthStatsData) {
+        safeSetItem(
+          "dashboard_month_stats_cache",
+          JSON.stringify({ timestamp: Date.now(), data: sanitizeStatsForCache(currentMonthStatsData) }),
+        );
+      }
+      setHasLoadedVolumeComparison(true);
+    } catch (error) {
+      console.error("Volume comparison load error", error);
+    } finally {
+      setIsVolumeLoading(false);
+    }
+  };
+
+  const handleToggleVolumeComparison = async () => {
+    if (!isVolumeComparisonOpen) {
+      setIsVolumeComparisonOpen(true);
+      if (!hasLoadedVolumeComparison) {
+        await loadVolumeComparisonData();
+      }
+    } else {
+      setIsVolumeComparisonOpen(false);
+    }
+  };
+
+  const handleToggleTopCars = async () => {
+    if (!isTopCarsOpen) {
+      setIsTopCarsOpen(true);
+      if (!hasLoadedCarData) {
+        await loadCarData();
+      }
+    } else {
+      setIsTopCarsOpen(false);
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -1087,66 +1211,13 @@ const Dashboard: React.FC = () => {
         );
       }
 
-      // --- Performance Optimization: Caching for Past Data ---
-      const CACHE_KEY = "dashboard_revenue_pulse_cache";
-      const CACHE_EXPIRY = 6 * 60 * 60 * 1000; // 6 hours
-      const cachedStr = localStorage.getItem(CACHE_KEY);
-      let pastPulseStats: FinancialStats | null = null;
-      let shouldFetchFullPulse = true;
-
-      if (cachedStr) {
-        try {
-          const cached = JSON.parse(cachedStr);
-          const isExpired = Date.now() - cached.timestamp > CACHE_EXPIRY;
-          const cacheDate = new Date(cached.timestamp).toLocaleDateString(
-            "en-CA",
-          );
-          const todayStr = now.toLocaleDateString("en-CA");
-
-          if (!isExpired && cacheDate === todayStr) {
-            pastPulseStats = cached.data;
-            shouldFetchFullPulse = false;
-          }
-        } catch (e) {
-          console.error("Cache parse error", e);
-        }
-      }
-
       const pulseEnd = new Date();
       pulseEnd.setHours(23, 59, 59, 999);
-      const pulseStart = new Date();
-      pulseStart.setDate(pulseEnd.getDate() - 60); // Fetch 60 days for last month comparison
-      pulseStart.setHours(0, 0, 0, 0);
-
-      // Always fetch current calendar month and previous calendar month
-      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const currentMonthEnd = new Date(
-        now.getFullYear(),
-        now.getMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
-      const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const prevMonthEnd = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
 
       const [
         currentStats,
         previousStats,
         todayPulseStats,
-        fullPulseStats,
-        currentMonthStatsData,
-        prevMonthStatsData,
         totalClientsCount,
         newClientsCount,
         prevNewClientsCount,
@@ -1162,23 +1233,6 @@ const Dashboard: React.FC = () => {
           pulseEnd.toISOString(),
           false,
         ).catch(e => { console.error("todayPulseStats fetch failed", e); return null; }), // Today only
-        shouldFetchFullPulse
-          ? fetchServerFinancials(
-              pulseStart.toISOString(),
-              pulseEnd.toISOString(),
-              false,
-            ).catch(e => { console.error("fullPulseStats fetch failed", e); return null; })
-          : Promise.resolve(null),
-        fetchServerFinancials(
-          currentMonthStart.toISOString(),
-          currentMonthEnd.toISOString(),
-          false,
-        ).catch(e => { console.error("currentMonthStats fetch failed", e); return null; }),
-        fetchServerFinancials(
-          prevMonthStart.toISOString(),
-          prevMonthEnd.toISOString(),
-          false,
-        ).catch(e => { console.error("prevMonthStats fetch failed", e); return null; }),
         fetchClientsCount().catch(() => 0),
         fetchClientsCount(start.toISOString(), end.toISOString()).catch(() => 0),
         fetchClientsCount(prevStart.toISOString(), prevEnd.toISOString()).catch(() => 0),
@@ -1213,89 +1267,10 @@ const Dashboard: React.FC = () => {
       setPrevStats(previousStats);
       safeSetItem(
         "dashboard_main_stats_cache",
-        JSON.stringify({ timestamp: Date.now(), data: currentStats }),
+        JSON.stringify({ timestamp: Date.now(), data: sanitizeStatsForCache(currentStats) }),
       );
 
-      let finalPulse: FinancialStats;
-      if (shouldFetchFullPulse && fullPulseStats) {
-        finalPulse = fullPulseStats;
-        safeSetItem(
-          CACHE_KEY,
-          JSON.stringify({
-            timestamp: Date.now(),
-            data: fullPulseStats,
-          }),
-        );
-      } else if (pastPulseStats) {
-        const mergedDaily = { ...pastPulseStats.daily };
-        const todayKey = now.toLocaleDateString("en-CA");
-        mergedDaily[todayKey] = todayPulseStats.daily[todayKey] || {
-          date: todayKey,
-          cars: 0,
-          revenue: 0,
-          cash: 0,
-          card: 0,
-          transfer: 0,
-          unpaid: 0,
-          expenses: 0,
-          commission: 0,
-        };
-
-        finalPulse = {
-          ...pastPulseStats,
-          daily: mergedDaily,
-          totalRevenue: (Object.values(mergedDaily) as any[]).reduce(
-            (sum: number, d: any) => sum + (d.revenue || 0),
-            0,
-          ),
-        } as FinancialStats;
-      } else {
-        finalPulse = todayPulseStats;
-      }
-
-      setPulseStats(finalPulse);
-
-      // --- Forecasting Logic (Weighted Moving Average) ---
-      const forecast: any[] = [];
-      const dailyData = finalPulse.daily;
-
-      for (let i = 1; i <= 7; i++) {
-        const futureDate = new Date(now);
-        futureDate.setDate(now.getDate() + i);
-        const dayOfWeek = futureDate.getDay();
-
-        let sum = 0;
-        let count = 0;
-        for (let w = 1; w <= 4; w++) {
-          const pastDate = new Date(futureDate);
-          pastDate.setDate(futureDate.getDate() - w * 7);
-          const pastKey = pastDate.toLocaleDateString("en-CA");
-          if (dailyData[pastKey]) {
-            const weight = 5 - w;
-            sum += dailyData[pastKey].revenue * weight;
-            count += weight;
-          }
-        }
-
-        const predictedRevenue = count > 0 ? Math.round(sum / count) : 0;
-        forecast.push({
-          label: futureDate.toLocaleDateString("en-GB", {
-            day: "numeric",
-            month: "numeric",
-          }),
-          dateStr: futureDate.toLocaleDateString("en-CA"),
-          revenue: predictedRevenue,
-        });
-      }
-      setForecastData(forecast);
-      safeSetItem("dashboard_forecast_cache", JSON.stringify(forecast));
-
-      setMonthStats(currentMonthStatsData);
-      setPrevMonthStats(prevMonthStatsData);
-      safeSetItem(
-        "dashboard_month_stats_cache",
-        JSON.stringify({ timestamp: Date.now(), data: currentMonthStatsData }),
-      );
+      setPulseStats(todayPulseStats);
       setLastRefreshed(new Date());
     } catch (error) {
       console.error("Dashboard Load Error", error);
@@ -1334,23 +1309,28 @@ const Dashboard: React.FC = () => {
         end.setHours(23, 59, 59, 999);
       }
 
-      const [stats, { data: modelsData }] = await Promise.all([
+      const [stats] = await Promise.all([
         fetchServerFinancials(start.toISOString(), end.toISOString(), false).catch(e => { console.error("carStats fetch failed", e); return null; }),
-        Promise.resolve(supabase.from("car_models").select("*")).catch(e => { console.error("models fetch failed", e); return { data: null }; }),
       ]);
 
-      if (modelsData) {
-        setAllCarModels(modelsData);
-        safeSetItem("dashboard_car_models_cache", JSON.stringify(modelsData));
+      if (carModels && carModels.length > 0) {
+        setAllCarModels(carModels);
+      } else {
+        const { data: modelsData } = await supabase.from("car_models").select("*");
+        if (modelsData) {
+          setAllCarModels(modelsData);
+          safeSetItem("dashboard_car_models_cache", JSON.stringify(modelsData));
+        }
       }
 
       if (stats) {
         setCarStats(stats);
         safeSetItem(
           "dashboard_car_stats_cache",
-          JSON.stringify({ timestamp: Date.now(), data: stats }),
+          JSON.stringify({ timestamp: Date.now(), data: sanitizeStatsForCache(stats) }),
         );
       }
+      setHasLoadedCarData(true);
     } catch (error) {
       console.error("Car Data Load Error", error);
     } finally {
@@ -1363,7 +1343,9 @@ const Dashboard: React.FC = () => {
   }, [activePeriod]);
 
   useEffect(() => {
-    loadCarData();
+    if (hasLoadedCarData) {
+      loadCarData();
+    }
   }, [carFilter]);
 
   const [isSearchClientModalOpen, setIsSearchClientModalOpen] = useState(false);
@@ -1991,152 +1973,284 @@ const Dashboard: React.FC = () => {
         ))}
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 px-2">
-        {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-white/20 dark:border-slate-700/50 p-6 relative overflow-hidden group hover:border-blue-300 dark:hover:border-blue-800 transition-all duration-500">
-          <div className="flex justify-between items-center mb-6 relative z-10">
-            <div>
-              <h3 className="font-black text-slate-800 dark:text-white text-lg flex items-center gap-2">
-                <TrendingUpIcon className="w-5 h-5 text-blue-500" />
-                مقارنة حجم الطلبات
-              </h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                مقارنة عدد الطلبات للشهر الحالي بالسابق
-              </p>
+      {/* Charts Section - Collapsible Accordion Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 px-2 items-start">
+        {/* Main Chart - Volume Comparison Accordion */}
+        <div className="lg:col-span-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-white/20 dark:border-slate-700/50 p-6 relative overflow-hidden transition-all duration-300">
+          <div
+            onClick={handleToggleVolumeComparison}
+            className="flex justify-between items-center cursor-pointer select-none group/hdr"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-500 flex items-center justify-center shrink-0 shadow-inner group-hover/hdr:scale-105 transition-transform">
+                <TrendingUpIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-slate-800 dark:text-white text-base sm:text-lg">
+                    مقارنة حجم الطلبات
+                  </h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    isVolumeComparisonOpen
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-700/50 dark:text-slate-400'
+                  }`}>
+                    {isVolumeComparisonOpen ? 'مفتوح' : (hasLoadedVolumeComparison ? 'مطوي' : 'غير محمل')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                  مقارنة عدد الطلبات للشهر الحالي بالسابق
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="w-full h-72 sm:h-96 relative z-10 overflow-x-auto pb-2 custom-scrollbar">
-            <div className="min-w-[700px] w-full h-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={monthlyRequestsComparisonData}
-                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
+
+            <div className="flex items-center gap-2">
+              {hasLoadedVolumeComparison && isVolumeComparisonOpen && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadVolumeComparisonData();
+                  }}
+                  disabled={isVolumeLoading}
+                  title="إعادة تحميل المقارنة"
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-blue-50 dark:bg-slate-700/50 dark:hover:bg-blue-900/30 text-slate-600 hover:text-blue-600 dark:text-slate-300 transition-all active:scale-95 disabled:opacity-50"
                 >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="#e2e8f0"
-                    vertical={false}
-                    opacity={0.3}
-                  />
-                  <XAxis
-                    dataKey="day"
-                    stroke="#94a3b8"
-                    fontSize={10}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="#94a3b8"
-                    fontSize={10}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <RechartsTooltip
-                    contentStyle={{
-                      borderRadius: "20px",
-                      border: "none",
-                      boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
-                      backgroundColor: "rgba(255, 255, 255, 0.95)",
-                      backdropFilter: "blur(10px)",
-                    }}
-                    formatter={(value: number, name: string) => [
-                      `${value.toLocaleString()} طلب`,
-                      name,
-                    ]}
-                    labelFormatter={(label) => `يوم ${label}`}
-                  />
-                  <Legend
-                    verticalAlign="top"
-                    height={40}
-                    iconType="circle"
-                    wrapperStyle={{
-                      fontSize: "11px",
-                      fontWeight: "bold",
-                      paddingBottom: "20px",
-                    }}
-                  />
-                  <Bar
-                    dataKey="current"
-                    name="الشهر الحالي"
-                    fill="#3b82f6"
-                    radius={[6, 6, 0, 0]}
-                    animationDuration={1500}
-                  />
-                  <Bar
-                    dataKey="previous"
-                    name="الشهر الماضي"
-                    fill="#e2e8f0"
-                    radius={[6, 6, 0, 0]}
-                    animationDuration={1500}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+                  <RefreshCwIcon className={`w-4 h-4 ${isVolumeLoading ? 'animate-spin text-blue-500' : ''}`} />
+                </button>
+              )}
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleVolumeComparison();
+                }}
+                disabled={isVolumeLoading}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-bold text-xs transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isVolumeLoading ? (
+                  <>
+                    <RefreshCwIcon className="w-3.5 h-3.5 animate-spin" />
+                    جاري الجلب...
+                  </>
+                ) : isVolumeComparisonOpen ? (
+                  <>
+                    طي الشريط
+                    <ChevronDownIcon className="w-4 h-4 rotate-180 transition-transform duration-300" />
+                  </>
+                ) : (
+                  <>
+                    {hasLoadedVolumeComparison ? 'فتح الشريط' : '📊 جلب وفتح الشريط'}
+                    <ChevronDownIcon className="w-4 h-4 transition-transform duration-300" />
+                  </>
+                )}
+              </button>
             </div>
           </div>
+
+          {isVolumeComparisonOpen && (
+            <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-700/50">
+              {isVolumeLoading ? (
+                <div className="w-full h-72 sm:h-96 flex items-center justify-center">
+                  <Skeleton className="w-full h-full rounded-2xl" />
+                </div>
+              ) : (
+                <div className="w-full h-72 sm:h-96 relative z-10 overflow-x-auto pb-2 custom-scrollbar">
+                  <div className="min-w-[700px] w-full h-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={monthlyRequestsComparisonData}
+                        margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#e2e8f0"
+                          vertical={false}
+                          opacity={0.3}
+                        />
+                        <XAxis
+                          dataKey="day"
+                          stroke="#94a3b8"
+                          fontSize={10}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          stroke="#94a3b8"
+                          fontSize={10}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <RechartsTooltip
+                          contentStyle={{
+                            borderRadius: "20px",
+                            border: "none",
+                            boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+                            backgroundColor: "rgba(255, 255, 255, 0.95)",
+                            backdropFilter: "blur(10px)",
+                          }}
+                          formatter={(value: number, name: string) => [
+                            `${value.toLocaleString()} طلب`,
+                            name,
+                          ]}
+                          labelFormatter={(label) => `يوم ${label}`}
+                        />
+                        <Legend
+                          verticalAlign="top"
+                          height={40}
+                          iconType="circle"
+                          wrapperStyle={{
+                            fontSize: "11px",
+                            fontWeight: "bold",
+                            paddingBottom: "20px",
+                          }}
+                        />
+                        <Bar
+                          dataKey="current"
+                          name="الشهر الحالي"
+                          fill="#3b82f6"
+                          radius={[6, 6, 0, 0]}
+                          animationDuration={1500}
+                        />
+                        <Bar
+                          dataKey="previous"
+                          name="الشهر الماضي"
+                          fill="#e2e8f0"
+                          radius={[6, 6, 0, 0]}
+                          animationDuration={1500}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Top Cars Card */}
-        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-white/20 dark:border-slate-700/50 p-6 flex flex-col group hover:border-blue-300 dark:hover:border-blue-800 transition-all duration-500 h-[450px]">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h3 className="font-black text-slate-800 dark:text-white text-lg flex items-center gap-2">
-                <Icon name="car" className="w-5 h-5 text-indigo-500" />
-                السيارات الأكثر فحصاً
-              </h3>
-            </div>
-            <select
-              value={carFilter}
-              onChange={(e) => setCarFilter(e.target.value as any)}
-              className="text-[10px] font-bold border-none rounded-xl bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="yesterday">أمس</option>
-              <option value="week">أسبوع</option>
-              <option value="month">شهر</option>
-              <option value="all">الكل</option>
-            </select>
-          </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
-            {isCarLoading ? (
-              <Skeleton className="w-full h-full rounded-2xl" />
-            ) : (
-              <div className="flex flex-col gap-3">
-                {carInspectionFrequencyData.length > 0 ? (
-                  carInspectionFrequencyData.map((item, index) => {
-                    const maxCount = Math.max(
-                      ...carInspectionFrequencyData.map((d) => d.count),
-                      1,
-                    );
-                    const percentage = (item.count / maxCount) * 100;
-                    return (
-                      <div
-                        key={index}
-                        className="relative w-full h-11 bg-slate-50/50 dark:bg-slate-900/30 rounded-xl overflow-hidden flex items-center group/item border border-slate-100/50 dark:border-slate-700/30 shrink-0"
-                      >
-                        <div
-                          className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/5 dark:from-blue-400/10 dark:to-indigo-400/5 transition-all duration-700 ease-out"
-                          style={{ width: `${percentage}%` }}
-                        ></div>
-                        <div className="relative z-10 flex justify-between items-center w-full px-4 gap-3">
-                          <div className="font-black text-blue-600 dark:text-blue-400 text-xs w-8">
-                            {item.count}
-                          </div>
-                          <div className="flex-1 text-center text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">
-                            {item.make}
-                          </div>
-                          <div className="w-8"></div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center text-slate-400 text-xs py-10">
-                    لا توجد سجلات
-                  </div>
-                )}
+        {/* Top Cars Card - Accordion */}
+        <div className={`bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-white/20 dark:border-slate-700/50 p-6 flex flex-col relative overflow-hidden transition-all duration-300 ${isTopCarsOpen ? 'h-[480px]' : ''}`}>
+          <div
+            onClick={handleToggleTopCars}
+            className="flex justify-between items-center cursor-pointer select-none group/hdr"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500 flex items-center justify-center shrink-0 shadow-inner group-hover/hdr:scale-105 transition-transform">
+                <Icon name="car" className="w-5 h-5" />
               </div>
-            )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-slate-800 dark:text-white text-base sm:text-lg">
+                    السيارات الأكثر فحصاً
+                  </h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    isTopCarsOpen
+                      ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-700/50 dark:text-slate-400'
+                  }`}>
+                    {isTopCarsOpen ? 'مفتوح' : (hasLoadedCarData ? 'مطوي' : 'غير محمل')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                  أكثر الموديلات طلباً للفحص
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {hasLoadedCarData && isTopCarsOpen && (
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <select
+                    value={carFilter}
+                    onChange={(e) => setCarFilter(e.target.value as any)}
+                    className="text-[10px] font-bold border-none rounded-xl bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 px-3 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="yesterday">أمس</option>
+                    <option value="week">أسبوع</option>
+                    <option value="month">شهر</option>
+                    <option value="all">الكل</option>
+                  </select>
+                  <button
+                    onClick={loadCarData}
+                    disabled={isCarLoading}
+                    title="إعادة تحميل إحصائيات السيارات"
+                    className="p-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 dark:bg-slate-700/50 dark:hover:bg-indigo-900/30 text-slate-600 hover:text-indigo-600 dark:text-slate-300 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <RefreshCwIcon className={`w-3.5 h-3.5 ${isCarLoading ? 'animate-spin text-indigo-500' : ''}`} />
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleTopCars();
+                }}
+                disabled={isCarLoading}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 font-bold text-xs transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isCarLoading ? (
+                  <>
+                    <RefreshCwIcon className="w-3.5 h-3.5 animate-spin" />
+                    جاري التحليل...
+                  </>
+                ) : isTopCarsOpen ? (
+                  <>
+                    طي الشريط
+                    <ChevronDownIcon className="w-4 h-4 rotate-180 transition-transform duration-300" />
+                  </>
+                ) : (
+                  <>
+                    {hasLoadedCarData ? 'فتح الشريط' : '🚗 تحليل وفتح'}
+                    <ChevronDownIcon className="w-4 h-4 transition-transform duration-300" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
+
+          {isTopCarsOpen && (
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 mt-6 pt-6 border-t border-slate-100 dark:border-slate-700/50">
+              {isCarLoading ? (
+                <Skeleton className="w-full h-full rounded-2xl min-h-[220px]" />
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {carInspectionFrequencyData.length > 0 ? (
+                    carInspectionFrequencyData.map((item, index) => {
+                      const maxCount = Math.max(
+                        ...carInspectionFrequencyData.map((d) => d.count),
+                        1,
+                      );
+                      const percentage = (item.count / maxCount) * 100;
+                      return (
+                        <div
+                          key={index}
+                          className="relative w-full h-11 bg-slate-50/50 dark:bg-slate-900/30 rounded-xl overflow-hidden flex items-center group/item border border-slate-100/50 dark:border-slate-700/30 shrink-0"
+                        >
+                          <div
+                            className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/5 dark:from-blue-400/10 dark:to-indigo-400/5 transition-all duration-700 ease-out"
+                            style={{ width: `${percentage}%` }}
+                          ></div>
+                          <div className="relative z-10 flex justify-between items-center w-full px-4 gap-3">
+                            <div className="font-black text-blue-600 dark:text-blue-400 text-xs w-8">
+                              {item.count}
+                            </div>
+                            <div className="flex-1 text-center text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">
+                              {item.make}
+                            </div>
+                            <div className="w-8"></div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center text-slate-400 text-xs py-10">
+                      لا توجد سجلات
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

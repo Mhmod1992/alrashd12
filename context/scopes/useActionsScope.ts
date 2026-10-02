@@ -344,11 +344,7 @@ export const useActionsScope = (
 
         // Broadcast to all other devices in real-time immediately
         try {
-            supabase.channel('public:inspection_requests').send({
-                type: 'broadcast',
-                event: 'pending_change',
-                payload: { action: 'INSERT', record: newPending }
-            });
+            broadcastEvent('pending_change', { action: 'INSERT', record: newPending });
         } catch (bErr) {
             console.warn("Broadcast pending insert failed:", bErr);
         }
@@ -364,15 +360,11 @@ export const useActionsScope = (
 
         // Broadcast to all other devices in real-time immediately
         try {
-            supabase.channel('public:inspection_requests').send({
-                type: 'broadcast',
-                event: 'pending_change',
-                payload: { action: 'DELETE', id }
-            });
+            broadcastEvent('pending_change', { action: 'DELETE', id });
         } catch (bErr) {
             console.warn("Broadcast pending delete failed:", bErr);
         }
-    }, [setPendingRequests]);
+    }, [setPendingRequests, broadcastEvent]);
 
     const updatePendingRequest = useCallback(async (id: string, updates: Partial<PendingRequest>): Promise<PendingRequest> => {
         const { data, error } = await supabase
@@ -388,18 +380,14 @@ export const useActionsScope = (
 
         // Broadcast to all other devices in real-time immediately
         try {
-            supabase.channel('public:inspection_requests').send({
-                type: 'broadcast',
-                event: 'pending_change',
-                payload: { action: 'UPDATE', record: updated }
-            });
+            broadcastEvent('pending_change', { action: 'UPDATE', record: updated });
         } catch (bErr) {
             console.warn("Broadcast pending update failed:", bErr);
         }
 
         addNotification({ title: 'نجاح', message: 'تم تحديث بيانات الطلب المعلق بنجاح.', type: 'success' });
         return updated;
-    }, [setPendingRequests, addNotification]);
+    }, [setPendingRequests, addNotification, broadcastEvent]);
 
     const convertPendingToOfficialRequest = useCallback(async (
         pendingReq: PendingRequest,
@@ -418,11 +406,7 @@ export const useActionsScope = (
 
         // Broadcast to all other devices immediately so it disappears from pending lists
         try {
-            supabase.channel('public:inspection_requests').send({
-                type: 'broadcast',
-                event: 'pending_change',
-                payload: { action: 'DELETE', id: pendingReq.id }
-            });
+            broadcastEvent('pending_change', { action: 'DELETE', id: pendingReq.id });
         } catch (bErr) {
             console.warn("Broadcast pending convert failed:", bErr);
         }
@@ -497,7 +481,7 @@ export const useActionsScope = (
         }
 
         return officialRequest;
-    }, [addRequestOptimized, authUser, employees, setPendingRequests, setRequests]);
+    }, [addRequestOptimized, authUser, employees, setPendingRequests, setRequests, broadcastEvent]);
 
 
     // --- CLIENTS ---

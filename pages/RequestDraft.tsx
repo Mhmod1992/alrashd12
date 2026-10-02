@@ -357,7 +357,7 @@ const RequestDraft: React.FC = () => {
             .finally(() => {
                 setIsFetchingRequest(false);
             });
-    }, [selectedRequestId, requests, fetchAndUpdateSingleRequest]);
+    }, [selectedRequestId, fetchAndUpdateSingleRequest]);
 
     const activeRequest = directRequest || requests.find(r => r.id === selectedRequestId);
 

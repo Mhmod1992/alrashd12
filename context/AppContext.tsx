@@ -17,7 +17,7 @@ import { useNavigationScope } from './scopes/useNavigationScope';
 import { useThemeScope } from './scopes/useThemeScope';
 import { useDataScope } from './scopes/useDataScope';
 import { useActionsScope } from './scopes/useActionsScope';
-import { REQUESTS_PAGE_SIZE, INACTIVITY_LIMIT_MS, PERSONAL_SETTING_KEYS, ROOT_PAGES, PARENT_MAP } from './constants';
+import { REQUESTS_PAGE_SIZE, LIGHTWEIGHT_REQUEST_COLUMNS, INACTIVITY_LIMIT_MS, PERSONAL_SETTING_KEYS, ROOT_PAGES, PARENT_MAP } from './constants';
 
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -112,12 +112,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         whatsappMessages, setWhatsappMessages,
         unreadWhatsAppCount, setUnreadWhatsAppCount,
         latestWhatsAppMessage, setLatestWhatsAppMessage,
+        onlineEmployeeIds, setOnlineEmployeeIds,
+        onlineStaffMap, setOnlineStaffMap,
+        lastSeenStaffMap, setLastSeenStaffMap,
+        activeStaffAlert, setActiveStaffAlert,
+        dismissActiveStaffAlert,
         financialReport, setFinancialReport,
         isRefreshing, setIsRefreshing,
         fetchRequests,
         fetchCarModelsByMake,
         fetchCarMakes,
         ensureEntitiesLoaded,
+        refreshEntitiesForRequests,
         createActivityLog,
         addNotification,
         markNotificationAsRead,
@@ -155,7 +161,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setBrokers, employees, setEmployees, setTechnicians, setExpenses, setInspectionTypes,
         setCustomFindingCategories, setPredefinedFindings, setReservations, setUnreadMessagesCount,
         setWhatsappMessages, setUnreadWhatsAppCount,
-        setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchRequests
+        setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchRequests,
+        channelRef
     );
 
     // Override updateEmployee to sync with cache if we are updating the current user
@@ -259,6 +266,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const ensureEntitiesLoadedRef = useRef(ensureEntitiesLoaded);
     useEffect(() => { ensureEntitiesLoadedRef.current = ensureEntitiesLoaded; }, [ensureEntitiesLoaded]);
+    const refreshEntitiesForRequestsRef = useRef(refreshEntitiesForRequests);
+    useEffect(() => { refreshEntitiesForRequestsRef.current = refreshEntitiesForRequests; }, [refreshEntitiesForRequests]);
 
 
     const setupRealtimeSubscription = useCallback(async () => {
@@ -277,6 +286,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
 
         const channel = supabase.channel('app-realtime-main')
+            .on('broadcast', { event: 'official_request_change' }, (payload) => {
+                if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
+                    const updatedReq = payload.payload.record as InspectionRequest;
+                    refreshEntitiesForRequestsRef.current([updatedReq]);
+                    setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
+                    setSearchedRequests(prev => prev ? prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r) : null);
+                } else if (payload.payload?.action === 'DELETE' && payload.payload?.id) {
+                    const deletedId = payload.payload.id;
+                    setRequests(prev => prev.filter(r => r.id !== deletedId));
+                    setSearchedRequests(prev => prev ? prev.filter(r => r.id !== deletedId) : null);
+                }
+            })
+            .on('broadcast', { event: 'client_change' }, (payload) => {
+                if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
+                    const updatedClient = payload.payload.record as Client;
+                    setClients(prev => {
+                        const exists = prev.some(c => c.id === updatedClient.id);
+                        if (exists) return prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c);
+                        return [updatedClient, ...prev];
+                    });
+                }
+            })
+            .on('broadcast', { event: 'car_change' }, (payload) => {
+                if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
+                    const updatedCar = payload.payload.record as Car;
+                    setCars(prev => {
+                        const exists = prev.some(c => c.id === updatedCar.id);
+                        if (exists) return prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c);
+                        return [updatedCar, ...prev];
+                    });
+                }
+            })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'inspection_requests' },
                 async (payload) => {
                     if (payload.eventType === 'INSERT') {
@@ -297,7 +338,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         triggerHighlight(newReq.id);
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedReq = payload.new as InspectionRequest;
-                        await ensureEntitiesLoadedRef.current([updatedReq]);
+                        await refreshEntitiesForRequestsRef.current([updatedReq]);
                         setRequests(prev => {
                             const exists = prev.some(r => r.id === updatedReq.id);
                             if (exists) {
@@ -306,6 +347,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                                 return [updatedReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                             }
                         });
+                        setSearchedRequests(prev => prev ? prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r) : null);
                         triggerHighlight(updatedReq.id);
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
@@ -378,16 +420,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
                         const newPending = payload.new as PendingRequest;
+                        if (!newPending || !newPending.id) return;
                         setPendingRequests(prev => {
                             if (prev.some(p => p.id === newPending.id)) return prev;
                             return [newPending, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                         });
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedPending = payload.new as PendingRequest;
+                        if (!updatedPending || !updatedPending.id) return;
                         setPendingRequests(prev => prev.map(p => p.id === updatedPending.id ? { ...p, ...updatedPending } : p));
                     } else if (payload.eventType === 'DELETE') {
+                        const deletedId = payload.old?.id;
+                        if (deletedId) setPendingRequests(prev => prev.filter(p => p.id !== deletedId));
+                    }
+                }
+            )
+            .on('broadcast', { event: 'pending_change' },
+                (e) => {
+                    const { action, record, id } = e.payload || {};
+                    if (action === 'INSERT' && record) {
+                        setPendingRequests(prev => {
+                            if (prev.some(p => p.id === record.id)) return prev;
+                            return [record, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                        });
+                    } else if (action === 'UPDATE' && record) {
+                        setPendingRequests(prev => prev.map(p => p.id === record.id ? { ...p, ...record } : p));
+                    } else if (action === 'DELETE' && id) {
+                        setPendingRequests(prev => prev.filter(p => p.id !== id));
+                    }
+                }
+            )
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'inspection_types' },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        const newType = payload.new as InspectionType;
+                        setInspectionTypes(prev => {
+                            if (prev.some(t => t.id === newType.id)) return prev;
+                            return [...prev, newType];
+                        });
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedType = payload.new as InspectionType;
+                        setInspectionTypes(prev => prev.map(t => t.id === updatedType.id ? { ...t, ...updatedType } : t));
+                    } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
-                        setPendingRequests(prev => prev.filter(p => p.id !== deletedId));
+                        setInspectionTypes(prev => prev.filter(t => t.id !== deletedId));
                     }
                 }
             )
@@ -882,8 +958,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const fetchRequestTabContent = useCallback(async (requestId: string, group: 'general' | 'categories' | 'gallery') => {
         let columns = '';
-        if (group === 'general') columns = 'general_notes';
-        else if (group === 'categories') columns = 'category_notes,structured_findings,voice_memos';
+        if (group === 'general') columns = 'general_notes,activity_log';
+        else if (group === 'categories') columns = 'category_notes,structured_findings,voice_memos,activity_log';
         else if (group === 'gallery') columns = 'general_notes,category_notes,attached_files';
         if (!columns) return;
         const { data, error } = await supabase.from('inspection_requests').select(columns).eq('id', requestId).single();
@@ -902,7 +978,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (isLoadingMore || !hasMoreRequests) return;
         setIsLoadingMore(true);
         const { data: nextBatch, error } = await supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, report_stamps, attached_files, payment_note, split_payment_details, inspection_data')
+            .select(LIGHTWEIGHT_REQUEST_COLUMNS)
             .order('created_at', { ascending: false })
             .range(requestsOffset, requestsOffset + REQUESTS_PAGE_SIZE - 1);
         if (!error && nextBatch) {
@@ -1016,7 +1092,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if ((exactOnly && isNumericQuery) || (!exactOnly && isNumericQuery && cleanQuery.length <= 8 && !isTenDigits)) {
                 const { data, error } = await supabase
                     .from('inspection_requests')
-                    .select('*')
+                    .select(LIGHTWEIGHT_REQUEST_COLUMNS)
                     .eq('request_number', Number(cleanQuery))
                     .order('created_at', { ascending: false });
 
@@ -1203,7 +1279,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (requestOrConditions.length > 0) {
                 const { data: relatedRequests, error: reqError } = await supabase
                     .from('inspection_requests')
-                    .select('*')
+                    .select(LIGHTWEIGHT_REQUEST_COLUMNS)
                     .or(requestOrConditions.join(','))
                     .order('created_at', { ascending: false })
                     .limit(50);
@@ -2234,8 +2310,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
-        requests, pendingRequests, addPendingRequest, updatePendingRequest, deletePendingRequest, convertPendingToOfficialRequest, clients, cars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
-        loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, clearSearchedRequests, searchedRequests,
+        requests, setRequests, pendingRequests, addPendingRequest, updatePendingRequest, deletePendingRequest, convertPendingToOfficialRequest, clients, setClients, cars, setCars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
+        loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, clearSearchedRequests, searchedRequests, setSearchedRequests,
         searchQuery, setSearchQuery, highlightedRequestId, triggerHighlight,
         customFindingCategories, predefinedFindings, selectedRequestId, setSelectedRequestId, selectedClientId, setSelectedClientId,
         authUser, setAuthUser, login, logout, updateOwnPassword, settings, updateSettings, addRequest, addRequestOptimized, updateRequest, deleteRequest, deleteRequestsBatch,
@@ -2277,7 +2353,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsCreatingRequest,
         isSettingsLoaded,
         setIsSettingsLoaded,
-        isInitializedFromCache
+        isInitializedFromCache,
+        ensureEntitiesLoaded,
+        refreshEntitiesForRequests,
+        onlineEmployeeIds,
+        onlineStaffMap,
+        lastSeenStaffMap,
+        activeStaffAlert,
+        dismissActiveStaffAlert
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

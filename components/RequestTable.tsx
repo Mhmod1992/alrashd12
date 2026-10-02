@@ -258,8 +258,8 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
 }) => {
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
-    deleteRequest, deletePendingRequest, addNotification, can, updateRequest, createActivityLog,
-    brokers
+    deleteRequest, deletePendingRequest, updatePendingRequest, addNotification, can, updateRequest, createActivityLog,
+    brokers, ensureEntitiesLoaded
   } = useAppContext();
 
   const [activeBrokerMenuId, setActiveBrokerMenuId] = useState<string | null>(null);
@@ -485,6 +485,9 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
 
 
 
+  const missingClientIdsRef = useRef<Set<string>>(new Set());
+  const missingCarIdsRef = useRef<Set<string>>(new Set());
+
   const getClientInfo = (clientId: string, req?: InspectionRequest) => {
     const rawPending = (req as any)?._rawPending;
     if (rawPending) {
@@ -500,6 +503,10 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
         phone: client.phone || '',
       };
     }
+    if (clientId && req && !missingClientIdsRef.current.has(clientId)) {
+      missingClientIdsRef.current.add(clientId);
+      ensureEntitiesLoaded([req]);
+    }
     return {
       name: 'غير معروف',
       phone: '',
@@ -508,6 +515,10 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
   
   const getCarInfo = (carId: string, req?: InspectionRequest) => {
     const car = cars.find(c => c.id === carId);
+    if (carId && !car && req && !missingCarIdsRef.current.has(carId)) {
+      missingCarIdsRef.current.add(carId);
+      ensureEntitiesLoaded([req]);
+    }
     const snap = req?.car_snapshot;
 
     const makeObj = car ? carMakes.find(m => m.id === car.make_id) : undefined;

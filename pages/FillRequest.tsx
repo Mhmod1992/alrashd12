@@ -64,7 +64,8 @@ export const FillRequest: React.FC = () => {
         deleteImage, can, settings, goBack, showConfirmModal, createActivityLog,
         fetchRequestTabContent, fetchFullRequestForSave, setIsFocusMode,
         hasUnsavedChanges, setHasUnsavedChanges, unreadMessagesCount, setIsMailboxOpen, technicians, employees,
-        fetchAndUpdateSingleRequest, sendWhatsAppMessage, whatsappApiStatus
+        fetchAndUpdateSingleRequest, sendWhatsAppMessage, whatsappApiStatus,
+        setRequests, setSearchedRequests
     } = useAppContext();
 
     const focusRingClass = `focus:ring-${settings.design === 'classic' ? 'teal' : settings.design === 'glass' ? 'indigo' : 'blue'}-500`;
@@ -205,7 +206,7 @@ export const FillRequest: React.FC = () => {
     }, [requests, searchedRequests, selectedRequestId]);
 
     useEffect(() => {
-        if (selectedRequestId && !request && fetchAttemptedRef.current !== selectedRequestId) {
+        if (selectedRequestId && (!request || !request.category_notes || !request.activity_log) && fetchAttemptedRef.current !== selectedRequestId) {
             fetchAttemptedRef.current = selectedRequestId;
             setIsFetchingRequest(true);
             fetchAndUpdateSingleRequest(selectedRequestId).finally(() => {
@@ -912,6 +913,21 @@ export const FillRequest: React.FC = () => {
     }, [generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog]);
 
     const handleServerUpdate = useCallback((serverRequest: InspectionRequest) => {
+        // Update root request fields (status, inspection_type_id, etc.) in global state immediately
+        if (serverRequest && serverRequest.id) {
+            setRequests(prev => {
+                const exists = prev.some(r => r.id === serverRequest.id);
+                if (exists) {
+                    return prev.map(r => r.id === serverRequest.id ? { ...r, ...serverRequest } : r);
+                }
+                return [serverRequest, ...prev];
+            });
+            setSearchedRequests(prev => {
+                if (!prev) return null;
+                return prev.map(r => r.id === serverRequest.id ? { ...r, ...serverRequest } : r);
+            });
+        }
+
         // --- PREVENT SYNC WARS: Skip sync if user just interacted ---
         if (Date.now() - lastInteractionRef.current < 2000) {
             return;
@@ -994,7 +1010,7 @@ export const FillRequest: React.FC = () => {
             return prev;
         });
 
-    }, []);
+    }, [setRequests, setSearchedRequests]);
 
     // --- REALTIME SUBSCRIPTION ---
     useEffect(() => {

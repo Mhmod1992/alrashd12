@@ -9,7 +9,7 @@ import {
     FinancialStats
 } from '../../types';
 import { OnlineStaffInfo, ActiveStaffAlert } from '../types';
-import { REQUESTS_PAGE_SIZE } from '../constants';
+import { REQUESTS_PAGE_SIZE, LIGHTWEIGHT_REQUEST_COLUMNS } from '../constants';
 import { uuidv4, getCurrentShiftRange } from '../../lib/utils';
 
 const getCachedMaster = <T>(key: string): T[] => {
@@ -55,6 +55,10 @@ export const useDataScope = (
 
     const [clients, setClients] = useState<Client[]>([]);
     const [cars, setCars] = useState<Car[]>([]);
+    const clientsRef = useRef(clients);
+    useEffect(() => { clientsRef.current = clients; }, [clients]);
+    const carsRef = useRef(cars);
+    useEffect(() => { carsRef.current = cars; }, [cars]);
 
     const [carMakes, setCarMakes] = useState<CarMake[]>(() => getCachedMaster<CarMake>('car_makes'));
     const [carModels, setCarModels] = useState<CarModel[]>([]);
@@ -130,7 +134,7 @@ export const useDataScope = (
 
             const results = await Promise.all([
                 supabase.from('inspection_requests')
-                    .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps, payment_note, split_payment_details, inspection_data')
+                    .select(LIGHTWEIGHT_REQUEST_COLUMNS)
                     .gte('created_at', shiftStartIso)
                     .lt('created_at', shiftEndIso)
                     .order('created_at', { ascending: false })
@@ -285,11 +289,14 @@ export const useDataScope = (
     const ensureEntitiesLoaded = useCallback(async (fetchedRequests: InspectionRequest[]) => {
         if (!fetchedRequests || fetchedRequests.length === 0) return;
 
+        const currentClients = clientsRef.current.length > 0 ? clientsRef.current : clients;
+        const currentCars = carsRef.current.length > 0 ? carsRef.current : cars;
+
         const clientIdsToFetch = Array.from(new Set(fetchedRequests.map(r => r.client_id)))
-            .filter(id => id && !clients.some(c => c.id === id)) as string[];
+            .filter(id => id && !currentClients.some(c => c.id === id)) as string[];
 
         const carIdsToFetch = Array.from(new Set(fetchedRequests.map(r => r.car_id)))
-            .filter(id => id && !cars.some(c => c.id === id)) as string[];
+            .filter(id => id && !currentCars.some(c => c.id === id)) as string[];
 
         const CHUNK_SIZE = 50; // Use small chunks to keep URLs short
 
@@ -317,7 +324,9 @@ export const useDataScope = (
                             setClients(prev => {
                                 const existingIds = new Set(prev.map(c => c.id));
                                 const newClients = data.filter(c => !existingIds.has(c.id));
-                                return [...prev, ...newClients];
+                                const updated = [...prev, ...newClients];
+                                clientsRef.current = updated;
+                                return updated;
                             });
                         }
                     })
@@ -332,7 +341,9 @@ export const useDataScope = (
                             setCars(prev => {
                                 const existingIds = new Set(prev.map(c => c.id));
                                 const newCars = data.filter(c => !existingIds.has(c.id));
-                                return [...prev, ...newCars];
+                                const updated = [...prev, ...newCars];
+                                carsRef.current = updated;
+                                return updated;
                             });
                         }
                     })
@@ -343,6 +354,68 @@ export const useDataScope = (
             await Promise.all(promises);
         }
     }, [clients, cars]);
+
+    const refreshEntitiesForRequests = useCallback(async (requestsToRefresh: InspectionRequest[]) => {
+        if (!requestsToRefresh || requestsToRefresh.length === 0) return;
+
+        const clientIds = Array.from(new Set(requestsToRefresh.map(r => r.client_id).filter(Boolean))) as string[];
+        const carIds = Array.from(new Set(requestsToRefresh.map(r => r.car_id).filter(Boolean))) as string[];
+
+        const CHUNK_SIZE = 50;
+        const fetchInChunks = async (ids: string[], table: string, select: string = '*') => {
+            const results: any[] = [];
+            for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+                const chunk = ids.slice(i, i + CHUNK_SIZE);
+                const { data, error } = await supabase.from(table).select(select).in('id', chunk);
+                if (error) {
+                    console.error(`Error fetching ${table} chunk:`, error);
+                    continue;
+                }
+                if (data) results.push(...data);
+            }
+            return results;
+        };
+
+        const promises = [];
+
+        if (clientIds.length > 0) {
+            promises.push(
+                fetchInChunks(clientIds, 'clients', '*, inspection_requests(count)')
+                    .then(data => {
+                        if (data && data.length > 0) {
+                            setClients(prev => {
+                                const map = new Map(prev.map(c => [c.id, c]));
+                                data.forEach(c => map.set(c.id, { ...(map.get(c.id) || {}), ...c }));
+                                const updated = Array.from(map.values());
+                                clientsRef.current = updated;
+                                return updated;
+                            });
+                        }
+                    })
+            );
+        }
+
+        if (carIds.length > 0) {
+            promises.push(
+                fetchInChunks(carIds, 'cars')
+                    .then(data => {
+                        if (data && data.length > 0) {
+                            setCars(prev => {
+                                const map = new Map(prev.map(c => [c.id, c]));
+                                data.forEach(c => map.set(c.id, { ...(map.get(c.id) || {}), ...c }));
+                                const updated = Array.from(map.values());
+                                carsRef.current = updated;
+                                return updated;
+                            });
+                        }
+                    })
+            );
+        }
+
+        if (promises.length > 0) {
+            await Promise.all(promises);
+        }
+    }, []);
 
     const markNotificationAsRead = useCallback(async (id: string) => {
         setAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
@@ -400,9 +473,8 @@ export const useDataScope = (
     }, [ensureEntitiesLoaded]);
 
     const fetchRequestsByDateRange = useCallback(async (startDate: string, endDate: string, paymentType?: PaymentType): Promise<InspectionRequest[]> => {
-        // Added 'attached_files' and 'inspection_data' to select list
         let query = supabase.from('inspection_requests')
-            .select('id, request_number, client_id, car_id, car_snapshot, inspection_type_id, payment_type, price, status, created_at, employee_id, broker, activity_log, technician_assignments, updated_at, attached_files, report_stamps, payment_note, split_payment_details, inspection_data')
+            .select(LIGHTWEIGHT_REQUEST_COLUMNS)
             .gte('created_at', startDate)
             .lte('created_at', endDate);
         
@@ -627,6 +699,7 @@ export const useDataScope = (
         fetchCarModelsByMake,
         fetchCarMakes,
         ensureEntitiesLoaded,
+        refreshEntitiesForRequests,
         createActivityLog,
         addNotification,
         markNotificationAsRead,

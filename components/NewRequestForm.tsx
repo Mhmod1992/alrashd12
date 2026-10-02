@@ -1558,7 +1558,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             const carSnapshot: CarSnapshot = {
                 make_ar: make.name_ar, make_en: make.name_en,
                 model_ar: model.name_ar, model_en: model.name_en,
-                year: carYear
+                year: carYear,
+                plate_number: plateNumberArabic || undefined,
+                plate_number_en: plateNumberEnglish || undefined,
+                vin: vin || undefined
             };
 
             const newStatus = isReceptionistMode ? RequestStatus.WAITING_PAYMENT : (isEditMode && initialData ? initialData.status : RequestStatus.NEW);

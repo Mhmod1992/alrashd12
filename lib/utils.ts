@@ -424,12 +424,24 @@ export const cleanJsonString = (str: string): string => {
     return str.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
 };
 
-// Helper function to estimate size
+// Helper function to estimate size safely
 export const estimateObjectSize = (obj: any): number => {
     if (obj === null || obj === undefined) return 0;
-    // A rough estimation by stringifying the object.
-    // Not perfectly accurate due to JS object overhead, but good enough for this purpose.
-    return new Blob([JSON.stringify(obj)]).size;
+    try {
+        const seen = new WeakSet();
+        const jsonStr = JSON.stringify(obj, (key, value) => {
+            if (typeof value === 'object' && value !== null) {
+                if (seen.has(value)) {
+                    return; // omit circular reference
+                }
+                seen.add(value);
+            }
+            return value;
+        });
+        return new Blob([jsonStr || '']).size;
+    } catch {
+        return 0;
+    }
 };
 
 // Helper function to format bytes into a human-readable string

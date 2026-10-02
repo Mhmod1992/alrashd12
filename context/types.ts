@@ -54,6 +54,7 @@ export interface AppContextType {
     searchRequestByNumber: (query: string | number, exactOnly?: boolean) => Promise<void>;
     clearSearchedRequests: () => void;
     searchedRequests: InspectionRequest[] | null;
+    setSearchedRequests: React.Dispatch<React.SetStateAction<InspectionRequest[] | null>>;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     highlightedRequestId: string | null;
@@ -292,6 +293,8 @@ export interface AppContextType {
     lastUpdatedCar?: Car | null;
     setLastUpdatedCar?: (car: Car | null) => void;
     broadcastEvent?: (event: string, payload: any) => void;
+    ensureEntitiesLoaded: (requests: InspectionRequest[]) => Promise<void>;
+    refreshEntitiesForRequests: (requests: InspectionRequest[]) => Promise<void>;
     isSettingsLoaded: boolean;
     setIsSettingsLoaded: (loaded: boolean) => void;
     isInitializedFromCache?: boolean;

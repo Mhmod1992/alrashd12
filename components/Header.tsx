@@ -477,7 +477,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                             className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${notificationTab === 'online' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
                         >
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span>النشطون ({onlineEmployeeIds.size})</span>
+                            <span>النشطون ({onlineEmployeeIds?.size || 0})</span>
                         </button>
                     </div>
                     
@@ -485,16 +485,16 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                         {notificationTab === 'online' ? (
                             <div className="p-2 space-y-1">
                                 {[...employees.filter(e => e.is_active)].sort((a, b) => {
-                                    const aOnline = onlineEmployeeIds.has(a.id) ? 1 : 0;
-                                    const bOnline = onlineEmployeeIds.has(b.id) ? 1 : 0;
+                                    const aOnline = onlineEmployeeIds?.has(a.id) ? 1 : 0;
+                                    const bOnline = onlineEmployeeIds?.has(b.id) ? 1 : 0;
                                     if (aOnline !== bOnline) return bOnline - aOnline; // Online first
                                     return a.name.localeCompare(b.name, 'ar');
                                 }).map(emp => {
-                                    const isEmpOnline = onlineEmployeeIds.has(emp.id);
-                                    const staffInfo = onlineStaffMap[emp.id];
+                                    const isEmpOnline = !!onlineEmployeeIds?.has(emp.id);
+                                    const staffInfo = onlineStaffMap?.[emp.id];
                                     const durationText = isEmpOnline 
                                         ? formatOnlineDuration(staffInfo?.online_at)
-                                        : formatOfflineDuration(lastSeenStaffMap[emp.id]);
+                                        : formatOfflineDuration(lastSeenStaffMap?.[emp.id]);
 
                                     return (
                                         <div 
