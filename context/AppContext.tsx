@@ -836,7 +836,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, []);
 
-    const verifyAndSyncInternetStatus = useCallback(async (isForced: boolean = false) => {
+    const verifyAndSyncInternetStatus = useCallback(async (isForced: boolean = false, isSilent: boolean = true) => {
         if (isProbingRef.current) return;
         isProbingRef.current = true;
 
@@ -849,39 +849,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (wasOffline || isForced) {
                     isOnlineRef.current = true;
                     setIsOnline(true);
-                    addNotification({
-                        title: 'تم استعادة الاتصال بالإنترنت',
-                        message: 'الإنترنت متصل الآن، وتم تحديث جدول البيانات تلقائياً.',
-                        type: 'success'
-                    });
+                    
+                    if (!isSilent && wasOffline) {
+                        addNotification({
+                            title: 'تم استعادة الاتصال بالإنترنت',
+                            message: 'الإنترنت متصل الآن.',
+                            type: 'success'
+                        });
+                    }
 
                     if (authUserRef.current) {
                         supabase.auth.startAutoRefresh();
-                        retryConnection();
-                        // Automatically simulate manual table refresh behavior
-                        await fetchRequests();
+                        if (realtimeStatusRef.current === 'disconnected') {
+                            retryConnection();
+                        }
                     }
                 }
             } else {
                 consecutiveFailuresRef.current += 1;
-                // Require 2 consecutive failed probes before flagging offline
-                if (consecutiveFailuresRef.current >= 2 || !navigator.onLine) {
+                // Require at least 3 consecutive failed probes AND navigator.onLine being false before flagging offline
+                if (consecutiveFailuresRef.current >= 3 && !navigator.onLine) {
                     if (isOnlineRef.current) {
                         isOnlineRef.current = false;
                         setIsOnline(false);
                         setRealtimeStatus('disconnected');
-                        addNotification({
-                            title: 'فقد الاتصال بالإنترنت',
-                            message: 'تعذر الاتصال بالشبكة الخارجية، أنت تعمل الآن في وضع عدم الاتصال.',
-                            type: 'warning'
-                        });
+                        if (!isSilent) {
+                            addNotification({
+                                title: 'فقد الاتصال بالإنترنت',
+                                message: 'تعذر الاتصال بالشبكة الخارجية، أنت تعمل الآن في وضع عدم الاتصال.',
+                                type: 'warning'
+                            });
+                        }
                     }
                 }
             }
         } finally {
             isProbingRef.current = false;
         }
-    }, [checkRealInternetConnection, addNotification, retryConnection, fetchRequests]);
+    }, [checkRealInternetConnection, addNotification, retryConnection]);
 
     // Network Status & Reconnection Effect
     useEffect(() => {
@@ -902,34 +907,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     if (realtimeStatusRef.current === 'disconnected') {
                         retryConnection();
                     }
-                    // Trigger real internet probe and table refresh
-                    verifyAndSyncInternetStatus();
+                    // Silent background probe without disruptive alerts or table refetches
+                    verifyAndSyncInternetStatus(false, true);
                 }
             }
         };
 
         const handleOnline = () => {
-            verifyAndSyncInternetStatus(true);
+            verifyAndSyncInternetStatus(true, true);
         };
 
         const handleOffline = () => {
             isOnlineRef.current = false;
             setIsOnline(false);
             setRealtimeStatus('disconnected');
-            addNotification({ title: 'فقد الاتصال', message: 'لا يوجد اتصال بالشبكة.', type: 'warning' });
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
-        // Active probe every 15 seconds to catch router connection without internet
+        // Active background probe every 30 seconds
         const probeInterval = setInterval(() => {
-            verifyAndSyncInternetStatus();
-        }, 15000);
+            verifyAndSyncInternetStatus(false, true);
+        }, 30000);
 
-        // Initial background probe on mount
-        verifyAndSyncInternetStatus();
+        // Initial background probe on mount (silent)
+        verifyAndSyncInternetStatus(false, true);
 
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -937,7 +941,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             window.removeEventListener('offline', handleOffline);
             clearInterval(probeInterval);
         };
-    }, [verifyAndSyncInternetStatus, retryConnection, addNotification, logout]);
+    }, [verifyAndSyncInternetStatus, retryConnection, logout]);
 
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
