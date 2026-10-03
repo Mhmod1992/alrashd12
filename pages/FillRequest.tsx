@@ -199,7 +199,7 @@ export const FillRequest: React.FC = () => {
         setSessionEgress(prev => prev + size);
     }, []);
 
-    const [isFetchingRequest, setIsFetchingRequest] = useState(false);
+    const [isFetchingRequest, setIsFetchingRequest] = useState(true);
     const fetchAttemptedRef = useRef<string | null>(null);
 
     const request = useMemo(() => {
@@ -207,14 +207,14 @@ export const FillRequest: React.FC = () => {
     }, [requests, searchedRequests, selectedRequestId]);
 
     useEffect(() => {
-        if (selectedRequestId && (!request || !request.category_notes || !request.activity_log) && fetchAttemptedRef.current !== selectedRequestId) {
+        if (selectedRequestId && fetchAttemptedRef.current !== selectedRequestId) {
             fetchAttemptedRef.current = selectedRequestId;
             setIsFetchingRequest(true);
             fetchAndUpdateSingleRequest(selectedRequestId).finally(() => {
                 if (isMounted.current) setIsFetchingRequest(false);
             });
         }
-    }, [selectedRequestId, request, fetchAndUpdateSingleRequest]);
+    }, [selectedRequestId, fetchAndUpdateSingleRequest]);
 
     // LOCKED STATE CHECK
     const isLockedByStatus = request?.status === RequestStatus.COMPLETE;
@@ -677,8 +677,8 @@ export const FillRequest: React.FC = () => {
         // Update interaction timestamp to prevent immediate sync from overwriting local state
         lastInteractionRef.current = Date.now();
 
-        // Failsafe: Don't save if we haven't successfully loaded the initial state
-        if (!isInitialDataLoaded) {
+        // Failsafe: Don't save if we haven't successfully loaded the initial state or still fetching
+        if (!isInitialDataLoaded || isFetchingRequest) {
             console.warn("Save aborted: Initial cloud data not loaded yet.");
             return;
         }
@@ -1137,8 +1137,11 @@ export const FillRequest: React.FC = () => {
     useEffect(() => {
         if (!request) return;
 
-        // 1. Initial Load (or Request Change)
-        if (request.id !== prevRequestRef.current?.id) {
+        // 1. Initial Load (or Request Change) OR First Time Full Request Data Arrived From Server
+        const isRequestChange = request.id !== prevRequestRef.current?.id;
+        const isFullDataArrival = (!prevRequestRef.current?.category_notes && request.category_notes !== undefined);
+
+        if (isRequestChange || isFullDataArrival) {
             setActivityLog(request.activity_log || []);
 
             // Try to load from Local Storage first (Persistence)
@@ -1195,14 +1198,19 @@ export const FillRequest: React.FC = () => {
 
             setVoiceMemos(request.voice_memos || {});
 
-            const defTab = getDefaultTab();
-            setActiveTab(defTab);
-            setActiveFindingGroup(null);
-            setLoadedTabs(new Set());
-            setCategorySubTab('main');
+            if (isRequestChange) {
+                const defTab = getDefaultTab();
+                setActiveTab(defTab);
+                setActiveFindingGroup(null);
+                setLoadedTabs(new Set());
+                setCategorySubTab('main');
+                setIsFindingsSectionOpen(true);
+            }
+
             setHasUnsavedChanges(false);
-            setIsFindingsSectionOpen(true);
-            setIsInitialDataLoaded(true);
+            if (request.category_notes !== undefined || request.general_notes !== undefined) {
+                setIsInitialDataLoaded(true);
+            }
 
             prevRequestRef.current = request;
             return;
@@ -3788,8 +3796,11 @@ export const FillRequest: React.FC = () => {
                 className="flex-1 overflow-y-auto bg-[#f8fafc] dark:bg-slate-800 p-4 sm:p-6 pb-4 relative scroll-smooth overflow-x-hidden"
                 style={{ paddingBottom: `${footerHeight + 180}px` }}
             >
-                {isLoadingTab ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-500"><RefreshCwIcon className={`w-10 h-10 animate-spin text-${themeColor}-500 mb-4`} /><p>جاري تحميل البيانات...</p></div>
+                {isLoadingTab || (isFetchingRequest && !isInitialDataLoaded) ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+                        <RefreshCwIcon className={`w-10 h-10 animate-spin text-${themeColor}-500 mb-4`} />
+                        <p className="font-bold text-sm">جاري جلب ملاحظات وبيانات الطلب من السيرفر...</p>
+                    </div>
                 ) : (
                     <div className="max-w-6xl mx-auto w-full">
                         {activeTab === 'gallery' && <ImageGallery images={allImages} onImageClick={openImagePreview} />}

@@ -110,7 +110,7 @@ export interface AppContextType {
         reservationId?: string | null;
     }) => Promise<InspectionRequest>;
     updateRequest: (updatedRequest: Partial<InspectionRequest> & { id: string }) => Promise<void>;
-    fetchAndUpdateSingleRequest: (requestId: string) => Promise<void>;
+    fetchAndUpdateSingleRequest: (requestId: string) => Promise<InspectionRequest | null>;
     fetchRequestTabContent: (requestId: string, group: 'general' | 'categories' | 'gallery') => Promise<void>;
     fetchFullRequestForSave: (requestId: string) => Promise<InspectionRequest | null>;
     updateRequestAndAssociatedData: (payload: {

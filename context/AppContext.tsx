@@ -958,11 +958,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
-    const fetchAndUpdateSingleRequest = useCallback(async (requestId: string) => {
+    const fetchAndUpdateSingleRequest = useCallback(async (requestId: string): Promise<InspectionRequest | null> => {
         const { data: req, error } = await supabase.from('inspection_requests').select('*').eq('id', requestId).single();
         if (error && !req) {
             setRequests(prev => prev.filter(r => r.id !== requestId));
-            return;
+            return null;
         }
         if (req) {
             setRequests(prev => {
@@ -970,7 +970,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 return exists ? prev.map(r => r.id === requestId ? { ...r, ...req } : r) : [req, ...prev];
             });
             await ensureEntitiesLoaded([req]);
+            return req as InspectionRequest;
         }
+        return null;
     }, [ensureEntitiesLoaded, setRequests]);
 
     const fetchRequestTabContent = useCallback(async (requestId: string, group: 'general' | 'categories' | 'gallery') => {
