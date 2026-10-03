@@ -77,7 +77,8 @@ const Requests: React.FC = () => {
         fetchRequestByRequestNumber, reservations, updateReservationStatus, addRequest, fetchReservations,
         searchClients, addClient, addCar, searchCarMakes, searchCarModels, fetchCarModelsByMake,
         lastRemoteDeleteId, fetchRequests, fetchRequestsCount, triggerHighlight, searchReservations,
-        showNewRequestSuccessModal, createActivityLog, ensureEntitiesLoaded, refreshEntitiesForRequests
+        showNewRequestSuccessModal, createActivityLog, ensureEntitiesLoaded, refreshEntitiesForRequests,
+        lastUpdatedRequest, lastUpdatedClient, lastUpdatedCar, incomingRequest
     } = useAppContext();
 
     const [requestNumberQuery, setRequestNumberQuery] = useState('');
@@ -356,14 +357,20 @@ const Requests: React.FC = () => {
         if (shiftStart.getHours() < 4) shiftStart.setDate(shiftStart.getDate() - 1);
         shiftStart.setHours(4, 0, 0, 0);
 
-        // 1. Update Existing items with latest data from Context requests
+        // 1. Update Existing items with latest authoritative data from Context requests
         newData = newData.map(localItem => {
             const freshItem = requests.find(r => r.id === localItem.id);
             if (freshItem) {
-                const merged = { ...localItem, ...freshItem };
-                if (JSON.stringify(localItem) !== JSON.stringify(merged)) {
+                const statusChanged = freshItem.status && freshItem.status !== localItem.status;
+                const priceChanged = freshItem.price !== undefined && freshItem.price !== localItem.price;
+                const paymentChanged = freshItem.payment_type && freshItem.payment_type !== localItem.payment_type;
+                const employeeChanged = freshItem.employee_id !== undefined && freshItem.employee_id !== localItem.employee_id;
+                const brokerChanged = JSON.stringify(freshItem.broker) !== JSON.stringify(localItem.broker);
+                const updatedTimeChanged = freshItem.updated_at && freshItem.updated_at !== localItem.updated_at;
+
+                if (statusChanged || priceChanged || paymentChanged || employeeChanged || brokerChanged || updatedTimeChanged) {
                     hasChanges = true;
-                    return merged;
+                    return { ...localItem, ...freshItem };
                 }
             }
             return localItem;
@@ -397,6 +404,7 @@ const Requests: React.FC = () => {
                 if (dateB.getHours() < 4) dateB.setHours(dateB.getHours() + 24);
                 return dateB.getTime() - dateA.getTime();
             });
+            moduleCachedServerData = newData;
             setServerFetchedData(newData);
         }
 
@@ -405,141 +413,68 @@ const Requests: React.FC = () => {
     // --- Listen for Remote Deletion Events ---
     useEffect(() => {
         if (lastRemoteDeleteId && serverFetchedData) {
-            setServerFetchedData(prev => prev ? prev.filter(r => r.id !== lastRemoteDeleteId) : null);
+            setServerFetchedData(prev => {
+                const updated = prev ? prev.filter(r => r.id !== lastRemoteDeleteId) : null;
+                moduleCachedServerData = updated;
+                return updated;
+            });
         }
     }, [lastRemoteDeleteId]);
 
-    // --- DIRECT REALTIME LISTENER FOR serverFetchedData ---
-    // This fixes the core issue: requests[] in Context is limited to REQUESTS_PAGE_SIZE entries
-    // (today's shift only). If serverFetchedData contains more requests than what's in requests[],
-    // those extra items never receive Realtime updates. This channel listens directly to DB changes
-    // and patches serverFetchedData without relying on requests[] as an intermediary.
+    // --- DIRECT REALTIME SYNC FOR serverFetchedData FROM CENTRAL APP CONTEXT ---
+    // Instead of opening a redundant separate Realtime channel that duplicates subscriptions
+    // and multiplies Egress bandwidth, we listen directly to the central AppContext events.
     useEffect(() => {
-        if (serverFetchedData === null) return;
+        if (!lastUpdatedRequest) return;
+        if (lastUpdatedRequest.client_id || lastUpdatedRequest.car_id) {
+            refreshEntitiesForRequests([lastUpdatedRequest]);
+        }
+        setServerFetchedData(prev => {
+            if (!prev) {
+                moduleCachedServerData = [lastUpdatedRequest];
+                return [lastUpdatedRequest];
+            }
+            const exists = prev.some(r => r.id === lastUpdatedRequest.id);
+            let updatedList: InspectionRequest[];
+            if (exists) {
+                updatedList = prev.map(r => r.id === lastUpdatedRequest.id ? { ...r, ...lastUpdatedRequest } : r);
+            } else {
+                updatedList = [lastUpdatedRequest, ...prev];
+            }
+            moduleCachedServerData = updatedList;
+            return updatedList;
+        });
+    }, [lastUpdatedRequest, refreshEntitiesForRequests]);
 
-        const pageChannel = supabase
-            .channel(`requests-page-direct-rt-${Date.now()}`)
-            .on('broadcast', { event: 'official_request_change' }, (payload) => {
-                if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
-                    const updatedReq = payload.payload.record as InspectionRequest;
-                    if (updatedReq?.client_id || updatedReq?.car_id) {
-                        refreshEntitiesForRequests([updatedReq]);
-                    }
-                    setServerFetchedData(prev => {
-                        if (!prev) return prev;
-                        return prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r);
-                    });
-                } else if (payload.payload?.action === 'DELETE' && payload.payload?.id) {
-                    const deletedId = payload.payload.id;
-                    setServerFetchedData(prev => prev ? prev.filter(r => r.id !== deletedId) : prev);
-                }
-            })
-            .on('broadcast', { event: 'client_change' }, (payload) => {
-                if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
-                    const updatedClient = payload.payload.record as Client;
-                    setClients(prev => {
-                        const exists = prev.some(c => c.id === updatedClient.id);
-                        if (exists) return prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c);
-                        return [updatedClient, ...prev];
-                    });
-                }
-            })
-            .on('broadcast', { event: 'car_change' }, (payload) => {
-                if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
-                    const updatedCar = payload.payload.record as Car;
-                    setCars(prev => {
-                        const exists = prev.some(c => c.id === updatedCar.id);
-                        if (exists) return prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c);
-                        return [updatedCar, ...prev];
-                    });
-                }
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, (payload) => {
-                if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-                    const updatedClient = payload.new as Client;
-                    setClients(prev => {
-                        const exists = prev.some(c => c.id === updatedClient.id);
-                        if (exists) return prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c);
-                        return [updatedClient, ...prev];
-                    });
-                }
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'cars' }, (payload) => {
-                if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-                    const updatedCar = payload.new as Car;
-                    setCars(prev => {
-                        const exists = prev.some(c => c.id === updatedCar.id);
-                        if (exists) return prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c);
-                        return [updatedCar, ...prev];
-                    });
-                }
-            })
-            .on(
-                'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'inspection_requests' },
-                (payload) => {
-                    const updatedReq = payload.new as InspectionRequest;
-                    if (updatedReq?.client_id || updatedReq?.car_id) {
-                        refreshEntitiesForRequests([updatedReq]);
-                    }
-                    setServerFetchedData(prev => {
-                        if (!prev) return prev;
-                        const exists = prev.some(r => r.id === updatedReq.id);
-                        if (!exists) return prev;
-                        return prev.map(r =>
-                            r.id === updatedReq.id
-                                ? { ...r, ...updatedReq }
-                                : r
-                        );
-                    });
-                }
-            )
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'inspection_requests' },
-                (payload) => {
-                    const newReq = payload.new as InspectionRequest;
-                    if (newReq?.client_id || newReq?.car_id) {
-                        ensureEntitiesLoaded([newReq]);
-                    }
-                    // Only add if not already present (requests[] useEffect handles most INSERTs,
-                    // but this catches any that slip through)
-                    setServerFetchedData(prev => {
-                        if (!prev) return prev;
-                        if (prev.some(r => r.id === newReq.id)) return prev;
+    useEffect(() => {
+        if (!incomingRequest) return;
+        if (incomingRequest.client_id || incomingRequest.car_id) {
+            ensureEntitiesLoaded([incomingRequest]);
+        }
+        setServerFetchedData(prev => {
+            if (!prev) return [incomingRequest];
+            if (prev.some(r => r.id === incomingRequest.id)) return prev;
+            return [incomingRequest, ...prev];
+        });
+    }, [incomingRequest, ensureEntitiesLoaded]);
 
-                        // For 'today' filter: only add if within current shift
-                        if (dateFilter === 'today') {
-                            const now = new Date();
-                            const shiftStart = new Date(now);
-                            if (shiftStart.getHours() < 4) shiftStart.setDate(shiftStart.getDate() - 1);
-                            shiftStart.setHours(4, 0, 0, 0);
-                            if (new Date(newReq.created_at).getTime() < shiftStart.getTime()) return prev;
-                        }
+    useEffect(() => {
+        if (!lastUpdatedClient) return;
+        setClients(prev => {
+            const exists = prev.some(c => c.id === lastUpdatedClient.id);
+            if (exists) return prev.map(c => c.id === lastUpdatedClient.id ? { ...c, ...lastUpdatedClient } : c);
+            return [lastUpdatedClient, ...prev];
+        });
+    }, [lastUpdatedClient, setClients]);
 
-                        return [newReq, ...prev];
-                    });
-                }
-            )
-            .on(
-                'postgres_changes',
-                { event: 'DELETE', schema: 'public', table: 'inspection_requests' },
-                (payload) => {
-                    const deletedId = payload.old?.id;
-                    if (!deletedId) return;
-                    setServerFetchedData(prev =>
-                        prev ? prev.filter(r => r.id !== deletedId) : prev
-                    );
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(pageChannel);
-        };
-    // Re-subscribe only when serverFetchedData goes from null → populated (filter change)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [serverFetchedData !== null, dateFilter]);
+    useEffect(() => {
+        if (!lastUpdatedCar) return;
+        setCars(prev => {
+            const exists = prev.some(c => c.id === lastUpdatedCar.id);
+            if (exists) return prev.map(c => c.id === lastUpdatedCar.id ? { ...c, ...lastUpdatedCar } : c);
+            return [lastUpdatedCar, ...prev];
+        });
+    }, [lastUpdatedCar, setCars]);
 
     // --- DATABASE TOTAL COUNT FETCHING ---
     useEffect(() => {
@@ -802,6 +737,7 @@ const Requests: React.FC = () => {
 
         try {
             const data = await fetchRequestsByDateRange(start, end, paymentType);
+            moduleCachedServerData = data;
             setServerFetchedData(data);
         } catch (error) {
             console.error("Date fetch failed", error);

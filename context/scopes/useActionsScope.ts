@@ -135,8 +135,24 @@ export const useActionsScope = (
         const { error } = await supabase.from('inspection_requests').update(updatedRequest).eq('id', updatedRequest.id);
         if (error) throw error;
 
-        // Broadcast to all other devices in real-time immediately via active channel
-        broadcastEvent('official_request_change', { action: 'UPDATE', record: merged });
+        // Broadcast lean request change to all other devices in real-time immediately via active channel
+        // Only essential metadata fields are sent (~200 bytes) without heavy findings/notes/logs to protect egress bandwidth
+        const leanRecord: Partial<InspectionRequest> & { id: string } = {
+            id: merged.id,
+            request_number: merged.request_number,
+            status: merged.status,
+            price: merged.price,
+            payment_type: merged.payment_type,
+            payment_note: merged.payment_note,
+            split_payment_details: merged.split_payment_details,
+            client_id: merged.client_id,
+            car_id: merged.car_id,
+            car_snapshot: merged.car_snapshot,
+            employee_id: merged.employee_id,
+            broker: merged.broker,
+            updated_at: merged.updated_at || new Date().toISOString()
+        };
+        broadcastEvent('official_request_change', { action: 'UPDATE', record: leanRecord });
 
         // Sync to TV after update ONLY if status is being changed
         if ('status' in updatedRequest) {
@@ -300,20 +316,12 @@ export const useActionsScope = (
         // Sync to TV after creation
         syncToTvDisplay(newRequest);
 
-        // Broadcast to all other devices in real-time immediately
-        try {
-            supabase.channel('public:inspection_requests').send({
-                type: 'broadcast',
-                event: 'official_request_change',
-                payload: { action: 'INSERT', record: newRequest }
-            });
-        } catch (bErr) {
-            console.warn("Broadcast official request insert failed:", bErr);
-        }
+        // Broadcast to all other devices in real-time immediately via active channel
+        broadcastEvent('official_request_change', { action: 'INSERT', record: newRequest });
         
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return newRequest;
-    }, [setRequests, addNotification, syncToTvDisplay]);
+    }, [setRequests, addNotification, syncToTvDisplay, broadcastEvent]);
 
     // --- PENDING REQUESTS ---
     const addPendingRequest = useCallback(async (payload: Omit<PendingRequest, 'id' | 'pending_number' | 'created_at'>): Promise<PendingRequest> => {
@@ -469,16 +477,8 @@ export const useActionsScope = (
             setRequests(prev => prev.map(r => r.id === officialRequest.id ? { ...r, inspection_data: updatedInspectionData, employee_id: creatorId } : r));
         }
 
-        // Broadcast to all other devices in real-time immediately with the full finalized official request
-        try {
-            supabase.channel('public:inspection_requests').send({
-                type: 'broadcast',
-                event: 'official_request_change',
-                payload: { action: 'INSERT', record: officialRequest }
-            });
-        } catch (bErr) {
-            console.warn("Broadcast official request failed:", bErr);
-        }
+        // Broadcast to all other devices in real-time immediately via active channel
+        broadcastEvent('official_request_change', { action: 'INSERT', record: officialRequest });
 
         return officialRequest;
     }, [addRequestOptimized, authUser, employees, setPendingRequests, setRequests, broadcastEvent]);

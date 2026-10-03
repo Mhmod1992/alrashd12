@@ -153,6 +153,7 @@ export const FillRequest: React.FC = () => {
             isMounted.current = false;
             setIsFocusMode(false);
             setHasUnsavedChanges(false);
+            if (syncDelayTimeoutRef.current) clearTimeout(syncDelayTimeoutRef.current);
         };
     }, [selectedRequestId, setIsFocusMode, setHasUnsavedChanges]);
 
@@ -438,6 +439,14 @@ export const FillRequest: React.FC = () => {
     const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
 
     const debounceTimeoutRef = useRef<number | null>(null);
+    const syncDelayTimeoutRef = useRef<number | null>(null);
+    const pendingServerUpdateRef = useRef<InspectionRequest | null>(null);
+    // Tracks note IDs created or edited locally on this device within the last 30s.
+    // Protects pending/just-saved notes from being wiped by delayed out-of-order Realtime events.
+    const recentlyAddedNoteIdsRef = useRef<Map<string, number>>(new Map());
+    // Tracks note IDs explicitly deleted on this device.
+    // Prevents zombie/stale events from resurrecting notes deleted by this user.
+    const deletedNoteIdsRef = useRef<Map<string, number>>(new Map());
     const inspectionDataRef = useRef({ generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog });
     const prevRequestRef = useRef<InspectionRequest | undefined>(undefined);
 
@@ -651,7 +660,12 @@ export const FillRequest: React.FC = () => {
     useEffect(() => { 
         latestRequestRef.current = request; 
         if (request?.inspection_data?.field_tested_categories) {
-            setFieldTestedCategories(request.inspection_data.field_tested_categories);
+            setFieldTestedCategories(prev => {
+                if (JSON.stringify(prev) === JSON.stringify(request.inspection_data?.field_tested_categories)) {
+                    return prev;
+                }
+                return request.inspection_data?.field_tested_categories || {};
+            });
         }
     }, [request]);
 
@@ -818,6 +832,21 @@ export const FillRequest: React.FC = () => {
             updates.voice_memos = cleanVoiceMemos(localVoiceMemos); 
         }
 
+        // Avoid unnecessary network calls if no actual data changed
+        const hasStatusChange = !!(finalStatus && finalStatus !== currentRequest.status);
+        const hasGeneralChange = loadedTabs.has('general') && cleanDataForComparison(updates.general_notes) !== cleanDataForComparison(currentRequest.general_notes || []);
+        const hasCategoryChange = loadedTabs.has('categories') && (
+            cleanDataForComparison(updates.category_notes) !== cleanDataForComparison(currentRequest.category_notes || {}) ||
+            cleanDataForComparison(updates.structured_findings) !== cleanDataForComparison(currentRequest.structured_findings || []) ||
+            cleanDataForComparison(updates.voice_memos) !== cleanDataForComparison(currentRequest.voice_memos || {})
+        );
+        const hasLogChange = (newLogs.length > 0) || !!overrides?.activityLog;
+
+        if (!hasStatusChange && !hasGeneralChange && !hasCategoryChange && !hasLogChange && !overrides) {
+            setHasUnsavedChanges(false);
+            return;
+        }
+
         const payloadSize = estimateObjectSize(updates);
         trackDataTransfer(payloadSize);
 
@@ -891,8 +920,10 @@ export const FillRequest: React.FC = () => {
     }, [createActivityLog, debouncedSave, isLocked]);
 
 
+    const statusUpdateAttemptedRef = useRef<string | null>(null);
     useEffect(() => {
-        if (request && request.status === RequestStatus.NEW && can('fill_requests')) {
+        if (request && request.status === RequestStatus.NEW && can('fill_requests') && statusUpdateAttemptedRef.current !== request.id) {
+            statusUpdateAttemptedRef.current = request.id;
             const newLog = createActivityLog('تغيير حالة الطلب', 'تم تغيير الحالة من "جديد" إلى "قيد التنفيذ"');
             if (newLog) {
                 const updates = {
@@ -906,7 +937,7 @@ export const FillRequest: React.FC = () => {
                 });
             }
         }
-    }, [request, can, updateRequest, createActivityLog, addNotification]);
+    }, [request?.id, request?.status, can, updateRequest, createActivityLog, addNotification]);
 
     useEffect(() => {
         inspectionDataRef.current = { generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog };
@@ -916,7 +947,11 @@ export const FillRequest: React.FC = () => {
         // Update root request fields (status, inspection_type_id, etc.) in global state immediately
         if (serverRequest && serverRequest.id) {
             setRequests(prev => {
-                const exists = prev.some(r => r.id === serverRequest.id);
+                const existing = prev.find(r => r.id === serverRequest.id);
+                if (existing && existing.updated_at === serverRequest.updated_at && existing.status === serverRequest.status) {
+                    return prev;
+                }
+                const exists = !!existing;
                 if (exists) {
                     return prev.map(r => r.id === serverRequest.id ? { ...r, ...serverRequest } : r);
                 }
@@ -924,12 +959,25 @@ export const FillRequest: React.FC = () => {
             });
             setSearchedRequests(prev => {
                 if (!prev) return null;
+                const existing = prev.find(r => r.id === serverRequest.id);
+                if (existing && existing.updated_at === serverRequest.updated_at && existing.status === serverRequest.status) {
+                    return prev;
+                }
                 return prev.map(r => r.id === serverRequest.id ? { ...r, ...serverRequest } : r);
             });
         }
 
-        // --- PREVENT SYNC WARS: Skip sync if user just interacted ---
+        // --- PREVENT SYNC WARS: Delay sync if user just interacted ---
         if (Date.now() - lastInteractionRef.current < 2000) {
+            pendingServerUpdateRef.current = serverRequest;
+            if (syncDelayTimeoutRef.current) clearTimeout(syncDelayTimeoutRef.current);
+            syncDelayTimeoutRef.current = window.setTimeout(() => {
+                if (pendingServerUpdateRef.current && isMounted.current) {
+                    const pending = pendingServerUpdateRef.current;
+                    pendingServerUpdateRef.current = null;
+                    handleServerUpdate(pending);
+                }
+            }, 2100);
             return;
         }
 
@@ -937,13 +985,40 @@ export const FillRequest: React.FC = () => {
             ['status', 'localFile', 'localBlob', 'isTranscribing', 'isEditingTranscription', 'originalText', 'translations', 'displayTranslation'].includes(key) ? undefined : value
         );
 
+        const now = Date.now();
+        // Prune expired tracking entries
+        recentlyAddedNoteIdsRef.current.forEach((time, id) => {
+            if (now - time > 30000) recentlyAddedNoteIdsRef.current.delete(id);
+        });
+        deletedNoteIdsRef.current.forEach((time, id) => {
+            if (now - time > 60000) deletedNoteIdsRef.current.delete(id);
+        });
+
         // 1. General Notes
-        const serverGeneralNotes = serverRequest.general_notes || [];
+        // Server notes is the source of truth for all confirmed notes.
+        // We filter out any notes deleted locally on this device.
+        const serverGeneralNotes = (serverRequest.general_notes || []).filter(
+            sn => !deletedNoteIdsRef.current.has(sn.id)
+        );
+        // Server confirmed presence of note -> no longer pending local protection
+        serverGeneralNotes.forEach(sn => {
+            recentlyAddedNoteIdsRef.current.delete(sn.id);
+        });
+
         setGeneralNotes(prev => {
-            const unsaved = prev.filter(n => n.status === 'error' || n.status === 'saving');
             const merged = [...serverGeneralNotes];
-            unsaved.forEach(n => {
-                if (!merged.find(sn => sn.id === n.id)) merged.push(n);
+            // Only preserve local notes that are either unsaved ('saving'/'error')
+            // or were recently created locally on this device (< 30s) and not yet in server payload
+            prev.forEach(localNote => {
+                if (deletedNoteIdsRef.current.has(localNote.id)) return;
+                if (merged.some(sn => sn.id === localNote.id)) return;
+
+                const isUnsaved = localNote.status === 'saving' || localNote.status === 'error';
+                const isRecentlyAddedLocally = recentlyAddedNoteIdsRef.current.has(localNote.id);
+
+                if (isUnsaved || isRecentlyAddedLocally) {
+                    merged.push(localNote);
+                }
             });
 
             if (cleanDataForComparison(merged) !== cleanDataForComparison(prev)) return merged;
@@ -952,27 +1027,47 @@ export const FillRequest: React.FC = () => {
 
         // 2. Category Notes
         const serverCategoryNotes = serverRequest.category_notes || {};
-        setCategoryNotes(prev => {
-            const newMap = { ...serverCategoryNotes };
-            let changed = false;
+        const cleanedServerCatNotes: Record<string, Note[]> = {};
+        Object.keys(serverCategoryNotes).forEach(catId => {
+            cleanedServerCatNotes[catId] = (serverCategoryNotes[catId] || []).filter(
+                sn => !deletedNoteIdsRef.current.has(sn.id)
+            );
+            cleanedServerCatNotes[catId].forEach(sn => {
+                recentlyAddedNoteIdsRef.current.delete(sn.id);
+            });
+        });
 
-            // Check for unsaved local notes in each category
+        setCategoryNotes(prev => {
+            const newMap: Record<string, Note[]> = {};
+
+            // Start with server categories
+            Object.keys(cleanedServerCatNotes).forEach(catId => {
+                newMap[catId] = [...(cleanedServerCatNotes[catId] || [])];
+            });
+
+            // Preserve local category notes that are unsaved or recently added locally
             Object.keys(prev).forEach(catId => {
-                const unsaved = prev[catId].filter(n => n.status === 'error' || n.status === 'saving');
-                if (unsaved.length > 0) {
-                    if (!newMap[catId]) newMap[catId] = [];
-                    newMap[catId] = [...newMap[catId]]; // Clone to avoid mutation
-                    const currentServerList = newMap[catId];
-                    unsaved.forEach(n => {
-                        if (!currentServerList.find((sn: Note) => sn.id === n.id)) {
-                            currentServerList.push(n);
-                            changed = true;
-                        }
-                    });
+                const localNotes = prev[catId] || [];
+                if (!newMap[catId]) newMap[catId] = [];
+
+                localNotes.forEach(localNote => {
+                    if (deletedNoteIdsRef.current.has(localNote.id)) return;
+                    if (newMap[catId].some(sn => sn.id === localNote.id)) return;
+
+                    const isUnsaved = localNote.status === 'saving' || localNote.status === 'error';
+                    const isRecentlyAddedLocally = recentlyAddedNoteIdsRef.current.has(localNote.id);
+
+                    if (isUnsaved || isRecentlyAddedLocally) {
+                        newMap[catId].push(localNote);
+                    }
+                });
+
+                if (newMap[catId].length === 0 && !cleanedServerCatNotes[catId]) {
+                    delete newMap[catId];
                 }
             });
 
-            if (!changed && cleanDataForComparison(newMap) === cleanDataForComparison(prev)) return prev;
+            if (cleanDataForComparison(newMap) !== cleanDataForComparison(prev)) return newMap;
             return newMap;
         });
 
@@ -1113,7 +1208,11 @@ export const FillRequest: React.FC = () => {
             return;
         }
 
-        handleServerUpdate(request);
+        // Only sync if the request updated_at has actually changed from outside
+        if (prevRequestRef.current && request.updated_at && prevRequestRef.current.updated_at !== request.updated_at) {
+            prevRequestRef.current = request;
+            handleServerUpdate(request);
+        }
 
     }, [request, getDraftKey, getDefaultTab, setHasUnsavedChanges, handleServerUpdate]);
 
@@ -1151,6 +1250,8 @@ export const FillRequest: React.FC = () => {
         const categoryId = isGeneral ? 'general' : activeTab; // Fixed: activeTab
 
         const noteId = uuidv4();
+        recentlyAddedNoteIdsRef.current.set(noteId, Date.now());
+        deletedNoteIdsRef.current.delete(noteId);
         const { text, file, color } = noteData;
         const isFieldConfiguredForCat = !isGeneral && !!settings.reportSettings.categoryFieldNotesEnabled?.[categoryId];
         const isField = isFieldConfiguredForCat && (noteData.isFieldNote ?? (noteData.stage === 'field' || activeNoteStage === 'field'));
@@ -1314,12 +1415,17 @@ export const FillRequest: React.FC = () => {
             icon: 'warning',
             onConfirm: async () => {
                 lastInteractionRef.current = Date.now();
+                if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
                 const catNotes = categoryNotes[categoryId] || [];
                 const notesToDelete = catNotes.filter(n => (stage === 'field' ? (n.isFieldNote || n.stage === 'field') : (!n.isFieldNote && n.stage !== 'field')));
                 notesToDelete.forEach(n => {
+                    deletedNoteIdsRef.current.set(n.id, Date.now());
+                    recentlyAddedNoteIdsRef.current.delete(n.id);
                     if (n.image) deleteImage(n.image).catch(() => {});
                 });
                 const remainingNotes = catNotes.filter(n => (stage === 'field' ? (!n.isFieldNote && n.stage !== 'field') : (n.isFieldNote || n.stage === 'field')));
+                const newCatNotes = { ...categoryNotes, [categoryId]: remainingNotes };
+                inspectionDataRef.current.categoryNotes = newCatNotes;
                 setCategoryNotes(prev => ({ ...prev, [categoryId]: remainingNotes }));
                 const catName = customFindingCategories.find(c => c.id === categoryId)?.name || 'القسم';
                 addActivityLogEntry(`حذف ${stageLabel}`, `تم حذف جميع ${stageLabel} في قسم "${catName}"`);
@@ -1375,6 +1481,8 @@ export const FillRequest: React.FC = () => {
 
         // Mark interaction
         lastInteractionRef.current = Date.now();
+        deletedNoteIdsRef.current.set(idToRemove, Date.now());
+        recentlyAddedNoteIdsRef.current.delete(idToRemove);
 
         const noteToDelete = generalNotes.find(note => note.id === idToRemove);
         if (!noteToDelete) return;
@@ -1393,6 +1501,7 @@ export const FillRequest: React.FC = () => {
             }
 
             const newGeneralNotes = generalNotes.filter(note => note.id !== idToRemove);
+            inspectionDataRef.current.generalNotes = newGeneralNotes;
             const newLog = createActivityLog('حذف ملاحظة عامة', `"${noteToDelete.text}"`, noteToDelete.image);
             const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
 
@@ -1436,11 +1545,18 @@ export const FillRequest: React.FC = () => {
                 if (!request) return;
 
                 lastInteractionRef.current = Date.now(); // Mark interaction
+                if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+
+                visibleNotes.forEach(n => {
+                    deletedNoteIdsRef.current.set(n.id, Date.now());
+                    recentlyAddedNoteIdsRef.current.delete(n.id);
+                });
 
                 const newLog = createActivityLog('حذف جماعي', 'تم حذف جميع الملاحظات العامة');
                 const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
 
                 const sysNotes = generalNotes.filter(n => n.text === '__HANDWRITTEN_REPORT_TRUE__');
+                inspectionDataRef.current.generalNotes = sysNotes;
                 const updatedRequest: Partial<InspectionRequest> & { id: string } = {
                     id: request.id,
                     general_notes: sysNotes,
@@ -1469,6 +1585,8 @@ export const FillRequest: React.FC = () => {
 
         // Mark interaction
         lastInteractionRef.current = Date.now();
+        deletedNoteIdsRef.current.set(idToRemove, Date.now());
+        recentlyAddedNoteIdsRef.current.delete(idToRemove);
 
         const notesForCategory = categoryNotes[categoryId] || [];
         const noteToDelete = notesForCategory.find(note => note.id === idToRemove);
@@ -1488,6 +1606,7 @@ export const FillRequest: React.FC = () => {
 
             const newNotesForCategory = notesForCategory.filter(note => note.id !== idToRemove);
             const newCategoryNotes = { ...categoryNotes, [categoryId]: newNotesForCategory };
+            inspectionDataRef.current.categoryNotes = newCategoryNotes;
 
             const categoryName = customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
             const newLog = createActivityLog('حذف ملاحظة', `"${noteToDelete.text}" من قسم "${categoryName}"`, noteToDelete.image);
@@ -1538,6 +1657,12 @@ export const FillRequest: React.FC = () => {
                 if (!request) return;
 
                 lastInteractionRef.current = Date.now(); // Mark interaction
+                if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+
+                (categoryNotes[categoryId] || []).forEach(n => {
+                    deletedNoteIdsRef.current.set(n.id, Date.now());
+                    recentlyAddedNoteIdsRef.current.delete(n.id);
+                });
 
                 const categoryName = customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
                 const newLog = createActivityLog('حذف جماعي', `تم حذف جميع الملاحظات من قسم "${categoryName}"`);
@@ -1545,6 +1670,7 @@ export const FillRequest: React.FC = () => {
 
                 const newCategoryNotes = { ...categoryNotes };
                 delete newCategoryNotes[categoryId];
+                inspectionDataRef.current.categoryNotes = newCategoryNotes;
 
                 const cleanCategoryNotes = (notesMap: Record<string, Note[]>) => {
                     const newMap: Record<string, Note[]> = {};
@@ -1664,6 +1790,9 @@ export const FillRequest: React.FC = () => {
                 isFieldNote: isField,
                 status: 'saving'
             };
+
+            recentlyAddedNoteIdsRef.current.set(updatedNote.id, Date.now());
+            deletedNoteIdsRef.current.delete(updatedNote.id);
 
             const textChanged = originalNote.text !== modalNoteData.text;
             const imageChanged = originalNote.image !== finalImageUrl;

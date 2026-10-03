@@ -55,7 +55,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const channelRef = useRef<RealtimeChannel | null>(null);
     const notificationsChannelRef = useRef<RealtimeChannel | null>(null);
     const messagesChannelRef = useRef<RealtimeChannel | null>(null);
-    const whatsappChannelRef = useRef<RealtimeChannel | null>(null);
+    const reconnectTimeoutRef = useRef<number | null>(null);
 
     const [selectedRequestId, setSelectedRequestId] = useLocalStorage<string | null>('selectedRequestId', null);
     const [selectedClientId, setSelectedClientId] = useLocalStorage<string | null>('selectedClientId', null);
@@ -136,7 +136,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
         fetchClientsWithDebtIds,
-        searchReservations
+        searchReservations,
+        lastUpdatedRequest, setLastUpdatedRequest,
+        lastUpdatedClient, setLastUpdatedClient,
+        lastUpdatedCar, setLastUpdatedCar
     } = useDataScope(authUser);
 
     const {
@@ -162,8 +165,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setCustomFindingCategories, setPredefinedFindings, setReservations, setUnreadMessagesCount,
         setWhatsappMessages, setUnreadWhatsAppCount,
         setSystemLogs, authUser, setAuthUser, addNotification, createActivityLog, fetchRequests,
-        channelRef
+        channelRef,
+        setLastUpdatedRequest,
+        setLastUpdatedClient,
+        setLastUpdatedCar
     );
+
+    const requestsRef = useRef(requests);
+    useEffect(() => { requestsRef.current = requests; }, [requests]);
 
     // Override updateEmployee to sync with cache if we are updating the current user
     const updateEmployee = useCallback(async (employeeUpdate: any) => {
@@ -287,20 +296,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const channel = supabase.channel('app-realtime-main')
             .on('broadcast', { event: 'official_request_change' }, (payload) => {
-                if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
-                    const updatedReq = payload.payload.record as InspectionRequest;
-                    refreshEntitiesForRequestsRef.current([updatedReq]);
+                const { action, record, id } = payload.payload || {};
+                if (action === 'INSERT' && record) {
+                    const newReq = record as InspectionRequest;
+                    setLastUpdatedRequest(newReq);
+                    ensureEntitiesLoadedRef.current([newReq]);
+                    setRequests(prev => {
+                        if (prev.some(r => r.id === newReq.id)) return prev;
+                        return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                    });
+                    setIncomingRequest(newReq);
+                    triggerHighlight(newReq.id);
+                } else if (action === 'UPDATE' && record) {
+                    const updatedReq = record as InspectionRequest;
+                    setLastUpdatedRequest(updatedReq);
                     setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
                     setSearchedRequests(prev => prev ? prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r) : null);
-                } else if (payload.payload?.action === 'DELETE' && payload.payload?.id) {
-                    const deletedId = payload.payload.id;
-                    setRequests(prev => prev.filter(r => r.id !== deletedId));
-                    setSearchedRequests(prev => prev ? prev.filter(r => r.id !== deletedId) : null);
+                    triggerHighlight(updatedReq.id);
+                } else if (action === 'DELETE' && id) {
+                    setRequests(prev => prev.filter(r => r.id !== id));
+                    setSearchedRequests(prev => prev ? prev.filter(r => r.id !== id) : null);
+                    setLastRemoteDeleteId(id);
+                    setTimeout(() => setLastRemoteDeleteId(null), 1000);
                 }
             })
             .on('broadcast', { event: 'client_change' }, (payload) => {
                 if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
                     const updatedClient = payload.payload.record as Client;
+                    setLastUpdatedClient(updatedClient);
                     setClients(prev => {
                         const exists = prev.some(c => c.id === updatedClient.id);
                         if (exists) return prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c);
@@ -311,6 +334,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .on('broadcast', { event: 'car_change' }, (payload) => {
                 if (payload.payload?.action === 'UPDATE' && payload.payload?.record) {
                     const updatedCar = payload.payload.record as Car;
+                    setLastUpdatedCar(updatedCar);
                     setCars(prev => {
                         const exists = prev.some(c => c.id === updatedCar.id);
                         if (exists) return prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c);
@@ -322,6 +346,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 async (payload) => {
                     if (payload.eventType === 'INSERT') {
                         const newReq = payload.new as InspectionRequest;
+                        setLastUpdatedRequest(newReq);
                         await ensureEntitiesLoadedRef.current([newReq]);
                         setRequests(prev => {
                             const existingReqIndex = prev.findIndex(r => r.id === newReq.id);
@@ -332,13 +357,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             }
                             return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                         });
-                        if (authUserRef.current && newReq.employee_id !== authUserRef.current.id) {
-                            setIncomingRequest(newReq);
-                        }
+                        setIncomingRequest(newReq);
                         triggerHighlight(newReq.id);
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedReq = payload.new as InspectionRequest;
-                        await refreshEntitiesForRequestsRef.current([updatedReq]);
+                        setLastUpdatedRequest(updatedReq);
+                        const prevReq = requestsRef.current.find(r => r.id === updatedReq.id);
+                        if (!prevReq || prevReq.client_id !== updatedReq.client_id || prevReq.car_id !== updatedReq.car_id) {
+                            if (updatedReq.client_id || updatedReq.car_id) {
+                                await refreshEntitiesForRequestsRef.current([updatedReq]);
+                            }
+                        }
                         setRequests(prev => {
                             const exists = prev.some(r => r.id === updatedReq.id);
                             if (exists) {
@@ -362,12 +391,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
                         const newClient = payload.new as Client;
+                        setLastUpdatedClient(newClient);
                         setClients(prev => {
                             if (prev.some(c => c.id === newClient.id)) return prev;
                             return [newClient, ...prev];
                         });
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedClient = payload.new as Client;
+                        setLastUpdatedClient(updatedClient);
                         setClients(prev => prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c));
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
@@ -379,12 +410,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
                         const newCar = payload.new as Car;
+                        setLastUpdatedCar(newCar);
                         setCars(prev => {
                             if (prev.some(c => c.id === newCar.id)) return prev;
                             return [newCar, ...prev];
                         });
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedCar = payload.new as Car;
+                        setLastUpdatedCar(updatedCar);
                         setCars(prev => prev.map(c => c.id === updatedCar.id ? { ...c, ...updatedCar } : c));
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
@@ -472,13 +505,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setRealtimeStatus('connected');
                 } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                     setRealtimeStatus('disconnected');
-                    if (channelRef.current) {
-                        supabase.removeChannel(channelRef.current);
-                        channelRef.current = null;
+                    if (reconnectTimeoutRef.current) {
+                        clearTimeout(reconnectTimeoutRef.current);
                     }
-                    setTimeout(() => {
+                    reconnectTimeoutRef.current = window.setTimeout(() => {
                         setupRealtimeSubscription();
-                    }, 3000);
+                    }, 5000);
                 }
             });
         channelRef.current = channel;
@@ -509,41 +541,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .subscribe();
         messagesChannelRef.current = msgChannel;
 
-        const waChannel = supabase.channel('whatsapp-realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'whatsapp_messages' },
-                (payload) => {
-                    const newMessage = payload.new as WhatsAppMessage;
-                    setWhatsappMessages(prev => {
-                        const exists = prev.some(m => m.id === newMessage.id);
-                        if (exists) return prev;
-                        return [newMessage, ...prev];
-                    });
-
-                    if (newMessage.direction === 'incoming' || !newMessage.direction) {
-                        setUnreadWhatsAppCount(prev => prev + 1);
-                        setLatestWhatsAppMessage(newMessage);
-                    }
-                }
-            )
-            .subscribe((status) => {
-                console.log('WhatsApp Realtime Status:', status);
-            });
-        whatsappChannelRef.current = waChannel;
-
-    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setPendingRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setWhatsappMessages, setUnreadWhatsAppCount, setLatestWhatsAppMessage]);
+    }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setPendingRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setLastUpdatedRequest, setLastUpdatedClient, setLastUpdatedCar]);
 
     const retryConnection = useCallback(() => {
-        const cleanup = async () => {
-            if (channelRef.current) await supabase.removeChannel(channelRef.current);
-            if (notificationsChannelRef.current) await supabase.removeChannel(notificationsChannelRef.current);
-            if (messagesChannelRef.current) await supabase.removeChannel(messagesChannelRef.current);
-            if (whatsappChannelRef.current) await supabase.removeChannel(whatsappChannelRef.current);
-            channelRef.current = null;
-            notificationsChannelRef.current = null;
-            messagesChannelRef.current = null;
-            whatsappChannelRef.current = null;
-        };
-        cleanup().then(() => setupRealtimeSubscription());
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
+        if (channelRef.current) supabase.removeChannel(channelRef.current);
+        if (notificationsChannelRef.current) supabase.removeChannel(notificationsChannelRef.current);
+        if (messagesChannelRef.current) supabase.removeChannel(messagesChannelRef.current);
+        channelRef.current = null;
+        notificationsChannelRef.current = null;
+        messagesChannelRef.current = null;
+        setupRealtimeSubscription();
     }, [setupRealtimeSubscription]);
 
     const refreshSessionAndReload = useCallback(async () => {
@@ -781,14 +792,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Cleanup
             setRequests([]); setClients([]); setCars([]); setCarMakes([]); setCarModels([]); setExpenses([]); setAppNotifications([]); setTechnicians([]); setReservations([]);
             const cleanup = async () => {
+                if (reconnectTimeoutRef.current) {
+                    clearTimeout(reconnectTimeoutRef.current);
+                    reconnectTimeoutRef.current = null;
+                }
                 if (channelRef.current) await supabase.removeChannel(channelRef.current);
                 if (notificationsChannelRef.current) await supabase.removeChannel(notificationsChannelRef.current);
                 if (messagesChannelRef.current) await supabase.removeChannel(messagesChannelRef.current);
-                if (whatsappChannelRef.current) await supabase.removeChannel(whatsappChannelRef.current);
                 channelRef.current = null;
                 notificationsChannelRef.current = null;
                 messagesChannelRef.current = null;
-                whatsappChannelRef.current = null;
             };
             cleanup();
             setRealtimeStatus('disconnected');
@@ -2349,6 +2362,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         reservations, fetchReservations, addReservation, updateReservationStatus, updateReservation, deleteReservation, searchReservations, parseReservationText,
         fetchRequestTabContent, fetchFullRequestForSave, isOnline, realtimeStatus, retryConnection, refreshSessionAndReload,
         lastRemoteDeleteId, setLastRemoteDeleteId,
+        lastUpdatedRequest,
+        lastUpdatedClient,
+        lastUpdatedCar,
         fetchPaperArchiveRequests,
         fetchAllPaperArchiveRequests,
         fetchClientsWithDebtIds,
