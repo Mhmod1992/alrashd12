@@ -69,14 +69,16 @@ const Notification: React.FC<NotificationProps> = ({ notification, style }) => {
       style={style}
       role="alert"
     >
-      <div className="flex-1 p-3 sm:p-4 flex items-start gap-2 sm:gap-3">
+      <div className="flex-1 p-2 sm:p-4 flex items-center sm:items-start gap-1.5 sm:gap-3">
         <div className={`flex-shrink-0 p-1 sm:p-1.5 rounded-full ${currentStyle.bgIcon}`}>
-           <IconComponent className={`w-5 h-5 sm:w-6 sm:h-6 ${currentStyle.iconColor}`} />
+           <IconComponent className={`w-3.5 h-3.5 sm:w-6 sm:h-6 ${currentStyle.iconColor}`} />
         </div>
 
-        <div className="flex-1 pt-0.5">
-          {title && <h4 className={`text-sm sm:text-base font-bold mb-0.5 ${currentStyle.textColor}`}>{title}</h4>}
-          {message && <p className={`text-xs sm:text-sm leading-snug ${currentStyle.subTextColor}`}>{message}</p>}
+        <div className="flex-1 pt-0 sm:pt-0.5 min-w-0">
+          <div className="flex flex-col sm:block">
+            {title && <h4 className={`text-[11px] sm:text-base font-black sm:font-bold leading-tight truncate sm:mb-0.5 ${currentStyle.textColor}`}>{title}</h4>}
+            {message && <p className={`text-[9px] sm:text-sm leading-tight sm:leading-snug truncate sm:whitespace-normal ${currentStyle.subTextColor}`}>{message}</p>}
+          </div>
         </div>
       </div>
     </div>

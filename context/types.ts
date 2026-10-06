@@ -62,6 +62,7 @@ export interface AppContextType {
     isCreatingRequest: boolean;
     setIsCreatingRequest: (isCreating: boolean) => void;
     clients: Client[];
+    systemDefaultClient: Client | null;
     setClients: React.Dispatch<React.SetStateAction<Client[]>>;
     selectedClientId: string | null;
     setSelectedClientId: (id: string | null) => void;
@@ -210,6 +211,7 @@ export interface AppContextType {
     }>;
     fetchRequestsByCarId: (carId: string) => Promise<InspectionRequest[]>;
     fetchRequests: () => Promise<void>;
+    syncDeltas: () => Promise<void>;
     fetchPendingRequests?: () => Promise<void>;
     fetchRequestByRequestNumber: (reqNum: number) => Promise<InspectionRequest | null>;
     fetchRequestByRequestNumberForAuth: (reqNum: number) => Promise<InspectionRequest | null>;
@@ -223,7 +225,7 @@ export interface AppContextType {
     isOnline: boolean;
     realtimeStatus: 'connected' | 'connecting' | 'disconnected';
     retryConnection: () => void;
-    refreshSessionAndReload: () => void;
+    refreshSessionAndReload: (isSilent?: boolean) => void;
     whatsappMessages: WhatsAppMessage[];
     unreadWhatsAppCount: number;
     markWhatsAppAsRead: (id: number) => Promise<void>;

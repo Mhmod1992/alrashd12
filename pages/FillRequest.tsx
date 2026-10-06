@@ -2179,18 +2179,16 @@ export const FillRequest: React.FC = () => {
         const currentIndex = allTabsInOrder.indexOf(activeTab);
         if (currentIndex < allTabsInOrder.length - 1) {
             handleTabSwitch(allTabsInOrder[currentIndex + 1]);
-        } else {
-            handleTabSwitch(allTabsInOrder[0]); // Wrap
         }
+        // Stop at the last tab without wrapping
     }, [activeTab, allTabsInOrder]);
 
     const handlePrevTab = useCallback(() => {
         const currentIndex = allTabsInOrder.indexOf(activeTab);
         if (currentIndex > 0) {
             handleTabSwitch(allTabsInOrder[currentIndex - 1]);
-        } else {
-            handleTabSwitch(allTabsInOrder[allTabsInOrder.length - 1]); // Wrap
         }
+        // Stop at the first tab without wrapping
     }, [activeTab, allTabsInOrder]);
 
     // Globals back/forward prevention and section navigation using Alt + Arrow keys

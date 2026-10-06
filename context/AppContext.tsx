@@ -11,7 +11,7 @@ import {
     FinancialStats, ArchiveResult, PaymentType, PayrollDraft, PayrollItem, Reservation, WhatsAppMessage, PendingRequest
 } from '../types';
 import { mockSettings } from '../data/mockData';
-import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile, arabicToEnglishNumerals } from '../lib/utils';
+import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile, arabicToEnglishNumerals, getCurrentShiftRange } from '../lib/utils';
 import { AppContextType, CarHistoryResult } from './types';
 import { useNavigationScope } from './scopes/useNavigationScope';
 import { useThemeScope } from './scopes/useThemeScope';
@@ -81,6 +81,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [selectedRequestId, page]);
 
+    const dataScope = useDataScope(authUser);
     const {
         requests, setRequests,
         pendingRequests, setPendingRequests,
@@ -120,6 +121,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         financialReport, setFinancialReport,
         isRefreshing, setIsRefreshing,
         fetchRequests,
+        syncDeltas,
         fetchCarModelsByMake,
         fetchCarMakes,
         ensureEntitiesLoaded,
@@ -139,8 +141,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         searchReservations,
         lastUpdatedRequest, setLastUpdatedRequest,
         lastUpdatedClient, setLastUpdatedClient,
-        lastUpdatedCar, setLastUpdatedCar
-    } = useDataScope(authUser);
+        lastUpdatedCar, setLastUpdatedCar,
+        systemDefaultClient
+    } = dataScope;
 
     const {
         updateRequest, updateRequestAndAssociatedData, deleteRequest, deleteRequestsBatch, addRequest, addRequestOptimized,
@@ -301,18 +304,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     const newReq = record as InspectionRequest;
                     setLastUpdatedRequest(newReq);
                     ensureEntitiesLoadedRef.current([newReq]);
+                    const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
+                    const isCurrentShift = newReq.created_at >= shiftStartIso && newReq.created_at < shiftEndIso;
                     setRequests(prev => {
                         if (prev.some(r => r.id === newReq.id)) return prev;
-                        return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                        if (isCurrentShift) {
+                            return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                        }
+                        return prev;
                     });
-                    setIncomingRequest(newReq);
-                    triggerHighlight(newReq.id);
+                    if (isCurrentShift) {
+                        setIncomingRequest(newReq);
+                        triggerHighlight(newReq.id);
+                    }
                 } else if (action === 'UPDATE' && record) {
                     const updatedReq = record as InspectionRequest;
                     setLastUpdatedRequest(updatedReq);
+                    const isCurrentlyInRequests = requestsRef.current.some(r => r.id === updatedReq.id);
                     setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
                     setSearchedRequests(prev => prev ? prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r) : null);
-                    triggerHighlight(updatedReq.id);
+                    if (isCurrentlyInRequests) {
+                        triggerHighlight(updatedReq.id);
+                    }
                 } else if (action === 'DELETE' && id) {
                     setRequests(prev => prev.filter(r => r.id !== id));
                     setSearchedRequests(prev => prev ? prev.filter(r => r.id !== id) : null);
@@ -347,7 +360,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     if (payload.eventType === 'INSERT') {
                         const newReq = payload.new as InspectionRequest;
                         setLastUpdatedRequest(newReq);
+                        localStorage.setItem('lastSyncTimestamp', Date.now().toString());
                         await ensureEntitiesLoadedRef.current([newReq]);
+                        const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
+                        const isCurrentShift = newReq.created_at >= shiftStartIso && newReq.created_at < shiftEndIso;
                         setRequests(prev => {
                             const existingReqIndex = prev.findIndex(r => r.id === newReq.id);
                             if (existingReqIndex !== -1) {
@@ -355,31 +371,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                                 updatedPrev[existingReqIndex] = { ...updatedPrev[existingReqIndex], ...newReq };
                                 return updatedPrev.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                             }
-                            return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                            if (isCurrentShift) {
+                                return [newReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                            }
+                            return prev;
                         });
-                        setIncomingRequest(newReq);
-                        triggerHighlight(newReq.id);
+                        if (isCurrentShift) {
+                            setIncomingRequest(newReq);
+                            triggerHighlight(newReq.id);
+                        }
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedReq = payload.new as InspectionRequest;
                         setLastUpdatedRequest(updatedReq);
+                        localStorage.setItem('lastSyncTimestamp', Date.now().toString());
                         const prevReq = requestsRef.current.find(r => r.id === updatedReq.id);
                         if (!prevReq || prevReq.client_id !== updatedReq.client_id || prevReq.car_id !== updatedReq.car_id) {
                             if (updatedReq.client_id || updatedReq.car_id) {
                                 await refreshEntitiesForRequestsRef.current([updatedReq]);
                             }
                         }
+                        const isCurrentlyInRequests = requestsRef.current.some(r => r.id === updatedReq.id);
                         setRequests(prev => {
                             const exists = prev.some(r => r.id === updatedReq.id);
                             if (exists) {
                                 return prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r);
                             } else {
-                                return [updatedReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                                const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
+                                if (updatedReq.created_at >= shiftStartIso && updatedReq.created_at < shiftEndIso) {
+                                    return [updatedReq, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                                }
+                                return prev;
                             }
                         });
                         setSearchedRequests(prev => prev ? prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r) : null);
-                        triggerHighlight(updatedReq.id);
+                        if (isCurrentlyInRequests) {
+                            triggerHighlight(updatedReq.id);
+                        }
                     } else if (payload.eventType === 'DELETE') {
                         const deletedId = payload.old.id;
+                        localStorage.setItem('lastSyncTimestamp', Date.now().toString());
                         setRequests(prev => prev.filter(r => r.id !== deletedId));
                         setSearchedRequests(prev => prev ? prev.filter(r => r.id !== deletedId) : null);
                         setLastRemoteDeleteId(deletedId);
@@ -500,9 +530,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     }
                 }
             )
+            .on('presence', { event: 'sync' }, () => {
+                const newState = channel.presenceState();
+                const onlineIds = new Set<string>();
+                const staffMap: Record<string, any> = {};
+
+                Object.keys(newState).forEach(key => {
+                    const presences = newState[key] as any[];
+                    presences.forEach(presence => {
+                        if (presence.userId) {
+                            onlineIds.add(presence.userId);
+                            staffMap[presence.userId] = presence;
+                        }
+                    });
+                });
+
+                setOnlineEmployeeIds(new Set(onlineIds));
+                setOnlineStaffMap(staffMap);
+            })
+            .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+                // Optional: handle join alerts
+            })
+            .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+                // Optional: handle leave
+            })
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') {
                     setRealtimeStatus('connected');
+                    if (authUserRef.current) {
+                        channel.track({
+                            userId: authUserRef.current.id,
+                            name: authUserRef.current.name,
+                            role: authUserRef.current.role,
+                            online_at: new Date().toISOString()
+                        });
+                    }
                 } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                     setRealtimeStatus('disconnected');
                     if (reconnectTimeoutRef.current) {
@@ -543,51 +605,89 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     }, [addNotification, authUser, triggerHighlight, setAppNotifications, setUnreadMessagesCount, setRequests, setPendingRequests, setSearchedRequests, setIncomingRequest, setLastRemoteDeleteId, setLastUpdatedRequest, setLastUpdatedClient, setLastUpdatedCar]);
 
-    const retryConnection = useCallback(() => {
+    const retryConnection = useCallback(async () => {
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
         }
-        if (channelRef.current) supabase.removeChannel(channelRef.current);
-        if (notificationsChannelRef.current) supabase.removeChannel(notificationsChannelRef.current);
-        if (messagesChannelRef.current) supabase.removeChannel(messagesChannelRef.current);
+
+        // 1. Force explicit disconnection to clear any stale socket states
+        try {
+            await supabase.realtime.disconnect();
+        } catch (e) {
+            console.warn("Realtime disconnect error:", e);
+        }
+
+        // 2. Remove all registered channels to prevent 'Channel already exists' conflicts
+        try {
+            await supabase.removeAllChannels();
+        } catch (e) {
+            console.warn("Remove all channels error:", e);
+        }
+        
         channelRef.current = null;
         notificationsChannelRef.current = null;
         messagesChannelRef.current = null;
+
+        // 3. Re-verify Auth state and refresh Auth Token manually for the Realtime engine
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+                await supabase.realtime.setAuth(session.access_token);
+            }
+        } catch (e) {
+            console.warn("Realtime setAuth refresh error:", e);
+        }
+
+        // 4. Start subscription from scratch
         setupRealtimeSubscription();
     }, [setupRealtimeSubscription]);
 
-    const refreshSessionAndReload = useCallback(async () => {
+    const refreshSessionAndReload = useCallback(async (isSilent: boolean = false) => {
         setIsRefreshing(true);
         try {
-            // 1. Attempt to refresh the session token
-            const { data, error } = await supabase.auth.refreshSession();
+            // 1. Attempt to refresh the session token - this fixes 'expired token' errors in console
+            let sessionResponse: any = await supabase.auth.refreshSession();
 
-            if (error) {
-                console.warn("Session refresh failed", error);
-                throw error;
+            // 2. If direct refresh fails, try a silent session recovery
+            if (sessionResponse.error) {
+                console.warn("Soft session refresh failed, attempting fallback recovery...", sessionResponse.error);
+                sessionResponse = await supabase.auth.getSession();
+                if (sessionResponse.error) throw sessionResponse.error;
             }
 
-            if (data.session) {
-                // 2. Re-establish Realtime Connection
-                retryConnection();
+            if (sessionResponse.data?.session) {
+                // 3. Perform Deep Reset of the Realtime Connection
+                await retryConnection();
 
-                // 3. Re-fetch all critical data
-                await fetchRequests();
+                // 4. Re-fetch only changes to ensure UI is in sync efficiently
+                await syncDeltas();
 
-                // 4. Update activity timestamp
+                // 5. Update activity timestamp
                 localStorage.setItem('lastActiveTime', Date.now().toString());
 
-                // 5. Clear error states
+                // 6. Clear error states and notify user
                 setIsSessionError(false);
-                addNotification({ title: 'تم تحديث الاتصال', message: 'تم استعادة الاتصال بالخادم وتحديث البيانات.', type: 'success' });
+                if (!isSilent) {
+                    addNotification({ 
+                        title: 'تم استعادة الاتصال', 
+                        message: 'تم تحديث مفاتيح الأمان وإعادة ربط القنوات بنجاح.', 
+                        type: 'success' 
+                    });
+                }
             } else {
-                // No session means we are logged out
+                // No session means the user's refresh token is completely dead
                 logout();
             }
         } catch (e) {
-            console.error("Soft refresh failed:", e);
-            addNotification({ title: 'خطأ', message: 'تعذر تحديث الاتصال. يرجى التحقق من الشبكة.', type: 'error' });
+            console.error("Critical connection recovery failed:", e);
+            if (!isSilent) {
+                addNotification({ 
+                    title: 'فشل التحديث', 
+                    message: 'يرجى التأكد من اتصال الإنترنت أو تسجيل الدخول مرة أخرى.', 
+                    type: 'error' 
+                });
+            }
         } finally {
             setIsRefreshing(false);
         }
@@ -609,37 +709,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const initializeApp = async () => {
             try {
                 // 1. Initial Local Data Setup (Settings)
-                const { data: settingsDataRaw } = await supabase.from('app_settings').select('*').eq('id', 1).maybeSingle();
-                const fetchedSettingsData = (settingsDataRaw?.settings_data || {}) as Record<string, any>;
-                const finalGlobalSettings = {
-                    ...mockSettings, ...fetchedSettingsData,
-                    plateCharacters: fetchedSettingsData?.plateCharacters || mockSettings.plateCharacters,
-                    platePreviewSettings: { ...mockSettings.platePreviewSettings, ...(fetchedSettingsData?.platePreviewSettings || {}) },
-                    reportSettings: { ...mockSettings.reportSettings, ...(fetchedSettingsData?.reportSettings || {}) },
-                };
+                const { data: settingsDataRaw, error: fetchSettingsError } = await supabase.from('app_settings').select('*').eq('id', 1).maybeSingle();
+                
+                // Only proceed with updating global state if we actually fetched something or if it's the first time
+                if (!fetchSettingsError && settingsDataRaw?.settings_data) {
+                    const fetchedSettingsData = (settingsDataRaw.settings_data || {}) as Record<string, any>;
+                    const finalGlobalSettings = {
+                        ...mockSettings, ...fetchedSettingsData,
+                        plateCharacters: fetchedSettingsData?.plateCharacters || mockSettings.plateCharacters,
+                        platePreviewSettings: { ...mockSettings.platePreviewSettings, ...(fetchedSettingsData?.platePreviewSettings || {}) },
+                        reportSettings: { ...mockSettings.reportSettings, ...(fetchedSettingsData?.reportSettings || {}) },
+                    };
 
-                if (mounted) {
-                    setGlobalSettings(finalGlobalSettings);
+                    if (mounted) {
+                        setGlobalSettings(finalGlobalSettings);
 
-                    // Check LocalStorage for setup completion flag
-                    const localSetupComplete = localStorage.getItem('app_setup_complete') === 'true';
-                    const dbSetupComplete = !!finalGlobalSettings.setupCompleted;
-                    const isComplete = dbSetupComplete || localSetupComplete;
+                        // Check LocalStorage for setup completion flag
+                        const localSetupComplete = localStorage.getItem('app_setup_complete') === 'true';
+                        const dbSetupComplete = !!finalGlobalSettings.setupCompleted;
+                        const isComplete = dbSetupComplete || localSetupComplete;
 
-                    setIsSetupComplete(isComplete);
-                    setSettings(finalGlobalSettings);
+                        setIsSetupComplete(isComplete);
+                        setSettings(finalGlobalSettings);
 
-                    // Cache branding for immediate load next time
-                    localStorage.setItem('app_branding_cache', JSON.stringify({
-                        appName: finalGlobalSettings.appName,
-                        logoUrl: finalGlobalSettings.logoUrl
-                    }));
-                    setIsSettingsLoaded(true);
+                        // Cache branding for immediate load next time - ONLY if we have valid data
+                        if (finalGlobalSettings.appName || finalGlobalSettings.logoUrl) {
+                            localStorage.setItem('app_branding_cache', JSON.stringify({
+                                appName: finalGlobalSettings.appName,
+                                logoUrl: finalGlobalSettings.logoUrl
+                            }));
+                        }
+                        setIsSettingsLoaded(true);
 
-                    // Sync to localStorage if DB confirms it
-                    if (dbSetupComplete && !localSetupComplete) {
-                        localStorage.setItem('app_setup_complete', 'true');
+                        // Sync to localStorage if DB confirms it
+                        if (dbSetupComplete && !localSetupComplete) {
+                            localStorage.setItem('app_setup_complete', 'true');
+                        }
                     }
+                } else if (fetchSettingsError) {
+                    console.warn("Could not fetch remote settings, keeping current/cached state.", fetchSettingsError);
+                    // If we can't reach settings, we still want the UI to load using what's in useThemeScope's initial state
+                    if (mounted) setIsSettingsLoaded(true);
+                } else {
+                    // No data found at all (fresh install)
+                    if (mounted) setIsSettingsLoaded(true);
                 }
 
                 // 2. Background Session Verification
@@ -917,11 +1030,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 supabase.auth.startAutoRefresh();
 
                 if (authUserRef.current) {
-                    if (realtimeStatusRef.current === 'disconnected') {
-                        retryConnection();
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    
+                    if (isMobile) {
+                        // On Mobile, always force a proactive reconnect because the OS often 
+                        // freezes or kills the socket silently when the screen is off or app is backgrounded.
+                        await retryConnection();
+                        await syncDeltas();
+                        
+                        // Silent background probe on mobile after returning from sleep
+                        verifyAndSyncInternetStatus(false, true);
+                    } else {
+                        // On Desktop, do NOT trigger any database queries (syncDeltas) on tab change/focus.
+                        // Realtime websocket handles all live updates seamlessly with zero unnecessary egress.
+                        if (realtimeStatusRef.current === 'disconnected') {
+                            await retryConnection();
+                        }
                     }
-                    // Silent background probe without disruptive alerts or table refetches
-                    verifyAndSyncInternetStatus(false, true);
                 }
             }
         };
@@ -937,6 +1062,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleVisibilityChange);
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
@@ -950,11 +1076,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleVisibilityChange);
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
             clearInterval(probeInterval);
         };
-    }, [verifyAndSyncInternetStatus, retryConnection, logout]);
+    }, [verifyAndSyncInternetStatus, retryConnection, logout, fetchRequests]);
+
+    const [autoHealRetries, setAutoHealRetries] = useState(0);
+
+    // --- AUTO-HEALING EFFECT ---
+    // Automatically attempts to refresh the connection when it goes into 'disconnected' state
+    useEffect(() => {
+        if (realtimeStatus === 'disconnected' && isOnline && authUser && !isRefreshing) {
+            if (autoHealRetries < 3) {
+                console.log(`Auto-healing attempt ${autoHealRetries + 1}/3 starting in 3s...`);
+                const timer = setTimeout(() => {
+                    setAutoHealRetries(prev => prev + 1);
+                    refreshSessionAndReload(true);
+                }, 3000);
+                return () => clearTimeout(timer);
+            } else {
+                console.warn("Auto-healing reached max retries. Manual intervention required.");
+            }
+        } else if (realtimeStatus === 'connected') {
+            // Reset retries once connected successfully
+            setAutoHealRetries(0);
+        }
+    }, [realtimeStatus, isOnline, authUser, isRefreshing, autoHealRetries, refreshSessionAndReload]);
 
     const startSetupProcess = useCallback(() => setIsSetupComplete(false), []);
 
@@ -1478,9 +1627,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     const searchClients = useCallback(async (query: string): Promise<Client[]> => {
-        if (!query || query.length < 2) return [];
-        const { data } = await supabase.from('clients').select('*, inspection_requests(count)').or(`name.ilike.%${query}%,phone.ilike.%${query}%`).limit(20);
-        return data || [];
+        if (!query) return [];
+        const cleanDigits = query.replace(/\D/g, '');
+        const isNumeric = cleanDigits.length > 0 && query.replace(/[\s+\-()]/g, '') === cleanDigits;
+        
+        if (isNumeric && cleanDigits.length < 7) {
+            return [];
+        }
+        if (!isNumeric && query.trim().length < 2) {
+            return [];
+        }
+
+        let orConditions = `name.ilike.%${query}%,phone.ilike.%${query}%`;
+        if (cleanDigits.length >= 7) {
+            const last7 = cleanDigits.slice(-7);
+            orConditions += `,phone.ilike.%${cleanDigits}%,phone.ilike.%${last7}%`;
+        }
+
+        const { data } = await supabase
+            .from('clients')
+            .select('*, inspection_requests(count)')
+            .or(orConditions)
+            .limit(20);
+
+        if (data) {
+            return data.map((c: any) => ({
+                ...c,
+                count: Array.isArray(c.inspection_requests) ? (c.inspection_requests[0]?.count || 0) : (c.count || 0)
+            }));
+        }
+        return [];
     }, []);
 
     const searchClientsPage = useCallback(async (pageNumber: number, pageSize: number, query?: string, onlyIds?: string[]) => {
@@ -2329,7 +2505,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
-        requests, setRequests, pendingRequests, addPendingRequest, updatePendingRequest, deletePendingRequest, convertPendingToOfficialRequest, clients, setClients, cars, setCars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
+        requests, setRequests, pendingRequests, addPendingRequest, updatePendingRequest, deletePendingRequest, convertPendingToOfficialRequest, clients, systemDefaultClient, setClients, cars, setCars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
         loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, clearSearchedRequests, searchedRequests, setSearchedRequests,
         searchQuery, setSearchQuery, highlightedRequestId, triggerHighlight,
         customFindingCategories, predefinedFindings, selectedRequestId, setSelectedRequestId, selectedClientId, setSelectedClientId,
@@ -2371,6 +2547,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchAllPaperArchiveRequests,
         fetchClientsWithDebtIds,
         fetchRequests,
+        syncDeltas,
         isCreatingRequest,
         setIsCreatingRequest,
         isSettingsLoaded,

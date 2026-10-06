@@ -292,7 +292,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                     <span>اتصال...</span>
                 </div>
             ) : realtimeStatus === 'disconnected' ? (
-                <button onClick={refreshSessionAndReload} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400 rounded-full text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors" title="فشل الاتصال بالخادم. اضغط لإعادة المحاولة.">
+                <button onClick={() => refreshSessionAndReload()} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400 rounded-full text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors" title="فشل الاتصال بالخادم. اضغط لإعادة المحاولة.">
                     <WifiOffIcon className="w-3.5 h-3.5" />
                     <span>تحديث الاتصال</span>
                 </button>

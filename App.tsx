@@ -280,7 +280,7 @@ const AppContent: React.FC = () => {
              <span className="font-bold text-sm">لا يوجد اتصال بالإنترنت - أنت تعمل في وضع غير متصل</span>
           </div>
           <button 
-            onClick={refreshSessionAndReload} 
+            onClick={() => refreshSessionAndReload()} 
             className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md text-xs font-bold transition-colors flex items-center gap-2"
           >
             <RefreshCwIcon className="w-3.5 h-3.5" />

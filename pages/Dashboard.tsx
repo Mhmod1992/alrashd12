@@ -30,6 +30,8 @@ import { Skeleton } from "../components/Skeleton";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
 import MiniPlateDisplay from "../components/MiniPlateDisplay";
+import CalendarClockIcon from "../components/icons/CalendarClockIcon";
+import ClientHistoryModal from "../components/ClientHistoryModal";
 import {
   AreaChart,
   Area as RechartsArea,
@@ -150,6 +152,15 @@ const QuickActions: React.FC<{
       },
     },
     {
+      label: "إنشاء طلب بانتظار الدفع",
+      icon: <CalendarClockIcon className="w-5 h-5" />,
+      color: "bg-amber-500 text-white dark:bg-amber-600",
+      action: () => {
+        setInitialRequestModalState("new");
+        setPage("waiting-requests");
+      },
+    },
+    {
       label: "البحث عن عميل",
       icon: <SearchIcon className="w-5 h-5" />,
       color:
@@ -186,7 +197,7 @@ const QuickActions: React.FC<{
   ];
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3 mb-6">
       {actions.map((btn, idx) => (
         <button
           key={idx}
@@ -755,14 +766,20 @@ const VehicleHistorySearchModal: React.FC<{ onClose: () => void }> = ({
 
 // Client Search Modal
 const ClientSearchModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { searchClients } = useAppContext();
+  const { searchClients, requests } = useAppContext();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
+
+  const cleanDigits = query.replace(/\D/g, "");
+  const isDigitsOnly = cleanDigits.length > 0 && query.replace(/[\s+\-()]/g, "") === cleanDigits;
+  const isSearchable = isDigitsOnly ? cleanDigits.length >= 7 : query.trim().length >= 2;
 
   useEffect(() => {
-    if (!query.trim()) {
+    if (!isSearchable) {
       setResults([]);
+      setIsLoading(false);
       return;
     }
     const timer = setTimeout(async () => {
@@ -775,69 +792,120 @@ const ClientSearchModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       } finally {
         setIsLoading(false);
       }
-    }, 500);
+    }, isDigitsOnly && cleanDigits.length >= 7 ? 150 : 350);
     return () => clearTimeout(timer);
-  }, [query, searchClients]);
+  }, [query, searchClients, isSearchable, isDigitsOnly, cleanDigits.length]);
+
+  const getClientCount = (client: Client) => {
+    let count = 0;
+    if (typeof (client as any).count === "number") {
+      count = (client as any).count;
+    } else if (Array.isArray((client as any).inspection_requests)) {
+      count = (client as any).inspection_requests[0]?.count || 0;
+    }
+    const localCount = requests.filter((r) => r.client_id === client.id).length;
+    return Math.max(count, localCount);
+  };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="البحث السريع عن العملاء">
-      <div className="space-y-4">
-        <div className="relative">
-          <SearchIcon className="absolute right-3 top-3 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="ابحث بالاسم أو رقم الهاتف..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-4 pr-10 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-            autoFocus
-          />
-        </div>
+    <>
+      <Modal isOpen={true} onClose={onClose} title="البحث السريع عن العملاء">
+        <div className="space-y-4">
+          <div className="relative">
+            <SearchIcon className="absolute right-3 top-3.5 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="ابحث بالاسم أو رقم الهاتف (7 أرقام على الأقل)..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full pl-4 pr-10 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+              autoFocus
+            />
+          </div>
 
-        <div className="max-h-64 overflow-y-auto custom-scrollbar">
-          {isLoading ? (
-            <div className="flex justify-center p-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          {isDigitsOnly && cleanDigits.length > 0 && cleanDigits.length < 7 && (
+            <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl text-center">
+              <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                يرجى إدخال 7 أرقام على الأقل للبدء بالبحث برقم الهاتف ({cleanDigits.length}/7)
+              </p>
             </div>
-          ) : results.length > 0 ? (
-            <div className="space-y-2">
-              {results.map((client) => (
-                <div
-                  key={client.id}
-                  className="p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg hover:border-blue-300 transition-colors"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-bold text-sm text-slate-700 dark:text-slate-200">
-                        {client.name}
-                      </p>
-                      <p className="text-xs text-slate-500 font-numeric flex items-center gap-1 mt-1">
-                        <PhoneIcon className="w-3 h-3" /> {client.phone}
-                      </p>
-                    </div>
-                    <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-bold items-center text-center">
-                      <div className="text-[10px] text-blue-400 dark:text-blue-500 mb-0.5">
-                        الطلبات
+          )}
+
+          <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2">
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center p-8 gap-2">
+                <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-500"></div>
+                <span className="text-xs text-slate-500">جاري البحث في قاعدة البيانات...</span>
+              </div>
+            ) : results.length > 0 ? (
+              <div className="space-y-2">
+                {results.map((client) => {
+                  const reqCount = getClientCount(client);
+                  return (
+                    <div
+                      key={client.id}
+                      className="p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-blue-300 dark:hover:border-blue-600 transition-colors shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
+                            {client.name}
+                          </p>
+                          {reqCount > 0 && (
+                            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+                              {reqCount} {reqCount === 1 ? "طلب" : "طلبات"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1.5 mt-1" dir="ltr">
+                          <PhoneIcon className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{client.phone}</span>
+                        </p>
                       </div>
-                      {(client as any)?.count || 0}
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        {reqCount > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedClientForHistory(client)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-300 text-xs font-bold rounded-lg transition-colors border border-blue-200 dark:border-blue-800/60"
+                          >
+                            <FileTextIcon className="w-3.5 h-3.5" />
+                            <span>عرض الطلبات السابقة ({reqCount})</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] font-medium text-slate-400 px-2.5 py-1 bg-slate-100 dark:bg-slate-800/60 rounded-lg">
+                            لا توجد طلبات مسجلة
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : query.trim() ? (
-            <p className="text-center text-slate-500 text-sm py-4">
-              لا يوجد نتائج
-            </p>
-          ) : null}
+                  );
+                })}
+              </div>
+            ) : isSearchable ? (
+              <p className="text-center text-slate-500 text-sm py-8">
+                لم يتم العثور على عملاء مطابقين
+              </p>
+            ) : null}
+          </div>
+          <div className="flex justify-end pt-2 border-t dark:border-slate-700/50">
+            <Button variant="secondary" onClick={onClose}>
+              إغلاق
+            </Button>
+          </div>
         </div>
-        <div className="flex justify-end pt-2">
-          <Button variant="secondary" onClick={onClose}>
-            إغلاق
-          </Button>
-        </div>
-      </div>
-    </Modal>
+      </Modal>
+
+      {/* Client History Modal */}
+      {selectedClientForHistory && (
+        <ClientHistoryModal
+          isOpen={!!selectedClientForHistory}
+          client={selectedClientForHistory}
+          onClose={() => setSelectedClientForHistory(null)}
+        />
+      )}
+    </>
   );
 };
 

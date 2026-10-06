@@ -53,7 +53,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         settings, authUser, addClient, addCar, addRequest, addRequestOptimized, addPendingRequest, updatePendingRequest, addNotification,
         addCarMake, addCarModel, addBroker, showNewRequestSuccessModal, hideNewRequestSuccessModal, showConfirmModal,
         searchClients, searchCarMakes, searchCarModels, checkCarHistory,
-        ensureLocalClient, clients, fetchCarModelsByMake, fetchClientRequests,
+        ensureLocalClient, clients, systemDefaultClient, fetchCarModelsByMake, fetchClientRequests,
         setSelectedRequestId, setPage, carMakes: contextCarMakes, carModels: contextCarModels,
         can, updateReservationStatus, updateReservation, updateRequestAndAssociatedData, cars,
         fetchAndUpdateSingleRequest, isCreatingRequest, setIsCreatingRequest, updateClient, addReservation, page,
@@ -1837,7 +1837,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     }, [addNotification, fetchCarModelsByMake, isMobile]);
 
     const handleMagicFill = useCallback(() => {
-        const defaultClient = initialClients.find(c => c.is_system_default);
+        const defaultClient = systemDefaultClient;
         if (defaultClient) {
             setClientName(defaultClient.name);
             setClientPhone(defaultClient.phone);
@@ -2123,7 +2123,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             existingClientSummary={existingClientSummary}
                             isReservationMode={isReservationMode}
                             onMagicFill={handleMagicFill}
-                            hasDefaultClient={initialClients.some(c => c.is_system_default)}
+                            hasDefaultClient={!!systemDefaultClient}
                             isMobile={isMobile}
                             whatsappApiStatus={(shouldShowWhatsAppCheckbox || (isReservationMode && (!initialReservationData || !initialReservationData.id))) ? whatsappApiStatus : undefined}
                             sendWhatsAppStartNotify={sendWhatsAppStartNotify}

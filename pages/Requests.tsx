@@ -28,8 +28,11 @@ import AlertTriangleIcon from '../components/icons/AlertTriangleIcon';
 import Icon from '../components/Icon';
 import InAppScannerModal from '../components/InAppScannerModal';
 import { Skeleton } from '../components/Skeleton';
-import { uuidv4, timeAgo, formatPendingNumber, arabicToEnglishNumerals } from '../lib/utils';
+import { uuidv4, timeAgo, formatPendingNumber, arabicToEnglishNumerals, getCurrentShiftRange, cleanSaudiPhoneNumber } from '../lib/utils';
 import { ClientSearchInput } from '../components/ClientSearchInput';
+import SmartPhoneInput from '../components/SmartPhoneInput';
+import LockIcon from '../components/icons/LockIcon';
+import EditIcon from '../components/icons/EditIcon';
 
 const StatBlock: React.FC<{ title: string; count: number; icon: React.ReactElement<{ className?: string }>; color: string; }> = ({ title, count, icon, color }) => (
     <div 
@@ -169,6 +172,91 @@ const Requests: React.FC = () => {
     const [selectedPaymentClientId, setSelectedPaymentClientId] = useState<string | null>(null);
     const [editablePrice, setEditablePrice] = useState<number>(0);
     const [isSubmittingPayment, setIsSubmittingPayment] = useState<boolean>(false);
+
+    const [matchedDbClient, setMatchedDbClient] = useState<Client | null>(null);
+    const [isSearchingClient, setIsSearchingClient] = useState<boolean>(false);
+
+    const searchDbForClient = useCallback(async (rawPhone: string) => {
+        const digits = (rawPhone || '').replace(/\D/g, '');
+        if (digits.length < 8) {
+            setMatchedDbClient(null);
+            setIsSearchingClient(false);
+            return null;
+        }
+
+        const searchPart = digits.slice(-8);
+        setIsSearchingClient(true);
+
+        try {
+            const { data } = await supabase
+                .from('clients')
+                .select('*')
+                .not('is_system_default', 'is', true)
+                .or(`phone.ilike.%${searchPart}%,phone.ilike.%${digits}%`)
+                .limit(5);
+
+            if (data && data.length > 0) {
+                const bestMatch = data.find((c: Client) => {
+                    const cDigits = (c.phone || '').replace(/\D/g, '');
+                    return cDigits.endsWith(searchPart) || cDigits === digits;
+                }) || data[0];
+
+                if (bestMatch) {
+                    setMatchedDbClient(bestMatch);
+                    setSelectedPaymentClientId(bestMatch.id);
+                    setEditableClientName(prev => {
+                        if (!prev || prev.trim() === '' || prev.trim() === 'عميل' || prev.trim() === 'عميل عام') {
+                            return bestMatch.name;
+                        }
+                        return prev;
+                    });
+                    setIsSearchingClient(false);
+                    return bestMatch;
+                }
+            }
+            setMatchedDbClient(null);
+        } catch (err) {
+            console.error('Error searching client by phone:', err);
+        } finally {
+            setIsSearchingClient(false);
+        }
+        return null;
+    }, [supabase]);
+
+    useEffect(() => {
+        if (!isPaymentModalOpen) return;
+        const digits = editableClientPhone.replace(/\D/g, '');
+        if (digits.length >= 8) {
+            const searchPart = digits.slice(-8);
+            const localMatch = clients.find(c => !c.is_system_default && c.phone && c.phone.replace(/\D/g, '').endsWith(searchPart));
+            if (localMatch) {
+                setMatchedDbClient(localMatch);
+                setSelectedPaymentClientId(localMatch.id);
+                setEditableClientName(prev => {
+                    if (!prev || prev.trim() === '' || prev.trim() === 'عميل' || prev.trim() === 'عميل عام') {
+                        return localMatch.name;
+                    }
+                    return prev;
+                });
+            }
+
+            const timer = setTimeout(() => {
+                searchDbForClient(editableClientPhone);
+            }, 300);
+            return () => clearTimeout(timer);
+        } else {
+            setMatchedDbClient(null);
+            setSelectedPaymentClientId(null);
+        }
+    }, [editableClientPhone, isPaymentModalOpen, clients, searchDbForClient]);
+
+    const activeMatchedClient = useMemo(() => {
+        if (matchedDbClient) return matchedDbClient;
+        const digits = (editableClientPhone || '').replace(/\D/g, '');
+        if (digits.length < 8) return null;
+        const searchPart = digits.slice(-8);
+        return clients.find(c => !c.is_system_default && c.phone && c.phone.replace(/\D/g, '').endsWith(searchPart)) || null;
+    }, [matchedDbClient, editableClientPhone, clients]);
 
     const [isReservationsAccordionOpen, setIsReservationsAccordionOpen] = useState(false);
     const [reservationMiniSearchTerm, setReservationMiniSearchTerm] = useState('');
@@ -430,21 +518,32 @@ const Requests: React.FC = () => {
             refreshEntitiesForRequests([lastUpdatedRequest]);
         }
         setServerFetchedData(prev => {
-            if (!prev) {
-                moduleCachedServerData = [lastUpdatedRequest];
-                return [lastUpdatedRequest];
-            }
+            if (!prev) return null;
             const exists = prev.some(r => r.id === lastUpdatedRequest.id);
-            let updatedList: InspectionRequest[];
             if (exists) {
-                updatedList = prev.map(r => r.id === lastUpdatedRequest.id ? { ...r, ...lastUpdatedRequest } : r);
-            } else {
-                updatedList = [lastUpdatedRequest, ...prev];
+                const updatedList = prev.map(r => r.id === lastUpdatedRequest.id ? { ...r, ...lastUpdatedRequest } : r);
+                moduleCachedServerData = updatedList;
+                return updatedList;
             }
-            moduleCachedServerData = updatedList;
-            return updatedList;
+
+            // Only add if it matches the current active date filter
+            let shouldAdd = false;
+            if (dateFilter === 'today') {
+                const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
+                shouldAdd = lastUpdatedRequest.created_at >= shiftStartIso && lastUpdatedRequest.created_at < shiftEndIso;
+            } else if (dateFilter === 'all') {
+                shouldAdd = true;
+            }
+
+            if (shouldAdd) {
+                const updatedList = [lastUpdatedRequest, ...prev];
+                moduleCachedServerData = updatedList;
+                return updatedList;
+            }
+
+            return prev;
         });
-    }, [lastUpdatedRequest, refreshEntitiesForRequests]);
+    }, [lastUpdatedRequest, refreshEntitiesForRequests, dateFilter]);
 
     useEffect(() => {
         if (!incomingRequest) return;
@@ -452,11 +551,26 @@ const Requests: React.FC = () => {
             ensureEntitiesLoaded([incomingRequest]);
         }
         setServerFetchedData(prev => {
-            if (!prev) return [incomingRequest];
+            if (!prev) return null;
             if (prev.some(r => r.id === incomingRequest.id)) return prev;
-            return [incomingRequest, ...prev];
+
+            let shouldAdd = false;
+            if (dateFilter === 'today') {
+                const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
+                shouldAdd = incomingRequest.created_at >= shiftStartIso && incomingRequest.created_at < shiftEndIso;
+            } else if (dateFilter === 'all') {
+                shouldAdd = true;
+            }
+
+            if (shouldAdd) {
+                const updatedList = [incomingRequest, ...prev];
+                moduleCachedServerData = updatedList;
+                return updatedList;
+            }
+
+            return prev;
         });
-    }, [incomingRequest, ensureEntitiesLoaded]);
+    }, [incomingRequest, ensureEntitiesLoaded, dateFilter]);
 
     useEffect(() => {
         if (!lastUpdatedClient) return;
@@ -749,6 +863,13 @@ const Requests: React.FC = () => {
 
     const lastDateFilter = useRef(dateFilter);
 
+    // --- VISIBILITY & FOCUS RECOVERY ---
+    useEffect(() => {
+        // Removed visibility fetch logic to save on API usage. 
+        // Reconnection is now handled globally in AppContext.
+        return () => {};
+    }, []);
+
     // Smart Back Logic: Scroll to and highlight the selected request when returning to the page
     useEffect(() => {
         // 1. Check if we should reset filters (Direct Navigation from Sidebar or Return from completion)
@@ -947,10 +1068,11 @@ const Requests: React.FC = () => {
     };
 
 
-    const handleProcessPaymentClick = (request: InspectionRequest) => {
+    const handleProcessPaymentClick = async (request: InspectionRequest) => {
         setPaymentRequest(request);
         setPaymentMethod('');
         setPaymentError(null);
+        setMatchedDbClient(null);
 
         const rawPending = (request as any)?._rawPending;
         let cName = rawPending?.client_name || (request as any)?.client_name || '';
@@ -962,44 +1084,48 @@ const Requests: React.FC = () => {
             cPhone = client?.phone || '';
         }
 
-        // Check strictly by phone number if an official registered client exists in the database
-        const cleaned = (cPhone || '').replace(/\D/g, '');
-        let matchedClient: any = undefined;
-        let resolvedClientId: string | null = null;
-
-        if (cleaned.length >= 9) {
-            const last9 = cleaned.slice(-9);
-            matchedClient = clients.find(c => c.phone && c.phone.replace(/\D/g, '').endsWith(last9));
-            if (matchedClient) {
-                if (matchedClient.name) {
-                    cName = matchedClient.name;
-                }
-                resolvedClientId = matchedClient.id;
-            }
-        }
-
         setEditableClientName(cName);
         setEditableClientPhone(cPhone);
-        setSelectedPaymentClientId(resolvedClientId);
         setEditablePrice(request.price || 0);
-
-        // Async DB lookup strictly by phone if not matched in cached clients
-        if (!matchedClient && searchClients && cleaned.length >= 9) {
-            searchClients(cleaned).then(remoteMatches => {
-                if (Array.isArray(remoteMatches)) {
-                    const last9 = cleaned.slice(-9);
-                    const dbMatch = remoteMatches.find(c => c.phone && c.phone.replace(/\D/g, '').endsWith(last9));
-                    if (dbMatch && dbMatch.name) {
-                        setEditableClientName(dbMatch.name);
-                        setSelectedPaymentClientId(dbMatch.id);
-                    }
-                }
-            }).catch(console.error);
-        }
-
         setSplitCashAmount(0);
         setSplitCardAmount(request.price || 0);
         setIsPaymentModalOpen(true);
+
+        // Perform silent immediate search in DB and local
+        const digits = (cPhone || '').replace(/\D/g, '');
+        if (digits.length >= 8) {
+            const searchPart = digits.slice(-8);
+            const localMatch = clients.find(c => !c.is_system_default && c.phone && c.phone.replace(/\D/g, '').endsWith(searchPart));
+            if (localMatch) {
+                setMatchedDbClient(localMatch);
+                setSelectedPaymentClientId(localMatch.id);
+                if (localMatch.name) {
+                    setEditableClientName(localMatch.name);
+                }
+            }
+            
+            searchDbForClient(cPhone).then(remoteMatch => {
+                if (remoteMatch) {
+                    setMatchedDbClient(remoteMatch);
+                    setSelectedPaymentClientId(remoteMatch.id);
+                    if (remoteMatch.name) {
+                        setEditableClientName(remoteMatch.name);
+                    }
+                }
+            });
+        } else if (request.client_id) {
+            try {
+                const { data: dbClient } = await supabase.from('clients').select('*').eq('id', request.client_id).single();
+                if (dbClient && !dbClient.is_system_default) {
+                    setMatchedDbClient(dbClient);
+                    setSelectedPaymentClientId(dbClient.id);
+                    if (dbClient.name) setEditableClientName(dbClient.name);
+                    if (dbClient.phone && !cPhone) setEditableClientPhone(dbClient.phone);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
     };
 
     const handleSplitCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2196,26 +2322,98 @@ const Requests: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* EDITABLE FIELDS SECTION */}
-                    <div className="p-3 bg-amber-50/50 dark:bg-amber-900/10 rounded-lg border border-amber-200/60 dark:border-amber-800/40 space-y-3">
-                        <h4 className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                            ✏️ بيانات العميل والمبلغ المطلوب قبل التحصيل:
+                    {/* CUSTOMER & PRICE SECTION */}
+                    <div className="p-3.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            <span>📋</span>
+                            <span>بيانات العميل والمبلغ المطلوب:</span>
                         </h4>
-                        
-                        <ClientSearchInput
-                            clientName={editableClientName}
-                            clientPhone={editableClientPhone}
-                            onNameChange={setEditableClientName}
-                            onPhoneChange={setEditableClientPhone}
-                            selectedClientId={selectedPaymentClientId}
-                            onSelectClient={(client) => setSelectedPaymentClientId(client.id)}
-                            onClearSelection={() => setSelectedPaymentClientId(null)}
-                            disabled={isSubmittingPayment}
-                            autoFocusPhone={true}
-                        />
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* 1. Phone number (Always open and directly editable) */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    رقم هاتف العميل
+                                </label>
+                                <SmartPhoneInput
+                                    value={editableClientPhone}
+                                    onChange={(val) => {
+                                        setEditableClientPhone(val);
+                                        const digits = val.replace(/\D/g, '');
+                                        if (digits.length >= 8) {
+                                            const searchPart = digits.slice(-8);
+                                            const localMatch = clients.find(c => !c.is_system_default && c.phone && c.phone.replace(/\D/g, '').endsWith(searchPart));
+                                            if (localMatch) {
+                                                setMatchedDbClient(localMatch);
+                                                setSelectedPaymentClientId(localMatch.id);
+                                                setEditableClientName(prev => {
+                                                    if (!prev || prev.trim() === '' || prev.trim() === 'عميل' || prev.trim() === 'عميل عام') {
+                                                        return localMatch.name;
+                                                    }
+                                                    return prev;
+                                                });
+                                            }
+                                        } else {
+                                            setMatchedDbClient(null);
+                                            setSelectedPaymentClientId(null);
+                                        }
+                                    }}
+                                    disabled={isSubmittingPayment}
+                                    autoFocus={false}
+                                    className="w-full !h-[42px] font-mono"
+                                />
+                            </div>
+
+                            {/* 2. Client Name */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    اسم العميل
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editableClientName}
+                                    disabled={isSubmittingPayment}
+                                    onChange={(e) => setEditableClientName(e.target.value)}
+                                    placeholder="اسم العميل"
+                                    className="w-full p-2.5 text-sm font-semibold border rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Hint indicating if client is already registered or new */}
+                        {isSearchingClient ? (
+                            <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-xl text-xs text-blue-700 dark:text-blue-300 animate-pulse">
+                                <RefreshCwIcon className="w-3.5 h-3.5 animate-spin" />
+                                <span>جاري البحث في قاعدة البيانات عن العميل...</span>
+                            </div>
+                        ) : activeMatchedClient ? (
+                            <div className="flex items-center justify-between p-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 animate-fade-in">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm">✅</span>
+                                    <div>
+                                        <span className="font-bold">العميل مسجل لدينا مسبقاً: </span>
+                                        <span className="font-semibold underline decoration-emerald-500/50 underline-offset-2">{activeMatchedClient.name}</span>
+                                    </div>
+                                </div>
+                                {editableClientName !== activeMatchedClient.name && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditableClientName(activeMatchedClient.name)}
+                                        className="px-2.5 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-sm transition-all flex items-center gap-1"
+                                    >
+                                        استخدام الاسم المسجل
+                                    </button>
+                                )}
+                            </div>
+                        ) : editableClientPhone.replace(/\D/g, '').length >= 8 ? (
+                            <div className="flex items-center gap-2 p-2 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl text-xs text-slate-600 dark:text-slate-300">
+                                <span>✨</span>
+                                <span>عميل جديد — سيتم ربطه وحفظه بالطلب تلقائياً.</span>
+                            </div>
+                        ) : null}
 
                         <div>
-                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">المبلغ المطلوب (ريال)</label>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">المبلغ المطلوب (ريال)</label>
                             <input
                                 type="number"
                                 value={editablePrice || ''}
@@ -2228,7 +2426,7 @@ const Requests: React.FC = () => {
                                     }
                                 }}
                                 placeholder="المبلغ"
-                                className="w-full p-2 text-base font-bold text-green-700 dark:text-green-400 border rounded-lg bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-green-500"
+                                className="w-full p-2.5 text-base font-bold text-green-700 dark:text-green-400 border rounded-xl bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-green-500"
                             />
                         </div>
                     </div>

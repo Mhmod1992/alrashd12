@@ -18,8 +18,8 @@ const NotificationContainer: React.FC = () => {
   const visibleNotifications = [...notifications].reverse().slice(0, 3);
 
   return (
-    <div className="fixed top-16 left-4 right-4 sm:top-24 sm:left-auto sm:right-6 z-[99999] sm:w-full sm:max-w-sm pointer-events-none print:hidden">
-      <div className="relative w-full">
+    <div className="fixed top-4 sm:top-24 left-4 right-4 sm:left-auto sm:right-6 z-[99999] sm:w-full sm:max-w-sm pointer-events-none print:hidden">
+      <div className="relative w-full max-w-[280px] sm:max-w-none mx-auto sm:mx-0">
         {visibleNotifications.map((notification, index) => {
           // Stacking logic:
           const scale = 1 - index * 0.05;
@@ -36,7 +36,7 @@ const NotificationContainer: React.FC = () => {
                 transform: `translateY(${translateY}px) scale(${scale})`,
                 opacity: opacity,
                 zIndex: zIndex,
-                transformOrigin: 'top center'
+                transformOrigin: isMobile ? 'top center' : 'top center'
               }}
             />
           );

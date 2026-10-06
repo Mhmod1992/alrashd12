@@ -7,6 +7,7 @@ interface SmartPhoneInputProps {
     onChange: (value: string) => void;
     autoFocus?: boolean;
     required?: boolean;
+    disabled?: boolean;
     className?: string;
     id?: string;
     onFocus?: () => void;
@@ -19,6 +20,7 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
     onChange,
     autoFocus = false,
     required = false,
+    disabled = false,
     className = '',
     id,
     onFocus,
@@ -52,7 +54,9 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
     };
 
     const handleContainerClick = () => {
-        combinedRef.current?.focus();
+        if (!disabled) {
+            combinedRef.current?.focus();
+        }
     };
 
     const renderVisual = () => {
@@ -60,7 +64,7 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
         const template = '05xxxxxxxx'.split('');
 
         return (
-            <div className="flex items-center font-mono select-none pointer-events-none" style={{ direction: 'ltr' }}>
+            <div className="flex items-center font-mono select-none pointer-events-none text-xs sm:text-sm" style={{ direction: 'ltr' }}>
                 {template.map((tChar, i) => {
                     const digit = digits[i];
                     const isFilled = digit !== undefined;
@@ -70,18 +74,18 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
                         <React.Fragment key={i}>
                             {/* Hyphens at specific positions */}
                             {(i === 3 || i === 6) && (
-                                <span className="text-slate-400 mx-0.5 tracking-tighter font-bold font-sans">-</span>
+                                <span className="text-slate-400 mx-1 tracking-tighter font-semibold font-sans text-xs">-</span>
                             )}
                             
-                            <div className="relative flex items-center justify-center w-[0.85em]">
+                            <div className="relative flex items-center justify-center w-[0.72em]">
                                 {/* Integrated Smart Cursor */}
                                 {isFocused && isCurrent && !selectionRange && (
-                                    <div className="absolute inset-y-1 -left-0.5 w-[2px] bg-blue-500 animate-pulse rounded-full z-10" />
+                                    <div className="absolute inset-y-0.5 -left-0.5 w-[2px] bg-blue-500 animate-pulse rounded-full z-10" />
                                 )}
                                 
                                 {/* Case for cursor at the very end (mask full) */}
                                 {isFocused && i === 9 && value.length === 10 && !selectionRange && (
-                                    <div className="absolute inset-y-1 -right-0.5 w-[2px] bg-blue-500 animate-pulse rounded-full z-10" />
+                                    <div className="absolute inset-y-0.5 -right-0.5 w-[2px] bg-blue-500 animate-pulse rounded-full z-10" />
                                 )}
 
                                 {/* Selection Background Highlight */}
@@ -89,10 +93,10 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
                                     <div className="absolute inset-0 bg-blue-200/50 dark:bg-blue-500/40 z-0 rounded-sm" />
                                 )}
 
-                                <span className={`transition-all duration-200 z-10 relative ${
+                                <span className={`transition-all duration-150 z-10 relative leading-none ${
                                     isFilled 
-                                        ? 'text-slate-900 dark:text-slate-100 font-bold text-lg' 
-                                        : 'text-slate-300 dark:text-slate-600/40 text-sm'
+                                        ? 'text-slate-800 dark:text-slate-100 font-bold text-xs sm:text-sm' 
+                                        : 'text-slate-400 dark:text-slate-500/50 text-xs'
                                 } ${!isFilled && tChar === 'x' ? 'italic' : ''}`}>
                                     {isFilled ? digit : tChar}
                                 </span>
@@ -106,10 +110,12 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
 
     return (
         <div 
-            className={`relative flex items-center justify-start h-[52px] px-4 rounded-xl border-2 transition-all duration-200 cursor-text bg-white dark:bg-slate-800 ${
-                isFocused 
-                    ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg' 
-                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+            className={`relative flex items-center justify-start h-[40px] px-3 rounded-xl border transition-all duration-200 cursor-text bg-white dark:bg-slate-800 ${
+                disabled
+                    ? 'opacity-85 cursor-not-allowed bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700'
+                    : isFocused 
+                    ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-sm' 
+                    : 'border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500'
             } ${className}`}
             onClick={handleContainerClick}
         >
@@ -124,18 +130,19 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
                 ref={combinedRef}
                 type="tel"
                 value={value}
+                disabled={disabled}
                 onChange={handleChange}
                 onPaste={handlePaste}
                 onSelect={handleSelect}
                 onKeyDown={onKeyDown}
                 onKeyUp={handleSelect}
                 onMouseUp={handleSelect}
-                onFocus={(e) => { setIsFocused(true); handleSelect(e); onFocus?.(); }}
+                onFocus={(e) => { if (!disabled) { setIsFocused(true); handleSelect(e); onFocus?.(); } }}
                 onBlur={(e) => { setIsFocused(false); handleSelect(e); onBlur?.(); }}
                 autoFocus={autoFocus}
                 required={required}
                 maxLength={25}
-                className="absolute inset-0 w-full h-full bg-transparent text-transparent z-10 cursor-text selection:bg-transparent dark:selection:bg-transparent caret-transparent focus:outline-none"
+                className="absolute inset-0 w-full h-full bg-transparent text-transparent z-10 cursor-text disabled:cursor-not-allowed selection:bg-transparent dark:selection:bg-transparent caret-transparent focus:outline-none"
                 autoComplete="off"
                 style={{ direction: 'ltr' }}
             />

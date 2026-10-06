@@ -214,6 +214,9 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
     const handleStageChange = (stage: 'workshop' | 'field') => {
         setInternalStage(stage);
         onChangeNoteStage?.(stage);
+        setTimeout(() => {
+            textareaRef.current?.focus();
+        }, 50);
     };
     
     // Bulk Input State
@@ -254,6 +257,41 @@ export const StickyNoteInput: React.FC<StickyNoteInputProps> = ({
             return () => clearTimeout(timer);
         }
     }, [activeTabId, isLocked, canManageNotes]);
+
+    // Smart Global Typing Capture: Focus textarea when user starts typing on keyboard
+    useEffect(() => {
+        const handleGlobalTypeCapture = (e: KeyboardEvent) => {
+            if (isLocked || isHandwritten || isSubmitting || !canManageNotes) return;
+
+            // Ignore modifier keys
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+            // Ignore non-printable keys
+            if (e.key.length !== 1) return;
+
+            const activeEl = document.activeElement;
+            const isInputActive = activeEl && (
+                activeEl.tagName === 'INPUT' ||
+                activeEl.tagName === 'TEXTAREA' ||
+                activeEl.tagName === 'SELECT' ||
+                (activeEl as HTMLElement).isContentEditable
+            );
+
+            // If user is already typing in another input (e.g., finding card status, search box, modal input), do not interfere
+            if (isInputActive) return;
+
+            // If bulk modal or camera page is open, do not capture
+            if (isBulkModalOpen || isCameraPageOpen || isConfirmingComplete) return;
+
+            // Focus the textarea
+            if (textareaRef.current && document.activeElement !== textareaRef.current) {
+                textareaRef.current.focus();
+            }
+        };
+
+        window.addEventListener('keydown', handleGlobalTypeCapture);
+        return () => window.removeEventListener('keydown', handleGlobalTypeCapture);
+    }, [isLocked, isHandwritten, isSubmitting, canManageNotes, isBulkModalOpen, isCameraPageOpen, isConfirmingComplete]);
 
     // Close color menu on click outside
     useEffect(() => {

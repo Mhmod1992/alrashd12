@@ -54,6 +54,7 @@ export const useDataScope = (
     const [lastUpdatedCar, setLastUpdatedCar] = useState<Car | null>(null);
 
     const [clients, setClients] = useState<Client[]>([]);
+    const [systemDefaultClient, setSystemDefaultClient] = useState<Client | null>(null);
     const [cars, setCars] = useState<Car[]>([]);
     const clientsRef = useRef(clients);
     useEffect(() => { clientsRef.current = clients; }, [clients]);
@@ -109,182 +110,6 @@ export const useDataScope = (
         setNotifications(prev => [...prev, { ...notification, id }]);
         setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
     }, []);
-
-    const fetchRequests = useCallback(async () => {
-        setIsRefreshing(true);
-        try {
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
-
-            const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
-
-            // Check if we already have valid cached master data
-            const cachedMakes = getCachedMaster<CarMake>('car_makes');
-            const cachedTypes = getCachedMaster<InspectionType>('inspection_types');
-            const cachedBrokers = getCachedMaster<Broker>('brokers');
-            const cachedCats = getCachedMaster<CustomFindingCategory>('custom_finding_categories');
-            const cachedFinds = getCachedMaster<PredefinedFinding>('predefined_findings');
-
-            const shouldFetchMakes = cachedMakes.length === 0;
-            const shouldFetchTypes = cachedTypes.length === 0;
-            const shouldFetchBrokers = cachedBrokers.length === 0;
-            const shouldFetchCats = cachedCats.length === 0;
-            const shouldFetchFinds = cachedFinds.length === 0;
-
-            const results = await Promise.all([
-                supabase.from('inspection_requests')
-                    .select(LIGHTWEIGHT_REQUEST_COLUMNS)
-                    .gte('created_at', shiftStartIso)
-                    .lt('created_at', shiftEndIso)
-                    .order('created_at', { ascending: false })
-                    .limit(REQUESTS_PAGE_SIZE),
-                shouldFetchMakes ? supabase.from('car_makes').select('*') : Promise.resolve({ data: cachedMakes, error: null }),
-                shouldFetchTypes ? supabase.from('inspection_types').select('*') : Promise.resolve({ data: cachedTypes, error: null }),
-                shouldFetchBrokers ? supabase.from('brokers').select('*') : Promise.resolve({ data: cachedBrokers, error: null }),
-                shouldFetchCats ? supabase.from('custom_finding_categories').select('*') : Promise.resolve({ data: cachedCats, error: null }),
-                shouldFetchFinds ? supabase.from('predefined_findings').select('*') : Promise.resolve({ data: cachedFinds, error: null }),
-                supabase.from('expenses').select('*'),
-                supabase.from('clients').select('*, inspection_requests(count)').limit(100),
-                supabase.from('cars').select('*').limit(100),
-                supabase.from('employees').select('*'),
-                supabase.from('technicians').select('*'),
-                supabase.from('notifications')
-                    .select('*')
-                    .order('created_at', { ascending: false })
-                    .limit(50),
-                supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(50),
-                supabase.from('whatsapp_messages').select('*').order('created_at', { ascending: false }).limit(50),
-                supabase.from('pending_requests').select('*').order('created_at', { ascending: false }),
-            ]);
-
-            const [
-                { data: reqs, error: reqError }, { data: mks }, { data: types },
-                { data: brks }, { data: cats }, { data: finds }, { data: exps },
-                { data: clts }, { data: crs }, { data: emps }, { data: techs }, { data: notifs },
-                { data: res },
-                { data: waMsgs, error: waError },
-                { data: pndData }
-            ] = results as any;
-
-            if (waError) console.error("WA Error:", waError);
-
-            // Cache freshly fetched master tables
-            if (shouldFetchMakes && mks) setCachedMaster('car_makes', mks);
-            if (shouldFetchTypes && types) setCachedMaster('inspection_types', types);
-            if (shouldFetchBrokers && brks) setCachedMaster('brokers', brks);
-            if (shouldFetchCats && cats) setCachedMaster('custom_finding_categories', cats);
-            if (shouldFetchFinds && finds) setCachedMaster('predefined_findings', finds);
-
-            // Cleanup old notifications (older than 30 days)
-            // Only run cleanup once per day for admins/managers
-            if (authUser && (authUser.role === 'general_manager' || authUser.role === 'manager')) {
-                const lastCleanup = localStorage.getItem('last_notif_cleanup');
-                const today = new Date().toDateString();
-                if (lastCleanup !== today) {
-                    supabase.from('notifications')
-                        .delete()
-                        .lt('created_at', thirtyDaysAgoStr)
-                        .then(({ error }) => {
-                            if (!error) {
-                                localStorage.setItem('last_notif_cleanup', today);
-                                console.log('Old notifications cleaned up');
-                            }
-                        });
-                }
-            }
-
-            if (reqError) throw reqError;
-
-            const requestsData = reqs || [];
-            const carsData = crs || [];
-            const clientsData = clts || [];
-
-            setRequests(requestsData);
-            setRequestsOffset(requestsData.length);
-            setHasMoreRequests(requestsData.length >= REQUESTS_PAGE_SIZE);
-            setClients(clientsData);
-            setCars(carsData);
-            setCarMakes(mks || []);
-            setInspectionTypes(types || []);
-            setBrokers(brks || []);
-            setCustomFindingCategories(cats || []);
-            setPredefinedFindings(finds || []);
-            setExpenses((exps || []).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            setEmployees(emps || []);
-            setTechnicians(techs || []);
-            setAppNotifications(notifs as AppNotification[] || []);
-            setReservations(res || []);
-            setPendingRequests(pndData || []);
-            setWhatsappMessages(waMsgs || []);
-            setUnreadWhatsAppCount((waMsgs || []).filter((m: any) => !m.is_read && (m.direction === 'incoming' || !m.direction)).length);
-
-            // --- PROACTIVE LOADING FOR INITIAL BATCH ---
-            const missingCarIds = Array.from(new Set(requestsData.map(r => r.car_id)))
-                .filter(id => id && !carsData.some(c => c.id === id));
-
-            const missingClientIds = Array.from(new Set(requestsData.map(r => r.client_id)))
-                .filter(id => id && !clientsData.some(c => c.id === id));
-
-            if (missingCarIds.length > 0) {
-                const { data: moreCars } = await supabase.from('cars').select('*').in('id', missingCarIds);
-                if (moreCars) setCars(prev => [...prev, ...moreCars.filter(mc => !prev.some(pc => pc.id === mc.id))]);
-            }
-            if (missingClientIds.length > 0) {
-                const { data: moreClients } = await supabase.from('clients').select('*, inspection_requests(count)').in('id', missingClientIds);
-                if (moreClients) setClients(prev => [...prev, ...moreClients.filter(mc => !prev.some(pc => pc.id === mc.id))]);
-            }
-
-            if (authUser) {
-                const { count, error } = await supabase
-                    .from('internal_messages')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('receiver_id', authUser.id)
-                    .eq('is_read', false);
-
-                if (!error && count !== null) {
-                    setUnreadMessagesCount(count);
-                }
-            }
-
-        } catch (error: any) {
-            console.error("Error fetching data from Supabase:", error);
-            addNotification({ title: 'خطأ', message: 'فشل تحميل البيانات من الخادم.', type: 'error' });
-        } finally {
-            setIsRefreshing(false);
-        }
-    }, [addNotification, authUser]);
-
-    const fetchCarModelsByMake = useCallback(async (makeId: string) => {
-        if (loadedMakesForModels.has(makeId)) return;
-
-        try {
-            const { data: models, error } = await supabase.from('car_models').select('*').eq('make_id', makeId).order('name_en', { ascending: true });
-            if (error) throw error;
-
-            if (models) {
-                setCarModels(prev => {
-                    const newModels = models.filter(nm => !prev.some(pm => pm.id === nm.id));
-                    return [...prev, ...newModels];
-                });
-                setLoadedMakesForModels(prev => new Set(prev).add(makeId));
-            }
-        } catch (e) {
-            console.error(`Failed to fetch models for make ${makeId}`, e);
-            addNotification({ title: 'تحذير', message: 'فشل تحميل موديلات السيارات.', type: 'warning' });
-        }
-    }, [loadedMakesForModels, addNotification]);
-
-    const fetchCarMakes = useCallback(async () => {
-        try {
-            const { data, error } = await supabase.from('car_makes').select('*').order('name_en', { ascending: true });
-            if (error) throw error;
-            setCarMakes(data || []);
-        } catch (error) {
-            console.error("Failed to fetch car makes", error);
-            addNotification({ title: 'خطأ', message: 'فشل تحميل قائمة الشركات.', type: 'error' });
-        }
-    }, [addNotification]);
 
     const ensureEntitiesLoaded = useCallback(async (fetchedRequests: InspectionRequest[]) => {
         if (!fetchedRequests || fetchedRequests.length === 0) return;
@@ -417,6 +242,240 @@ export const useDataScope = (
         }
     }, []);
 
+    const fetchRequests = useCallback(async () => {
+        setIsRefreshing(true);
+        try {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
+
+            const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
+
+            // Check if we already have valid cached master data
+            const cachedMakes = getCachedMaster<CarMake>('car_makes');
+            const cachedTypes = getCachedMaster<InspectionType>('inspection_types');
+            const cachedBrokers = getCachedMaster<Broker>('brokers');
+            const cachedCats = getCachedMaster<CustomFindingCategory>('custom_finding_categories');
+            const cachedFinds = getCachedMaster<PredefinedFinding>('predefined_findings');
+
+            const shouldFetchMakes = cachedMakes.length === 0;
+            const shouldFetchTypes = cachedTypes.length === 0;
+            const shouldFetchBrokers = cachedBrokers.length === 0;
+            const shouldFetchCats = cachedCats.length === 0;
+            const shouldFetchFinds = cachedFinds.length === 0;
+
+            const results = await Promise.all([
+                supabase.from('inspection_requests')
+                    .select(LIGHTWEIGHT_REQUEST_COLUMNS)
+                    .gte('created_at', shiftStartIso)
+                    .lt('created_at', shiftEndIso)
+                    .order('created_at', { ascending: false })
+                    .limit(REQUESTS_PAGE_SIZE),
+                shouldFetchMakes ? supabase.from('car_makes').select('*') : Promise.resolve({ data: cachedMakes, error: null }),
+                shouldFetchTypes ? supabase.from('inspection_types').select('*') : Promise.resolve({ data: cachedTypes, error: null }),
+                shouldFetchBrokers ? supabase.from('brokers').select('*') : Promise.resolve({ data: cachedBrokers, error: null }),
+                shouldFetchCats ? supabase.from('custom_finding_categories').select('*') : Promise.resolve({ data: cachedCats, error: null }),
+                shouldFetchFinds ? supabase.from('predefined_findings').select('*') : Promise.resolve({ data: cachedFinds, error: null }),
+                supabase.from('expenses').select('*'),
+                supabase.from('clients').select('*, inspection_requests(count)').limit(100),
+                supabase.from('cars').select('*').limit(100),
+                supabase.from('employees').select('*'),
+                supabase.from('technicians').select('*'),
+                supabase.from('notifications')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(50),
+                supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(50),
+                supabase.from('whatsapp_messages').select('*').order('created_at', { ascending: false }).limit(50),
+                supabase.from('pending_requests').select('*').order('created_at', { ascending: false }),
+                supabase.from('clients').select('*').eq('is_system_default', true).maybeSingle(),
+            ]);
+
+            const [
+                { data: reqs, error: reqError }, { data: mks }, { data: types },
+                { data: brks }, { data: cats }, { data: finds }, { data: exps },
+                { data: clts }, { data: crs }, { data: emps }, { data: techs }, { data: notifs },
+                { data: res },
+                { data: waMsgs, error: waError },
+                { data: pndData },
+                { data: defClt }
+            ] = results as any;
+
+            if (waError) console.error("WA Error:", waError);
+
+            // Cache freshly fetched master tables
+            if (shouldFetchMakes && mks) setCachedMaster('car_makes', mks);
+            if (shouldFetchTypes && types) setCachedMaster('inspection_types', types);
+            if (shouldFetchBrokers && brks) setCachedMaster('brokers', brks);
+            if (shouldFetchCats && cats) setCachedMaster('custom_finding_categories', cats);
+            if (shouldFetchFinds && finds) setCachedMaster('predefined_findings', finds);
+
+            // Cleanup old notifications (older than 30 days)
+            // Only run cleanup once per day for admins/managers
+            if (authUser && (authUser.role === 'general_manager' || authUser.role === 'manager')) {
+                const lastCleanup = localStorage.getItem('last_notif_cleanup');
+                const today = new Date().toDateString();
+                if (lastCleanup !== today) {
+                    supabase.from('notifications')
+                        .delete()
+                        .lt('created_at', thirtyDaysAgoStr)
+                        .then(({ error }) => {
+                            if (!error) {
+                                localStorage.setItem('last_notif_cleanup', today);
+                                console.log('Old notifications cleaned up');
+                            }
+                        });
+                }
+            }
+
+            if (reqError) throw reqError;
+
+            const requestsData = reqs || [];
+            const carsData = crs || [];
+            const clientsData = clts || [];
+
+            setRequests(requestsData);
+            setRequestsOffset(requestsData.length);
+            setHasMoreRequests(requestsData.length >= REQUESTS_PAGE_SIZE);
+            setClients(clientsData);
+            setSystemDefaultClient(defClt || null);
+            setCars(carsData);
+            setCarMakes(mks || []);
+            setInspectionTypes(types || []);
+            setBrokers(brks || []);
+            setCustomFindingCategories(cats || []);
+            setPredefinedFindings(finds || []);
+            setExpenses((exps || []).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            setEmployees(emps || []);
+            setTechnicians(techs || []);
+            setAppNotifications(notifs as AppNotification[] || []);
+            setReservations(res || []);
+            setPendingRequests(pndData || []);
+            setWhatsappMessages(waMsgs || []);
+            setUnreadWhatsAppCount((waMsgs || []).filter((m: any) => !m.is_read && (m.direction === 'incoming' || !m.direction)).length);
+
+            // --- PROACTIVE LOADING FOR INITIAL BATCH ---
+            const missingCarIds = Array.from(new Set(requestsData.map(r => r.car_id)))
+                .filter(id => id && !carsData.some(c => c.id === id));
+
+            const missingClientIds = Array.from(new Set(requestsData.map(r => r.client_id)))
+                .filter(id => id && !clientsData.some(c => c.id === id));
+
+            if (missingCarIds.length > 0) {
+                const { data: moreCars } = await supabase.from('cars').select('*').in('id', missingCarIds);
+                if (moreCars) setCars(prev => [...prev, ...moreCars.filter(mc => !prev.some(pc => pc.id === mc.id))]);
+            }
+            if (missingClientIds.length > 0) {
+                const { data: moreClients } = await supabase.from('clients').select('*, inspection_requests(count)').in('id', missingClientIds);
+                if (moreClients) setClients(prev => [...prev, ...moreClients.filter(mc => !prev.some(pc => pc.id === mc.id))]);
+            }
+
+            if (authUser) {
+                const { count, error } = await supabase
+                    .from('internal_messages')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('receiver_id', authUser.id)
+                    .eq('is_read', false);
+
+                if (!error && count !== null) {
+                    setUnreadMessagesCount(count);
+                }
+            }
+
+            // Update sync timestamp
+            localStorage.setItem('lastSyncTimestamp', Date.now().toString());
+
+        } catch (error: any) {
+            console.error("Error fetching data from Supabase:", error);
+            addNotification({ title: 'خطأ', message: 'فشل تحميل البيانات من الخادم.', type: 'error' });
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [addNotification, authUser]);
+
+    const syncDeltas = useCallback(async () => {
+        const lastSync = localStorage.getItem('lastSyncTimestamp');
+        // If no timestamp or older than 4 hours, do full fetch
+        if (!lastSync || Date.now() - parseInt(lastSync) > 4 * 60 * 60 * 1000) {
+            return fetchRequests();
+        }
+
+        setIsRefreshing(true);
+        try {
+            const lastSyncIso = new Date(parseInt(lastSync)).toISOString();
+            
+            // 1. Fetch only changed requests since last sync
+            const { data: changedReqs, error: reqError } = await supabase.from('inspection_requests')
+                .select(LIGHTWEIGHT_REQUEST_COLUMNS)
+                .gt('updated_at', lastSyncIso);
+
+            if (reqError) throw reqError;
+
+            // 2. Fetch changes in critical secondary tables (cheaper because they have few records)
+            const results = await Promise.all([
+                supabase.from('pending_requests').select('*'),
+                supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(50),
+                supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(50)
+            ]);
+
+            const [pndRes, resRes, notifRes] = results as any;
+
+            if (changedReqs && changedReqs.length > 0) {
+                setRequests(prev => {
+                    const map = new Map(prev.map(r => [r.id, r]));
+                    changedReqs.forEach(r => map.set(r.id, r));
+                    return Array.from(map.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                });
+                await ensureEntitiesLoaded(changedReqs);
+            }
+
+            if (pndRes.data) setPendingRequests(pndRes.data);
+            if (resRes.data) setReservations(resRes.data);
+            if (notifRes.data) setAppNotifications(notifRes.data);
+
+            // Update sync timestamp
+            localStorage.setItem('lastSyncTimestamp', Date.now().toString());
+            console.log(`Delta sync complete: processed ${changedReqs?.length || 0} request updates.`);
+
+        } catch (e) {
+            console.error("Delta sync failed, falling back to full fetch", e);
+            return fetchRequests();
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [fetchRequests, ensureEntitiesLoaded]);
+
+    const fetchCarModelsByMake = useCallback(async (makeId: string) => {
+        if (loadedMakesForModels.has(makeId)) return;
+
+        try {
+            const { data: models, error } = await supabase.from('car_models').select('*').eq('make_id', makeId).order('name_en', { ascending: true });
+            if (error) throw error;
+
+            if (models) {
+                setCarModels(prev => {
+                    const newModels = models.filter(nm => !prev.some(pm => pm.id === nm.id));
+                    return [...prev, ...newModels];
+                });
+                setLoadedMakesForModels(prev => new Set(prev).add(makeId));
+            }
+        } catch (e) {
+            console.error(`Failed to fetch models for make ${makeId}`, e);
+            addNotification({ title: 'تحذير', message: 'فشل تحميل موديلات السيارات.', type: 'warning' });
+        }
+    }, [loadedMakesForModels, addNotification]);
+
+    const fetchCarMakes = useCallback(async () => {
+        try {
+            const { data, error } = await supabase.from('car_makes').select('*').order('name_en', { ascending: true });
+            if (error) throw error;
+            setCarMakes(data || []);
+        } catch (error) {
+            console.error("Failed to fetch car makes", error);
+            addNotification({ title: 'خطأ', message: 'فشل تحميل قائمة الشركات.', type: 'error' });
+        }
+    }, [addNotification]);
+
     const markNotificationAsRead = useCallback(async (id: string) => {
         setAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
         const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
@@ -465,8 +524,12 @@ export const useDataScope = (
             setRequests(prev => {
                 const exists = prev.some(r => r.id === data.id);
                 if (exists) return prev.map(r => r.id === data.id ? data : r);
-                const newRequests = [data, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-                return newRequests.slice(0, REQUESTS_PAGE_SIZE + 10);
+                const { shiftStartIso, shiftEndIso } = getCurrentShiftRange();
+                if (data.created_at >= shiftStartIso && data.created_at < shiftEndIso) {
+                    const newRequests = [data, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                    return newRequests.slice(0, REQUESTS_PAGE_SIZE + 10);
+                }
+                return prev;
             });
         }
         return data;
@@ -669,6 +732,7 @@ export const useDataScope = (
         lastUpdatedClient, setLastUpdatedClient,
         lastUpdatedCar, setLastUpdatedCar,
         clients, setClients,
+        systemDefaultClient, setSystemDefaultClient,
         cars, setCars,
         carMakes, setCarMakes,
         carModels, setCarModels,
@@ -696,6 +760,7 @@ export const useDataScope = (
         financialReport, setFinancialReport,
         isRefreshing, setIsRefreshing,
         fetchRequests,
+        syncDeltas,
         fetchCarModelsByMake,
         fetchCarMakes,
         ensureEntitiesLoaded,

@@ -25,6 +25,8 @@ import XIcon from './icons/XIcon';
 import UserXIcon from './icons/UserXIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import ClientHistoryModal from './ClientHistoryModal';
+import SmartPhoneInput from './SmartPhoneInput';
+import { arabicToEnglishNumerals } from '../lib/utils';
 import { Banknote, CreditCard, ArrowRightLeft, Clock } from 'lucide-react';
 
 const SmartRowWrapper: React.FC<{
@@ -259,8 +261,273 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
     deleteRequest, deletePendingRequest, updatePendingRequest, addNotification, can, updateRequest, createActivityLog,
-    brokers, ensureEntitiesLoaded
+    brokers, ensureEntitiesLoaded, updateClient, addClient, sendWhatsAppMessage, fetchCarModelsByMake
   } = useAppContext();
+
+  // Quick Edit Modals for Waiting Payment Requests
+  const [clientModalRequest, setClientModalRequest] = useState<InspectionRequest | null>(null);
+  const [editClientName, setEditClientName] = useState('');
+  const [editClientPhone, setEditClientPhone] = useState('');
+  const [isSavingClient, setIsSavingClient] = useState(false);
+
+  const [carModalRequest, setCarModalRequest] = useState<InspectionRequest | null>(null);
+  const [editMakeId, setEditMakeId] = useState('');
+  const [editMakeNameAr, setEditMakeNameAr] = useState('');
+  const [editMakeNameEn, setEditMakeNameEn] = useState('');
+  const [editModelId, setEditModelId] = useState('');
+  const [editModelNameAr, setEditModelNameAr] = useState('');
+  const [editModelNameEn, setEditModelNameEn] = useState('');
+  const [editYear, setEditYear] = useState<number>(new Date().getFullYear());
+  const [editPlate, setEditPlate] = useState('');
+  const [editVin, setEditVin] = useState('');
+  const [editInspectionTypeId, setEditInspectionTypeId] = useState('');
+  const [editPrice, setEditPrice] = useState<number>(0);
+  const [isSavingCar, setIsSavingCar] = useState(false);
+
+  // Search states for Car Modal
+  const [makeSearchTerm, setMakeSearchTerm] = useState('');
+  const [isMakeDropdownOpen, setIsMakeDropdownOpen] = useState(false);
+  const [modelSearchTerm, setModelSearchTerm] = useState('');
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [inspectionSearchTerm, setInspectionSearchTerm] = useState('');
+  const [isInspectionDropdownOpen, setIsInspectionDropdownOpen] = useState(false);
+
+  const filteredMakesForEdit = useMemo(() => {
+    if (!makeSearchTerm.trim()) return carMakes.slice(0, 30);
+    const term = makeSearchTerm.toLowerCase();
+    return carMakes.filter(m => 
+      (m.name_ar && m.name_ar.toLowerCase().includes(term)) || 
+      (m.name_en && m.name_en.toLowerCase().includes(term))
+    ).slice(0, 30);
+  }, [carMakes, makeSearchTerm]);
+
+  const filteredModelsForEdit = useMemo(() => {
+    const list = editMakeId ? carModels.filter(m => m.make_id === editMakeId) : carModels;
+    if (!modelSearchTerm.trim()) return list.slice(0, 30);
+    const term = modelSearchTerm.toLowerCase();
+    return list.filter(m => 
+      (m.name_ar && m.name_ar.toLowerCase().includes(term)) || 
+      (m.name_en && m.name_en.toLowerCase().includes(term))
+    ).slice(0, 30);
+  }, [carModels, editMakeId, modelSearchTerm]);
+
+  const filteredInspectionsForEdit = useMemo(() => {
+    if (!inspectionSearchTerm.trim()) return inspectionTypes;
+    const term = inspectionSearchTerm.toLowerCase();
+    return inspectionTypes.filter(t => 
+      (t.name && t.name.toLowerCase().includes(term)) || 
+      String(t.price).includes(term)
+    );
+  }, [inspectionTypes, inspectionSearchTerm]);
+
+  const filteredCarModels = useMemo(() => {
+    if (!editMakeId) return [];
+    return carModels.filter(m => m.make_id === editMakeId);
+  }, [carModels, editMakeId]);
+
+  const openQuickEditClient = (req: InspectionRequest) => {
+    setClientModalRequest(req);
+    const info = getClientInfo(req.client_id, req);
+    const client = clients.find(c => c.id === req.client_id);
+    const clientName = (info.name && info.name !== 'غير معروف') ? info.name : (client?.name || '');
+    const clientPhone = info.phone || client?.phone || '';
+    setEditClientName(clientName);
+    setEditClientPhone(clientPhone);
+  };
+
+  const handleSaveClient = async (andSendWhatsApp: boolean) => {
+    if (!clientModalRequest) return;
+    if (!editClientName.trim() && !editClientPhone.trim()) {
+      addNotification({ title: 'تنبيه', message: 'يرجى إدخال اسم أو رقم هاتف العميل.', type: 'warning' });
+      return;
+    }
+
+    setIsSavingClient(true);
+    try {
+      const isPending = (clientModalRequest as any)._isPending;
+      if (isPending) {
+        await updatePendingRequest(clientModalRequest.id, {
+          client_name: editClientName.trim(),
+          client_phone: editClientPhone.trim()
+        });
+      } else {
+        const client = clients.find(c => c.id === clientModalRequest.client_id);
+        if (client?.is_system_default) {
+          const newClient = await addClient({
+            id: `cli_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            name: editClientName.trim(),
+            phone: editClientPhone.trim(),
+            created_at: new Date().toISOString()
+          } as Client);
+          await updateRequest({
+            ...clientModalRequest,
+            client_id: newClient.id
+          });
+        } else if (clientModalRequest.client_id) {
+          await updateClient({
+            id: clientModalRequest.client_id,
+            name: editClientName.trim(),
+            phone: editClientPhone.trim()
+          } as Client);
+        } else {
+          const newClient = await addClient({
+            id: `cli_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            name: editClientName.trim(),
+            phone: editClientPhone.trim(),
+            created_at: new Date().toISOString()
+          } as Client);
+          await updateRequest({
+            ...clientModalRequest,
+            client_id: newClient.id
+          });
+        }
+      }
+
+      if (andSendWhatsApp) {
+        const normalizedPhone = arabicToEnglishNumerals(String(editClientPhone || ''));
+        let phone = normalizedPhone.replace(/\D/g, '');
+        if (phone.startsWith('00966')) phone = phone.substring(2);
+        else if (phone.startsWith('05')) phone = '966' + phone.substring(1);
+        else if (phone.length === 9 && phone.startsWith('5')) phone = '966' + phone;
+
+        if (!phone || phone.length < 9) {
+          addNotification({ title: 'تنبيه', message: 'تم حفظ البيانات، ولكن رقم الهاتف غير صحيح لإرسال واتساب.', type: 'warning' });
+        } else {
+          const formatShortRequestNumber = (num: string | number) => {
+            const str = String(num);
+            if (str.length >= 4) return str.replace(/(\d)(\d{3})$/, '$1-$2');
+            return str;
+          };
+          const shortReqNum = formatShortRequestNumber(clientModalRequest.request_number);
+          let carDetails = 'غير محدد';
+          if (clientModalRequest.car_snapshot) {
+            const snap = clientModalRequest.car_snapshot;
+            carDetails = [snap.make_ar || snap.make_en, snap.model_ar || snap.model_en, snap.year].filter(Boolean).join(' ') || 'غير محدد';
+          }
+          const message = `*تذكير بالدفع — مركز الراشد*\n\nالمكرم *${editClientName.trim() || 'العميل'}* ،\nنُذكّركم بأن الطلب *\u200E#${shortReqNum}\u200E* بانتظار الدفع:\n\n▪️ السيارة: ${carDetails}\n💵 المبلغ: *《 ${clientModalRequest.price} ريال 》*\n\nيرجى السداد لدى *المحاسب لبدء الفحص* .\n\n*إدارة مركز الراشد*`;
+          await sendWhatsAppMessage(phone, message, editClientName.trim());
+        }
+      }
+
+      addNotification({
+        title: andSendWhatsApp ? 'تم الحفظ والإرسال' : 'تم الحفظ',
+        message: andSendWhatsApp ? 'تم تحديث بيانات العميل وإرسال رسالة الدفع عبر واتساب.' : 'تم تحديث بيانات العميل بنجاح.',
+        type: 'success'
+      });
+      if (onRefresh) onRefresh();
+      setClientModalRequest(null);
+    } catch (err: any) {
+      console.error('Error saving client:', err);
+      addNotification({ title: 'خطأ', message: 'فشل حفظ بيانات العميل.', type: 'error' });
+    } finally {
+      setIsSavingClient(false);
+    }
+  };
+
+  const openQuickEditCar = (req: InspectionRequest) => {
+    setCarModalRequest(req);
+    const snap: any = req.car_snapshot || {};
+    const make = carMakes.find(m => m.name_ar === snap.make_ar || m.name_en === snap.make_en);
+    setEditMakeId(make?.id || '');
+    const mNameAr = snap.make_ar || make?.name_ar || '';
+    const mNameEn = snap.make_en || make?.name_en || '';
+    setEditMakeNameAr(mNameAr);
+    setEditMakeNameEn(mNameEn);
+    setMakeSearchTerm(mNameAr ? `${mNameAr} (${mNameEn || ''})`.trim() : mNameEn || '');
+
+    const mdlNameAr = snap.model_ar || '';
+    const mdlNameEn = snap.model_en || '';
+    setEditModelId('');
+    setEditModelNameAr(mdlNameAr);
+    setEditModelNameEn(mdlNameEn);
+    setModelSearchTerm(mdlNameAr ? `${mdlNameAr} (${mdlNameEn || ''})`.trim() : mdlNameEn || '');
+
+    setEditYear(snap.year || new Date().getFullYear());
+    setEditPlate((snap as any).plate_number || (snap as any).plate || (req as any).plate_number || '');
+    setEditVin(snap.vin || (req as any).vin || '');
+    
+    setEditInspectionTypeId(req.inspection_type_id || '');
+    const it = inspectionTypes.find(t => t.id === req.inspection_type_id);
+    setInspectionSearchTerm(it ? `${it.name} (${it.price} ريال)` : '');
+
+    setEditPrice(req.price || 0);
+
+    setIsMakeDropdownOpen(false);
+    setIsModelDropdownOpen(false);
+    setIsInspectionDropdownOpen(false);
+
+    if (make?.id) {
+      fetchCarModelsByMake(make.id);
+    }
+  };
+
+  const handleMakeSelect = (makeId: string) => {
+    setEditMakeId(makeId);
+    const m = carMakes.find(item => item.id === makeId);
+    setEditMakeNameAr(m?.name_ar || '');
+    setEditMakeNameEn(m?.name_en || '');
+    setEditModelId('');
+    setEditModelNameAr('');
+    setEditModelNameEn('');
+    if (makeId) {
+      fetchCarModelsByMake(makeId);
+    }
+  };
+
+  const handleModelSelect = (modelId: string) => {
+    setEditModelId(modelId);
+    const mdl = carModels.find(item => item.id === modelId);
+    setEditModelNameAr(mdl?.name_ar || '');
+    setEditModelNameEn(mdl?.name_en || '');
+  };
+
+  const handleSaveCar = async () => {
+    if (!carModalRequest) return;
+    setIsSavingCar(true);
+    try {
+      const updatedSnapshot = {
+        make_ar: editMakeNameAr,
+        make_en: editMakeNameEn,
+        model_ar: editModelNameAr,
+        model_en: editModelNameEn,
+        year: Number(editYear),
+        plate_number: editPlate.trim(),
+        vin: editVin.trim()
+      };
+
+      const isPending = (carModalRequest as any)._isPending;
+      if (isPending) {
+        await updatePendingRequest(carModalRequest.id, {
+          car_snapshot: updatedSnapshot,
+          car_year: Number(editYear),
+          plate_number: editPlate.trim(),
+          vin: editVin.trim(),
+          inspection_type_id: editInspectionTypeId,
+          price: Number(editPrice)
+        });
+      } else {
+        await updateRequest({
+          id: carModalRequest.id,
+          car_snapshot: updatedSnapshot,
+          inspection_type_id: editInspectionTypeId,
+          price: Number(editPrice)
+        });
+      }
+
+      addNotification({
+        title: 'تم الحفظ',
+        message: 'تم تحديث بيانات السيارة ونوع الفحص والسعر بنجاح.',
+        type: 'success'
+      });
+      if (onRefresh) onRefresh();
+      setCarModalRequest(null);
+    } catch (err) {
+      console.error('Error saving car details:', err);
+      addNotification({ title: 'خطأ', message: 'فشل حفظ بيانات السيارة.', type: 'error' });
+    } finally {
+      setIsSavingCar(false);
+    }
+  };
 
   const [activeBrokerMenuId, setActiveBrokerMenuId] = useState<string | null>(null);
   const brokerMenuRef = useRef<HTMLDivElement>(null);
@@ -849,7 +1116,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                             }
                         } : carInfo);
 
-                        const isWaitingPayment = request.status === RequestStatus.WAITING_PAYMENT;
+                        const isWaitingPayment = request.status === RequestStatus.WAITING_PAYMENT || request.payment_type === PaymentType.WaitingPayment || Boolean((request as any)._isPending);
                         const inspectionType = inspectionTypes.find(t => t.id === request.inspection_type_id);
                         
                         // Row styling based on payment
@@ -939,12 +1206,16 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                 </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
+                                        <td className={`px-6 py-4 ${isWaitingPayment ? "cursor-pointer hover:bg-amber-50/50 dark:hover:bg-amber-900/10" : ""}`} onClick={(e) => { if (isWaitingPayment) { e.stopPropagation(); openQuickEditClient(request); } }}>
                                             <div 
-                                                className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors group/client"
+                                                className={`font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer transition-colors group/client ${
+                                                    isWaitingPayment ? 'hover:text-amber-600 dark:hover:text-amber-400' : 'hover:text-blue-600 dark:hover:text-blue-400'
+                                                }`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (client && !client.is_system_default) {
+                                                    if (isWaitingPayment) {
+                                                        openQuickEditClient(request);
+                                                    } else if (client && !client.is_system_default) {
                                                         setSelectedClientForHistory(client);
                                                     } else {
                                                         const searchKey = client?.is_system_default ? 'عميل عام' : clientInfo.phone;
@@ -952,7 +1223,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                         window.open(url, '_blank');
                                                     }
                                                 }}
-                                                title={client?.is_system_default ? "عرض كل طلبات العميل العام" : "اضغط لعرض سجل طلبات العميل"}
+                                                title={isWaitingPayment ? "اضغط لتعديل بيانات العميل وحفظها أو إرسالها عبر واتساب" : (client?.is_system_default ? "عرض كل طلبات العميل العام" : "اضغط لعرض سجل طلبات العميل")}
                                             >
                                                 {client?.is_system_default ? (
                                                     <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-black">
@@ -961,6 +1232,11 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                     </span>
                                                 ) : (
                                                     <HighlightText text={clientInfo.name} tokens={expandedSearchTokens} />
+                                                )}
+                                                {isWaitingPayment && (
+                                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 opacity-60 group-hover/client:opacity-100 transition-opacity" title="تعديل سريع">
+                                                        ✏️
+                                                    </span>
                                                 )}
                                                 {lazyHasClientHistory && !client?.is_system_default && (
                                                     <span 
@@ -1003,7 +1279,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                 );
                                             })()}
                                         </td>
-                                        <td className={`px-6 py-4 sticky right-0 md:static z-10 shadow-sm md:shadow-none transition-colors duration-150 ${(request.status === RequestStatus.WAITING_PAYMENT || request.payment_type === PaymentType.WaitingPayment) ? 'bg-purple-50/60 dark:bg-purple-900/20' : request.payment_type === PaymentType.Unpaid ? 'bg-rose-50 dark:bg-rose-900/20' : request.payment_type === PaymentType.Transfer ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30'}`}>
+                                        <td className={`px-6 py-4 sticky right-0 md:static z-10 shadow-sm md:shadow-none transition-colors duration-150 ${(request.status === RequestStatus.WAITING_PAYMENT || request.payment_type === PaymentType.WaitingPayment) ? 'bg-purple-50/60 dark:bg-purple-900/20 cursor-pointer hover:bg-purple-100/60 dark:hover:bg-purple-900/40' : request.payment_type === PaymentType.Unpaid ? 'bg-rose-50 dark:bg-rose-900/20' : request.payment_type === PaymentType.Transfer ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30'}`} onClick={(e) => { if (isWaitingPayment) { e.stopPropagation(); openQuickEditCar(request); } }}>
                                             <div className="flex items-center gap-2">
                                                 {lazyHasCarHistory && onHistoryClick && (
                                                     <button
@@ -1016,14 +1292,25 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                 )}
                                         <div>
                                             <div 
-                                                className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                                className={`font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer transition-colors ${
+                                                    isWaitingPayment ? 'hover:text-amber-600 dark:hover:text-amber-400' : 'hover:text-blue-600 dark:hover:text-blue-400'
+                                                }`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    handleCarClick(e, searchData);
+                                                    if (isWaitingPayment) {
+                                                        openQuickEditCar(request);
+                                                    } else {
+                                                        handleCarClick(e, searchData);
+                                                    }
                                                 }}
-                                                title="اضغط للبحث عن صور السيارة"
+                                                title={isWaitingPayment ? "اضغط لتعديل بيانات السيارة ونوع الفحص والسعر" : "اضغط للبحث عن صور السيارة"}
                                             >
                                                 <span><HighlightText text={carDisplayName} tokens={expandedSearchTokens} /></span>
+                                                {isWaitingPayment && (
+                                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 opacity-60 hover:opacity-100 transition-opacity" title="تعديل سريع">
+                                                        ✏️
+                                                    </span>
+                                                )}
                                                 {request.report_stamps?.includes('CUSTOMER_REQUEST_INCOMPLETE') && (
                                                     <div className="relative group">
                                                         <AlertTriangleIcon className="w-5 h-5 text-red-500" />
@@ -1077,13 +1364,13 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                      <td className="px-6 py-4">
                                         <div className="relative">
                                             <div 
-                                                className={`flex items-center gap-1 font-bold text-slate-800 dark:text-slate-200 ${can('add_broker_commission') ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50' : 'cursor-default'} p-1.5 rounded-lg transition-colors group/price`}
+                                                className={`flex items-center gap-1 font-bold text-slate-800 dark:text-slate-200 ${can('add_broker_commission') && !isWaitingPayment ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50' : 'cursor-default'} p-1.5 rounded-lg transition-colors group/price`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!can('add_broker_commission')) return;
+                                                    if (isWaitingPayment || !can('add_broker_commission')) return;
                                                     setActiveBrokerMenuId(activeBrokerMenuId === request.id ? null : request.id);
                                                 }}
-                                                title={can('add_broker_commission') ? "اضغط لتعيين سمسار سريع" : ""}
+                                                title={can('add_broker_commission') && !isWaitingPayment ? "اضغط لتعيين سمسار سريع" : ""}
                                             >
                                                 <div className="flex flex-col">
                                                     <div className="flex items-center gap-1">
@@ -1100,9 +1387,11 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                     )}
                                                 </div>
                                                 
-                                                <div className="opacity-0 group-hover/price:opacity-100 transition-opacity ml-1">
-                                                    <ChevronDownIcon className="w-3 h-3 text-slate-400" />
-                                                </div>
+                                                {!isWaitingPayment && can('add_broker_commission') && (
+                                                    <div className="opacity-0 group-hover/price:opacity-100 transition-opacity ml-1">
+                                                        <ChevronDownIcon className="w-3 h-3 text-slate-400" />
+                                                    </div>
+                                                )}
                                                 
                                                 {request.payment_note && (
                                                     <div className="relative group/tooltip flex items-center justify-center cursor-help mx-1">
@@ -1117,7 +1406,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
 
                                             {/* Quick Broker Menu */}
                                             <AnimatePresence>
-                                                {activeBrokerMenuId === request.id && (
+                                                {activeBrokerMenuId === request.id && !isWaitingPayment && (
                                                     <motion.div
                                                         ref={brokerMenuRef}
                                                         initial={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -1228,33 +1517,34 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                     <div className="flex items-center justify-end gap-1">
                                         {isWaitingPayment ? (
                                             <>
-                                                {onProcessPayment && can('process_payment') && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); onProcessPayment(request); }}
-                                                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300 dark:hover:bg-green-900/60 transition-all font-semibold text-xs shadow-sm border border-green-200 dark:border-green-800"
-                                                        title="تحصيل المبلغ وتفعيل الطلب"
-                                                    >
-                                                        <DollarSignIcon className="w-4 h-4" />
-                                                        تحصيل
-                                                    </button>
-                                                )}
                                                 {onOpenUpdateModal && can('update_requests_data') && (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); onOpenUpdateModal(request); }}
-                                                        className={`p-2 rounded-lg text-slate-500 hover:text-${primaryColor}-600 hover:bg-${primaryColor}-50 dark:hover:bg-${primaryColor}-900/20 transition-all`}
-                                                        title="تعديل بيانات الطلب"
+                                                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60 transition-all font-semibold text-xs shadow-sm border border-blue-200 dark:border-blue-800"
+                                                        title="تحديث بيانات الطلب"
                                                     >
-                                                        <RefreshCwIcon className="w-4 h-4" />
+                                                        <RefreshCwIcon className="w-3.5 h-3.5" />
+                                                        <span>تحديث</span>
+                                                    </button>
+                                                )}
+                                                {onProcessPayment && can('process_payment') && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onProcessPayment(request); }}
+                                                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition-all font-semibold text-xs shadow-sm border border-emerald-200 dark:border-emerald-800"
+                                                        title="تحصيل المبلغ وتفعيل الطلب"
+                                                    >
+                                                        <DollarSignIcon className="w-3.5 h-3.5" />
+                                                        <span>تحصيل</span>
                                                     </button>
                                                 )}
                                                 {onResendWhatsApp && can('resend_whatsapp_report') && (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); onResendWhatsApp(request); }}
-                                                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#25D366] text-white hover:bg-[#128C7E] transition-all font-semibold text-xs shadow-sm"
-                                                        title="إعادة إرسال عبر واتساب"
+                                                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#25D366] text-white hover:bg-[#128C7E] transition-all font-semibold text-xs shadow-sm"
+                                                        title="إرسال بيانات الدفع عبر واتساب"
                                                     >
-                                                        <WhatsappIcon className="w-4 h-4" />
-                                                        <span>إرسال</span>
+                                                        <WhatsappIcon className="w-3.5 h-3.5" />
+                                                        <span>واتساب</span>
                                                     </button>
                                                 )}
                                             </>
@@ -1397,6 +1687,290 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
         client={selectedClientForHistory} 
         onClose={() => setSelectedClientForHistory(null)} 
       />
+
+      {/* Quick Edit Client Modal for Waiting Payment */}
+      {clientModalRequest && (
+        <Modal
+          isOpen={!!clientModalRequest}
+          onClose={() => !isSavingClient && setClientModalRequest(null)}
+          title={`تعديل بيانات العميل — طلب #${clientModalRequest.request_number}`}
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200/60 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-300 font-medium">
+              💡 يمكنك تعديل بيانات العميل مباشرة، واختيار "حفظ وإرسال وتساب" لإرسال رسالة تذكير بالدفع إلى الرقم الجديد فوراً.
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                اسم العميل <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={editClientName}
+                onChange={(e) => setEditClientName(e.target.value)}
+                className="w-full p-2.5 text-sm font-semibold border rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-blue-500"
+                placeholder="أدخل اسم العميل"
+                disabled={isSavingClient}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                رقم هاتف العميل <span className="text-red-500">*</span>
+              </label>
+              <SmartPhoneInput
+                value={editClientPhone}
+                onChange={(val) => setEditClientPhone(val)}
+                disabled={isSavingClient}
+                className="w-full !h-[48px]"
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
+              <button
+                type="button"
+                disabled={isSavingClient}
+                onClick={() => handleSaveClient(true)}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all disabled:opacity-50"
+              >
+                <WhatsappIcon className="w-4 h-4" />
+                <span>{isSavingClient ? 'جاري الحفظ...' : 'حفظ وإرسال وتساب'}</span>
+              </button>
+              <button
+                type="button"
+                disabled={isSavingClient}
+                onClick={() => handleSaveClient(false)}
+                className="py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-50"
+              >
+                حفظ فقط
+              </button>
+              <button
+                type="button"
+                disabled={isSavingClient}
+                onClick={() => setClientModalRequest(null)}
+                className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-sm transition-all"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Quick Edit Car & Inspection Modal for Waiting Payment */}
+      {carModalRequest && (
+        <Modal
+          isOpen={!!carModalRequest}
+          onClose={() => !isSavingCar && setCarModalRequest(null)}
+          title={`تعديل بيانات السيارة والفحص — طلب #${carModalRequest.request_number}`}
+          size="lg"
+        >
+          <div className="space-y-4">
+            <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200/60 dark:border-blue-800/40 text-xs text-blue-800 dark:text-blue-300 font-medium">
+              🚗 تعديل سريع لبيانات السيارة وسنة الصنع واللوحة، ونوع الفحص والسعر للطلب بانتظار الدفع.
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 1. Searchable Make */}
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  الشركة المصنعة <span className="text-blue-500 font-normal">(قابلة للبحث)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={makeSearchTerm}
+                    onChange={(e) => {
+                      setMakeSearchTerm(e.target.value);
+                      setIsMakeDropdownOpen(true);
+                      setEditMakeNameAr(e.target.value);
+                    }}
+                    onFocus={() => setIsMakeDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setIsMakeDropdownOpen(false), 200)}
+                    placeholder="ابحث عن الشركة أو اكتب اسمها..."
+                    disabled={isSavingCar}
+                    className="w-full p-2.5 text-sm font-semibold border rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-blue-500 pl-8"
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                    <SearchIcon className="w-4 h-4" />
+                  </div>
+                </div>
+                {isMakeDropdownOpen && filteredMakesForEdit.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                    {filteredMakesForEdit.map(m => (
+                      <div
+                        key={m.id}
+                        onMouseDown={() => {
+                          setEditMakeId(m.id);
+                          setEditMakeNameAr(m.name_ar || '');
+                          setEditMakeNameEn(m.name_en || '');
+                          setMakeSearchTerm(`${m.name_ar} (${m.name_en || ''})`.trim());
+                          setIsMakeDropdownOpen(false);
+                          setEditModelId('');
+                          setEditModelNameAr('');
+                          setEditModelNameEn('');
+                          setModelSearchTerm('');
+                          fetchCarModelsByMake(m.id);
+                        }}
+                        className="p-2.5 text-xs font-semibold cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 flex items-center justify-between"
+                      >
+                        <span>{m.name_ar}</span>
+                        <span className="text-[11px] text-slate-400 font-mono" dir="ltr">{m.name_en}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Searchable Model */}
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  الموديل <span className="text-blue-500 font-normal">(قابل للبحث)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={modelSearchTerm}
+                    onChange={(e) => {
+                      setModelSearchTerm(e.target.value);
+                      setIsModelDropdownOpen(true);
+                      setEditModelNameAr(e.target.value);
+                    }}
+                    onFocus={() => setIsModelDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setIsModelDropdownOpen(false), 200)}
+                    placeholder="ابحث عن الموديل أو اكتب اسمه..."
+                    disabled={isSavingCar}
+                    className="w-full p-2.5 text-sm font-semibold border rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-blue-500 pl-8"
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                    <SearchIcon className="w-4 h-4" />
+                  </div>
+                </div>
+                {isModelDropdownOpen && filteredModelsForEdit.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                    {filteredModelsForEdit.map(mdl => (
+                      <div
+                        key={mdl.id}
+                        onMouseDown={() => {
+                          setEditModelId(mdl.id);
+                          setEditModelNameAr(mdl.name_ar || '');
+                          setEditModelNameEn(mdl.name_en || '');
+                          setModelSearchTerm(`${mdl.name_ar} (${mdl.name_en || ''})`.trim());
+                          setIsModelDropdownOpen(false);
+                        }}
+                        className="p-2.5 text-xs font-semibold cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 flex items-center justify-between"
+                      >
+                        <span>{mdl.name_ar}</span>
+                        <span className="text-[11px] text-slate-400 font-mono" dir="ltr">{mdl.name_en}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+              {/* 3. Year */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">سنة الصنع</label>
+                <input
+                  type="number"
+                  value={editYear || ''}
+                  onChange={(e) => setEditYear(Number(e.target.value))}
+                  disabled={isSavingCar}
+                  className="w-full p-2.5 text-sm font-semibold border rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-blue-500"
+                  placeholder="2024"
+                />
+              </div>
+
+              {/* 4. Searchable Inspection Type */}
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  نوع الفحص <span className="text-blue-500 font-normal">(قابل للبحث)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={inspectionSearchTerm}
+                    onChange={(e) => {
+                      setInspectionSearchTerm(e.target.value);
+                      setIsInspectionDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsInspectionDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setIsInspectionDropdownOpen(false), 200)}
+                    placeholder="ابحث عن نوع الفحص..."
+                    disabled={isSavingCar}
+                    className="w-full p-2.5 text-sm font-semibold border rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-blue-500 pl-8"
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                    <SearchIcon className="w-4 h-4" />
+                  </div>
+                </div>
+                {isInspectionDropdownOpen && filteredInspectionsForEdit.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                    {filteredInspectionsForEdit.map(t => (
+                      <div
+                        key={t.id}
+                        onMouseDown={() => {
+                          setEditInspectionTypeId(t.id);
+                          setInspectionSearchTerm(`${t.name} (${t.price} ريال)`);
+                          if (t.price) {
+                            setEditPrice(t.price);
+                          }
+                          setIsInspectionDropdownOpen(false);
+                        }}
+                        className={`p-2.5 text-xs font-semibold cursor-pointer transition flex items-center justify-between ${
+                          editInspectionTypeId === t.id 
+                            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-200 font-bold' 
+                            : 'hover:bg-blue-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200'
+                        }`}
+                      >
+                        <span>{t.name}</span>
+                        <span className="text-[11px] font-bold text-green-600 dark:text-green-400 font-mono">
+                          {t.price} ريال
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Price */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">السعر المطلوب (ريال)</label>
+                <input
+                  type="number"
+                  value={editPrice || ''}
+                  onChange={(e) => setEditPrice(Math.max(0, Number(e.target.value)))}
+                  disabled={isSavingCar}
+                  className="w-full p-2.5 text-sm font-bold text-green-700 dark:text-green-400 border rounded-xl bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-green-500"
+                  placeholder="السعر"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
+              <button
+                type="button"
+                disabled={isSavingCar}
+                onClick={handleSaveCar}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition-all disabled:opacity-50"
+              >
+                {isSavingCar ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+              </button>
+              <button
+                type="button"
+                disabled={isSavingCar}
+                onClick={() => setCarModalRequest(null)}
+                className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-sm transition-all"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 });

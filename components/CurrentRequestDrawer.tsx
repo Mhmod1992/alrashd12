@@ -28,7 +28,7 @@ export const CurrentRequestDrawer: React.FC<CurrentRequestDrawerProps> = ({
     inspectionType,
     canViewPrice = true,
 }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [viewState, setViewState] = useState<'expanded' | 'tab' | 'minimized'>('tab');
 
     // Resolve car string
     const carNameAr = `${carDetails.makeNameAr || ''} ${carDetails.modelNameAr || ''} ${carDetails.year || ''}`.trim();
@@ -125,15 +125,48 @@ export const CurrentRequestDrawer: React.FC<CurrentRequestDrawerProps> = ({
     const inspectionTypeName = inspectionType?.name || 'فحص عام';
 
     return (
-        <div className="hidden md:flex fixed left-0 top-32 z-[160] items-start select-none">
-            {/* 1. Closed State: Soft Pastel Side Tab (مستوحى من تصميم الصورة الناعم) */}
-            {!isExpanded && (
-                <div
-                    onClick={() => setIsExpanded(true)}
-                    className={`backdrop-blur-md border-y-2 border-r-2 rounded-r-3xl shadow-xl p-3 sm:p-3.5 flex items-center gap-3 cursor-pointer transition-all duration-300 group hover:pl-4 border-l-0 min-w-[155px] max-w-[210px] ${theme.cardBg} ${theme.cardBorder}`}
-                    title={`انقر لفتح تفاصيل الطلب الحالي - ${theme.label}`}
+        <div className="hidden md:flex fixed left-0 top-32 z-30 items-start select-none">
+            {/* 1. Fully Minimized State: Slim Left Edge Handle (مثل مقبض طلبات اليوم) */}
+            {viewState === 'minimized' && (
+                <button
+                    type="button"
+                    onClick={() => setViewState('tab')}
+                    className={`backdrop-blur-md border-y-2 border-r-2 rounded-r-2xl shadow-xl py-2 px-2.5 flex items-center gap-2 cursor-pointer transition-all duration-300 group hover:pr-3.5 border-l-0 ${theme.cardBg} ${theme.cardBorder}`}
+                    title={`إظهار بطاقة سعر الطلب (${priceDisplay} ر.س - ${theme.label})`}
                 >
-                    <div className="flex flex-col items-center text-center w-full gap-1">
+                    <CarIcon className="w-4 h-4 text-slate-600 dark:text-slate-300 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                        {canViewPrice ? `${priceDisplay} ر.س` : 'تفاصيل الطلب'}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.paymentPill}`}>
+                        {theme.label}
+                    </span>
+                </button>
+            )}
+
+            {/* 2. Closed/Tab State: Soft Pastel Side Tab (الشكل الحالي الجميل مع خيار الطي الكامل أو الفتح) */}
+            {viewState === 'tab' && (
+                <div
+                    className={`backdrop-blur-md border-y-2 border-r-2 rounded-r-3xl shadow-xl p-3 sm:p-3.5 flex flex-col items-center gap-2 cursor-pointer transition-all duration-300 group border-l-0 min-w-[155px] max-w-[210px] relative ${theme.cardBg} ${theme.cardBorder}`}
+                >
+                    {/* Top minimize button */}
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setViewState('minimized');
+                        }}
+                        className="absolute top-1.5 right-2 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                        title="طي البطاقة للحافة"
+                    >
+                        <span className="text-xs font-black">◀</span>
+                    </button>
+
+                    <div 
+                        onClick={() => setViewState('expanded')}
+                        className="flex flex-col items-center text-center w-full gap-1 pt-1"
+                        title={`انقر لفتح كامل تفاصيل الطلب الحالي - ${theme.label}`}
+                    >
                         {/* Header: سعر الطلب + Icon */}
                         <div className={`flex items-center justify-center gap-1.5 text-xs font-black ${theme.headerText}`}>
                             <span>سعر الطلب</span>
@@ -151,28 +184,31 @@ export const CurrentRequestDrawer: React.FC<CurrentRequestDrawerProps> = ({
                         <span className={`text-[11px] font-black px-4 py-0.5 rounded-full shadow-2xs mt-0.5 ${theme.paymentPill}`}>
                             {theme.label}
                         </span>
-                    </div>
 
-                    {/* Arrow Icon */}
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 group-hover:translate-x-0.5 transition-transform ${theme.inspPill}`}>
-                        <ChevronRightIcon className="w-3.5 h-3.5 rotate-180" />
+                        {/* Expand Hint */}
+                        <div className={`mt-1 text-[10px] font-bold flex items-center gap-1 text-slate-400 group-hover:${theme.headerText} transition-colors`}>
+                            <span>عرض التفاصيل</span>
+                            <ChevronRightIcon className="w-3 h-3 rotate-180" />
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* 2. Expanded State: Soft Pastel Card (طابق الأصل للبطاقة المرفقة بالصورة) */}
-            {isExpanded && (
+            {/* 3. Expanded State: Full Details Soft Pastel Card */}
+            {viewState === 'expanded' && (
                 <div className={`backdrop-blur-xl border-2 rounded-3xl shadow-2xl w-72 sm:w-80 p-4 transition-all duration-300 animate-slide-in-left relative overflow-hidden ${theme.cardBg} ${theme.cardBorder}`}>
-                    {/* Top Close Button */}
-                    <button
-                        onClick={() => setIsExpanded(false)}
-                        className={`absolute top-3 left-3 p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer ${theme.headerText}`}
-                        title="طي البطاقة"
-                    >
-                        <XIcon className="w-4 h-4" />
-                    </button>
+                    {/* Top Close / Collapse Button */}
+                    <div className="absolute top-3 left-3 flex items-center gap-1">
+                        <button
+                            onClick={() => setViewState('tab')}
+                            className={`p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer ${theme.headerText}`}
+                            title="إرجاع للشكل الجانبي"
+                        >
+                            <XIcon className="w-4 h-4" />
+                        </button>
+                    </div>
 
-                    {/* Main Card Content (Soft Pastel Layout like User Image) */}
+                    {/* Main Card Content */}
                     <div className="flex flex-col items-center text-center pt-1 pb-2">
                         {/* 1. Label + Car Icon */}
                         <div className={`flex items-center justify-center gap-1.5 text-xs font-black mb-1 ${theme.headerText}`}>
@@ -189,7 +225,7 @@ export const CurrentRequestDrawer: React.FC<CurrentRequestDrawerProps> = ({
                             <div className={`text-lg font-black mb-2 ${theme.headerText}`}>محمي</div>
                         )}
 
-                        {/* 3. Primary Payment Pill (مثل كبسولة "شبكة" بالصورة) */}
+                        {/* 3. Primary Payment Pill */}
                         <span className={`text-xs font-black px-5 py-1 rounded-full shadow-xs mb-3 ${theme.paymentPill}`}>
                             {theme.label}
                         </span>
@@ -197,7 +233,7 @@ export const CurrentRequestDrawer: React.FC<CurrentRequestDrawerProps> = ({
                         {/* 4. Light Horizontal Divider */}
                         <div className={`w-3/4 h-px my-1 ${theme.divider}`}></div>
 
-                        {/* 5. Soft Inspection Type Pill (مثل كبسولة "شامل" بالصورة) */}
+                        {/* 5. Soft Inspection Type Pill */}
                         <div className="mt-2 mb-1">
                             <span className={`text-xs font-black px-4 py-1 rounded-full ${theme.inspPill}`}>
                                 {inspectionTypeName}
@@ -246,13 +282,22 @@ export const CurrentRequestDrawer: React.FC<CurrentRequestDrawerProps> = ({
                         </div>
                     </div>
 
-                    {/* Action button to collapse */}
-                    <button
-                        onClick={() => setIsExpanded(false)}
-                        className={`mt-3 w-full py-1.5 text-xs font-bold rounded-2xl transition-colors cursor-pointer text-center ${theme.innerCardBg} ${theme.headerText} hover:opacity-80`}
-                    >
-                        طي البطاقة
-                    </button>
+                    {/* Action buttons to collapse / minimize */}
+                    <div className="flex items-center gap-2 mt-3">
+                        <button
+                            onClick={() => setViewState('tab')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-2xl transition-colors cursor-pointer text-center ${theme.innerCardBg} ${theme.headerText} hover:opacity-80`}
+                        >
+                            إغلاق التفاصيل
+                        </button>
+                        <button
+                            onClick={() => setViewState('minimized')}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-2xl transition-colors cursor-pointer text-center ${theme.innerCardBg} text-slate-500 hover:text-slate-800 dark:hover:text-slate-200`}
+                            title="طي بالكامل للحافة"
+                        >
+                            طي للحافة ◀
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
