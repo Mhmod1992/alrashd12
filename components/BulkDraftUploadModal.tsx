@@ -22,6 +22,7 @@ interface ProcessedFile {
     errorMessage?: string;
     previewUrl: string;
     actionOnExisting?: 'append' | 'replace';
+    isManualLink?: boolean;
     requestData?: {
         carMake: string;
         carModel: string;
@@ -356,15 +357,15 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
             setCompressProgress({ current: i + 1, total: newFiles.length });
 
             try {
+                // محاولة التعرف التلقائي على الباركود من الصورة الأصلية لضمان أفضل دقة
+                const reqNum = await scanQRCode(originalFile);
+
                 // تطبيق استراتيجية الضغط لاستهداف نطاق 34 - 44 كيلوبايت
                 const processedFile = await compressToTargetKilobytes(originalFile, {
                     filterType,
                     targetMinKB: 34,
                     targetMaxKB: 44
                 });
-
-                // محاولة التعرف التلقائي على الباركود
-                const reqNum = await scanQRCode(processedFile);
 
                 let requestData: ProcessedFile['requestData'] = undefined;
                 let status: ProcessedFile['status'] = 'error';
@@ -600,6 +601,7 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                     errorMessage: undefined,
                     actionOnExisting: 'append',
                     requestNumber: reqNumberToSearch,
+                    isManualLink: true,
                     requestData: {
                         ...carDetails,
                         existingDraftsCount
@@ -625,8 +627,10 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
     };
 
     // تقسيم الملفات إلى المجموعتين المطلوبتين
-    const failedFiles = files.filter(f => f.status === 'error' || (!f.requestData && f.status !== 'ready' && f.status !== 'success'));
-    const recognizedFiles = files.filter(f => (f.status === 'ready' || f.status === 'success' || f.status === 'uploading') && f.requestData);
+    // المجموعة الأولى: التي فشلت أو التي تم ربطها يدوياً (لتبقى في مكانها ولا تذهب للأسفل)
+    const failedFiles = files.filter(f => f.status === 'error' || f.isManualLink || (!f.requestData && f.status !== 'ready' && f.status !== 'success'));
+    // المجموعة الثانية: التي تم التعرف عليها تلقائياً فقط
+    const recognizedFiles = files.filter(f => (f.status === 'ready' || f.status === 'success' || f.status === 'uploading') && f.requestData && !f.isManualLink);
 
     const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
     const totalProcessedSize = files.reduce((acc, f) => acc + f.processedSize, 0);
@@ -700,31 +704,44 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                         </div>
                     )}
 
-                    {/* تفاصيل الحجم قبل وبعد الضغط - في نطاق 34 - 44 KB */}
-                    <div className="bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800/80">
-                        <div className="flex items-center justify-between text-[10.5px]">
-                            <span className="text-slate-500 dark:text-slate-400">الحجم المعالج:</span>
-                            <div className="flex items-center gap-1.5 font-mono">
-                                <span className="text-slate-400 line-through">
-                                    {formatBytes(file.originalSize)}
-                                </span>
-                                <Icon name="chevron-left" className="w-2.5 h-2.5 text-slate-400" />
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-200/60 dark:border-emerald-800/40">
-                                    {formatBytes(file.processedSize)}
-                                </span>
-                                <span className="text-[9px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1 rounded font-sans font-bold">
-                                    WebP
-                                </span>
+                    {/* تفاصيل الحجم قبل وبعد الضغط - مخفية خلف أيقونة تلميح */}
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800/80 group/stats relative">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                                <Icon name="chart-pie" className="w-3.5 h-3.5 text-blue-500" />
+                                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">إحصائيات الضغط المعالج</span>
+                            </div>
+                            <div className="relative group/tooltip">
+                                <div className="p-1 cursor-help text-slate-400 hover:text-blue-500 transition-colors">
+                                    <Icon name="info" className="w-4 h-4" />
+                                </div>
+                                {/* التلميح الظاهر عند المرور بالماوس */}
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-900 text-white rounded-lg shadow-xl border border-white/10 opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-50 text-[10px]">
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between border-b border-white/10 pb-1 mb-1">
+                                            <span>الحجم الأصلي:</span>
+                                            <span className="font-mono">{formatBytes(file.originalSize)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-emerald-400">
+                                            <span>الحجم المعالج:</span>
+                                            <span className="font-mono font-bold">{formatBytes(file.processedSize)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-blue-400">
+                                            <span>نوع الملف:</span>
+                                            <span className="font-bold">WebP (عالية الوضوح)</span>
+                                        </div>
+                                        {file.originalSize > file.processedSize && (
+                                            <div className="flex justify-between text-amber-400 pt-1 border-t border-white/10 mt-1">
+                                                <span>توفير المساحة:</span>
+                                                <span className="font-bold">{Math.round((1 - file.processedSize / file.originalSize) * 100)}% ⚡</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* مثلث التلميح */}
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900"></div>
+                                </div>
                             </div>
                         </div>
-                        {file.originalSize > file.processedSize && (
-                            <div className="flex items-center justify-between text-[9.5px] mt-1 pt-1 border-t border-slate-200/40 dark:border-slate-800">
-                                <span className="text-slate-400">توفير المساحة:</span>
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                    تم خفض {Math.round((1 - file.processedSize / file.originalSize) * 100)}% من الحجم ⚡
-                                </span>
-                            </div>
-                        )}
                     </div>
 
                     {/* زر صريح لعرض ومعاينة الصورة بعد الضغط */}
@@ -1255,6 +1272,22 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                                         100%
                                     </button>
                                 </div>
+
+                                <button 
+                                    onClick={() => {
+                                        const link = document.createElement('a');
+                                        link.href = selectedPreviewFile.previewUrl;
+                                        link.download = `Processed_${selectedPreviewFile.requestNumber || 'Unknown'}.webp`;
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors font-bold text-xs shadow-sm"
+                                    title="تنزيل الصورة المعالجة للتحقق من الحجم والجودة"
+                                >
+                                    <Icon name="download" className="w-4 h-4" />
+                                    <span>تنزيل للتحقق</span>
+                                </button>
 
                                 <button 
                                     onClick={() => setSelectedPreviewFile(null)}

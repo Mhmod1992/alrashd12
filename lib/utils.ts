@@ -312,7 +312,8 @@ export const compressToTargetKilobytes = (
                 };
 
                 // محاولة أولية مدروسة للوصول إلى النطاق المطلوب
-                let quality = supportsWebP ? 0.48 : 0.60;
+                // رفع الجودة قليلاً للبداية لضمان الوضوح العالي المطلوبة
+                let quality = supportsWebP ? 0.55 : 0.65;
                 let currentBlob = await generateBlob(canvas, quality);
                 if (!currentBlob) return resolve(file);
 
@@ -320,12 +321,14 @@ export const compressToTargetKilobytes = (
 
                 // التعديل التكيفي الذكي للوصول لنطاق 34 - 44 KB:
                 if (currentSizeKB > targetMaxKB) {
+                    // إذا كان الحجم كبيراً جداً، نقوم بتقليل الجودة أو الأبعاد
                     const ratio = 38 / currentSizeKB;
-                    let newQuality = Math.max(supportsWebP ? 0.22 : 0.32, quality * ratio);
+                    let newQuality = Math.max(supportsWebP ? 0.25 : 0.35, quality * ratio);
                     
-                    if (currentSizeKB > 65) {
-                        const scale = Math.sqrt(40 / currentSizeKB);
-                        const scaledW = Math.max(680, Math.round(width * Math.min(0.88, Math.max(0.72, scale))));
+                    if (currentSizeKB > 60) {
+                        // تصغير الأبعاد قليلاً إذا كان الملف ضخماً جداً (أكثر من 60 كيلو)
+                        const scale = Math.sqrt(42 / currentSizeKB);
+                        const scaledW = Math.max(720, Math.round(width * Math.min(0.95, Math.max(0.75, scale))));
                         const scaledH = Math.round((height * scaledW) / width);
                         const scaledCanvas = document.createElement('canvas');
                         scaledCanvas.width = scaledW;
@@ -346,11 +349,12 @@ export const compressToTargetKilobytes = (
                             currentBlob = adjustedBlob;
                         }
                     }
-                } else if (currentSizeKB < targetMinKB && quality < 0.85) {
-                    const ratio = 38 / Math.max(12, currentSizeKB);
-                    let boostQuality = Math.min(0.85, quality * Math.min(1.7, ratio));
+                } else if (currentSizeKB < targetMinKB && quality < 0.92) {
+                    // إذا كان الحجم صغيراً جداً، نرفع الجودة لتحسين الوضوح
+                    const ratio = 40 / Math.max(10, currentSizeKB);
+                    let boostQuality = Math.min(0.92, quality * Math.min(1.8, ratio));
                     const boostedBlob = await generateBlob(canvas, boostQuality);
-                    if (boostedBlob && (boostedBlob.size / 1024) <= targetMaxKB + 5) {
+                    if (boostedBlob && (boostedBlob.size / 1024) <= targetMaxKB + 2) {
                         currentBlob = boostedBlob;
                     }
                 }

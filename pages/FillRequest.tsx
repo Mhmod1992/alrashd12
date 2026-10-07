@@ -104,6 +104,7 @@ export const FillRequest: React.FC = () => {
     // View Modes
     const [findingsViewMode, setFindingsViewMode] = useState<'grid' | 'list'>('grid');
     const [isGroupedView, setIsGroupedView] = useState(true);
+    const [isColumnsView, setIsColumnsView] = useState(false);
     const [isFloatingInfoVisible, setIsFloatingInfoVisible] = useState(true);
     const [isTodayRequestsDrawerOpen, setIsTodayRequestsDrawerOpen] = useState(false);
     // Main Accordion Control
@@ -3312,9 +3313,16 @@ export const FillRequest: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                     <div className="flex bg-white dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200 dark:border-slate-600 shadow-sm">
-                                        <button onClick={() => setFindingsViewMode('grid')} className={`p-1.5 rounded-md transition-all ${findingsViewMode === 'grid' ? `bg-${themeColor}-50 text-${themeColor}-600 dark:bg-${themeColor}-900/30 dark:text-${themeColor}-400` : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`} title="عرض شبكة"><Icon name="findings" className="w-4 h-4" /></button>
-                                        <button onClick={() => setFindingsViewMode('list')} className={`p-1.5 rounded-md transition-all ${findingsViewMode === 'list' ? `bg-${themeColor}-50 text-${themeColor}-600 dark:bg-${themeColor}-900/30 dark:text-${themeColor}-400` : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`} title="عرض قائمة"><ClipboardListIcon className="w-4 h-4" /></button>
-                                        <button onClick={() => setIsGroupedView(!isGroupedView)} className={`p-1.5 rounded-md transition-all ${isGroupedView ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`} title="عرض المجموعات"><Icon name="appearance" className="w-4 h-4" /></button>
+                                        <button onClick={() => { setFindingsViewMode('grid'); setIsColumnsView(false); }} className={`p-1.5 rounded-md transition-all ${findingsViewMode === 'grid' && !isColumnsView && !isGroupedView ? `bg-${themeColor}-50 text-${themeColor}-600 dark:bg-${themeColor}-900/30 dark:text-${themeColor}-400` : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`} title="عرض شبكة"><Icon name="findings" className="w-4 h-4" /></button>
+                                        <button onClick={() => { setFindingsViewMode('list'); setIsColumnsView(false); }} className={`p-1.5 rounded-md transition-all ${findingsViewMode === 'list' && !isColumnsView && !isGroupedView ? `bg-${themeColor}-50 text-${themeColor}-600 dark:bg-${themeColor}-900/30 dark:text-${themeColor}-400` : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`} title="عرض قائمة"><ClipboardListIcon className="w-4 h-4" /></button>
+                                        <button onClick={() => { setIsGroupedView(!isGroupedView); if (!isGroupedView) setIsColumnsView(false); }} className={`p-1.5 rounded-md transition-all ${isGroupedView && !isColumnsView ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`} title="عرض المجموعات"><Icon name="appearance" className="w-4 h-4" /></button>
+                                        <button onClick={() => { setIsColumnsView(!isColumnsView); if (!isColumnsView) setIsGroupedView(false); }} className={`p-1.5 rounded-md transition-all ${isColumnsView ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 ring-1 ring-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`} title="عرض الأعمدة (يمين - وسط - يسار)">
+                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <rect x="3" y="3" width="5" height="18" rx="1"/>
+                                                <rect x="10" y="3" width="5" height="18" rx="1"/>
+                                                <rect x="17" y="3" width="5" height="18" rx="1"/>
+                                            </svg>
+                                        </button>
                                     </div>
                                     {!isLocked && <Button onClick={() => setIsFindingModalOpen(true)} size="sm" leftIcon={<Icon name="add" className="w-4 h-4" />} disabled={!can('manage_findings')} className="text-xs px-3 py-1.5 h-8">إضافة بنود</Button>}
                                 </div>
@@ -3323,7 +3331,101 @@ export const FillRequest: React.FC = () => {
                                 <div className="p-2 bg-[#f8fafc] dark:bg-slate-800/50">
                                     {findingsToRender.length > 0 ? (
                                         <div className="flex flex-col gap-4">
-                                            {isGroupedView ? (
+                                            {isColumnsView ? (
+                                                (() => {
+                                                    const rightItems: typeof findingsToRender = [];
+                                                    const centerItems: typeof findingsToRender = [];
+                                                    const leftItems: typeof findingsToRender = [];
+                                                    const otherItems: typeof findingsToRender = [];
+
+                                                    findingsToRender.forEach(item => {
+                                                        const pos = item.predefined?.report_position;
+                                                        const grp = item.predefined?.group || '';
+                                                        const grps = item.predefined?.groups || [];
+                                                        const allGrp = [grp, ...grps].join(' ');
+
+                                                        if (pos === 'right' || /يمين|right/i.test(allGrp)) {
+                                                            rightItems.push(item);
+                                                        } else if (pos === 'left' || /يسار|left/i.test(allGrp)) {
+                                                            leftItems.push(item);
+                                                        } else if (pos === 'center' || /وسط|center/i.test(allGrp)) {
+                                                            centerItems.push(item);
+                                                        } else {
+                                                            otherItems.push(item);
+                                                        }
+                                                    });
+
+                                                    const hasPositionData = rightItems.length > 0 || leftItems.length > 0 || centerItems.length > 0;
+
+                                                    let columns: { id: string; title: string; color: string; items: typeof findingsToRender }[] = [];
+
+                                                    if (hasPositionData) {
+                                                        columns = [
+                                                            { id: 'right', title: 'الجهة اليمنى', color: 'emerald', items: rightItems },
+                                                            { id: 'center', title: 'الوسط', color: 'blue', items: [...centerItems, ...otherItems] },
+                                                            { id: 'left', title: 'الجهة اليسرى', color: 'purple', items: leftItems }
+                                                        ];
+                                                    } else {
+                                                        const groupsMap: Record<string, typeof findingsToRender> = {};
+                                                        findingsToRender.forEach(item => {
+                                                            const g = item.predefined?.group || item.predefined?.groups?.[0] || 'البنود العامة';
+                                                            groupsMap[g] = groupsMap[g] || [];
+                                                            groupsMap[g].push(item);
+                                                        });
+                                                        const colorList = ['blue', 'emerald', 'purple', 'amber', 'rose', 'indigo'];
+                                                        columns = Object.entries(groupsMap).map(([title, items], idx) => ({
+                                                            id: `col-${idx}`,
+                                                            title,
+                                                            color: colorList[idx % colorList.length],
+                                                            items
+                                                        }));
+                                                    }
+
+                                                    return (
+                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-start">
+                                                            {columns.map(col => (
+                                                                <div 
+                                                                    key={col.id} 
+                                                                    className="flex flex-col bg-white dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 shadow-sm"
+                                                                >
+                                                                    <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100 dark:border-slate-800">
+                                                                        <h5 className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                                                            <span className={`w-2 h-3.5 rounded-full bg-${col.color}-500 inline-block`}></span>
+                                                                            {col.title}
+                                                                        </h5>
+                                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                                                            {col.items.length}
+                                                                        </span>
+                                                                    </div>
+                                                                    {col.items.length > 0 ? (
+                                                                        <div className="flex flex-col gap-2">
+                                                                            {col.items.map(({ finding, predefined }) => (
+                                                                                <FindingCard 
+                                                                                    key={finding.findingId} 
+                                                                                    finding={finding} 
+                                                                                    predefined={predefined} 
+                                                                                    onUpdate={handleFindingValueChange} 
+                                                                                    onRemove={handleRemoveFinding} 
+                                                                                    onRetry={(id) => handleRetryItem(id, 'finding')} 
+                                                                                    onPreview={openImagePreview} 
+                                                                                    isDeleting={deletingFindingIds.has(finding.findingId)} 
+                                                                                    canManage={can('manage_findings')} 
+                                                                                    isLocked={isLocked} 
+                                                                                    viewMode="list" 
+                                                                                />
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="py-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-700/60 rounded-xl">
+                                                                            لا توجد بنود
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                })()
+                                            ) : isGroupedView ? (
                                                 (() => {
                                                     const groupsMap: Record<string, typeof findingsToRender> = {};
                                                     findingsToRender.forEach(item => {

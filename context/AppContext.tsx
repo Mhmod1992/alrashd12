@@ -1869,14 +1869,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("Not authenticated");
 
-        // Compress the image before uploading (max 1200px, 70% quality)
-        const compressedFile = await compressImageFile(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
+        // If file is already an optimized WebP file, upload directly; otherwise compress (max 1200px, 70% quality)
+        const isAlreadyWebP = file.type === 'image/webp' || file.name.endsWith('.webp');
+        const fileToUpload = isAlreadyWebP ? file : await compressImageFile(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
 
-        const fileExt = compressedFile.name.split('.').pop();
-        const fileName = customFileName ? `${customFileName}.${fileExt}` : `${uuidv4()}.${fileExt}`;
+        const fileExt = isAlreadyWebP ? 'webp' : (fileToUpload.name.split('.').pop() || 'jpg');
+        const fileName = customFileName 
+            ? (customFileName.endsWith(`.${fileExt}`) ? customFileName : `${customFileName}.${fileExt}`) 
+            : `${uuidv4()}.${fileExt}`;
         const filePath = folder ? `${folder}/${fileName}` : fileName;
 
-        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, compressedFile);
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, fileToUpload, {
+            contentType: isAlreadyWebP ? 'image/webp' : (fileToUpload.type || 'image/jpeg')
+        });
         if (uploadError) throw uploadError;
         const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
         return data.publicUrl;

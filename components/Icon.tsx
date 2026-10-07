@@ -52,10 +52,11 @@ import BarChartIcon from './icons/BarChartIcon';
 import ShieldCheckIcon from './icons/ShieldCheckIcon';
 import DatabaseIcon from './icons/DatabaseIcon';
 import MinusIcon from './icons/MinusIcon';
+import InfoIcon from './icons/InfoIcon';
 
 
 interface IconProps {
-  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'chevron-left' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'external-link' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan' | 'users' | 'clipboard-check' | 'bar-chart' | 'shield-check' | 'database' | 'list' | 'plus' | 'minus';
+  name: 'add' | 'lock' | 'back' | 'print' | 'delete' | 'edit' | 'camera' | 'document-report' | 'settings' | 'save' | 'chevron-right' | 'chevron-left' | 'employee' | 'broker' | 'findings' | 'cars' | 'car' | 'report' | 'download' | 'phone' | 'dollar-sign' | 'microphone' | 'close' | 'history' | 'chevron-down' | 'check-circle' | 'gallery' | 'appearance' | 'scan-plate' | 'sparkles' | 'refresh-cw' | 'credit-card' | 'workshop' | 'mail' | 'send' | 'filter' | 'search' | 'eye' | 'external-link' | 'archive' | 'star' | 'whatsapp' | 'calendar-clock' | 'calendar-check' | 'upload' | 'chevron-up' | 'folder-open' | 'scan' | 'users' | 'clipboard-check' | 'bar-chart' | 'shield-check' | 'database' | 'list' | 'plus' | 'minus' | 'info';
   className?: string;
 }
 
@@ -170,6 +171,8 @@ const Icon: React.FC<IconProps> = ({ name, className }) => {
         return <ShieldCheckIcon className={className} />;
     case 'database':
         return <DatabaseIcon className={className} />;
+    case 'info':
+        return <InfoIcon className={className} />;
     default:
       return null;
   }
