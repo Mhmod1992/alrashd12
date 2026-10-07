@@ -12,7 +12,8 @@ interface CameraScannerModalProps {
     onClose: () => void;
     onScanComplete?: (plateData: { letters: string, numbers: string }) => void;
     onCarIdentify?: (carData: { makeId: string; makeName: string; modelId: string; modelName: string; year: number }) => void;
-    mode?: 'plate' | 'car';
+    onVinScanComplete?: (vin: string) => void;
+    mode?: 'plate' | 'car' | 'vin';
 }
 
 const CameraScannerModal: React.FC<CameraScannerModalProps> = ({ 
@@ -20,6 +21,7 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     onClose, 
     onScanComplete, 
     onCarIdentify,
+    onVinScanComplete,
     mode = 'plate' 
 }) => {
     const { addNotification, settings, carMakes, carModels, fetchCarModelsByMake } = useAppContext();
@@ -257,8 +259,8 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         const videoHeight = video.videoHeight;
         
         // Base framing ratio
-        const widthRatio = mode === 'plate' ? 0.8 : 0.9;
-        const heightRatio = mode === 'plate' ? 0.4 : 0.7;
+        const widthRatio = mode === 'plate' ? 0.8 : mode === 'vin' ? 0.92 : 0.9;
+        const heightRatio = mode === 'plate' ? 0.4 : mode === 'vin' ? 0.28 : 0.7;
 
         // If software digital zoom is active (not handled by hardware track)
         const effectiveZoom = hasHardwareZoom ? 1 : zoomLevel;
@@ -346,6 +348,30 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                 resetState();
                 onClose();
 
+            } else if (mode === 'vin') {
+                const prompt = `Analyze this image and extract the vehicle identification number (VIN / Chassis Number).
+                A standard VIN consists of 17 alphanumeric uppercase characters (capital letters and digits, excluding letters I, O, and Q).
+                It may be stamped on the metal chassis frame, printed on a door jamb sticker, visible at the lower corner of the windshield, or printed on a vehicle registration document.
+                Return ONLY the clean VIN string in uppercase letters without any spaces, hyphens, or labels.
+                If no VIN is visible in the image, return nothing.`;
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-flash-lite-latest',
+                    contents: { parts: [imagePart, { text: prompt }] },
+                });
+
+                let rawText = response.text?.trim() || '';
+                const cleanedVin = rawText
+                    .replace(/(?:VIN|CHASSIS|NO|NUMBER|رقم|الشاصي|الهيكل)[\s:#-]*/gi, '')
+                    .replace(/[^A-Za-z0-9]/g, '')
+                    .toUpperCase();
+
+                if (onVinScanComplete) {
+                    onVinScanComplete(cleanedVin);
+                }
+                resetState();
+                onClose();
+
             } else if (mode === 'car') {
                 const prompt = `Identify the car manufacturer (make), model, and estimated year from this image. 
                 Return the result strictly in JSON format.
@@ -407,8 +433,14 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         return carModels.filter(m => m.make_id === selectedMakeId);
     }, [carModels, selectedMakeId]);
     
+    const modalTitle = mode === 'car' 
+        ? (step === 'review' ? "مراجعة وتأكيد" : "التعرف على السيارة") 
+        : mode === 'vin' 
+        ? "مسح رقم الشاصي (VIN) بالكاميرا" 
+        : "مسح لوحة السيارة";
+
     return (
-        <Modal isOpen={isOpen} onClose={() => { resetState(); onClose(); }} title={mode === 'car' ? (step === 'review' ? "مراجعة وتأكيد" : "التعرف على السيارة") : "مسح لوحة السيارة"} size="3xl">
+        <Modal isOpen={isOpen} onClose={() => { resetState(); onClose(); }} title={modalTitle} size="3xl">
             {step === 'capture' && (
                 <>
                     {/* Viewfinder Container */}
@@ -436,7 +468,13 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                         {!error && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                 <div 
-                                    className={`relative border-2 border-amber-400 rounded-xl transition-all duration-300 ${mode === 'car' ? 'w-[90%] h-[70%]' : 'w-4/5 h-2/5'}`} 
+                                    className={`relative border-2 border-amber-400 rounded-xl transition-all duration-300 ${
+                                        mode === 'car' 
+                                            ? 'w-[90%] h-[70%]' 
+                                            : mode === 'vin' 
+                                            ? 'w-[92%] h-[28%]' 
+                                            : 'w-4/5 h-2/5'
+                                    }`} 
                                     style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)' }}
                                 >
                                     {/* Corner Accent Brackets */}
@@ -560,6 +598,11 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                             <p className="text-xs text-slate-500 dark:text-slate-400">وجّه الكاميرا نحو السيارة بالكامل مع استخدام الزوم إذا لزم الأمر.</p>
                         </div>
                     )}
+                    {mode === 'vin' && (
+                        <div className="mt-2 text-center">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">وجّه الكاميرا نحو رقم الشاصي (على الزجاج الأمامي، ملصق الباب، أو الاستمارة) داخل الإطار.</p>
+                        </div>
+                    )}
 
                     {/* Action Capture Button */}
                     <div className="mt-4 flex justify-center">
@@ -574,7 +617,9 @@ const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
             {step === 'processing' && (
                 <div className="flex flex-col items-center justify-center py-12">
                     <RefreshCwIcon className="w-16 h-16 animate-spin text-blue-500 mb-4" />
-                    <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">جاري تحليل الصورة وقراءة اللوحة...</p>
+                    <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">
+                        {mode === 'vin' ? 'جاري تحليل الصورة وقراءة رقم الشاصي...' : mode === 'car' ? 'جاري تحليل صورة السيارة...' : 'جاري تحليل الصورة وقراءة اللوحة...'}
+                    </p>
                     <p className="text-sm text-slate-500 dark:text-slate-400">يرجى الانتظار بينما يقوم الذكاء الاصطناعي بالتعرف على البيانات.</p>
                 </div>
             )}

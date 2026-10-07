@@ -5,6 +5,7 @@ import { cleanSaudiPhoneNumber } from '../lib/utils';
 interface SmartPhoneInputProps {
     value: string; // digits only (e.g. "0512345678")
     onChange: (value: string) => void;
+    size?: 'sm' | 'md' | 'lg' | 'default';
     autoFocus?: boolean;
     required?: boolean;
     disabled?: boolean;
@@ -18,6 +19,7 @@ interface SmartPhoneInputProps {
 const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>(({
     value = '',
     onChange,
+    size = 'default',
     autoFocus = false,
     required = false,
     disabled = false,
@@ -31,6 +33,7 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
     const [selectionRange, setSelectionRange] = useState<[number, number] | null>(null);
     const internalRef = useRef<HTMLInputElement>(null);
     const combinedRef = (ref as React.RefObject<HTMLInputElement>) || internalRef;
+    const isSm = size === 'sm';
 
     const handleSelect = (e: React.SyntheticEvent<HTMLInputElement>) => {
         const target = e.target as HTMLInputElement;
@@ -64,7 +67,7 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
         const template = '05xxxxxxxx'.split('');
 
         return (
-            <div className="flex items-center font-mono select-none pointer-events-none text-xs sm:text-sm" style={{ direction: 'ltr' }}>
+            <div className={`flex items-center font-mono select-none pointer-events-none ${isSm ? 'text-xs sm:text-sm' : 'text-sm sm:text-base'}`} style={{ direction: 'ltr' }}>
                 {template.map((tChar, i) => {
                     const digit = digits[i];
                     const isFilled = digit !== undefined;
@@ -74,7 +77,7 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
                         <React.Fragment key={i}>
                             {/* Hyphens at specific positions */}
                             {(i === 3 || i === 6) && (
-                                <span className="text-slate-400 mx-1 tracking-tighter font-semibold font-sans text-xs">-</span>
+                                <span className={`text-slate-400 mx-1 tracking-tighter font-semibold font-sans ${isSm ? 'text-xs' : 'text-sm'}`}>-</span>
                             )}
                             
                             <div className="relative flex items-center justify-center w-[0.72em]">
@@ -95,8 +98,8 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
 
                                 <span className={`transition-all duration-150 z-10 relative leading-none ${
                                     isFilled 
-                                        ? 'text-slate-800 dark:text-slate-100 font-bold text-xs sm:text-sm' 
-                                        : 'text-slate-400 dark:text-slate-500/50 text-xs'
+                                        ? (isSm ? 'text-slate-800 dark:text-slate-100 font-bold text-xs sm:text-sm' : 'text-slate-800 dark:text-slate-100 font-bold text-sm sm:text-base')
+                                        : (isSm ? 'text-slate-400 dark:text-slate-500/50 text-xs' : 'text-slate-400 dark:text-slate-500/50 text-xs sm:text-sm')
                                 } ${!isFilled && tChar === 'x' ? 'italic' : ''}`}>
                                     {isFilled ? digit : tChar}
                                 </span>
@@ -108,9 +111,11 @@ const SmartPhoneInput = React.forwardRef<HTMLInputElement, SmartPhoneInputProps>
         );
     };
 
+    const sizeClass = isSm ? 'h-[40px] px-3 rounded-xl' : 'h-[50px] px-3.5 rounded-lg';
+
     return (
         <div 
-            className={`relative flex items-center justify-start h-[40px] px-3 rounded-xl border transition-all duration-200 cursor-text bg-white dark:bg-slate-800 ${
+            className={`relative flex items-center justify-start ${sizeClass} border transition-all duration-200 cursor-text bg-white dark:bg-slate-800 ${
                 disabled
                     ? 'opacity-85 cursor-not-allowed bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700'
                     : isFocused 

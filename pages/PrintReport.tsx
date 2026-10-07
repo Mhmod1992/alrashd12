@@ -354,6 +354,7 @@ const PrintReport: React.FC = () => {
     const [translatedSettings, setTranslatedSettings] = useState<ReportSettings | null>(null);
     const [translatedCategories, setTranslatedCategories] = useState<CustomFindingCategory[] | null>(null);
     const [reportDirection, setReportDirection] = useState<'rtl' | 'ltr'>('rtl');
+    const [translationInfo, setTranslationInfo] = useState<{ mode: 'bilingual' | 'full'; langName: string; langCode: string } | null>(null);
     const [isTranslationModalOpen, setIsTranslationModalOpen] = useState(false);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
@@ -886,12 +887,16 @@ const PrintReport: React.FC = () => {
         newRequest: InspectionRequest, 
         newSettings: ReportSettings, 
         direction: 'rtl' | 'ltr', 
-        newCategories: CustomFindingCategory[]
+        newCategories: CustomFindingCategory[],
+        meta?: { mode: 'bilingual' | 'full'; langName: string; langCode: string }
     ) => {
         setTranslatedRequest(newRequest);
         setTranslatedSettings(newSettings);
         setReportDirection(direction);
         setTranslatedCategories(newCategories);
+        if (meta) {
+            setTranslationInfo(meta);
+        }
     };
 
     const handleClearTranslation = () => {
@@ -899,6 +904,7 @@ const PrintReport: React.FC = () => {
         setTranslatedSettings(null);
         setTranslatedCategories(null);
         setReportDirection('rtl');
+        setTranslationInfo(null);
         addNotification({ title: 'تم', message: 'تمت العودة للتقرير الأصلي.', type: 'info' });
     };
 
@@ -1000,6 +1006,8 @@ const PrintReport: React.FC = () => {
                 .print-clone .image-note-card { border-width: 1.5px !important; border-color: #cbd5e1 !important; }
                 .print-clone .image-note-category { font-size: 11px !important; font-weight: 800 !important; margin-bottom: 2px !important; font-family: 'Tajawal', sans-serif !important; }
                 .print-clone .image-note-text { font-size: 12px !important; line-height: 1.4 !important; font-weight: 500 !important; color: #000000 !important; font-family: 'Tajawal', sans-serif !important; padding-top: 2px !important; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+                .print-clone [dir="ltr"] { direction: ltr !important; text-align: left !important; }
+                .print-clone [dir="rtl"] { direction: rtl !important; text-align: right !important; }
             `;
             clone.appendChild(style);
             clone.classList.add('print-clone');
@@ -1536,7 +1544,7 @@ ${reviewLink}
     }
 
     return (
-        <div className="bg-white dark:bg-gray-900 min-h-screen flex flex-col print:!bg-white print:!min-h-0 print:!border-none relative">
+        <div className="bg-white dark:bg-gray-900 h-screen max-h-screen flex flex-col overflow-hidden print:!bg-white print:!min-h-0 print:!h-auto print:!max-h-none print:!overflow-visible print:!border-none relative">
             {/* Drag and Drop Overlay */}
             <AnimatePresence>
                 {isDragging && (
@@ -1593,7 +1601,7 @@ ${reviewLink}
                     </motion.div>
                 )}
             </AnimatePresence>
-            <header className="no-print bg-white dark:bg-slate-800 p-2 sm:p-4 shadow-md sticky top-0 z-50">
+            <header className="no-print bg-white/95 dark:bg-slate-800/95 backdrop-blur-md p-2 sm:p-4 shadow-md sticky top-0 z-50 flex-shrink-0 border-b border-slate-200 dark:border-slate-700">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-3">
                     <div className="flex items-center justify-between w-full md:w-auto md:min-w-[150px]">
                         <h2 className="text-base sm:text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 whitespace-nowrap">
@@ -1646,6 +1654,24 @@ ${reviewLink}
                                 <span className="hidden sm:inline ms-1">المرفقات ({paperImages.length})</span>
                             </Button>
 
+                            {translatedRequest && (
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 rounded-full text-xs font-bold text-purple-700 dark:text-purple-300 shadow-sm animate-fade-in flex-shrink-0">
+                                    <SparklesIcon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                                    <span>
+                                        {translationInfo?.mode === 'bilingual'
+                                            ? `ثنائي اللغة (${translationInfo.langName})`
+                                            : translationInfo?.langName ? `مترجم: ${translationInfo.langName}` : 'مترجم'}
+                                    </span>
+                                    <button
+                                        onClick={handleClearTranslation}
+                                        className="hover:bg-purple-200 dark:hover:bg-purple-800 rounded-full p-0.5 ms-0.5 transition-colors text-purple-600 dark:text-purple-300"
+                                        title="إلغاء الترجمة والعودة للأصل"
+                                    >
+                                        <Icon name="close" className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            )}
+
                             <div className="relative flex-shrink-0">
                                 <Button 
                                     variant="secondary" 
@@ -1667,7 +1693,7 @@ ${reviewLink}
                                                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                className="absolute top-full mt-2 right-0 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-20 overflow-hidden"
+                                                className="absolute top-full mt-2 right-0 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-20 overflow-hidden"
                                             >
                                                 <button 
                                                     onClick={() => { setIsAiModalOpen(true); setIsExtraMenuOpen(false); }} 
@@ -1685,7 +1711,7 @@ ${reviewLink}
                                                         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
                                                     >
                                                         <Icon name="refresh-cw" className="w-4 h-4" />
-                                                        <span>إلغاء الترجمة</span>
+                                                        <span>إلغاء الترجمة (العودة للأصل)</span>
                                                     </button>
                                                 ) : (
                                                     <button 
@@ -1693,7 +1719,7 @@ ${reviewLink}
                                                         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
                                                     >
                                                         <SparklesIcon className="w-4 h-4 text-purple-500" />
-                                                        <span>ترجمة التقرير (AI)</span>
+                                                        <span>ترجمة التقرير (ثنائي اللغة)</span>
                                                     </button>
                                                 )}
                                             </motion.div>
@@ -1744,7 +1770,7 @@ ${reviewLink}
             </header>
             
             {isReportEmpty && (
-                <div className="no-print bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 p-3 sm:p-4 shadow-inner flex items-center justify-center gap-3 text-amber-800 dark:text-amber-200 z-40 relative">
+                <div className="no-print bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 p-3 sm:p-4 shadow-inner flex items-center justify-center gap-3 text-amber-800 dark:text-amber-200 z-40 relative flex-shrink-0">
                     <Icon name="search" className="w-6 h-6 animate-pulse flex-shrink-0" />
                     <div>
                         <p className="font-bold text-sm sm:text-base">تنبيه: التقرير فارغ من البيانات</p>
@@ -1754,7 +1780,7 @@ ${reviewLink}
             )}
 
             {/* Small screen assigned technicians bar */}
-            <div className="md:hidden flex items-center overflow-x-auto py-2 px-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 scrollbar-hide gap-2 no-print">
+            <div className="md:hidden flex items-center overflow-x-auto py-2 px-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 scrollbar-hide gap-2 no-print flex-shrink-0">
                 <Button 
                     variant="secondary" 
                     onClick={() => setIsTechnicianModalOpen(true)} 
@@ -1785,7 +1811,7 @@ ${reviewLink}
                 </div>
             )}
             
-            <main className="flex-1 bg-gray-200 dark:bg-gray-900/50 py-8 overflow-auto print-container print:!py-0 print:!bg-white print:!overflow-visible print:!px-0 print:!mx-0 print:!border-none" dir={reportDirection}>
+            <main className="flex-1 bg-gray-200 dark:bg-gray-900/50 py-8 overflow-y-auto overflow-x-auto print-container print:!py-0 print:!bg-white print:!overflow-visible print:!px-0 print:!mx-0 print:!border-none" dir={reportDirection}>
                 <div className="flex justify-center w-full min-h-full print:block print:!w-full print:!h-auto print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!overflow-visible">
                     <div className="origin-top transition-transform duration-200 print:transform-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!overflow-visible print:!h-auto print:!w-full" style={{ transform: `scale(${previewScale})`, marginBottom: `-${(1 - previewScale) * 100}%` }}>
                         <div className="report-wrapper bg-white shadow-2xl print:shadow-none mx-auto overflow-hidden print:!overflow-visible print:!h-auto print:!min-h-0 print:!w-full print:!max-w-none print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!ring-0" style={{ width: '210mm', minHeight: '297mm' }}>

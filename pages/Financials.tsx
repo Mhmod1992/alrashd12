@@ -287,7 +287,16 @@ const DonutChart: React.FC<{ data: { label: string; value: number; color: string
     );
 };
 
-const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ data, isLoading }) => {
+const TrendAnalysisChart: React.FC<{ 
+    data: any[]; 
+    isLoading?: boolean;
+    comparisonInfo?: {
+        currentLabel: string;
+        currentSubLabel: string;
+        previousLabel: string;
+        previousSubLabel: string;
+    };
+}> = ({ data, isLoading, comparisonInfo }) => {
     if (data.length === 0) return (
         <div className="h-60 flex items-center justify-center text-slate-400 font-bold text-sm bg-slate-50 dark:bg-slate-900/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
             لا تتوفر بيانات كافية للمقارنة
@@ -343,36 +352,49 @@ const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ da
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
             return (
-                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 min-w-[180px] backdrop-blur-sm bg-white/90 dark:bg-slate-800/90" dir="rtl">
-                    <p className="text-xs font-black text-slate-400 mb-3 border-b border-slate-50 dark:border-slate-700 pb-2">{label}</p>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 min-w-[200px] backdrop-blur-sm bg-white/95 dark:bg-slate-800/95" dir="rtl">
+                    <p className="text-xs font-black text-slate-500 dark:text-slate-400 mb-3 border-b border-slate-100 dark:border-slate-700 pb-2 flex items-center justify-between">
+                        <span>{label}</span>
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    </p>
                     
                     {/* Current Period */}
-                    <div className="space-y-2 mb-3">
-                        <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1 mb-3">
+                        <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-blue-500" />
-                                <span className="text-[10px] font-bold text-slate-500">الفترة الحالية</span>
+                                <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">الفترة الحالية</span>
                             </div>
+                            {comparisonInfo?.currentSubLabel && (
+                                <span className="text-[9px] font-medium text-slate-400">
+                                    {comparisonInfo.currentSubLabel}
+                                </span>
+                            )}
                         </div>
-                        <div className="flex justify-between items-end">
+                        <div className="flex justify-between items-end pr-3.5">
                             <div className="flex flex-col">
-                                <span className="text-xs font-black text-slate-900 dark:text-white">{payload.find((p: any) => p.dataKey === 'currentRevenue')?.value.toLocaleString()} ريال</span>
+                                <span className="text-xs font-black text-slate-900 dark:text-white font-numeric">{payload.find((p: any) => p.dataKey === 'currentRevenue')?.value.toLocaleString()} ريال</span>
                                 <span className="text-[9px] font-bold text-slate-400">{payload.find((p: any) => p.dataKey === 'currentCount')?.value} طلبات</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Previous Period */}
-                    <div className="space-y-2 pt-2 border-t border-slate-50 dark:border-slate-700">
-                        <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
-                                <div className="w-2 h-2 rounded-full bg-slate-400 opacity-50" />
-                                <span className="text-[10px] font-bold text-slate-400">الفترة السابقة</span>
+                                <div className="w-2 h-2 rounded-full bg-slate-400 opacity-60" />
+                                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">الفترة السابقة</span>
                             </div>
+                            {comparisonInfo?.previousSubLabel && (
+                                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                                    {comparisonInfo.previousSubLabel}
+                                </span>
+                            )}
                         </div>
-                        <div className="flex justify-between items-end">
+                        <div className="flex justify-between items-end pr-3.5">
                             <div className="flex flex-col">
-                                <span className="text-xs font-bold text-slate-400">{payload.find((p: any) => p.dataKey === 'previousRevenue')?.value.toLocaleString()} ريال</span>
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 font-numeric">{payload.find((p: any) => p.dataKey === 'previousRevenue')?.value.toLocaleString()} ريال</span>
                                 <span className="text-[9px] font-bold text-slate-400">{payload.find((p: any) => p.dataKey === 'previousCount')?.value} طلبات</span>
                             </div>
                         </div>
@@ -384,7 +406,7 @@ const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ da
     };
 
     return (
-        <div className="w-full h-[300px] mt-4">
+        <div className="w-full h-[320px] mt-2">
             <ResponsiveContainer width="100%" height="100%">
                 <ReChartArea data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
@@ -413,11 +435,33 @@ const TrendAnalysisChart: React.FC<{ data: any[], isLoading?: boolean }> = ({ da
                     <ReChartLegend 
                         verticalAlign="top" 
                         align="right" 
-                        height={36}
+                        height={50}
                         iconType="circle"
                         formatter={(value) => {
-                            if (value === 'currentRevenue') return <span className="text-[10px] font-bold text-slate-500 mx-2">الدخل الحالي</span>;
-                            if (value === 'previousRevenue') return <span className="text-[10px] font-bold text-slate-500 mx-2">الدخل السابق</span>;
+                            if (value === 'currentRevenue') {
+                                return (
+                                    <span className="inline-flex flex-col text-right mx-3 align-middle">
+                                        <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">الدخل الحالي</span>
+                                        {comparisonInfo?.currentSubLabel && (
+                                            <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 font-numeric">
+                                                {comparisonInfo.currentSubLabel}
+                                            </span>
+                                        )}
+                                    </span>
+                                );
+                            }
+                            if (value === 'previousRevenue') {
+                                return (
+                                    <span className="inline-flex flex-col text-right mx-3 align-middle">
+                                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">الدخل السابق</span>
+                                        {comparisonInfo?.previousSubLabel && (
+                                            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 font-numeric">
+                                                {comparisonInfo.previousSubLabel}
+                                            </span>
+                                        )}
+                                    </span>
+                                );
+                            }
                             return null;
                         }}
                     />
@@ -601,6 +645,69 @@ const Financials: React.FC = () => {
 
         return { target, previous, periodLabel };
     }, [filterType, appliedStartDate, appliedEndDate, prevStats]);
+
+    const comparisonPeriodInfo = useMemo(() => {
+        const nowRaw = new Date();
+        const now = new Date(nowRaw);
+        if (now.getHours() < 4) now.setDate(now.getDate() - 1);
+
+        const formatDayDate = (d: Date) => {
+            const dayName = format(d, 'EEEE', { locale: ar });
+            const dateStr = format(d, 'yyyy/MM/dd');
+            return `${dayName} ${dateStr}`;
+        };
+
+        let currentLabel = 'الدخل الحالي';
+        let currentSubLabel = '';
+        let previousLabel = 'الدخل السابق';
+        let previousSubLabel = '';
+
+        if (filterType === 'today') {
+            const yesterday = subDays(now, 1);
+            currentSubLabel = `اليوم (${formatDayDate(now)})`;
+            previousSubLabel = `أمس (${formatDayDate(yesterday)})`;
+        } else if (filterType === 'yesterday') {
+            const yesterday = subDays(now, 1);
+            const dayBeforeYesterday = subDays(now, 2);
+            currentSubLabel = `أمس (${formatDayDate(yesterday)})`;
+            previousSubLabel = `قبل أمس (${formatDayDate(dayBeforeYesterday)})`;
+        } else if (filterType === 'month') {
+            const currentMonthName = format(now, 'MMMM yyyy', { locale: ar });
+            const prevMonthDate = subDays(startOfMonth(now), 1);
+            const prevMonthName = format(prevMonthDate, 'MMMM yyyy', { locale: ar });
+            currentSubLabel = `هذا الشهر (${currentMonthName})`;
+            previousSubLabel = `الشهر السابق (${prevMonthName})`;
+        } else if (filterType === 'last_month') {
+            const lastMonthDate = subDays(startOfMonth(now), 1);
+            const lastMonthName = format(lastMonthDate, 'MMMM yyyy', { locale: ar });
+            const prevLastMonthDate = subDays(startOfMonth(lastMonthDate), 1);
+            const prevLastMonthName = format(prevLastMonthDate, 'MMMM yyyy', { locale: ar });
+            currentSubLabel = `الشهر الماضي (${lastMonthName})`;
+            previousSubLabel = `الشهر الأسبق (${prevLastMonthName})`;
+        } else if (filterType === 'range' && appliedStartDate && appliedEndDate) {
+            const start = new Date(appliedStartDate);
+            const end = new Date(appliedEndDate);
+            const isSingleDay = isSameDay(start, end);
+            if (isSingleDay) {
+                const prevDay = subDays(start, 1);
+                currentSubLabel = formatDayDate(start);
+                previousSubLabel = `اليوم السابق (${formatDayDate(prevDay)})`;
+            } else {
+                const diff = end.getTime() - start.getTime();
+                const prevEnd = new Date(start.getTime() - 1);
+                const prevStart = new Date(prevEnd.getTime() - diff);
+                currentSubLabel = `${format(start, 'yyyy/MM/dd')} إلى ${format(end, 'yyyy/MM/dd')}`;
+                previousSubLabel = `${format(prevStart, 'yyyy/MM/dd')} إلى ${format(prevEnd, 'yyyy/MM/dd')}`;
+            }
+        }
+
+        return {
+            currentLabel,
+            currentSubLabel,
+            previousLabel,
+            previousSubLabel,
+        };
+    }, [filterType, appliedStartDate, appliedEndDate]);
 
     const chartData = useMemo(() => {
         if (!stats || !prevStats) return { comparisonSeries: [] };
@@ -1280,10 +1387,12 @@ const Financials: React.FC = () => {
                 {/* Main Visualization Center */}
                 <div className="xl:col-span-6 bg-white/50 dark:bg-slate-800/30 rounded-[40px] border border-slate-200 dark:border-slate-700 p-8 flex flex-col relative overflow-hidden backdrop-blur-md print:hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500" />
-                    <div className="flex justify-between items-center mb-6">
+                    <div className="flex justify-between items-center mb-4">
                         <div>
                             <h3 className="text-xl font-black text-slate-800 dark:text-white">تحليل الإيرادات وحجم العمل</h3>
-                            <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-wider">مقارنة الدخل وعدد الطلبات الحالية بما قبلها</p>
+                            <p className="text-xs text-slate-400 font-bold mt-1 tracking-wide">
+                                مقارنة الدخل وعدد الطلبات مع <span className="text-amber-600 dark:text-amber-400 font-numeric font-bold">{comparisonPeriodInfo.previousSubLabel}</span>
+                            </p>
                         </div>
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-xl">
                             <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -1291,7 +1400,11 @@ const Financials: React.FC = () => {
                         </div>
                     </div>
                     
-                    <TrendAnalysisChart data={chartData.comparisonSeries} isLoading={isLoading} />
+                    <TrendAnalysisChart 
+                        data={chartData.comparisonSeries} 
+                        isLoading={isLoading} 
+                        comparisonInfo={comparisonPeriodInfo}
+                    />
                 </div>
 
                 {/* Secondary Stats Column */}

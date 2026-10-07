@@ -247,9 +247,9 @@ const AppContent: React.FC = () => {
     }
   };
 
-  if (page === 'print-report' || page === 'request-draft') {
+  if (page === 'print-report') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans rtl overflow-x-hidden relative">
+      <div className="h-screen max-h-screen overflow-hidden flex flex-col bg-slate-50 dark:bg-slate-950 font-sans rtl relative print:!h-auto print:!max-h-none print:!overflow-visible">
         <Suspense fallback={<PageLoader />}>
           {mainContent()}
         </Suspense>
@@ -265,7 +265,28 @@ const AppContent: React.FC = () => {
         <ConfirmModal />
         <IncomingRequestNotifier />
         <KeyboardLayoutCorrector />
-        <PrivacyOverlay />
+      </div>
+    );
+  }
+
+  if (page === 'request-draft') {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans rtl relative print:h-auto print:overflow-visible">
+        <Suspense fallback={<PageLoader />}>
+          {mainContent()}
+        </Suspense>
+        
+        {/* Global Overlays for Full Screen Pages */}
+        <NotificationContainer />
+        <WhatsAppSuccessModal 
+          isOpen={whatsappSuccessModal.isOpen} 
+          onClose={hideWhatsAppSuccessModal} 
+          clientName={whatsappSuccessModal.clientName} 
+          phone={whatsappSuccessModal.phone} 
+        />
+        <ConfirmModal />
+        <IncomingRequestNotifier />
+        <KeyboardLayoutCorrector />
       </div>
     );
   }
@@ -427,7 +448,7 @@ const PrintStyles = () => (
         }
 
         /* Essential Reset for Printing */
-        html, body, #root, main, .print-container, .bg-gray-200, .min-h-screen {
+        html, body, #root, main, .print-container, .bg-gray-200, .min-h-screen, .h-screen {
           height: auto !important;
           min-height: 0 !important;
           overflow: visible !important;
@@ -441,7 +462,7 @@ const PrintStyles = () => (
         }
 
         /* Target the specific wrapper in App.tsx */
-        div.min-h-screen.relative {
+        div.min-h-screen.relative, div.h-screen.relative {
           height: auto !important;
           min-height: 0 !important;
           overflow: visible !important;
@@ -473,13 +494,18 @@ const PrintStyles = () => (
 
         /* Hide specific elements */
         .no-print, 
+        .no-print *,
         .sidebar, 
         aside,
         [role="banner"],
-        .print\\:hidden,
+        .print\:hidden,
         #background-container,
+        button[title*="قفل"],
+        button[title*="خصوصية"],
+        .fixed.bottom-6.left-6,
         .fixed.inset-0 {
             display: none !important;
+            visibility: hidden !important;
         }
 
         /* Reset padding for the main area */

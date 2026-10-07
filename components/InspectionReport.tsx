@@ -73,7 +73,7 @@ const getCardWidthClass = (size: string | undefined, isPrint: boolean) => {
     }
 };
 
-const generateWatermarkStyle = (text: string, settings: ReportSettings, isCustomerRequestIncomplete?: boolean, reportDirection?: 'ltr' | 'rtl'): React.CSSProperties => {
+const generateWatermarkStyle = (text: string, settings: ReportSettings, isCustomerRequestIncomplete?: boolean, reportDirection?: 'ltr' | 'rtl', isBilingual?: boolean): React.CSSProperties => {
     let finalOpacity = settings.watermarkOpacity ?? 0.06;
     let finalColorString = '0,0,0';
     let finalText = text;
@@ -81,7 +81,13 @@ const generateWatermarkStyle = (text: string, settings: ReportSettings, isCustom
     if (isCustomerRequestIncomplete) {
         finalOpacity = 0.22;
         finalColorString = '239, 68, 68'; // #ef4444
-        finalText = reportDirection === 'ltr' ? 'INCOMPLETE REQUEST' : 'لم يكمل الفحص';
+        if (reportDirection === 'ltr') {
+            finalText = 'INCOMPLETE INSPECTION';
+        } else if (isBilingual) {
+            finalText = 'لم يكتمل الفحص • INCOMPLETE';
+        } else {
+            finalText = 'لم يكمل الفحص';
+        }
     }
 
     const safeText = finalText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -187,10 +193,21 @@ const InfoPair: React.FC<{ label: string; value?: React.ReactNode; className?: s
     </div>
 );
 
-const FindingCategorySection: React.FC<{ title: string, children: React.ReactNode; settings: ReportSettings; technicians?: string[]; isPrintView?: boolean; direction?: 'rtl' | 'ltr' }> = ({ title, children, settings, technicians, isPrintView, direction }) => (
+const FindingCategorySection: React.FC<{ 
+    title: string; 
+    subtitle?: string; 
+    children: React.ReactNode; 
+    settings: ReportSettings; 
+    technicians?: string[]; 
+    isPrintView?: boolean; 
+    direction?: 'rtl' | 'ltr' 
+}> = ({ title, subtitle, children, settings, technicians, isPrintView, direction }) => (
     <div data-setting-section="colors-backgrounds" className={`finding-category border rounded-lg overflow-hidden print:overflow-hidden ${isPrintView ? 'mb-2' : 'mb-4'}`} style={{ borderColor: settings.borderColor }}>
-        <div data-setting-section="colors-section-titles" className={`${isPrintView ? 'p-1' : 'p-2'} flex justify-center items-center print:rounded-t-[7px]`} style={{ backgroundColor: settings.findingsHeaderBackgroundColor, color: settings.findingsHeaderFontColor }}>
-            <h3 className={`font-bold ${isPrintView ? getPrintSize(settings.fontSizes.categoryTitle) : settings.fontSizes.categoryTitle}`}>{title}</h3>
+        <div data-setting-section="colors-section-titles" className={`${isPrintView ? 'py-1 px-2' : 'py-1.5 px-3'} flex flex-col justify-center items-center print:rounded-t-[7px]`} style={{ backgroundColor: settings.findingsHeaderBackgroundColor, color: settings.findingsHeaderFontColor }}>
+            <h3 className={`font-bold ${isPrintView ? getPrintSize(settings.fontSizes.categoryTitle) : settings.fontSizes.categoryTitle} text-center leading-tight`}>{title}</h3>
+            {subtitle && (
+                <span className="text-[0.8em] font-normal opacity-85 italic text-center mt-0.5" style={{ direction: /[\u0600-\u06FF]/.test(subtitle) ? 'rtl' : 'ltr' }}>{subtitle}</span>
+            )}
         </div>
         <div className={`${isPrintView ? 'p-2' : 'p-3'} print:rounded-b-[7px]`} style={{ backgroundColor: settings.findingContainerBackgroundColor }}>
             {children}
@@ -206,9 +223,17 @@ const FindingCategorySection: React.FC<{ title: string, children: React.ReactNod
 
 const FindingItem: React.FC<{ finding: StructuredFinding; predefinedFinding?: PredefinedFinding; settings: ReportSettings; isPrintView?: boolean; direction?: 'rtl' | 'ltr' }> = ({ finding, predefinedFinding, settings, isPrintView, direction }) => {
     const { fontSizes } = settings;
+    const isNameTransRtl = finding.translatedFindingName ? /[\u0600-\u06FF]/.test(finding.translatedFindingName) : false;
+    const isValTransRtl = finding.translatedValue ? /[\u0600-\u06FF]/.test(finding.translatedValue) : false;
+
+    const hasValue = !!finding.value?.trim();
+    const hasTransValue = !!finding.translatedValue?.trim();
+    const isGoodStatus = /سليم|سليمة|ممتاز|جيد|pass|good|ok|intact/i.test(finding.value || '') || /pass|good|ok|intact/i.test(finding.translatedValue || '');
+
     return (
         <div data-setting-section="layout-cards" className="finding-item border rounded-lg text-center flex flex-col shadow-sm bg-white overflow-hidden h-full" style={{ borderColor: settings.borderColor }}>
-            <div className="finding-img-container bg-white flex items-center justify-center overflow-hidden relative p-1 h-20 flex-shrink-0">
+            {/* Finding Image */}
+            <div className="finding-img-container bg-white flex items-center justify-center overflow-hidden relative p-1 h-20 flex-shrink-0 border-b border-slate-100 dark:border-slate-800">
                 {predefinedFinding?.reference_image ? (
                     <img
                         src={predefinedFinding.reference_image}
@@ -221,10 +246,46 @@ const FindingItem: React.FC<{ finding: StructuredFinding; predefinedFinding?: Pr
                     <span className={`text-gray-300 ${isPrintView ? 'text-[10px]' : 'text-xs'}`}>No Img</span>
                 )}
             </div>
-            <div className={`finding-content flex-grow flex flex-col items-center justify-center text-center w-full ${isPrintView ? 'p-1' : 'p-2'}`} style={{ backgroundColor: '#f8fafc' }}>
-                <div className="finding-text-wrapper w-full flex flex-col items-center justify-center">
-                    <h4 className={`font-bold w-full leading-tight line-clamp-2 mb-1 break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingTitle) : fontSizes.findingTitle}`}><span>{finding.findingName}</span></h4>
-                    {finding.value?.trim() && <p className={`font-medium w-full text-slate-600 break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingValue || fontSizes.findingTitle) : (fontSizes.findingValue || fontSizes.findingTitle)}`}><span>{finding.value}</span></p>}
+
+            {/* Finding Body: 1. Item Name, 2. Item Status / Condition */}
+            <div className={`finding-content flex-grow flex flex-col justify-between text-center w-full ${isPrintView ? 'p-1.5' : 'p-2'}`} style={{ backgroundColor: '#f8fafc' }}>
+                {/* 1. Item Name (اسم البطاقة) */}
+                <div className="finding-header-box w-full mb-1.5 pb-1 border-b border-slate-200/70 dark:border-slate-700/60">
+                    <h4 className={`font-bold w-full leading-snug break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingTitle) : fontSizes.findingTitle}`}>
+                        <span className="text-slate-900 dark:text-slate-100 block">{finding.findingName}</span>
+                    </h4>
+                    {finding.translatedFindingName && (
+                        <div 
+                            className="text-[0.82em] font-semibold text-blue-700 dark:text-blue-400 mt-0.5 leading-tight break-words tracking-tight"
+                            style={{ direction: isNameTransRtl ? 'rtl' : 'ltr' }}
+                        >
+                            {finding.translatedFindingName}
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. Item Status / Condition (حالة البند) */}
+                <div className="finding-status-box w-full flex-grow flex flex-col justify-center items-center">
+                    {hasValue ? (
+                        <div className={`w-full rounded px-1.5 py-1 ${isGoodStatus ? 'bg-emerald-50/90 border border-emerald-200/70 text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-800/50 dark:text-emerald-300' : 'bg-slate-100/90 border border-slate-200/70 text-slate-800 dark:bg-slate-800/90 dark:border-slate-700/70 dark:text-slate-200'}`}>
+                            {/* Primary Status */}
+                            <span className={`font-bold block leading-tight break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingValue || fontSizes.findingTitle) : (fontSizes.findingValue || fontSizes.findingTitle)}`}>
+                                {finding.value}
+                            </span>
+                            {/* Translated Status */}
+                            {hasTransValue && (
+                                <div 
+                                    className="text-[0.80em] font-semibold text-slate-600 dark:text-slate-400 mt-0.5 pt-0.5 border-t border-slate-200/60 dark:border-slate-700/60 leading-tight break-words flex items-center justify-center gap-1"
+                                    style={{ direction: isValTransRtl ? 'rtl' : 'ltr' }}
+                                >
+                                    <span className="text-purple-600 font-bold text-[9px] select-none">↳</span>
+                                    <span>{finding.translatedValue}</span>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <span className="text-[11px] text-slate-400">-</span>
+                    )}
                 </div>
             </div>
         </div>
@@ -239,6 +300,7 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
 
     const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, settings.noteHighlightOpacity || 0.1) : {};
     const textClassName = note.highlightColor ? `highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
+    const isTransRtl = note.translatedText ? /[\u0600-\u06FF]/.test(note.translatedText) : false;
 
     return (
         <div data-setting-section="layout-cards" className="image-note-card bg-white rounded-lg border shadow-sm flex flex-col items-center text-center overflow-hidden break-inside-avoid print:break-inside-avoid w-full min-w-0" style={{ borderColor: settings.borderColor, clipPath: 'inset(0)' }}>
@@ -254,6 +316,15 @@ const ImageNoteCard: React.FC<{ note: Note; categoryName: string; settings: Repo
                         <span style={highlightStyle} className={textClassName}>{displayText}</span>
                     ) : (
                         <span style={{ color: settings.textColor }}>{displayText}</span>
+                    )}
+                    {note.translatedText && (
+                        <div 
+                            className="text-[0.88em] text-slate-500 font-sans mt-1 pt-1 border-t border-slate-100 flex items-start justify-center gap-1.5 font-normal opacity-90" 
+                            style={{ direction: isTransRtl ? 'rtl' : 'ltr' }}
+                        >
+                            <span className="text-blue-500 select-none text-xs font-bold">↳</span>
+                            <span className="italic leading-relaxed">{note.translatedText}</span>
+                        </div>
                     )}
                 </div>
             </div>
@@ -415,8 +486,49 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
         return [...techNames, ...empNames];
     };
 
+    const isTranslatedReport = useMemo(() => {
+        return !!request.translated_stamps || 
+            safeCustomCategories.some(c => !!c.translatedName) || 
+            (request.structured_findings || []).some(f => !!f.translatedFindingName || !!f.translatedValue) ||
+            (request.general_notes || []).some(n => !!n.translatedText);
+    }, [request.translated_stamps, safeCustomCategories, request.structured_findings, request.general_notes]);
+
     const getStampText = (stamp: ReportStamp): React.ReactNode => {
-        if (stamp === 'CUSTOMER_REQUEST_INCOMPLETE') return <>{reportDirection === 'ltr' ? 'INCOMPLETE REQUEST' : 'لم يتم اكمال الفحص'}<br /><span className="text-xl">{reportDirection === 'ltr' ? 'By Client Request' : 'بناء على طلب العميل'}</span></>;
+        const transStamp = request.translated_stamps?.[stamp];
+        const hasCustomObj = transStamp && typeof transStamp === 'object';
+        const transMain = hasCustomObj ? transStamp.main : (typeof transStamp === 'string' ? transStamp : 'INCOMPLETE INSPECTION');
+        const transSub = hasCustomObj ? transStamp.sub : 'By Client Request';
+
+        if (stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
+            if (reportDirection === 'ltr') {
+                return (
+                    <div className="flex flex-col items-center">
+                        <span className="text-2xl font-black tracking-wider leading-tight uppercase">{transMain || 'INCOMPLETE INSPECTION'}</span>
+                        <span className="text-lg font-bold opacity-90">{transSub || 'By Client Request'}</span>
+                    </div>
+                );
+            }
+
+            if (isTranslatedReport) {
+                return (
+                    <div className="flex flex-col items-center">
+                        <span className="text-xl font-black tracking-wider leading-tight">لم يتم اكمال الفحص</span>
+                        <span className="text-xs font-bold opacity-90">بناء على طلب العميل</span>
+                        <div className="border-t-2 border-red-500/60 w-full mt-1.5 pt-1 text-center" dir="ltr">
+                            <span className="text-sm font-black tracking-wider leading-tight uppercase block">{transMain || 'INCOMPLETE INSPECTION'}</span>
+                            {transSub && <span className="text-[11px] font-bold opacity-85 block">{transSub}</span>}
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex flex-col items-center">
+                    <span className="text-2xl font-black tracking-wider leading-tight">لم يتم اكمال الفحص</span>
+                    <span className="text-lg font-bold opacity-90 mt-0.5">بناء على طلب العميل</span>
+                </div>
+            );
+        }
         if (stamp === 'EXISTING_CUSTOMER') return '';
         return '';
     };
@@ -569,7 +681,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         const hasFieldTestStatus = isFieldTestClear || isFieldTestNotTested;
 
                         const techNames = getAssignedTechnicians(catId);
-                        const watermarkStyle = generateWatermarkStyle(category.name, reportSettings, isCustomerRequestIncomplete, reportDirection);
+                        const watermarkStyle = generateWatermarkStyle(category.name, reportSettings, isCustomerRequestIncomplete, reportDirection, isTranslatedReport);
 
                         const categoryNoticeText = reportSettings.categoryNotices?.[catId];
                         const excludedFindingsList = reportSettings.excludedNoticeFindings || [];
@@ -579,23 +691,40 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                             const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
                             const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
                             const textClassName = note.highlightColor ? `highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
-                            return <div key={note.id} className={`py-0.5 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>;
+                            const isTransRtl = note.translatedText ? /[\u0600-\u06FF]/.test(note.translatedText) : false;
+                            return (
+                                <div key={note.id} className={`py-0.5 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
+                                    <span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span>
+                                    <div className="flex-1 min-w-0 break-words whitespace-pre-wrap">
+                                        {note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}
+                                        {note.translatedText && (
+                                            <div 
+                                                className="text-[0.88em] text-slate-500 dark:text-slate-400 font-sans mt-0.5 pt-0.5 flex items-start gap-1.5 font-normal opacity-90 border-t border-slate-100 dark:border-slate-800" 
+                                                style={{ direction: isTransRtl ? 'rtl' : 'ltr' }}
+                                            >
+                                                <span className="text-blue-500 select-none text-xs font-bold leading-none mt-0.5">↳</span>
+                                                <span className="italic leading-relaxed">{note.translatedText}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
                         };
 
                         if (allFindingsForCategory.length === 0 && textOnlyNotes.length === 0 && !hasFieldTestStatus) {
                             if (isCustomerRequestIncomplete) {
                                 return (
-                                    <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}>
+                                    <FindingCategorySection title={category.name} subtitle={category.translatedName} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}>
                                         <div className={`text-center w-full rounded-lg relative overflow-hidden ${isPrintView ? 'py-6' : 'py-10'}`} style={{ ...watermarkStyle, minHeight: isPrintView ? '80px' : '120px' }}>
                                         </div>
                                     </FindingCategorySection>
                                 );
                             }
-                            return <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}><div className={`text-center ${isPrintView ? 'py-2' : 'py-6'}`}><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMGI5ODEiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAgNkw5IDE3bC01LTUiLz48L3N2Zz4=" alt="No Issues" className="mx-auto" referrerPolicy="no-referrer" style={{ width: '40px', height: '40px', display: 'block' }} /><p className="mt-2 font-bold" style={{ color: '#475569' }}>{reportDirection === 'ltr' ? 'No Issues Found' : 'بدون ملاحظات'}</p></div></FindingCategorySection>;
+                            return <FindingCategorySection title={category.name} subtitle={category.translatedName} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}><div className={`text-center ${isPrintView ? 'py-2' : 'py-6'}`}><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMGI5ODEiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAgNkw5IDE3bC01LTUiLz48L3N2Zz4=" alt="No Issues" className="mx-auto" referrerPolicy="no-referrer" style={{ width: '40px', height: '40px', display: 'block' }} /><p className="mt-2 font-bold" style={{ color: '#475569' }}>{reportDirection === 'ltr' ? 'No Issues Found' : 'بدون ملاحظات'}</p></div></FindingCategorySection>;
                         }
 
                         return (
-                            <FindingCategorySection title={category.name} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}>
+                            <FindingCategorySection title={category.name} subtitle={category.translatedName} key={catId} settings={reportSettings} technicians={techNames} isPrintView={isPrintView} direction={reportDirection}>
                                 {shouldShowNotice && sortedFindings.length > 0 && (
                                     <div className={`mb-3 px-3 py-2 rounded-md border text-center font-bold break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.categoryNoticeText || fontSizes.noteText) : (fontSizes.categoryNoticeText || fontSizes.noteText)}`} style={{ backgroundColor: reportSettings.categoryNoticeBackgroundColor || reportSettings.findingsHeaderBackgroundColor || '#f8fafc', color: reportSettings.categoryNoticeFontColor || reportSettings.findingsHeaderFontColor || '#0f172a', borderColor: reportSettings.borderColor }}>
                                         {categoryNoticeText}
@@ -656,13 +785,36 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                     })}
 
                     {generalTextOnlyNotes.length > 0 && (
-                        <FindingCategorySection title={reportDirection === 'ltr' ? "General Notes" : "ملاحظات عامة"} settings={reportSettings} isPrintView={isPrintView} direction={reportDirection}>
+                        <FindingCategorySection 
+                            title={reportDirection === 'ltr' ? "General Notes" : "ملاحظات عامة"} 
+                            subtitle={reportDirection === 'rtl' && generalTextOnlyNotes.some(n => n.translatedText) ? "General Notes" : undefined}
+                            settings={reportSettings} 
+                            isPrintView={isPrintView} 
+                            direction={reportDirection}
+                        >
                             <div data-setting-section="text-disclaimer" className={`bg-white rounded-lg border-2 border-dashed relative overflow-hidden ${isPrintView ? 'p-2' : 'p-3'}`} style={{ borderColor: reportSettings.borderColor, backgroundColor: '#ffffff', ...generateWatermarkStyle(reportDirection === 'ltr' ? 'General Notes' : 'ملاحظات عامة', reportSettings, isCustomerRequestIncomplete, reportDirection) }}>
                                 <div className="relative z-10 space-y-1 p-0 m-0">{generalTextOnlyNotes.map(note => {
                                     const displayText = (note.displayTranslation?.isActive && note.translations?.[note.displayTranslation.lang]) ? note.translations[note.displayTranslation.lang] : note.text;
                                     const highlightStyle = note.highlightColor ? getHighlightStyle(note.highlightColor, reportSettings.noteHighlightOpacity || 0.1) : {};
                                     const textClassName = note.highlightColor ? `highlighted-note px-1.5 py-0.5 rounded-md inline decoration-clone leading-relaxed font-bold ${highlightBaseColors[note.highlightColor].text}` : '';
-                                    return <div key={note.id} className={`py-1 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}><span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span><div className="flex-1 min-w-0 break-words whitespace-pre-wrap">{note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}</div></div>;
+                                    const isTransRtl = note.translatedText ? /[\u0600-\u06FF]/.test(note.translatedText) : false;
+                                    return (
+                                        <div key={note.id} className={`py-1 flex items-start ${isPrintView ? getPrintSize(fontSizes.noteText) : fontSizes.noteText}`}>
+                                            <span className={`inline-block ${reportDirection === 'ltr' ? 'me-4 ms-3' : 'ms-4 me-3'} flex-shrink-0`} style={getBulletStyle()}></span>
+                                            <div className="flex-1 min-w-0 break-words whitespace-pre-wrap">
+                                                {note.highlightColor ? <span style={highlightStyle} className={textClassName}>{displayText}</span> : <span style={{ color: settings.reportSettings.textColor }}>{displayText}</span>}
+                                                {note.translatedText && (
+                                                    <div 
+                                                        className="text-[0.88em] text-slate-500 dark:text-slate-400 font-sans mt-0.5 pt-0.5 flex items-start gap-1.5 font-normal opacity-90 border-t border-slate-100 dark:border-slate-800" 
+                                                        style={{ direction: isTransRtl ? 'rtl' : 'ltr' }}
+                                                    >
+                                                        <span className="text-blue-500 select-none text-xs font-bold leading-none mt-0.5">↳</span>
+                                                        <span className="italic leading-relaxed">{note.translatedText}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
                                 })}</div>
                             </div>
                         </FindingCategorySection>

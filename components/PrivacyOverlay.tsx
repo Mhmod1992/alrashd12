@@ -70,14 +70,14 @@ const PrivacyOverlay: React.FC = () => {
     if (!isLargeScreen || !authUser) return null;
 
     return (
-        <>
+        <div className="no-print print:hidden">
             {/* Floating Action Button */}
             <button
                 onClick={(e) => {
                     e.stopPropagation();
                     setIsActive(true);
                 }}
-                className="fixed bottom-6 left-6 z-[45] bg-slate-800 text-white dark:bg-slate-700 p-3 rounded-full shadow-xl border border-slate-700 dark:border-slate-600 hover:bg-slate-900 dark:hover:bg-slate-600 transition-all transform hover:scale-105"
+                className="no-print print:hidden fixed bottom-6 left-6 z-[45] bg-slate-800 text-white dark:bg-slate-700 p-3 rounded-full shadow-xl border border-slate-700 dark:border-slate-600 hover:bg-slate-900 dark:hover:bg-slate-600 transition-all transform hover:scale-105"
                 title="قفل الشاشة (وضع الخصوصية)"
             >
                 <Icon name="lock" className="w-6 h-6" />
@@ -91,7 +91,7 @@ const PrivacyOverlay: React.FC = () => {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.3 }}
-                        className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/98 dark:bg-slate-950/98 backdrop-blur-md cursor-pointer"
+                        className="no-print print:hidden fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/98 dark:bg-slate-950/98 backdrop-blur-md cursor-pointer"
                         onClick={(e) => {
                             e.stopPropagation();
                             setIsActive(false);
@@ -120,7 +120,7 @@ const PrivacyOverlay: React.FC = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
-        </>
+        </div>
     );
 };
 

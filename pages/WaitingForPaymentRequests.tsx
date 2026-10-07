@@ -751,6 +751,7 @@ const WaitingForPaymentRequests: React.FC = () => {
                                     }}
                                     disabled={isSubmittingPayment}
                                     autoFocus={false}
+                                    size="sm"
                                     className="w-full !h-[42px] font-mono"
                                 />
                             </div>

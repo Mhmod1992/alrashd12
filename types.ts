@@ -214,6 +214,7 @@ export interface Note {
   id: string;
   text: string;
   originalText?: string;
+  translatedText?: string;
   image?: string;
   authorId: string;
   authorName: string;
@@ -230,12 +231,15 @@ export interface Note {
 export interface CustomFindingCategory {
   id: string;
   name: string;
+  translatedName?: string;
 }
 
 export interface StructuredFinding {
   findingId: string;
   findingName: string;
+  translatedFindingName?: string;
   value: string;
+  translatedValue?: string;
   categoryId: string;
   status?: 'saving' | 'saved' | 'error';
 }
@@ -336,6 +340,7 @@ export interface InspectionRequest {
   attached_files?: AttachedFile[];
   technician_assignments?: Record<string, string[]>;
   report_stamps?: ReportStamp[];
+  translated_stamps?: Record<string, string | { main: string; sub: string }>;
   report_url?: string;
   report_generated_at?: string;
   ai_analysis?: string;

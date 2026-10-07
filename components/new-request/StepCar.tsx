@@ -225,23 +225,51 @@ const StepCar: React.FC<StepCarProps> = (props) => {
                         </div>
                     )
                 ) : (
-                    <div className="relative">
-                        <input
-                            ref={props.chassisInputRef}
-                            type="text"
-                            value={props.chassisNumber}
-                            onChange={e => props.setChassisNumber(e.target.value.toUpperCase())}
-                            style={{ direction: 'ltr' }}
-                            required={!props.isReservationMode}
-                            className={props.getInputClass('chassisNumber')}
-                            placeholder="WBA..."
-                            autoComplete="off"
-                        />
-                        {props.isCheckingHistory && (
-                            <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                                <RefreshCwIcon className="w-5 h-5 animate-spin text-blue-500" />
-                            </div>
+                    <div className="space-y-4">
+                        {/* Mobile only: Camera Scan Button above field for Chassis */}
+                        {props.isMobile && (
+                            <button
+                                type="button"
+                                onClick={() => props.setIsScannerOpen(true)}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-bold text-sm rounded-xl border border-purple-200 dark:border-purple-800/60 shadow-sm transition-all active:scale-[0.98]"
+                                title="مسح رقم الشاصي بالكاميرا"
+                            >
+                                <Icon name="scan" className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                <span>مسح رقم الشاصي بالكاميرا</span>
+                            </button>
                         )}
+
+                        <div className="flex items-center gap-2 relative">
+                            <div className="relative flex-1">
+                                <input
+                                    ref={props.chassisInputRef}
+                                    type="text"
+                                    value={props.chassisNumber}
+                                    onChange={e => props.setChassisNumber(e.target.value.toUpperCase())}
+                                    style={{ direction: 'ltr' }}
+                                    required={!props.isReservationMode}
+                                    className={`${props.getInputClass('chassisNumber')} font-mono uppercase tracking-wider text-base`}
+                                    placeholder="WBA..."
+                                    autoComplete="off"
+                                />
+                                {props.isCheckingHistory && (
+                                    <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                                        <RefreshCwIcon className="w-5 h-5 animate-spin text-blue-500" />
+                                    </div>
+                                )}
+                            </div>
+                            {!props.isMobile && (
+                                <Button 
+                                    type="button" 
+                                    variant="secondary" 
+                                    onClick={() => props.setIsScannerOpen(true)} 
+                                    className="p-3 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60" 
+                                    title="مسح رقم الشاصي بالكاميرا"
+                                >
+                                    <Icon name="scan" className="w-5 h-5" />
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

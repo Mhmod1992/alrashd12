@@ -190,6 +190,7 @@ export const ClientSearchInput: React.FC<ClientSearchInputProps> = ({
                         <SmartPhoneInput
                             ref={phoneInputRef}
                             value={clientPhone}
+                            size="sm"
                             disabled={disabled || phoneDisabled}
                             autoFocus={autoFocusPhone && !phoneDisabled}
                             onChange={(val) => !phoneDisabled && handlePhoneChange(val)}

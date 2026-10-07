@@ -149,6 +149,8 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                             onBlur={() => {}}
                             required={!props.isReservationMode}
                             autoFocus={true}
+                            size="default"
+                            className="mt-1 w-full"
                         />
                         {props.isSearchingClientPhone && (
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-20">

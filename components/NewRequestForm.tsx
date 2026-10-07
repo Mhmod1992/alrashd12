@@ -1807,6 +1807,26 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setIsScannerOpen(false);
     }, [addNotification, isMobile]);
 
+    const handleVinScanComplete = useCallback((vin: string) => {
+        if (vin && vin.trim()) {
+            const cleanVin = vin.trim().toUpperCase();
+            setChassisNumber(cleanVin);
+            addNotification({
+                title: 'تم قراءة رقم الشاصي بنجاح',
+                message: `تم إدراج رقم الشاصي: ${cleanVin}`,
+                type: 'success',
+            });
+            if (!isMobile) setTimeout(() => makeInputRef.current?.focus(), 500);
+        } else {
+            addNotification({
+                title: 'فشل قراءة رقم الشاصي',
+                message: 'لم يتم التعرف على رقم شاصي واضح في الصورة.',
+                type: 'error',
+            });
+        }
+        setIsScannerOpen(false);
+    }, [addNotification, isMobile]);
+
     const handleCarIdentifyComplete = useCallback((data: { makeId: string; makeName: string; modelId: string; modelName: string; year: number }) => {
         setIsCarScannerOpen(false);
 
@@ -2339,7 +2359,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 isOpen={isScannerOpen}
                 onClose={() => setIsScannerOpen(false)}
                 onScanComplete={handleScanComplete}
-                mode="plate"
+                onVinScanComplete={handleVinScanComplete}
+                mode={useChassisNumber ? 'vin' : 'plate'}
             />
 
             <CameraScannerModal

@@ -875,8 +875,29 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
               reportDirection === 'ltr' ? { left: 'auto', right: layoutSettings.stamps.incomplete.left } : {}
             ]}
           >
-            <Text style={styles.stampTextMain}>{reportDirection === 'ltr' ? 'INCOMPLETE REQUEST' : 'لم يتم اكمال الفحص'}</Text>
-            <Text style={styles.stampTextSub}>{reportDirection === 'ltr' ? 'By Client Request' : 'بناء على طلب العميل'}</Text>
+            {reportDirection === 'ltr' ? (
+              <>
+                <Text style={styles.stampTextMain}>
+                  {(typeof request.translated_stamps?.CUSTOMER_REQUEST_INCOMPLETE === 'object' ? request.translated_stamps.CUSTOMER_REQUEST_INCOMPLETE.main : request.translated_stamps?.CUSTOMER_REQUEST_INCOMPLETE) || 'INCOMPLETE INSPECTION'}
+                </Text>
+                <Text style={styles.stampTextSub}>
+                  {(typeof request.translated_stamps?.CUSTOMER_REQUEST_INCOMPLETE === 'object' ? request.translated_stamps.CUSTOMER_REQUEST_INCOMPLETE.sub : '') || 'By Client Request'}
+                </Text>
+              </>
+            ) : request.translated_stamps?.CUSTOMER_REQUEST_INCOMPLETE ? (
+              <>
+                <Text style={styles.stampTextMain}>لم يتم اكمال الفحص</Text>
+                <Text style={styles.stampTextSub}>بناء على طلب العميل</Text>
+                <Text style={[styles.stampTextSub, { marginTop: 2, fontWeight: 'bold' }]}>
+                  {typeof request.translated_stamps.CUSTOMER_REQUEST_INCOMPLETE === 'object' ? `${request.translated_stamps.CUSTOMER_REQUEST_INCOMPLETE.main} - ${request.translated_stamps.CUSTOMER_REQUEST_INCOMPLETE.sub}` : request.translated_stamps.CUSTOMER_REQUEST_INCOMPLETE}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.stampTextMain}>لم يتم اكمال الفحص</Text>
+                <Text style={styles.stampTextSub}>بناء على طلب العميل</Text>
+              </>
+            )}
           </View>
         )}
 
@@ -1170,7 +1191,19 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
                           </View>
                           <View style={styles.findingContent}>
                             <Text style={styles.findingName}>{finding.findingName}</Text>
-                            {finding.value && <Text style={styles.findingValue}>{finding.value}</Text>}
+                            {finding.translatedFindingName && (
+                              <Text style={[styles.findingName, { fontSize: 7, color: '#3b82f6', fontWeight: 'normal' }]}>
+                                {finding.translatedFindingName}
+                              </Text>
+                            )}
+                            {finding.value && (
+                              <Text style={styles.findingValue}>{finding.value}</Text>
+                            )}
+                            {finding.translatedValue && (
+                              <Text style={[styles.findingValue, { fontSize: 6.5, color: '#64748b', fontWeight: 'normal' }]}>
+                                ↳ {finding.translatedValue}
+                              </Text>
+                            )}
                           </View>
                         </View>
                       );

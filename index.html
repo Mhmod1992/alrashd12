@@ -306,7 +306,7 @@
           overflow: visible !important;
         }
 
-        #background-container, .no-print { display: none !important; }
+        #background-container, .no-print, .no-print *, .print\:hidden, button[title*="قفل"], button[title*="خصوصية"], .fixed.bottom-6.left-6 { display: none !important; visibility: hidden !important; }
         
         /* Hide everything by default using visibility to keep flow but hide content */
         body * { 
