@@ -308,7 +308,9 @@ const ReportPdf: React.FC<ReportPdfProps> = ({
                           <Image src={predefined.reference_image} style={styles.findingImage} />
                         )}
                         <Text style={styles.findingName}>{finding.findingName}</Text>
-                        {finding.value && <Text style={styles.findingValue}>{finding.value}</Text>}
+                        {Boolean(finding.value?.trim() && finding.value.trim() !== '-' && finding.value.trim() !== '—' && finding.value.trim() !== '--') && (
+                          <Text style={styles.findingValue}>{finding.value}</Text>
+                        )}
                       </View>
                     );
                   })}

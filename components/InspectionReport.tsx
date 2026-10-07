@@ -73,7 +73,7 @@ const getCardWidthClass = (size: string | undefined, isPrint: boolean) => {
     }
 };
 
-const generateWatermarkStyle = (text: string, settings: ReportSettings, isCustomerRequestIncomplete?: boolean, reportDirection?: 'ltr' | 'rtl', isBilingual?: boolean): React.CSSProperties => {
+const generateWatermarkStyle = (text: string, settings: ReportSettings, isCustomerRequestIncomplete?: boolean, reportDirection?: 'ltr' | 'rtl'): React.CSSProperties => {
     let finalOpacity = settings.watermarkOpacity ?? 0.06;
     let finalColorString = '0,0,0';
     let finalText = text;
@@ -81,13 +81,7 @@ const generateWatermarkStyle = (text: string, settings: ReportSettings, isCustom
     if (isCustomerRequestIncomplete) {
         finalOpacity = 0.22;
         finalColorString = '239, 68, 68'; // #ef4444
-        if (reportDirection === 'ltr') {
-            finalText = 'INCOMPLETE INSPECTION';
-        } else if (isBilingual) {
-            finalText = 'لم يكتمل الفحص • INCOMPLETE';
-        } else {
-            finalText = 'لم يكمل الفحص';
-        }
+        finalText = reportDirection === 'ltr' ? 'INCOMPLETE REQUEST' : 'لم يكمل الفحص';
     }
 
     const safeText = finalText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -226,14 +220,13 @@ const FindingItem: React.FC<{ finding: StructuredFinding; predefinedFinding?: Pr
     const isNameTransRtl = finding.translatedFindingName ? /[\u0600-\u06FF]/.test(finding.translatedFindingName) : false;
     const isValTransRtl = finding.translatedValue ? /[\u0600-\u06FF]/.test(finding.translatedValue) : false;
 
-    const hasValue = !!finding.value?.trim();
-    const hasTransValue = !!finding.translatedValue?.trim();
-    const isGoodStatus = /سليم|سليمة|ممتاز|جيد|pass|good|ok|intact/i.test(finding.value || '') || /pass|good|ok|intact/i.test(finding.translatedValue || '');
+    // Check if the finding has a real, meaningful status/value written (not empty and not a placeholder hyphen)
+    const rawValue = finding.value?.trim();
+    const hasMeaningfulValue = !!rawValue && rawValue !== '-' && rawValue !== '—' && rawValue !== '--';
 
     return (
         <div data-setting-section="layout-cards" className="finding-item border rounded-lg text-center flex flex-col shadow-sm bg-white overflow-hidden h-full" style={{ borderColor: settings.borderColor }}>
-            {/* Finding Image */}
-            <div className="finding-img-container bg-white flex items-center justify-center overflow-hidden relative p-1 h-20 flex-shrink-0 border-b border-slate-100 dark:border-slate-800">
+            <div className="finding-img-container bg-white flex items-center justify-center overflow-hidden relative p-1 h-20 flex-shrink-0">
                 {predefinedFinding?.reference_image ? (
                     <img
                         src={predefinedFinding.reference_image}
@@ -246,45 +239,31 @@ const FindingItem: React.FC<{ finding: StructuredFinding; predefinedFinding?: Pr
                     <span className={`text-gray-300 ${isPrintView ? 'text-[10px]' : 'text-xs'}`}>No Img</span>
                 )}
             </div>
-
-            {/* Finding Body: 1. Item Name, 2. Item Status / Condition */}
-            <div className={`finding-content flex-grow flex flex-col justify-between text-center w-full ${isPrintView ? 'p-1.5' : 'p-2'}`} style={{ backgroundColor: '#f8fafc' }}>
-                {/* 1. Item Name (اسم البطاقة) */}
-                <div className="finding-header-box w-full mb-1.5 pb-1 border-b border-slate-200/70 dark:border-slate-700/60">
-                    <h4 className={`font-bold w-full leading-snug break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingTitle) : fontSizes.findingTitle}`}>
-                        <span className="text-slate-900 dark:text-slate-100 block">{finding.findingName}</span>
-                    </h4>
-                    {finding.translatedFindingName && (
-                        <div 
-                            className="text-[0.82em] font-semibold text-blue-700 dark:text-blue-400 mt-0.5 leading-tight break-words tracking-tight"
-                            style={{ direction: isNameTransRtl ? 'rtl' : 'ltr' }}
-                        >
-                            {finding.translatedFindingName}
-                        </div>
-                    )}
-                </div>
-
-                {/* 2. Item Status / Condition (حالة البند) */}
-                <div className="finding-status-box w-full flex-grow flex flex-col justify-center items-center">
-                    {hasValue ? (
-                        <div className={`w-full rounded px-1.5 py-1 ${isGoodStatus ? 'bg-emerald-50/90 border border-emerald-200/70 text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-800/50 dark:text-emerald-300' : 'bg-slate-100/90 border border-slate-200/70 text-slate-800 dark:bg-slate-800/90 dark:border-slate-700/70 dark:text-slate-200'}`}>
-                            {/* Primary Status */}
-                            <span className={`font-bold block leading-tight break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingValue || fontSizes.findingTitle) : (fontSizes.findingValue || fontSizes.findingTitle)}`}>
-                                {finding.value}
+            <div className={`finding-content flex-grow flex flex-col items-center justify-center text-center w-full ${isPrintView ? 'p-1' : 'p-2'}`} style={{ backgroundColor: '#f8fafc' }}>
+                <div className="finding-text-wrapper w-full flex flex-col items-center justify-center">
+                    <h4 className={`font-bold w-full leading-tight line-clamp-2 break-words whitespace-pre-wrap ${hasMeaningfulValue ? 'mb-1' : ''} ${isPrintView ? getPrintSize(fontSizes.findingTitle) : fontSizes.findingTitle}`}>
+                        <span>{finding.findingName}</span>
+                        {finding.translatedFindingName && (
+                            <span 
+                                className="block text-[0.82em] font-normal text-slate-500 dark:text-slate-400 italic mt-0.5 border-t border-slate-200/60 dark:border-slate-700/60 pt-0.5" 
+                                style={{ direction: isNameTransRtl ? 'rtl' : 'ltr' }}
+                            >
+                                {finding.translatedFindingName}
                             </span>
-                            {/* Translated Status */}
-                            {hasTransValue && (
-                                <div 
-                                    className="text-[0.80em] font-semibold text-slate-600 dark:text-slate-400 mt-0.5 pt-0.5 border-t border-slate-200/60 dark:border-slate-700/60 leading-tight break-words flex items-center justify-center gap-1"
+                        )}
+                    </h4>
+                    {hasMeaningfulValue && (
+                        <div className={`font-medium w-full text-slate-600 dark:text-slate-300 break-words whitespace-pre-wrap ${isPrintView ? getPrintSize(fontSizes.findingValue || fontSizes.findingTitle) : (fontSizes.findingValue || fontSizes.findingTitle)}`}>
+                            <span>{finding.value}</span>
+                            {finding.translatedValue && (
+                                <span 
+                                    className="block text-[0.82em] font-normal text-slate-500 dark:text-slate-400 italic mt-0.5 border-t border-slate-200/60 dark:border-slate-700/60 pt-0.5" 
                                     style={{ direction: isValTransRtl ? 'rtl' : 'ltr' }}
                                 >
-                                    <span className="text-purple-600 font-bold text-[9px] select-none">↳</span>
-                                    <span>{finding.translatedValue}</span>
-                                </div>
+                                    {finding.translatedValue}
+                                </span>
                             )}
                         </div>
-                    ) : (
-                        <span className="text-[11px] text-slate-400">-</span>
                     )}
                 </div>
             </div>
@@ -486,49 +465,8 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
         return [...techNames, ...empNames];
     };
 
-    const isTranslatedReport = useMemo(() => {
-        return !!request.translated_stamps || 
-            safeCustomCategories.some(c => !!c.translatedName) || 
-            (request.structured_findings || []).some(f => !!f.translatedFindingName || !!f.translatedValue) ||
-            (request.general_notes || []).some(n => !!n.translatedText);
-    }, [request.translated_stamps, safeCustomCategories, request.structured_findings, request.general_notes]);
-
     const getStampText = (stamp: ReportStamp): React.ReactNode => {
-        const transStamp = request.translated_stamps?.[stamp];
-        const hasCustomObj = transStamp && typeof transStamp === 'object';
-        const transMain = hasCustomObj ? transStamp.main : (typeof transStamp === 'string' ? transStamp : 'INCOMPLETE INSPECTION');
-        const transSub = hasCustomObj ? transStamp.sub : 'By Client Request';
-
-        if (stamp === 'CUSTOMER_REQUEST_INCOMPLETE') {
-            if (reportDirection === 'ltr') {
-                return (
-                    <div className="flex flex-col items-center">
-                        <span className="text-2xl font-black tracking-wider leading-tight uppercase">{transMain || 'INCOMPLETE INSPECTION'}</span>
-                        <span className="text-lg font-bold opacity-90">{transSub || 'By Client Request'}</span>
-                    </div>
-                );
-            }
-
-            if (isTranslatedReport) {
-                return (
-                    <div className="flex flex-col items-center">
-                        <span className="text-xl font-black tracking-wider leading-tight">لم يتم اكمال الفحص</span>
-                        <span className="text-xs font-bold opacity-90">بناء على طلب العميل</span>
-                        <div className="border-t-2 border-red-500/60 w-full mt-1.5 pt-1 text-center" dir="ltr">
-                            <span className="text-sm font-black tracking-wider leading-tight uppercase block">{transMain || 'INCOMPLETE INSPECTION'}</span>
-                            {transSub && <span className="text-[11px] font-bold opacity-85 block">{transSub}</span>}
-                        </div>
-                    </div>
-                );
-            }
-
-            return (
-                <div className="flex flex-col items-center">
-                    <span className="text-2xl font-black tracking-wider leading-tight">لم يتم اكمال الفحص</span>
-                    <span className="text-lg font-bold opacity-90 mt-0.5">بناء على طلب العميل</span>
-                </div>
-            );
-        }
+        if (stamp === 'CUSTOMER_REQUEST_INCOMPLETE') return <>{reportDirection === 'ltr' ? 'INCOMPLETE REQUEST' : 'لم يتم اكمال الفحص'}<br /><span className="text-xl">{reportDirection === 'ltr' ? 'By Client Request' : 'بناء على طلب العميل'}</span></>;
         if (stamp === 'EXISTING_CUSTOMER') return '';
         return '';
     };
@@ -681,7 +619,7 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
                         const hasFieldTestStatus = isFieldTestClear || isFieldTestNotTested;
 
                         const techNames = getAssignedTechnicians(catId);
-                        const watermarkStyle = generateWatermarkStyle(category.name, reportSettings, isCustomerRequestIncomplete, reportDirection, isTranslatedReport);
+                        const watermarkStyle = generateWatermarkStyle(category.name, reportSettings, isCustomerRequestIncomplete, reportDirection);
 
                         const categoryNoticeText = reportSettings.categoryNotices?.[catId];
                         const excludedFindingsList = reportSettings.excludedNoticeFindings || [];

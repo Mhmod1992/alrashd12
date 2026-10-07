@@ -544,7 +544,9 @@ const InspectionReportPdf: React.FC<InspectionReportPdfProps> = ({
                       </View>
                       <View style={styles.findingTextContainer}>
                         <Text style={styles.findingTitle}>{finding.findingName}</Text>
-                        {finding.value && <Text style={styles.findingValue}>{finding.value}</Text>}
+                        {Boolean(finding.value?.trim() && finding.value.trim() !== '-' && finding.value.trim() !== '—' && finding.value.trim() !== '--') && (
+                          <Text style={styles.findingValue}>{finding.value}</Text>
+                        )}
                       </View>
                     </View>
                   );
