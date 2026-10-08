@@ -59,6 +59,7 @@ const PaperArchive: React.FC = () => {
         technicians,
         employees,
         customFindingCategories,
+        lastUpdatedRequest,
         requests
     } = useAppContext();
 
@@ -108,6 +109,40 @@ const PaperArchive: React.FC = () => {
             }
         }
     }, [requests, filteredRequests, selectedRequest]);
+    // Sync state when a request is updated globally (e.g. from Bulk Upload or other pages)
+    useEffect(() => {
+        if (lastUpdatedRequest) {
+            setRawRequests(prev => {
+                const exists = prev.some(r => r.id === lastUpdatedRequest.id);
+                if (exists) {
+                    return prev.map(r => r.id === lastUpdatedRequest.id ? lastUpdatedRequest : r);
+                }
+                return prev;
+            });
+            
+            setFilteredRequests(prev => {
+                const exists = prev.some(r => r.id === lastUpdatedRequest.id);
+                if (exists) {
+                    const updated = prev.map(r => r.id === lastUpdatedRequest.id ? lastUpdatedRequest : r);
+                    
+                    // Re-apply archive filters if necessary
+                    if (archiveStatusFilter === 'archived' && !lastUpdatedRequest.attached_files?.some(f => f.type === 'internal_draft')) {
+                        return updated.filter(r => r.id !== lastUpdatedRequest.id);
+                    }
+                    if (archiveStatusFilter === 'not_archived' && lastUpdatedRequest.attached_files?.some(f => f.type === 'internal_draft')) {
+                        return updated.filter(r => r.id !== lastUpdatedRequest.id);
+                    }
+                    return updated;
+                }
+                return prev;
+            });
+
+            if (selectedRequest && selectedRequest.id === lastUpdatedRequest.id) {
+                setSelectedRequest(lastUpdatedRequest);
+            }
+        }
+    }, [lastUpdatedRequest, archiveStatusFilter]);
+
     const [isLoading, setIsLoading] = useState(true);
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
 
@@ -401,6 +436,13 @@ const PaperArchive: React.FC = () => {
         }
     }, [isUploadModalOpen]);
 
+    // Refresh data when bulk upload modal closes to ensure stats are accurate
+    useEffect(() => {
+        if (!isBulkUploadModalOpen) {
+            loadData();
+        }
+    }, [isBulkUploadModalOpen]);
+
     const displayedRequests = useMemo(() => {
         let data = filteredRequests;
         if (searchQuery.trim()) {
@@ -665,21 +707,27 @@ const PaperArchive: React.FC = () => {
             );
             const updatedLog = newLog ? [newLog, ...(selectedRequest.activity_log || [])] : (selectedRequest.activity_log || []);
 
-            await updateRequest({
+            const updatedRequestData = {
                 id: selectedRequest.id,
                 attached_files: updatedFiles,
                 activity_log: updatedLog
-            });
+            };
 
-            setSelectedRequest(prev => prev ? ({ ...prev, attached_files: updatedFiles, activity_log: updatedLog }) : null);
+            await updateRequest(updatedRequestData);
+
+            const finalRequest = { ...selectedRequest, ...updatedRequestData } as InspectionRequest;
+            setSelectedRequest(finalRequest);
             
+            // Sync rawRequests to update statistics cards
+            setRawRequests(prev => prev.map(r => r.id === selectedRequest.id ? finalRequest : r));
+
             // Auto-update UI based on filters: if "Not Archived" filter is active and we just archived it, remove from list
             if (archiveStatusFilter === 'not_archived' && updatedFiles.some(f => f.type === 'internal_draft')) {
                 setFilteredRequests(prev => prev.filter(r => r.id !== selectedRequest.id));
             } else if (archiveStatusFilter === 'archived' && !updatedFiles.some(f => f.type === 'internal_draft')) {
                 setFilteredRequests(prev => prev.filter(r => r.id !== selectedRequest.id));
             } else {
-                setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, attached_files: updatedFiles, activity_log: updatedLog } : r));
+                setFilteredRequests(prev => prev.map(r => r.id === selectedRequest.id ? finalRequest : r));
             }
 
             const savings = totalOriginalSize > 0 ? Math.round(((totalOriginalSize - totalOptimizedSize) / totalOriginalSize) * 100) : 0;

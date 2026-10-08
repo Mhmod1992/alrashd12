@@ -402,6 +402,7 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                     requestNumber: reqNum || null,
                     errorMessage: status === 'error' ? errorMessage : undefined,
                     actionOnExisting: 'append',
+                    isManualLink: false,
                     previewUrl: URL.createObjectURL(processedFile),
                     requestData
                 });
@@ -626,35 +627,55 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
         setPreviewZoom(1);
     };
 
-    // تقسيم الملفات إلى المجموعتين المطلوبتين
-    // المجموعة الأولى: التي فشلت أو التي تم ربطها يدوياً (لتبقى في مكانها ولا تذهب للأسفل)
-    const failedFiles = files.filter(f => f.status === 'error' || f.isManualLink || (!f.requestData && f.status !== 'ready' && f.status !== 'success'));
-    // المجموعة الثانية: التي تم التعرف عليها تلقائياً فقط
-    const recognizedFiles = files.filter(f => (f.status === 'ready' || f.status === 'success' || f.status === 'uploading') && f.requestData && !f.isManualLink);
+    // تقسيم الملفات إلى المجموعات الثلاث المطلوبة
+    // 1. صور تم التعرف عليها تلقائياً
+    const autoRecognizedFiles = files.filter(f => (f.status === 'ready' || f.status === 'success' || f.status === 'uploading') && !!f.requestData && !f.isManualLink);
+    // 2. صور تم ربطها يدوياً
+    const manuallyLinkedFiles = files.filter(f => (f.status === 'ready' || f.status === 'success' || f.status === 'uploading') && !!f.requestData && f.isManualLink);
+    // 3. صور فشل التعرف عليها أو لم يتم ربطها بعد
+    const failedFiles = files.filter(f => f.status === 'error' || (!f.requestData && f.status !== 'ready' && f.status !== 'success' && f.status !== 'uploading'));
+    
+    // إجمالي الصور الجاهزة للرفع (تلقائي + يدوي)
+    const recognizedFiles = [...autoRecognizedFiles, ...manuallyLinkedFiles];
 
     const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
     const totalProcessedSize = files.reduce((acc, f) => acc + f.processedSize, 0);
 
     if (!isOpen) return null;
 
+    // دالة تقديم ترويسة المجموعة
+    const renderGroupHeader = (title: string, count: number, icon: string, colorClass: string) => {
+        if (count === 0) return null;
+        return (
+            <div className={`flex items-center gap-2 px-4 py-2 mb-3 rounded-xl border ${colorClass} font-bold text-sm shadow-sm sticky top-0 z-20 backdrop-blur-md`}>
+                <Icon name={icon as any} className="w-4 h-4" />
+                <span>{title}</span>
+                <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">{count}</span>
+            </div>
+        );
+    };
+
     // دالة تقديم بطاقة المسودة
-    const renderDraftCard = (file: ProcessedFile, displayIndex: number, isFailedSection: boolean) => {
+    const renderDraftCard = (file: ProcessedFile, displayIndex: number) => {
         const prevRecognizedNum = recognizedFiles.length > 0 ? recognizedFiles[recognizedFiles.length - 1].requestNumber : null;
+        const isFailed = !file.requestData && file.status !== 'success' && file.status !== 'uploading';
 
         return (
             <div 
                 key={file.id} 
                 className={`bg-white dark:bg-slate-800 border rounded-xl overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col ${
-                    isFailedSection 
+                    isFailed
                         ? 'border-rose-200 dark:border-rose-900/60 ring-1 ring-rose-500/10' 
-                        : 'border-emerald-200 dark:border-emerald-900/50 hover:border-emerald-400'
+                        : file.isManualLink 
+                            ? 'border-amber-200 dark:border-amber-900/60 ring-1 ring-amber-500/10'
+                            : 'border-emerald-200 dark:border-emerald-900/50 hover:border-emerald-400'
                 }`}
             >
                 {/* الجزء العلوي: معاينة رأس الورقة مع زووم مكبر وتحريك تفاعلي */}
                 <DraftHeaderPreview 
                     file={file}
                     index={displayIndex}
-                    badgeLabel={isFailedSection ? 'فشل التعرف' : 'تم التعرف'}
+                    badgeLabel={isFailed ? 'فشل التعرف' : file.isManualLink ? 'ربط يدوي' : 'تم التعرف'}
                     onRemove={() => removeFile(file.id)}
                     onOpenFull={() => openFullPreview(file)}
                 />
@@ -708,7 +729,7 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                     <div className="bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800/80 group/stats relative">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
-                                <Icon name="chart-pie" className="w-3.5 h-3.5 text-blue-500" />
+                                <Icon name="bar-chart" className="w-3.5 h-3.5 text-blue-500" />
                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">إحصائيات الضغط المعالج</span>
                             </div>
                             <div className="relative group/tooltip">
@@ -824,11 +845,11 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                         </p>
                     )}
 
-                    {/* حقل إدخال رقم الطلب يدوياً لبطاقات فشل التعرف */}
-                    {isFailedSection && file.status !== 'uploading' && file.status !== 'success' && (
-                        <div className="flex flex-col gap-1.5 mt-1 pt-2 border-t border-rose-100 dark:border-slate-700/60">
+                    {/* حقل إدخال رقم الطلب يدوياً (يظهر للفاشل ولليدوي للمراجعة) */}
+                    {(isFailed || file.isManualLink) && file.status !== 'uploading' && file.status !== 'success' && (
+                        <div className="flex flex-col gap-1.5 mt-1 pt-2 border-t border-slate-100 dark:border-slate-700/60">
                             <label className="text-[10.5px] font-bold text-slate-700 dark:text-slate-300">
-                                أدخل رقم الطلب للربط والنقل:
+                                {file.isManualLink ? 'تعديل رقم الربط اليدوي:' : 'أدخل رقم الطلب للربط والنقل:'}
                             </label>
                             <div className="flex items-center gap-1.5">
                                 <input 
@@ -846,10 +867,10 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                                 <button 
                                     onClick={() => handleSearchRequest(file.id)}
                                     disabled={!file.requestNumber || file.status === 'scanning'}
-                                    className="shrink-0 text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 font-bold text-xs shadow-sm"
+                                    className={`shrink-0 text-white ${file.isManualLink ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 font-bold text-xs shadow-sm`}
                                     title="بحث وتأكيد النقل"
                                 >
-                                    {file.status === 'scanning' ? 'جاري...' : 'ربط'}
+                                    {file.status === 'scanning' ? 'جاري...' : file.isManualLink ? 'تحديث' : 'ربط'}
                                 </button>
                             </div>
                             
@@ -983,7 +1004,7 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                     </div>
                 )}
 
-                {/* منطقة عرض الملفات والمجموعتين */}
+                {/* منطقة عرض الملفات والمجموعات الثلاث */}
                 <div className="flex-1 overflow-y-auto pr-1">
                     {files.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50/50 dark:bg-slate-800/30 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700">
@@ -994,7 +1015,7 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                                 لا توجد مسودات محددة حالياً
                             </h3>
                             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mb-6 leading-relaxed">
-                                اضغط على زر "اختيار صور المسودات" لاختيار صور المسودات دفعة واحدة. سيتم ضغطها بدقة لتصل إلى <strong>34 - 44 KB</strong>، وفصل الصور التي تفشل في التعرف في الأعلى والناجحة في الأسفل تلقائياً.
+                                اضغط على زر "اختيار صور المسودات" لاختيار صور المسودات دفعة واحدة. سيتم ضغطها بدقة لتصل إلى <strong>34 - 44 KB</strong>، وفصل الصور حسب حالة التعرف والربط تلقائياً.
                             </p>
                             <Button 
                                 variant="primary" 
@@ -1007,88 +1028,98 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                             </Button>
                         </div>
                     ) : (
-                        <div className="space-y-6 pb-4">
-                            {/* المجموعة الأولى: فشل التعرف (تظهر في الأعلى إذا كانت موجودة) */}
+                        <div className="space-y-8 pb-10">
+                            {/* المجموعة الأولى: فشل التعرف / بانتظار الربط */}
                             {failedFiles.length > 0 && (
-                                <div className="p-3.5 bg-rose-50/50 dark:bg-rose-950/20 border-2 border-rose-200/80 dark:border-rose-900/50 rounded-2xl">
-                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-rose-200 dark:border-rose-900/40">
-                                        <div className="flex items-center gap-2.5">
-                                            <div className="w-7 h-7 rounded-lg bg-rose-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                                <div className="p-3.5 bg-rose-50/50 dark:bg-rose-950/20 border-2 border-rose-200/80 dark:border-rose-900/50 rounded-2xl animate-fade-in">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-rose-200 dark:border-rose-900/40">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
                                                 ⚠️
                                             </div>
                                             <div>
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="text-sm font-black text-rose-900 dark:text-rose-200">
-                                                        فشل التعرف
-                                                    </h3>
-                                                    <span className="bg-rose-600 text-white text-[11px] px-2 py-0.2 rounded-full font-bold">
+                                                <h3 className="text-sm font-black text-rose-900 dark:text-rose-200 flex items-center gap-2">
+                                                    بانتظار إدخال رقم الطلب
+                                                    <span className="bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
                                                         {failedFiles.length} مسودة
                                                     </span>
-                                                </div>
-                                                <p className="text-[11px] text-rose-700/90 dark:text-rose-300/80 mt-0.5">
-                                                    لم يتم قراءة الكود تلقائياً لهذه الصور. اسحب لمعاينة رأس الورقة واكتب رقم الطلب للربط والنقل الفوري إلى الأسفل.
+                                                </h3>
+                                                <p className="text-[11px] text-rose-700/80 dark:text-rose-300/80 mt-0.5">
+                                                    لم يتم التعرف على الكود. يرجى إدخال الرقم يدوياً للربط.
                                                 </p>
                                             </div>
                                         </div>
-
-                                        <button
-                                            onClick={prepareQueue}
-                                            disabled={isProcessing}
-                                            className="text-xs text-rose-700 dark:text-rose-300 hover:text-rose-900 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-800 px-3 py-1.5 rounded-lg transition-colors font-bold flex items-center gap-1.5 shadow-2xs"
-                                        >
+                                        <button onClick={prepareQueue} disabled={isProcessing} className="text-xs text-rose-700 dark:text-rose-300 hover:text-rose-900 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-800 px-3 py-1.5 rounded-lg transition-colors font-bold flex items-center gap-1.5 shadow-2xs">
                                             <Icon name="refresh-cw" className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} />
-                                            <span>إعادة محاولة قراءة الأكواد</span>
+                                            <span>إعادة فحص الأكواد</span>
                                         </button>
                                     </div>
-
-                                    {/* شبكة بطاقات فشل التعرف */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                        {failedFiles.map((file, index) => renderDraftCard(file, index, true))}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                                        {failedFiles.map((file, idx) => renderDraftCard(file, idx))}
                                     </div>
                                 </div>
                             )}
 
-                            {/* المجموعة الثانية: تم التعرف على الكود (تظهر في الأسفل) */}
-                            {recognizedFiles.length > 0 && (
-                                <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 border-2 border-emerald-200/80 dark:border-emerald-900/50 rounded-2xl">
-                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-emerald-200 dark:border-emerald-900/40">
-                                        <div className="flex items-center gap-2.5">
-                                            <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                                                ✓
+                            {/* المجموعة الثانية: تم الربط يدوياً */}
+                            {manuallyLinkedFiles.length > 0 && (
+                                <div className="p-3.5 bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-200/80 dark:border-amber-900/50 rounded-2xl animate-fade-in">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-amber-200 dark:border-amber-900/40">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shadow-sm">
+                                                <Icon name="edit" className="w-4 h-4" />
                                             </div>
                                             <div>
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="text-sm font-black text-emerald-900 dark:text-emerald-200">
-                                                        تم التعرف على الكود
-                                                    </h3>
-                                                    <span className="bg-emerald-600 text-white text-[11px] px-2 py-0.2 rounded-full font-bold">
-                                                        {recognizedFiles.length} مسودة جاهزة
+                                                <h3 className="text-sm font-black text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                                                    تم الربط يدوياً - للمراجعة
+                                                    <span className="bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                                                        {manuallyLinkedFiles.length} مسودة
                                                     </span>
-                                                </div>
-                                                <p className="text-[11px] text-emerald-700/90 dark:text-emerald-300/80 mt-0.5">
-                                                    تم التعرف على بيانات الطلبات والمركبات بنجاح، وهي جاهزة للأرشفة والرفع مباشرة.
+                                                </h3>
+                                                <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+                                                    صور قمت بربطها يدوياً. تأكد من البيانات قبل الرفع النهائي.
                                                 </p>
                                             </div>
                                         </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                                        {manuallyLinkedFiles.map((file, idx) => renderDraftCard(file, idx))}
+                                    </div>
+                                </div>
+                            )}
 
-                                        <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs">
-                                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                            <span>جاهزة للتأكيد والرفع</span>
+                            {/* المجموعة الثالثة: تم التعرف عليها تلقائياً */}
+                            {autoRecognizedFiles.length > 0 && (
+                                <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 border-2 border-emerald-200/80 dark:border-emerald-900/50 rounded-2xl animate-fade-in">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-emerald-200 dark:border-emerald-900/40">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                                                <Icon name="check-circle" className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-black text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+                                                    جاهزة للرفع - تم التعرف تلقائياً
+                                                    <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                                                        {autoRecognizedFiles.length} مسودة
+                                                    </span>
+                                                </h3>
+                                                <p className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">
+                                                    تم التعرف على الكود تلقائياً وبدقة عالية. جاهزة للأرشفة.
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
-
-                                    {/* شبكة بطاقات تم التعرف */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                        {recognizedFiles.map((file, index) => renderDraftCard(file, index, false))}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                                        {autoRecognizedFiles.map((file, idx) => renderDraftCard(file, idx))}
                                     </div>
                                 </div>
                             )}
 
                             {/* في حالة نجاح التعرف على جميع الصور 100% */}
-                            {failedFiles.length === 0 && recognizedFiles.length > 0 && (
-                                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center">
-                                    <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                                        🎉 رائع! تم التعرف على جميع الأكواد بنجاح بنسبة 100% لجميع الصور المرفوعة.
+                            {failedFiles.length === 0 && manuallyLinkedFiles.length === 0 && autoRecognizedFiles.length > 0 && (
+                                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-center shadow-sm">
+                                    <p className="text-sm font-black text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2">
+                                        <span>🎉</span>
+                                        رائع! تم التعرف على جميع الأكواد تلقائياً بنسبة 100%.
                                     </p>
                                 </div>
                             )}
@@ -1105,15 +1136,23 @@ const BulkDraftUploadModal: React.FC<BulkDraftUploadModalProps> = ({ isOpen, onC
                                 <span className="text-slate-300 dark:text-slate-600">|</span>
                                 {failedFiles.length > 0 && (
                                     <span className="text-rose-600 dark:text-rose-400 font-bold">
-                                        فشل التعرف: {failedFiles.length}
+                                        تحتاج رقم: {failedFiles.length}
                                     </span>
                                 )}
-                                {failedFiles.length > 0 && recognizedFiles.length > 0 && (
+                                {failedFiles.length > 0 && (manuallyLinkedFiles.length > 0 || autoRecognizedFiles.length > 0) && (
                                     <span className="text-slate-300 dark:text-slate-600">|</span>
                                 )}
-                                {recognizedFiles.length > 0 && (
+                                {manuallyLinkedFiles.length > 0 && (
+                                    <span className="text-amber-600 dark:text-amber-400 font-bold">
+                                        تم الربط يدوياً: {manuallyLinkedFiles.length}
+                                    </span>
+                                )}
+                                {manuallyLinkedFiles.length > 0 && autoRecognizedFiles.length > 0 && (
+                                    <span className="text-slate-300 dark:text-slate-600">|</span>
+                                )}
+                                {autoRecognizedFiles.length > 0 && (
                                     <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                        تم التعرف: {recognizedFiles.length}
+                                        تم التعرف تلقائياً: {autoRecognizedFiles.length}
                                     </span>
                                 )}
                                 <span className="text-slate-300 dark:text-slate-600">|</span>
