@@ -1604,27 +1604,44 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 // Find or Create Client (Only for Edit Mode)
                 let client: Client | undefined;
-                if (initialData.client_id) {
-                    client = clients.find(c => c.id === initialData.client_id);
+                const initialClient = initialData.client_id ? clients.find(c => c.id === initialData.client_id) : undefined;
+                const isInitialGeneralClient = Boolean(
+                    (initialData.client_id && initialData.client_id === systemDefaultClient?.id) ||
+                    initialClient?.is_system_default ||
+                    initialClient?.phone === '0000000000'
+                );
+
+                const isCurrentInputGeneral = clientPhone === '0000000000' || (systemDefaultClient && clientPhone === systemDefaultClient.phone);
+
+                if (initialData.client_id && !isInitialGeneralClient) {
+                    client = initialClient;
                 }
+
                 if (!client) {
-                    client = clients.find(c => c.phone === clientPhone);
+                    if (isCurrentInputGeneral && systemDefaultClient) {
+                        client = systemDefaultClient;
+                    } else {
+                        client = clients.find(c => !c.is_system_default && c.phone === clientPhone);
+                    }
                 }
 
                 if (!client) {
                     const existingClients = await searchClients(clientPhone);
-                    client = existingClients.find(c => c.phone === clientPhone);
+                    client = existingClients.find(c => !c.is_system_default && c.phone === clientPhone);
 
                     if (client) {
                         ensureLocalClient(client);
-                    } else {
+                    } else if (!isCurrentInputGeneral) {
                         client = { id: uuidv4(), name: clientName, phone: clientPhone };
                         await addClient(client);
+                    } else {
+                        client = systemDefaultClient || { id: uuidv4(), name: clientName, phone: clientPhone, is_system_default: true };
                     }
                 }
 
-                // Update client name or phone if changed
-                if (client && (client.name !== clientName || client.phone !== clientPhone)) {
+                // Update client name or phone if changed - NEVER update system default client!
+                const isGeneralClient = client.is_system_default || client.id === systemDefaultClient?.id || client.phone === '0000000000';
+                if (client && !isGeneralClient && (client.name !== clientName || client.phone !== clientPhone)) {
                     const updatedClient = { ...client, name: clientName, phone: clientPhone };
                     await updateClient(updatedClient);
                     client = updatedClient;

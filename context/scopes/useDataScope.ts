@@ -334,11 +334,19 @@ export const useDataScope = (
             const carsData = crs || [];
             const clientsData = clts || [];
 
+            let resolvedDefClt = defClt;
+            if (!resolvedDefClt) {
+                const foundInClts = (clts || []).find((c: any) => c.phone === '0000000000' || c.name === 'عميل عام');
+                if (foundInClts) {
+                    resolvedDefClt = { ...foundInClts, is_system_default: true };
+                }
+            }
+
             setRequests(requestsData);
             setRequestsOffset(requestsData.length);
             setHasMoreRequests(requestsData.length >= REQUESTS_PAGE_SIZE);
             setClients(clientsData);
-            setSystemDefaultClient(defClt || null);
+            setSystemDefaultClient(resolvedDefClt || null);
             setCars(carsData);
             setCarMakes(mks || []);
             setInspectionTypes(types || []);

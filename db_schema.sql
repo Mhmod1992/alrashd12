@@ -56,8 +56,13 @@ BEGIN
         VALUES (p_client_name, p_client_phone)
         RETURNING id INTO v_client_id;
     ELSE
-        -- تحديث الاسم إذا تغير لضمان دقة البيانات
-        UPDATE clients SET name = p_client_name WHERE id = v_client_id AND name != p_client_name;
+        -- تحديث الاسم إذا تغير لضمان دقة البيانات (مع استثناء العميل العام النظامي)
+        UPDATE clients 
+        SET name = p_client_name 
+        WHERE id = v_client_id 
+          AND name != p_client_name 
+          AND COALESCE(is_system_default, false) = false
+          AND phone != '0000000000';
     END IF;
 
     -- 2. التعامل مع السيارة (بحث أو إنشاء)
