@@ -26,7 +26,7 @@ import UserXIcon from './icons/UserXIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import ClientHistoryModal from './ClientHistoryModal';
 import SmartPhoneInput from './SmartPhoneInput';
-import { arabicToEnglishNumerals } from '../lib/utils';
+import { arabicToEnglishNumerals, cleanSaudiPhoneNumber } from '../lib/utils';
 import { Banknote, CreditCard, ArrowRightLeft, Clock } from 'lucide-react';
 
 const SmartRowWrapper: React.FC<{
@@ -261,7 +261,8 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
   const { 
     settings, setPage, setSelectedRequestId, showConfirmModal, 
     deleteRequest, deletePendingRequest, updatePendingRequest, addNotification, can, updateRequest, createActivityLog,
-    brokers, ensureEntitiesLoaded, updateClient, addClient, sendWhatsAppMessage, fetchCarModelsByMake
+    brokers, ensureEntitiesLoaded, updateClient, addClient, sendWhatsAppMessage, fetchCarModelsByMake,
+    searchClients, ensureLocalClient
   } = useAppContext();
 
   // Quick Edit Modals for Waiting Payment Requests
@@ -352,33 +353,67 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
         });
       } else {
         const client = clients.find(c => c.id === clientModalRequest.client_id);
-        if (client?.is_system_default) {
-          const newClient = await addClient({
-            id: `cli_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            name: editClientName.trim(),
-            phone: editClientPhone.trim(),
-            created_at: new Date().toISOString()
-          } as Client);
-          await updateRequest({
-            ...clientModalRequest,
-            client_id: newClient.id
-          });
-        } else if (clientModalRequest.client_id) {
-          await updateClient({
-            id: clientModalRequest.client_id,
-            name: editClientName.trim(),
-            phone: editClientPhone.trim()
-          } as Client);
+        const cleanEditPhone = cleanSaudiPhoneNumber(editClientPhone) || editClientPhone.replace(/\D/g, '');
+        const cleanExistingPhone = client ? (cleanSaudiPhoneNumber(client.phone) || client.phone?.replace(/\D/g, '')) : '';
+
+        const isSamePhone = Boolean(
+          client &&
+          !client.is_system_default &&
+          cleanExistingPhone &&
+          cleanEditPhone &&
+          (cleanExistingPhone === cleanEditPhone || (cleanExistingPhone.length >= 8 && cleanEditPhone.length >= 8 && cleanExistingPhone.slice(-8) === cleanEditPhone.slice(-8)))
+        );
+
+        if (client?.is_system_default || editClientPhone === '0000000000') {
+          if (editClientPhone !== '0000000000' && cleanEditPhone.length >= 8) {
+            const searchPart = cleanEditPhone.slice(-8);
+            let target = clients.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanEditPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
+            if (!target) {
+              const dbMatches = await searchClients(editClientPhone);
+              target = dbMatches.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanEditPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
+              if (target && ensureLocalClient) ensureLocalClient(target);
+            }
+            if (!target) {
+              target = await addClient({
+                id: `cli_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: editClientName.trim() || 'عميل',
+                phone: editClientPhone.trim(),
+                created_at: new Date().toISOString()
+              } as Client);
+            }
+            await updateRequest({
+              ...clientModalRequest,
+              client_id: target.id
+            });
+          }
+        } else if (isSamePhone && client) {
+          // Same client! Only name was corrected
+          if (editClientName.trim() && client.name !== editClientName.trim()) {
+            await updateClient({
+              ...client,
+              name: editClientName.trim()
+            });
+          }
         } else {
-          const newClient = await addClient({
-            id: `cli_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            name: editClientName.trim(),
-            phone: editClientPhone.trim(),
-            created_at: new Date().toISOString()
-          } as Client);
+          // Phone changed! Unlink previous client without modifying their record, search or create new client
+          const searchPart = cleanEditPhone.slice(-8);
+          let target = clients.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanEditPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
+          if (!target && cleanEditPhone.length >= 8) {
+            const dbMatches = await searchClients(editClientPhone);
+            target = dbMatches.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanEditPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
+            if (target && ensureLocalClient) ensureLocalClient(target);
+          }
+          if (!target) {
+            target = await addClient({
+              id: `cli_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              name: editClientName.trim() || 'عميل',
+              phone: editClientPhone.trim(),
+              created_at: new Date().toISOString()
+            } as Client);
+          }
           await updateRequest({
             ...clientModalRequest,
-            client_id: newClient.id
+            client_id: target.id
           });
         }
       }

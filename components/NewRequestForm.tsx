@@ -1604,47 +1604,92 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 // Find or Create Client (Only for Edit Mode)
                 let client: Client | undefined;
-                const initialClient = initialData.client_id ? clients.find(c => c.id === initialData.client_id) : undefined;
+                let initialClient = initialData.client_id ? clients.find(c => c.id === initialData.client_id) : undefined;
+                if (!initialClient && initialData.client_id) {
+                    try {
+                        const { data: dbClient } = await supabase.from('clients').select('*').eq('id', initialData.client_id).single();
+                        if (dbClient) initialClient = dbClient;
+                    } catch (e) {
+                        console.warn('Failed to load initial client details:', e);
+                    }
+                }
+
                 const isInitialGeneralClient = Boolean(
                     (initialData.client_id && initialData.client_id === systemDefaultClient?.id) ||
                     initialClient?.is_system_default ||
                     initialClient?.phone === '0000000000'
                 );
 
+                const cleanInputPhone = cleanSaudiPhoneNumber(clientPhone) || clientPhone.replace(/\D/g, '');
                 const isCurrentInputGeneral = clientPhone === '0000000000' || (systemDefaultClient && clientPhone === systemDefaultClient.phone);
 
-                if (initialData.client_id && !isInitialGeneralClient) {
+                const cleanInitialPhone = initialClient 
+                    ? (cleanSaudiPhoneNumber(initialClient.phone) || initialClient.phone?.replace(/\D/g, ''))
+                    : '';
+
+                // The phone is considered the SAME client if both match (accounting for Saudi prefix variants or matching last 8 digits)
+                const isSamePhoneAsInitial = Boolean(
+                    initialClient &&
+                    !isInitialGeneralClient &&
+                    cleanInitialPhone &&
+                    cleanInputPhone &&
+                    (
+                        cleanInitialPhone === cleanInputPhone ||
+                        (cleanInitialPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanInitialPhone.slice(-8) === cleanInputPhone.slice(-8))
+                    )
+                );
+
+                if (isCurrentInputGeneral) {
+                    // Reassigning to system default / general walk-in client
+                    client = systemDefaultClient || { id: uuidv4(), name: clientName.trim() || 'عميل عام', phone: '0000000000', is_system_default: true };
+                } else if (isSamePhoneAsInitial && initialClient) {
+                    // It is the SAME client (phone not changed). We retain their record.
+                    // If user corrected their name, update client name.
                     client = initialClient;
-                }
-
-                if (!client) {
-                    if (isCurrentInputGeneral && systemDefaultClient) {
-                        client = systemDefaultClient;
-                    } else {
-                        client = clients.find(c => !c.is_system_default && c.phone === clientPhone);
+                    const isGeneralClient = client.is_system_default || client.id === systemDefaultClient?.id || client.phone === '0000000000';
+                    if (!isGeneralClient && clientName.trim() && client.name !== clientName.trim()) {
+                        const updatedClient = { ...client, name: clientName.trim() };
+                        await updateClient(updatedClient);
+                        client = updatedClient;
                     }
-                }
+                } else {
+                    // The client was changed (different phone)!
+                    // UNLINK the initial client without touching their profile or past history!
+                    // Search if a client already exists with the newly entered phone number:
+                    const searchPart = cleanInputPhone.slice(-8);
 
-                if (!client) {
-                    const existingClients = await searchClients(clientPhone);
-                    client = existingClients.find(c => !c.is_system_default && c.phone === clientPhone);
+                    let matchedClient = clients.find(c =>
+                        !c.is_system_default &&
+                        c.phone &&
+                        (cleanSaudiPhoneNumber(c.phone) === cleanInputPhone || (c.phone.replace(/\D/g, '').length >= 8 && c.phone.replace(/\D/g, '').endsWith(searchPart)))
+                    );
 
-                    if (client) {
-                        ensureLocalClient(client);
-                    } else if (!isCurrentInputGeneral) {
-                        client = { id: uuidv4(), name: clientName, phone: clientPhone };
-                        await addClient(client);
-                    } else {
-                        client = systemDefaultClient || { id: uuidv4(), name: clientName, phone: clientPhone, is_system_default: true };
+                    if (!matchedClient && clientPhone.trim()) {
+                        const existingClients = await searchClients(clientPhone);
+                        matchedClient = existingClients.find(c =>
+                            !c.is_system_default &&
+                            c.phone &&
+                            (cleanSaudiPhoneNumber(c.phone) === cleanInputPhone || (c.phone.replace(/\D/g, '').length >= 8 && c.phone.replace(/\D/g, '').endsWith(searchPart)))
+                        );
+
+                        if (matchedClient) {
+                            ensureLocalClient(matchedClient);
+                        }
                     }
-                }
 
-                // Update client name or phone if changed - NEVER update system default client!
-                const isGeneralClient = client.is_system_default || client.id === systemDefaultClient?.id || client.phone === '0000000000';
-                if (client && !isGeneralClient && (client.name !== clientName || client.phone !== clientPhone)) {
-                    const updatedClient = { ...client, name: clientName, phone: clientPhone };
-                    await updateClient(updatedClient);
-                    client = updatedClient;
+                    if (matchedClient) {
+                        // Found existing client with this phone number -> link request to them
+                        client = matchedClient;
+                    } else {
+                        // No client found with this phone number -> create a brand new client!
+                        const newClient: Client = {
+                            id: uuidv4(),
+                            name: clientName.trim() || 'عميل',
+                            phone: clientPhone.trim()
+                        };
+                        await addClient(newClient);
+                        client = newClient;
+                    }
                 }
 
                  await updateRequestAndAssociatedData({
