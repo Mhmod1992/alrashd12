@@ -172,24 +172,179 @@ export const useActionsScope = (
     const updateRequestAndAssociatedData = useCallback(async (payload: { originalRequest: InspectionRequest; formData: { client_id: string; car: Partial<Omit<Car, 'id'>>; request: any; } }) => {
         const { originalRequest, formData } = payload;
         const { client_id, car: carData, request: requestData } = formData;
-        if (Object.keys(carData).length > 0) {
-            const { error: carError } = await supabase.from('cars').update(carData).eq('id', originalRequest.car_id);
-            if (carError) throw carError;
-            const { data: updatedCar } = await supabase.from('cars').select('*').eq('id', originalRequest.car_id).single();
-            if (updatedCar) {
-                setCars(prev => {
-                    const exists = prev.some(c => c.id === updatedCar.id);
-                    if (exists) return prev.map(c => c.id === updatedCar.id ? updatedCar : c);
-                    return [updatedCar, ...prev];
-                });
-                if (setLastUpdatedCar) setLastUpdatedCar(updatedCar);
-                broadcastEvent('car_change', { action: 'UPDATE', record: updatedCar });
+        
+        let targetCarId = originalRequest.car_id;
+
+        if (carData && Object.keys(carData).length > 0) {
+            const newPlate = carData.plate_number ? carData.plate_number.trim() : null;
+            const newPlateEn = carData.plate_number_en ? carData.plate_number_en.trim() : null;
+            const newVin = carData.vin ? carData.vin.trim() : null;
+
+            let matchedCar: Car | null = null;
+
+            // 1. البحث عن سيارة مطابقة برقم الهيكل (VIN) إذا وجد
+            if (newVin) {
+                const cleanVin = newVin.replace(/\s+/g, '');
+                const { data: vinMatches } = await supabase
+                    .from('cars')
+                    .select('*')
+                    .ilike('vin', `%${cleanVin}%`)
+                    .limit(1);
+
+                if (vinMatches && vinMatches.length > 0) {
+                    matchedCar = vinMatches[0] as Car;
+                }
+            }
+
+            // 2. البحث عن سيارة مطابقة برقم اللوحة (عربي أو إنجليزي)
+            if (!matchedCar && (newPlate || newPlateEn)) {
+                // تطابق تام أولاً
+                if (newPlate) {
+                    const { data: exactPlateAr } = await supabase
+                        .from('cars')
+                        .select('*')
+                        .eq('plate_number', newPlate)
+                        .limit(1);
+                    if (exactPlateAr && exactPlateAr.length > 0) {
+                        matchedCar = exactPlateAr[0] as Car;
+                    }
+                }
+
+                if (!matchedCar && newPlateEn) {
+                    const { data: exactPlateEn } = await supabase
+                        .from('cars')
+                        .select('*')
+                        .eq('plate_number_en', newPlateEn)
+                        .limit(1);
+                    if (exactPlateEn && exactPlateEn.length > 0) {
+                        matchedCar = exactPlateEn[0] as Car;
+                    }
+                }
+
+                // بحث مرن بدون مسافات (fuzzy) إذا لم نجد تطابق تام
+                if (!matchedCar) {
+                    const cleanPlateAr = (newPlate || '').replace(/\s+/g, '');
+                    const cleanPlateEn = (newPlateEn || '').replace(/\s+/g, '');
+                    const orConditions: string[] = [];
+                    if (cleanPlateAr && cleanPlateAr.length >= 3) {
+                        const fuzzyPattern = '%' + cleanPlateAr.split('').join('%') + '%';
+                        orConditions.push(`plate_number.ilike.${fuzzyPattern}`);
+                        orConditions.push(`plate_number_en.ilike.${fuzzyPattern}`);
+                    }
+                    if (cleanPlateEn && cleanPlateEn.length >= 3) {
+                        const fuzzyPatternEn = '%' + cleanPlateEn.split('').join('%') + '%';
+                        orConditions.push(`plate_number.ilike.${fuzzyPatternEn}`);
+                        orConditions.push(`plate_number_en.ilike.${fuzzyPatternEn}`);
+                    }
+                    if (orConditions.length > 0) {
+                        const { data: fuzzyMatches } = await supabase
+                            .from('cars')
+                            .select('*')
+                            .or(orConditions.join(','))
+                            .limit(1);
+                        if (fuzzyMatches && fuzzyMatches.length > 0) {
+                            matchedCar = fuzzyMatches[0] as Car;
+                        }
+                    }
+                }
+            }
+
+            if (matchedCar) {
+                // تم العثور على سيارة مسجلة مسبقاً
+                targetCarId = matchedCar.id;
+
+                if (matchedCar.id === originalRequest.car_id) {
+                    // هي نفس السيارة الحالية للطلب - تحديث بياناتها (الموديل، السنة، إلخ)
+                    const { error: carError } = await supabase.from('cars').update(carData).eq('id', matchedCar.id);
+                    if (carError) throw carError;
+                    const updatedCar = { ...matchedCar, ...carData } as Car;
+                    setCars(prev => prev.map(c => c.id === updatedCar.id ? updatedCar : c));
+                    if (setLastUpdatedCar) setLastUpdatedCar(updatedCar);
+                    broadcastEvent('car_change', { action: 'UPDATE', record: updatedCar });
+                } else {
+                    // تم ربط الطلب بسيارة أخرى موجودة مسبقاً في قاعدة البيانات
+                    // لا نلمس السيارة القديمة originalRequest.car_id، ونربط الطلب بالسيارة المطابقة
+                    const { error: carError } = await supabase.from('cars').update(carData).eq('id', matchedCar.id);
+                    if (!carError) {
+                        const updatedCar = { ...matchedCar, ...carData } as Car;
+                        setCars(prev => {
+                            const exists = prev.some(c => c.id === updatedCar.id);
+                            return exists ? prev.map(c => c.id === updatedCar.id ? updatedCar : c) : [updatedCar, ...prev];
+                        });
+                        if (setLastUpdatedCar) setLastUpdatedCar(updatedCar);
+                        broadcastEvent('car_change', { action: 'UPDATE', record: updatedCar });
+                    }
+                }
+            } else {
+                // لم يتم العثور على أي سيارة مطابقة في قاعدة البيانات
+                // التحقق: هل السيارة الأصلية مسجلة ومرتبطة بفحوصات أخرى في النظام؟
+                let isOriginalCarShared = false;
+                if (originalRequest.car_id) {
+                    const { count, error: countErr } = await supabase
+                        .from('inspection_requests')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('car_id', originalRequest.car_id)
+                        .neq('id', originalRequest.id);
+                    if (!countErr && (count || 0) > 0) {
+                        isOriginalCarShared = true;
+                    }
+                }
+
+                if (isOriginalCarShared || !originalRequest.car_id) {
+                    // السيارة القديمة فحصت لدينا سابقاً أو لها طلبات أخرى -> لا نعدلها حفاظاً على سجلها وتاريخها
+                    // بل ننشئ سيارة جديدة تماماً في جدول cars ونربط هذا الطلب بها
+                    const newCarPayload: Partial<Car> = {
+                        make_id: carData.make_id,
+                        model_id: carData.model_id,
+                        year: carData.year,
+                        plate_number: carData.plate_number || null,
+                        plate_number_en: carData.plate_number_en || null,
+                        vin: carData.vin || null
+                    };
+
+                    const { data: createdCar, error: insertErr } = await supabase
+                        .from('cars')
+                        .insert(newCarPayload)
+                        .select()
+                        .single();
+
+                    if (insertErr) throw insertErr;
+                    if (createdCar) {
+                        targetCarId = createdCar.id;
+                        setCars(prev => [createdCar as Car, ...prev]);
+                        if (setLastUpdatedCar) setLastUpdatedCar(createdCar as Car);
+                        broadcastEvent('car_change', { action: 'INSERT', record: createdCar });
+                    }
+                } else {
+                    // السيارة غير مرتبطة بأي طلب آخر إطلاقاً (هذا الطلب هو الوحيد لها) -> يمكن تحديث السجل نفسه
+                    const { error: carError } = await supabase.from('cars').update(carData).eq('id', originalRequest.car_id);
+                    if (carError) throw carError;
+                    const { data: updatedCar } = await supabase.from('cars').select('*').eq('id', originalRequest.car_id).single();
+                    if (updatedCar) {
+                        targetCarId = updatedCar.id;
+                        setCars(prev => {
+                            const exists = prev.some(c => c.id === updatedCar.id);
+                            if (exists) return prev.map(c => c.id === updatedCar.id ? updatedCar : c);
+                            return [updatedCar, ...prev];
+                        });
+                        if (setLastUpdatedCar) setLastUpdatedCar(updatedCar);
+                        broadcastEvent('car_change', { action: 'UPDATE', record: updatedCar });
+                    }
+                }
             }
         }
+
         const currentRequest = requests.find(r => r.id === originalRequest.id) || originalRequest;
         const newLog = createActivityLog('تعديل بيانات الطلب', `تم تحديث البيانات الأساسية للطلب #${originalRequest.request_number}`);
         const updatedLog = newLog ? [newLog, ...(currentRequest.activity_log || [])] : (currentRequest.activity_log || []);
-        await updateRequest({ ...requestData, client_id, activity_log: updatedLog, id: originalRequest.id });
+        
+        await updateRequest({
+            ...requestData,
+            client_id,
+            car_id: targetCarId,
+            activity_log: updatedLog,
+            id: originalRequest.id
+        });
     }, [createActivityLog, requests, updateRequest, setCars, setLastUpdatedCar, broadcastEvent]);
 
     const deleteRequest = useCallback(async (id: string): Promise<void> => {
