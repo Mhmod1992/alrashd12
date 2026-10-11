@@ -13,12 +13,18 @@ import EditIcon from '../../components/icons/EditIcon';
 import SparklesIcon from '../../components/icons/SparklesIcon';
 import CarIcon from '../../components/icons/CarIcon';
 import DownloadIcon from '../../components/icons/DownloadIcon';
+import UploadIcon from '../../components/icons/UploadIcon';
+import ArchiveIcon from '../../components/icons/ArchiveIcon';
+import ImageIcon from '../../components/icons/ImageIcon';
 import CheckCircleIcon from '../../components/icons/CheckCircleIcon';
 import FilterIcon from '../../components/icons/FilterIcon';
 import ArrowLeftIcon from '../../components/icons/ArrowLeftIcon';
 import { GoogleGenAI, Type } from "@google/genai";
 import { cleanJsonString, urlToBase64, base64ToFile } from '../../lib/utils';
 import { supabase } from '../../lib/supabaseClient';
+import { urlToBase64Safe, uploadImageWithAutoBucket, ensureBucketExists } from '../../lib/storageUtils';
+import { exportCarLogosBundle, importCarLogosBundle } from '../../lib/logoBundleUtils';
+import OperationProgressModal from '../../components/OperationProgressModal';
 
 const LOGO_SOURCES = [
     { id: 'carlogos', name: 'CarLogos.org', domain: 'carlogos.org', color: 'text-blue-600 bg-blue-50 border-blue-200' },
@@ -75,6 +81,29 @@ const CarsManagement: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const [isExportingLogos, setIsExportingLogos] = useState(false);
+    const [isImportingLogos, setIsImportingLogos] = useState(false);
+    const logoBundleInputRef = useRef<HTMLInputElement>(null);
+
+    const [progressModal, setProgressModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        description?: string;
+        currentStep: string;
+        progress: number;
+        totalItems?: number;
+        currentItemIndex?: number;
+        itemTypeLabel?: string;
+        status?: 'in_progress' | 'success' | 'error';
+        errorMessage?: string;
+    }>({
+        isOpen: false,
+        title: '',
+        currentStep: '',
+        progress: 0,
+        status: 'in_progress',
+    });
 
     const isProcessingRef = useRef(false);
 
@@ -178,11 +207,12 @@ const CarsManagement: React.FC = () => {
         if (file) {
             setIsUploading(true);
             try {
-                const publicUrl = await uploadImage(file, 'logos');
+                const publicUrl = await uploadImageWithAutoBucket(file, 'logos');
+                if (!publicUrl) throw new Error('فشل رفع الشعار');
                 setCurrentMake(prev => ({ ...prev, logo_url: publicUrl }));
-                addNotification({ title: 'نجاح', message: 'تم رفع الشعار بنجاح.', type: 'success' });
+                addNotification({ title: 'نجاح', message: 'تم رفع الشعار وتخزينه في الحاوية بنجاح.', type: 'success' });
             } catch (error) {
-                addNotification({ title: 'خطأ', message: 'فشل رفع الشعار.', type: 'error' });
+                addNotification({ title: 'خطأ', message: 'فشل رفع الشعار إلى مساحة التخزين.', type: 'error' });
             } finally {
                 setIsUploading(false);
             }
@@ -199,10 +229,9 @@ const CarsManagement: React.FC = () => {
     };
 
     const uploadViaClientProxy = async (url: string): Promise<string> => {
-        const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
-        const blob = await res.blob();
-        const file = new File([blob], `logo_${Date.now()}.png`, { type: blob.type });
-        return await uploadImage(file, 'logos');
+        const publicUrl = await uploadImageWithAutoBucket(url, 'logos');
+        if (publicUrl) return publicUrl;
+        throw new Error('فشل تخزين الصورة في الحاوية');
     };
 
     const handleSearchLogoFromSource = async (sourceId: string) => {
@@ -465,15 +494,65 @@ Return JSON array of objects with "name_ar" and "name_en".`;
 
     const handleExportCarDatabase = async () => {
         setIsExporting(true);
-        try {
-            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجميع بيانات السيارات والشعارات...', type: 'info' });
+        const totalMakes = carMakes.length;
 
-            const processedMakes = await Promise.all(carMakes.map(async (make) => {
+        setProgressModal({
+            isOpen: true,
+            title: 'تصدير قاعدة بيانات السيارات',
+            description: 'يتم الآن جلب الشركات والموديلات وتضمين الشعارات في ملف النسخة الاحتياطية...',
+            currentStep: 'جاري جلب كافة موديلات السيارات من قاعدة البيانات...',
+            progress: 10,
+            totalItems: totalMakes,
+            currentItemIndex: 0,
+            itemTypeLabel: 'شركة',
+            status: 'in_progress',
+            errorMessage: '',
+        });
+
+        try {
+            // 1. Fetch ALL car models directly from database to ensure no models are missed!
+            const { data: allDbModels, error: modelsError } = await supabase.from('car_models').select('*');
+            if (modelsError) {
+                console.warn('Could not fetch all models from DB directly, using local state:', modelsError);
+            }
+
+            const exportModels = (allDbModels && allDbModels.length > 0) ? allDbModels : carModels;
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 25,
+                currentStep: `تم جلب ${exportModels.length} موديل بنجاح. جاري تحويل شعارات الشركات...`,
+            }));
+
+            // 2. Fetch all car makes, converting logos to Base64 with sequential visual progress
+            const processedMakes = [];
+            for (let i = 0; i < totalMakes; i++) {
+                const make = carMakes[i];
                 let logoBase64 = null;
+
+                const stepPercent = 25 + Math.round(((i + 1) / totalMakes) * 65);
+                setProgressModal(prev => ({
+                    ...prev,
+                    progress: stepPercent,
+                    currentStep: `جاري معالجة شعار شركة ${make.name_ar || make.name_en}...`,
+                    currentItemIndex: i + 1,
+                }));
+
                 if (make.logo_url) {
-                    logoBase64 = await urlToBase64(make.logo_url);
+                    try {
+                        logoBase64 = await urlToBase64Safe(make.logo_url);
+                    } catch (e) {
+                        console.warn(`Could not convert logo to base64 for ${make.name_en}:`, e);
+                    }
                 }
-                return { ...make, logoBase64 };
+
+                processedMakes.push({ ...make, logoBase64 });
+            }
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 95,
+                currentStep: 'جاري تجميع ملف النسخة الاحتياطية JSON وتجهيز التنزيل...',
             }));
 
             const exportData = {
@@ -482,11 +561,11 @@ Return JSON array of objects with "name_ar" and "name_en".`;
                 timestamp: new Date().toISOString(),
                 data: {
                     carMakes: processedMakes,
-                    carModels: carModels,
+                    carModels: exportModels,
                 }
             };
 
-            const dataStr = JSON.stringify(exportData);
+            const dataStr = JSON.stringify(exportData, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -497,10 +576,26 @@ Return JSON array of objects with "name_ar" and "name_en".`;
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
-            addNotification({ title: 'تم التصدير', message: 'تم تصدير قاعدة بيانات السيارات بنجاح.', type: 'success' });
-        } catch (error) {
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 100,
+                status: 'success',
+                currentStep: `تم تصدير ${processedMakes.length} شركة و ${exportModels.length} موديل بنجاح!`,
+            }));
+
+            addNotification({ 
+                title: 'تم التصدير بنجاح', 
+                message: `تم تصدير ${processedMakes.length} شركة و ${exportModels.length} موديل بنجاح.`, 
+                type: 'success' 
+            });
+        } catch (error: any) {
             console.error('Export error:', error);
-            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
+            setProgressModal(prev => ({
+                ...prev,
+                status: 'error',
+                errorMessage: error?.message || 'حدث خطأ أثناء تصدير قاعدة بيانات السيارات.',
+            }));
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء تصدير قاعدة بيانات السيارات.', type: 'error' });
         } finally {
             setIsExporting(false);
         }
@@ -511,36 +606,118 @@ Return JSON array of objects with "name_ar" and "name_en".`;
         if (!file) return;
 
         setIsImporting(true);
+        setProgressModal({
+            isOpen: true,
+            title: 'استيراد قاعدة بيانات السيارات',
+            description: 'يتم الآن قراءة الملف وتجهيز الحاويات ورفع الشعارات وحفظ الشركات والموديلات...',
+            currentStep: 'جاري فحص وتدقيق ملف البيانات...',
+            progress: 5,
+            totalItems: 0,
+            currentItemIndex: 0,
+            itemTypeLabel: 'شركة',
+            status: 'in_progress',
+            errorMessage: '',
+        });
+
         try {
             const fileContent = await file.text();
-            const data = JSON.parse(fileContent);
+            const parsed = JSON.parse(fileContent);
 
-            if (data.type !== 'car_database') {
-                throw new Error('ملف غير صالح. يرجى اختيار ملف قاعدة بيانات سيارات صحيح.');
+            if (parsed.type !== 'car_database' || !parsed.data?.carMakes) {
+                throw new Error('ملف غير صالح. يرجى اختيار ملف قاعدة بيانات سيارات صحيح (نوع car_database).');
             }
+
+            // Ensure bucket 'logos' exists in Supabase
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 12,
+                currentStep: 'جاري تهيئة حاوية تخزين الشعارات (logos) في السيرفر...',
+            }));
+            await ensureBucketExists('logos');
 
             const makeIdMap: Record<string, string> = {};
+            const rawMakes = parsed.data.carMakes || [];
+            const totalMakes = rawMakes.length;
 
-            for (const make of data.data?.carMakes || []) {
+            setProgressModal(prev => ({
+                ...prev,
+                totalItems: totalMakes,
+                currentStep: `جاري استيراد ${totalMakes} شركة ورفع شعاراتها كصور حقيقية لحاوية logos...`,
+            }));
+
+            for (let i = 0; i < totalMakes; i++) {
+                const make = rawMakes[i];
                 let newLogoUrl = make.logo_url;
-                if (make.logoBase64) {
-                    const logoFile = base64ToFile(make.logoBase64, `logo_${Date.now()}.png`);
-                    newLogoUrl = await uploadImage(logoFile, 'car_logos');
+                
+                setProgressModal(prev => ({
+                    ...prev,
+                    progress: 12 + Math.round(((i + 1) / totalMakes) * 55),
+                    currentStep: `جاري حفظ شركة ${make.name_ar || make.name_en} وتخزين الشعار في حاوية logos...`,
+                    currentItemIndex: i + 1,
+                }));
+
+                // Upload ANY logo (base64 or external url or old supabase link) directly to 'logos' bucket!
+                const logoSource = make.logoBase64 || make.logo_url;
+                if (logoSource) {
+                    try {
+                        const safeName = make.name_en?.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `make_${Date.now()}`;
+                        const uploadedLogo = await uploadImageWithAutoBucket(
+                            logoSource,
+                            'logos',
+                            undefined,
+                            `make_${safeName}_${Date.now()}`
+                        );
+                        if (uploadedLogo) {
+                            newLogoUrl = uploadedLogo;
+                        }
+                    } catch (uploadErr) {
+                        console.warn(`Could not upload logo for make ${make.name_en}:`, uploadErr);
+                    }
                 }
-                const newMake = await addCarMake({
-                    name_ar: make.name_ar,
-                    name_en: make.name_en,
-                    logo_url: newLogoUrl,
-                } as any);
-                if (newMake) {
-                    makeIdMap[make.id] = newMake.id;
+
+                // Check if make already exists by English or Arabic name
+                const existingMake = carMakes.find(m => 
+                    (m.name_en && make.name_en && m.name_en.toLowerCase().trim() === make.name_en.toLowerCase().trim()) ||
+                    (m.name_ar && make.name_ar && m.name_ar.trim() === make.name_ar.trim())
+                );
+
+                let savedMakeId: string | null = null;
+                if (existingMake) {
+                    savedMakeId = existingMake.id;
+                    // Forcefully update the existing make's logo_url with the newly uploaded image URL
+                    if (newLogoUrl) {
+                        await supabase
+                            .from('car_makes')
+                            .update({ logo_url: newLogoUrl })
+                            .eq('id', existingMake.id);
+                        existingMake.logo_url = newLogoUrl;
+                    }
+                } else {
+                    // Insert new car make
+                    const { data: newMake, error: makeError } = await supabase.from('car_makes').insert({
+                        name_ar: make.name_ar,
+                        name_en: make.name_en,
+                        logo_url: newLogoUrl,
+                    }).select().single();
+
+                    if (!makeError && newMake) {
+                        savedMakeId = newMake.id;
+                    }
+                }
+
+                if (savedMakeId) {
+                    makeIdMap[make.id] = savedMakeId;
                 }
             }
 
-            for (const model of data.data?.carModels || []) {
+            // Map and insert all models
+            const rawModels = parsed.data.carModels || [];
+            const mappedModels: { name_ar: string; name_en: string; make_id: string }[] = [];
+
+            for (const model of rawModels) {
                 const newMakeId = makeIdMap[model.make_id];
                 if (newMakeId) {
-                    await addCarModel({
+                    mappedModels.push({
                         name_ar: model.name_ar,
                         name_en: model.name_en,
                         make_id: newMakeId
@@ -548,9 +725,55 @@ Return JSON array of objects with "name_ar" and "name_en".`;
                 }
             }
 
-            addNotification({ title: 'تم الاستيراد', message: 'تم استيراد قاعدة بيانات السيارات بنجاح.', type: 'success' });
+            // Bulk insert models in chunks of 50
+            if (mappedModels.length > 0) {
+                const CHUNK_SIZE = 50;
+                const totalChunks = Math.ceil(mappedModels.length / CHUNK_SIZE);
+                for (let c = 0; c < totalChunks; c++) {
+                    const startIdx = c * CHUNK_SIZE;
+                    const chunk = mappedModels.slice(startIdx, startIdx + CHUNK_SIZE);
+
+                    setProgressModal(prev => ({
+                        ...prev,
+                        progress: 68 + Math.round(((c + 1) / totalChunks) * 28),
+                        currentStep: `جاري حفظ الموديلات (الدفعة ${c + 1} من ${totalChunks})...`,
+                        currentItemIndex: Math.min(startIdx + CHUNK_SIZE, mappedModels.length),
+                        totalItems: mappedModels.length,
+                        itemTypeLabel: 'موديل',
+                    }));
+
+                    await addCarModelsBulk(chunk);
+                }
+            }
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 98,
+                currentStep: 'جاري تحديث واجهة المستخدم وتحميل البيانات...',
+            }));
+
+            // Refresh car makes in application context
+            await fetchCarMakes();
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 100,
+                status: 'success',
+                currentStep: `تم استيراد ${Object.keys(makeIdMap).length} شركة و ${mappedModels.length} موديل بنجاح مع تخزين الشعارات كصور حقيقية!`,
+            }));
+
+            addNotification({ 
+                title: 'تم الاستيراد بنجاح', 
+                message: `تم استيراد ${Object.keys(makeIdMap).length} شركة و ${mappedModels.length} موديل مع صور الشعارات بنجاح.`, 
+                type: 'success' 
+            });
         } catch (error: any) {
             console.error('Import error:', error);
+            setProgressModal(prev => ({
+                ...prev,
+                status: 'error',
+                errorMessage: error.message || 'حدث خطأ أثناء الاستيراد.',
+            }));
             addNotification({ title: 'خطأ', message: error.message || 'حدث خطأ أثناء الاستيراد.', type: 'error' });
         } finally {
             setIsImporting(false);
@@ -560,46 +783,214 @@ Return JSON array of objects with "name_ar" and "name_en".`;
         }
     };
 
+    const handleExportLogosBundle = async () => {
+        const makesWithLogos = carMakes.filter(m => m.logo_url && m.logo_url.trim() !== '');
+        if (makesWithLogos.length === 0) {
+            addNotification({ title: 'تنبيه', message: 'لا توجد أي شركات تحتوي على شعارات لتصديرها.', type: 'warning' });
+            return;
+        }
+
+        setIsExportingLogos(true);
+        setProgressModal({
+            isOpen: true,
+            title: 'تصدير حزمة شعارات السيارات (ZIP)',
+            description: 'يتم الآن جلب جميع شعارات الشركات كملفات صور وحزمها في ملف ZIP واحد للتنزيل على جهازك...',
+            currentStep: 'بدء الاتصال وتجهيز الشعارات...',
+            progress: 5,
+            totalItems: makesWithLogos.length,
+            currentItemIndex: 0,
+            itemTypeLabel: 'شعار',
+            status: 'in_progress',
+            errorMessage: '',
+        });
+
+        try {
+            const result = await exportCarLogosBundle(carMakes, (prog) => {
+                setProgressModal(prev => ({
+                    ...prev,
+                    progress: prog.percent,
+                    currentStep: prog.currentStep,
+                    currentItemIndex: prog.current,
+                    totalItems: prog.total,
+                }));
+            });
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 100,
+                status: 'success',
+                currentStep: `تم تصدير وحزم ${result.count} شعار بنجاح في ملف ${result.fileName}!`,
+            }));
+
+            addNotification({
+                title: 'تم التصدير بنجاح',
+                message: `تم تنزيل حزمة الشعارات (${result.count} صورة) كملف مضغوط (ZIP) على جهازك.`,
+                type: 'success'
+            });
+        } catch (error: any) {
+            console.error('Export logos error:', error);
+            setProgressModal(prev => ({
+                ...prev,
+                status: 'error',
+                errorMessage: error?.message || 'حدث خطأ أثناء تصدير حزمة الشعارات.',
+            }));
+            addNotification({ title: 'خطأ', message: 'فشل تصدير حزمة الشعارات.', type: 'error' });
+        } finally {
+            setIsExportingLogos(false);
+        }
+    };
+
+    const handleImportLogosBundle = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        setIsImportingLogos(true);
+        setProgressModal({
+            isOpen: true,
+            title: 'استيراد حزمة شعارات السيارات إلى الحاوية',
+            description: 'يتم الآن قراءة الصور ورفعها مباشرة إلى حاوية التخزين (logos) وربط كل شعار بشركته وتحديث الرابط...',
+            currentStep: 'جاري فحص الملفات المحددة وتهيئة مساحة التخزين (logos)...',
+            progress: 5,
+            totalItems: files.length,
+            currentItemIndex: 0,
+            itemTypeLabel: 'ملف',
+            status: 'in_progress',
+            errorMessage: '',
+        });
+
+        try {
+            const result = await importCarLogosBundle(files, carMakes, (prog) => {
+                setProgressModal(prev => ({
+                    ...prev,
+                    progress: prog.percent,
+                    currentStep: prog.currentStep,
+                    currentItemIndex: prog.current,
+                    totalItems: prog.total,
+                }));
+            });
+
+            // Refresh car makes from server so UI displays the newly uploaded Supabase Storage URLs immediately
+            await fetchCarMakes();
+
+            const unmatchedNotice = result.unmatchedNames.length > 0
+                ? ` (يوجد ${result.unmatchedNames.length} ملف لم يتم العثور على شركة مطابقة لها بالاسم)`
+                : '';
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 100,
+                status: 'success',
+                currentStep: `اكتمل الاستيراد بنجاح! تم رفع ${result.uploadedCount} شعار إلى حاوية logos وتحديث وتخزين ${result.matchedCount} شركة بالرابط الجديد!${unmatchedNotice}`,
+            }));
+
+            addNotification({
+                title: 'تم استيراد وتخزين الشعارات',
+                message: `تم رفع ${result.uploadedCount} شعار وتحديث روابط الشركات في قاعدة البيانات بنجاح.`,
+                type: 'success'
+            });
+        } catch (error: any) {
+            console.error('Import logos error:', error);
+            setProgressModal(prev => ({
+                ...prev,
+                status: 'error',
+                errorMessage: error?.message || 'حدث خطأ أثناء استيراد الشعارات.',
+            }));
+            addNotification({ title: 'خطأ', message: error?.message || 'فشل استيراد الشعارات.', type: 'error' });
+        } finally {
+            setIsImportingLogos(false);
+            if (logoBundleInputRef.current) {
+                logoBundleInputRef.current.value = '';
+            }
+        }
+    };
+
     const formInputClasses = "mt-1 block w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200";
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+                    <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl">
                         <CarIcon className="w-5 h-5" />
                     </div>
                     <div>
-                        <h2 className="font-bold text-slate-800 dark:text-white">قاعدة بيانات السيارات</h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">إدارة الشركات المصنعة والموديلات</p>
+                        <h2 className="font-bold text-slate-800 dark:text-white text-base">قاعدة بيانات السيارات</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">إدارة الشركات المصنعة، الموديلات، وحزم الشعارات في مساحة التخزين</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <input 
-                        type="file" 
-                        accept=".json" 
-                        className="hidden" 
-                        ref={fileInputRef} 
-                        onChange={handleImportCarDatabase} 
-                    />
-                    <Button 
-                        size="sm" 
-                        variant="secondary" 
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isImporting || isExporting}
-                    >
-                        {isImporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <Icon name="upload" className="w-4 h-4" />}
-                        <span className="hidden sm:inline">{isImporting ? 'جاري...' : 'استيراد'}</span>
-                    </Button>
-                    <Button 
-                        size="sm" 
-                        variant="secondary" 
-                        onClick={handleExportCarDatabase}
-                        disabled={isImporting || isExporting}
-                    >
-                        {isExporting ? <RefreshCwIcon className="w-4 h-4 animate-spin" /> : <DownloadIcon className="w-4 h-4" />}
-                        <span className="hidden sm:inline">{isExporting ? 'جاري...' : 'تصدير'}</span>
-                    </Button>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Logos Bundle Actions (ZIP / Multi-images) */}
+                    <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-1 rounded-lg">
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 px-1.5 flex items-center gap-1">
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            <span>الشعارات:</span>
+                        </span>
+                        <input 
+                            type="file" 
+                            accept=".zip,image/png,image/jpeg,image/webp,image/svg+xml" 
+                            multiple
+                            className="hidden" 
+                            ref={logoBundleInputRef} 
+                            onChange={handleImportLogosBundle} 
+                        />
+                        <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            onClick={() => logoBundleInputRef.current?.click()}
+                            disabled={isImporting || isExporting || isImportingLogos || isExportingLogos}
+                            className="h-8 px-2.5 text-xs text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+                            title="استيراد حزمة الشعارات كملف ZIP أو صور متعددة من جهازك ورفعها مباشرة لحاوية logos"
+                        >
+                            {isImportingLogos ? <RefreshCwIcon className="w-3.5 h-3.5 animate-spin" /> : <UploadIcon className="w-3.5 h-3.5" />}
+                            <span className="mr-1">استيراد الشعارات</span>
+                        </Button>
+                        <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            onClick={handleExportLogosBundle}
+                            disabled={isImporting || isExporting || isImportingLogos || isExportingLogos}
+                            className="h-8 px-2.5 text-xs text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+                            title="تصدير جميع شعارات الشركات كملف مضغوط (ZIP) يحتوي على جميع الصور إلى جهازك"
+                        >
+                            {isExportingLogos ? <RefreshCwIcon className="w-3.5 h-3.5 animate-spin" /> : <ArchiveIcon className="w-3.5 h-3.5" />}
+                            <span className="mr-1">تصدير الشعارات (ZIP)</span>
+                        </Button>
+                    </div>
+
+                    {/* Car Database JSON Actions */}
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600/50 p-1 rounded-lg">
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 px-1.5 hidden sm:inline">بيانات JSON:</span>
+                        <input 
+                            type="file" 
+                            accept=".json" 
+                            className="hidden" 
+                            ref={fileInputRef} 
+                            onChange={handleImportCarDatabase} 
+                        />
+                        <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isImporting || isExporting || isImportingLogos || isExportingLogos}
+                            className="h-8 px-2.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600"
+                            title="استيراد قاعدة بيانات الشركات والموديلات من ملف JSON"
+                        >
+                            {isImporting ? <RefreshCwIcon className="w-3.5 h-3.5 animate-spin" /> : <Icon name="upload" className="w-3.5 h-3.5" />}
+                            <span className="mr-1">استيراد بيانات</span>
+                        </Button>
+                        <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            onClick={handleExportCarDatabase}
+                            disabled={isImporting || isExporting || isImportingLogos || isExportingLogos}
+                            className="h-8 px-2.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600"
+                            title="تصدير قاعدة بيانات الشركات والموديلات كملف JSON"
+                        >
+                            {isExporting ? <RefreshCwIcon className="w-3.5 h-3.5 animate-spin" /> : <DownloadIcon className="w-3.5 h-3.5" />}
+                            <span className="mr-1">تصدير بيانات</span>
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -697,7 +1088,22 @@ Return JSON array of objects with "name_ar" and "name_en".`;
                                     }`}
                                 >
                                     <div className="flex items-center gap-3">
-                                        {make.logo_url ? <img src={make.logo_url} alt="logo" className="w-8 h-8 object-contain rounded bg-white p-0.5" /> : <div className="w-8 h-8 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400"><CarIcon className="w-5 h-5" /></div>}
+                                        {make.logo_url ? (
+                                            <img 
+                                                src={make.logo_url} 
+                                                alt="logo" 
+                                                className="w-8 h-8 object-contain rounded bg-white p-0.5" 
+                                                referrerPolicy="no-referrer"
+                                                onError={(e) => {
+                                                    // Fallback to placeholder if broken
+                                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="w-8 h-8 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400">
+                                                <CarIcon className="w-5 h-5" />
+                                            </div>
+                                        )}
                                         <div className="min-w-0">
                                             <p className={`font-bold truncate ${selectedMakeId === make.id ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>{make.name_ar}</p>
                                             <p className="text-[10px] text-slate-500 font-mono">{make.name_en}</p>
@@ -724,7 +1130,17 @@ Return JSON array of objects with "name_ar" and "name_en".`;
                                             <ArrowLeftIcon className="w-5 h-5 transform scale-x-[-1]" />
                                         </button>
                                     )}
-                                    {selectedMake.logo_url && <img src={selectedMake.logo_url} alt="logo" className="h-10 w-auto object-contain max-w-[60px]" />}
+                                    {selectedMake.logo_url && (
+                                        <img 
+                                            src={selectedMake.logo_url} 
+                                            alt="logo" 
+                                            className="h-10 w-auto object-contain max-w-[60px]" 
+                                            referrerPolicy="no-referrer"
+                                            onError={(e) => {
+                                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                            }}
+                                        />
+                                    )}
                                     <div>
                                         <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 leading-tight">موديلات {selectedMake.name_ar}</h2>
                                         <p className="text-[10px] text-slate-500 dark:text-slate-400">{filteredModels.length} موديل مسجل</p>
@@ -886,6 +1302,20 @@ Return JSON array of objects with "name_ar" and "name_en".`;
                     </div>
                     <div className="flex justify-end pt-4 border-t dark:border-slate-700"><Button onClick={() => setIsDuplicateModalOpen(false)}>إغلاق</Button></div>
                 </Modal>
+
+                <OperationProgressModal
+                    isOpen={progressModal.isOpen}
+                    title={progressModal.title}
+                    description={progressModal.description}
+                    currentStep={progressModal.currentStep}
+                    progress={progressModal.progress}
+                    totalItems={progressModal.totalItems}
+                    currentItemIndex={progressModal.currentItemIndex}
+                    itemTypeLabel={progressModal.itemTypeLabel}
+                    status={progressModal.status}
+                    errorMessage={progressModal.errorMessage}
+                    onClose={() => setProgressModal(prev => ({ ...prev, isOpen: false }))}
+                />
             </div>
         </div>
     );

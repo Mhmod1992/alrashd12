@@ -8,6 +8,10 @@ import CustomDatePicker from '../../components/CustomDatePicker';
 import { formatBytes, uuidv4 } from '../../lib/utils';
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
 import DownloadIcon from '../../components/icons/DownloadIcon';
+import SparklesIcon from '../../components/icons/SparklesIcon';
+import CheckCircleIcon from '../../components/icons/CheckCircleIcon';
+import { supabase } from '../../lib/supabaseClient';
+import { urlToBase64Safe, uploadImageWithAutoBucket, ensureBucketExists } from '../../lib/storageUtils';
 
 
 const CircularProgress: React.FC<{ percentage: number, size?: number, strokeWidth?: number }> = ({ percentage, size = 160, strokeWidth = 12 }) => {
@@ -144,8 +148,9 @@ const DatabaseManagement: React.FC = () => {
         requests, clients, cars, carMakes, carModels, deleteRequestsBatch, 
         showConfirmModal, addNotification, settings, updateSettings, currentDbUsage,
         inspectionTypes, addInspectionType, customFindingCategories, addFindingCategory,
-        predefinedFindings, addPredefinedFinding, uploadImage, addCarMakesBulk, addCarModelsBulk,
-        authUser, addRequest, addCarMake, addCarModel
+        predefinedFindings, addPredefinedFinding, updatePredefinedFinding, uploadImage, 
+        addCarMakesBulk, addCarModelsBulk, authUser, addRequest, addCarMake, addCarModel,
+        fetchCarMakes
     } = useAppContext();
 
     // State for filters and selection
@@ -163,6 +168,378 @@ const DatabaseManagement: React.FC = () => {
     const [importProgress, setImportProgress] = useState<string>('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [importType, setImportType] = useState<'requests' | null>(null);
+
+    // Master Full Settings Backup & Migration States
+    const [isMasterExporting, setIsMasterExporting] = useState(false);
+    const [isMasterImporting, setIsMasterImporting] = useState(false);
+    const [masterImportProgress, setMasterImportProgress] = useState(0);
+    const [masterImportStatus, setMasterImportStatus] = useState('');
+    const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
+    const masterFileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleExportFullMasterBackup = async () => {
+        setIsMasterModalOpen(true);
+        setIsMasterExporting(true);
+        setMasterImportProgress(10);
+        setMasterImportStatus('جاري تجميع إعدادات وهوية الورشة والشعار...');
+
+        try {
+            // 1. Workshop Settings & Logo
+            let workshopLogoBase64: string | null = null;
+            if (settings.logoUrl) {
+                workshopLogoBase64 = await urlToBase64Safe(settings.logoUrl);
+            }
+            const workshopData = {
+                appName: settings.appName,
+                locationUrl: settings.locationUrl,
+                googleMapsLink: settings.googleMapsLink,
+                allowSignup: settings.allowSignup,
+                enableReviewPrompt: settings.enableReviewPrompt,
+                reviewLink: settings.reviewLink,
+                reviewMessage: settings.reviewMessage,
+                whatsappReviewMode: settings.whatsappReviewMode,
+                logoUrl: settings.logoUrl,
+                logoBase64: workshopLogoBase64
+            };
+
+            // 2. Report Settings & Stamp / Logo
+            setMasterImportProgress(30);
+            setMasterImportStatus('جاري تجميع إعدادات التقرير النهائي والألوان والأختام...');
+
+            const [reportLogoBase64, workshopStampBase64] = await Promise.all([
+                settings.reportSettings?.reportLogoUrl ? urlToBase64Safe(settings.reportSettings.reportLogoUrl) : Promise.resolve(null),
+                settings.reportSettings?.workshopStampUrl ? urlToBase64Safe(settings.reportSettings.workshopStampUrl) : Promise.resolve(null)
+            ]);
+            const reportData = {
+                reportSettings: {
+                    ...settings.reportSettings,
+                    logoBase64: reportLogoBase64,
+                    stampBase64: workshopStampBase64
+                },
+                customReportTemplates: settings.customReportTemplates || []
+            };
+
+            // 3. Inspection Packages, Categories & Findings
+            setMasterImportProgress(55);
+            setMasterImportStatus('جاري تجميع باقات وبنود الفحص والصور المرجعية...');
+
+            const processedFindings = await Promise.all(predefinedFindings.map(async (finding) => {
+                let imageBase64: string | null = null;
+                if (finding.reference_image) {
+                    imageBase64 = await urlToBase64Safe(finding.reference_image);
+                }
+                return { ...finding, imageBase64 };
+            }));
+            const inspectionData = {
+                inspectionTypes,
+                customFindingCategories,
+                predefinedFindings: processedFindings
+            };
+
+            // 4. Car Database (ALL Makes & ALL Models directly from DB)
+            setMasterImportProgress(75);
+            setMasterImportStatus('جاري جلب كافة شركات وموديلات السيارات من قاعدة البيانات وتحويل الشعارات...');
+
+            const { data: allDbModels } = await supabase.from('car_models').select('*');
+            const modelsToExport = (allDbModels && allDbModels.length > 0) ? allDbModels : carModels;
+
+            const processedMakes = await Promise.all(carMakes.map(async (make) => {
+                let logoBase64: string | null = null;
+                if (make.logo_url) {
+                    logoBase64 = await urlToBase64Safe(make.logo_url);
+                }
+                return { ...make, logoBase64 };
+            }));
+            const carsData = {
+                carMakes: processedMakes,
+                carModels: modelsToExport
+            };
+
+            // 5. Additional Settings
+            const otherSettings = {
+                plateCharacters: settings.plateCharacters,
+                platePreviewSettings: settings.platePreviewSettings,
+                draftSettings: settings.draftSettings,
+                databaseCapacity: settings.databaseCapacity
+            };
+
+            const fullBackupData = {
+                version: '2.0',
+                type: 'full_master_backup',
+                timestamp: new Date().toISOString(),
+                exportedBy: authUser?.name || 'مدير النظام',
+                data: {
+                    workshop: workshopData,
+                    report: reportData,
+                    inspection: inspectionData,
+                    cars: carsData,
+                    otherSettings: otherSettings
+                }
+            };
+
+            setMasterImportProgress(95);
+            setMasterImportStatus('جاري إنشاء ملف النسخة الشاملة وتنزيله...');
+
+            const dataStr = JSON.stringify(fullBackupData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `full_master_settings_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            setMasterImportProgress(100);
+            setMasterImportStatus(`اكتمل التصدير بنجاح! تم تصدير ${processedMakes.length} شركة، ${modelsToExport.length} موديل، ${processedFindings.length} بند فحص، وإعدادات الورشة والتقرير.`);
+
+            addNotification({
+                title: 'اكتمل التصدير بنجاح',
+                message: `تم تصدير النسخة الشاملة بنجاح (${processedMakes.length} شركة، ${modelsToExport.length} موديل، ${processedFindings.length} بند فحص، إعدادات الورشة والتقرير).`,
+                type: 'success'
+            });
+        } catch (error: any) {
+            console.error('Master export failed:', error);
+            setMasterImportStatus(`حدث خطأ أثناء التصدير: ${error?.message || 'فشلت العملية'}`);
+            addNotification({ title: 'خطأ', message: 'فشل تصدير النسخة الاحتياطية الشاملة للإعدادات.', type: 'error' });
+        } finally {
+            setIsMasterExporting(false);
+        }
+    };
+
+    const handleImportFullMasterBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setIsMasterModalOpen(true);
+        setIsMasterImporting(true);
+        setMasterImportProgress(5);
+        setMasterImportStatus('قراءة وتحليل ملف النسخة الشاملة للإعدادات...');
+
+        try {
+            const fileContent = await file.text();
+            const parsed = JSON.parse(fileContent);
+
+            if (parsed.type !== 'full_master_backup' || !parsed.data) {
+                throw new Error('الملف غير متوافق. يرجى اختيار ملف نسخة شاملة صالح (full_master_backup).');
+            }
+
+            const { workshop, report, inspection, cars: carsImport, otherSettings } = parsed.data;
+
+            // Step 1: Ensure Storage Buckets exist in the destination database
+            setMasterImportProgress(15);
+            setMasterImportStatus('تهيئة حاويات التخزين في السيرفر الجديد (logos, finding_images)...');
+            await Promise.all([
+                ensureBucketExists('logos'),
+                ensureBucketExists('finding_images')
+            ]);
+
+            // Step 2: Workshop Settings & Logo
+            setMasterImportProgress(28);
+            setMasterImportStatus('استيراد ورفع شعار وهوية الورشة كصورة حقيقية في التخزين...');
+            let newWorkshopLogo = settings.logoUrl;
+            const workshopLogoSource = workshop?.logoBase64 || workshop?.logoUrl;
+            if (workshopLogoSource) {
+                const uploaded = await uploadImageWithAutoBucket(
+                    workshopLogoSource,
+                    'logos',
+                    undefined,
+                    `workshop_logo_${Date.now()}`
+                );
+                if (uploaded) newWorkshopLogo = uploaded;
+            }
+
+            // Step 3: Report Settings & Stamp / Logo
+            setMasterImportProgress(42);
+            setMasterImportStatus('استيراد إعدادات التقرير النهائي ورفع الأختام والشعارات للتخزين...');
+            let newReportLogo = report?.reportSettings?.reportLogoUrl;
+            let newWorkshopStamp = report?.reportSettings?.workshopStampUrl;
+
+            const reportLogoSource = report?.reportSettings?.logoBase64 || report?.reportSettings?.reportLogoUrl;
+            if (reportLogoSource) {
+                const uploaded = await uploadImageWithAutoBucket(
+                    reportLogoSource,
+                    'logos',
+                    undefined,
+                    `report_logo_${Date.now()}`
+                );
+                if (uploaded) newReportLogo = uploaded;
+            }
+
+            const workshopStampSource = report?.reportSettings?.stampBase64 || report?.reportSettings?.workshopStampUrl;
+            if (workshopStampSource) {
+                const uploaded = await uploadImageWithAutoBucket(
+                    workshopStampSource,
+                    'logos',
+                    undefined,
+                    `workshop_stamp_${Date.now()}`
+                );
+                if (uploaded) newWorkshopStamp = uploaded;
+            }
+
+            const cleanReportSettings = {
+                ...(report?.reportSettings || {}),
+                reportLogoUrl: newReportLogo,
+                workshopStampUrl: newWorkshopStamp
+            };
+            delete (cleanReportSettings as any).logoBase64;
+            delete (cleanReportSettings as any).stampBase64;
+
+            // Apply global settings updates
+            await updateSettings({
+                appName: workshop?.appName || settings.appName,
+                logoUrl: newWorkshopLogo,
+                locationUrl: workshop?.locationUrl ?? settings.locationUrl,
+                googleMapsLink: workshop?.googleMapsLink ?? settings.googleMapsLink,
+                allowSignup: workshop?.allowSignup ?? settings.allowSignup,
+                enableReviewPrompt: workshop?.enableReviewPrompt ?? settings.enableReviewPrompt,
+                reviewLink: workshop?.reviewLink ?? settings.reviewLink,
+                reviewMessage: workshop?.reviewMessage ?? settings.reviewMessage,
+                whatsappReviewMode: workshop?.whatsappReviewMode ?? settings.whatsappReviewMode,
+                reportSettings: cleanReportSettings,
+                customReportTemplates: report?.customReportTemplates || settings.customReportTemplates || [],
+                plateCharacters: otherSettings?.plateCharacters || settings.plateCharacters,
+                platePreviewSettings: otherSettings?.platePreviewSettings || settings.platePreviewSettings,
+                draftSettings: otherSettings?.draftSettings || settings.draftSettings,
+            });
+
+            // Step 4: Inspection packages & findings
+            setMasterImportProgress(58);
+            setMasterImportStatus('استيراد باقات وبنود الفحص ورفع الصور المرجعية...');
+            const categoryIdMap: Record<string, string> = {};
+
+            if (inspection?.customFindingCategories) {
+                for (const cat of inspection.customFindingCategories) {
+                    const newCat = await addFindingCategory({ name: cat.name });
+                    if (newCat) categoryIdMap[cat.id] = newCat.id;
+                }
+            }
+
+            if (inspection?.inspectionTypes) {
+                for (const type of inspection.inspectionTypes) {
+                    const mappedCatIds = (type.finding_category_ids || [])
+                        .map((oldId: string) => categoryIdMap[oldId])
+                        .filter(Boolean);
+                    await addInspectionType({
+                        name: type.name,
+                        price: type.price,
+                        finding_category_ids: mappedCatIds
+                    } as any);
+                }
+            }
+
+            if (inspection?.predefinedFindings) {
+                const findingIdMap: Record<string, string> = {};
+                for (const finding of inspection.predefinedFindings) {
+                    let findingImgUrl = finding.reference_image;
+                    const findingImgSource = finding.imageBase64 || finding.reference_image;
+                    if (findingImgSource) {
+                        const uploaded = await uploadImageWithAutoBucket(
+                            findingImgSource,
+                            'finding_images',
+                            undefined,
+                            `finding_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+                        );
+                        if (uploaded) findingImgUrl = uploaded;
+                    }
+
+                    const newFinding = await addPredefinedFinding({
+                        name: finding.name,
+                        category_id: categoryIdMap[finding.category_id] || finding.category_id,
+                        options: finding.options,
+                        reference_image: findingImgUrl,
+                        reference_image_position: finding.reference_image_position,
+                        groups: finding.groups,
+                        group: finding.group,
+                        orderIndex: finding.orderIndex,
+                        report_position: finding.report_position,
+                        is_bundle: finding.is_bundle,
+                        linked_finding_ids: finding.linked_finding_ids,
+                        bundle_default_value: finding.bundle_default_value
+                    } as any);
+
+                    if (newFinding && finding.id) {
+                        findingIdMap[finding.id] = newFinding.id;
+                    }
+                }
+            }
+
+            // Step 5: Cars makes & ALL models
+            setMasterImportProgress(75);
+            setMasterImportStatus('استيراد شركات السيارات والشعارات ورفعها كصور حقيقية إلى logos...');
+            const makeIdMap: Record<string, string> = {};
+
+            if (carsImport?.carMakes) {
+                for (const make of carsImport.carMakes) {
+                    let newLogo = make.logo_url;
+                    const makeLogoSource = make.logoBase64 || make.logo_url;
+                    if (makeLogoSource) {
+                        const uploaded = await uploadImageWithAutoBucket(
+                            makeLogoSource,
+                            'logos',
+                            undefined,
+                            `make_${make.name_en?.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || 'logo'}_${Date.now()}`
+                        );
+                        if (uploaded) newLogo = uploaded;
+                    }
+
+                    const newMake = await addCarMake({
+                        name_ar: make.name_ar,
+                        name_en: make.name_en,
+                        logo_url: newLogo
+                    } as any);
+
+                    if (newMake) makeIdMap[make.id] = newMake.id;
+                }
+            }
+
+            setMasterImportProgress(88);
+            setMasterImportStatus('استيراد كافة موديلات السيارات وتعيينها لشركاتها...');
+            if (carsImport?.carModels) {
+                const mappedModels: { name_ar: string; name_en: string; make_id: string }[] = [];
+                for (const model of carsImport.carModels) {
+                    const newMakeId = makeIdMap[model.make_id];
+                    if (newMakeId) {
+                        mappedModels.push({
+                            name_ar: model.name_ar,
+                            name_en: model.name_en,
+                            make_id: newMakeId
+                        });
+                    }
+                }
+
+                if (mappedModels.length > 0) {
+                    const CHUNK_SIZE = 50;
+                    for (let i = 0; i < mappedModels.length; i += CHUNK_SIZE) {
+                        const chunk = mappedModels.slice(i, i + CHUNK_SIZE);
+                        await addCarModelsBulk(chunk);
+                    }
+                }
+            }
+
+            setMasterImportProgress(100);
+            setMasterImportStatus('تم اكتمال الاستيراد والترحيل بنجاح 100%! التطبيق جاهز للعمل بكامل إعداداته.');
+            addNotification({
+                title: 'نجاح الترحيل والاستيراد الشامل',
+                message: 'تم استيراد كافة إعدادات الورشة، التقرير، الفحص، والسيارات بنجاح.',
+                type: 'success'
+            });
+
+            if (fetchCarMakes) {
+                await fetchCarMakes();
+            }
+        } catch (error: any) {
+            console.error('Master import error:', error);
+            setMasterImportStatus(`حدث خطأ أثناء الاستيراد: ${error.message || 'فشلت العملية'}`);
+            addNotification({ title: 'خطأ', message: error.message || 'فشل استيراد النسخة الشاملة.', type: 'error' });
+        } finally {
+            setIsMasterImporting(false);
+            if (masterFileInputRef.current) {
+                masterFileInputRef.current.value = '';
+            }
+        }
+    };
 
     useEffect(() => {
         setCapacityInput(settings.databaseCapacity || 500);
@@ -472,6 +849,58 @@ const DatabaseManagement: React.FC = () => {
                 onChange={handleFileChange} 
                 className="hidden" 
             />
+
+            {/* Master Full Settings Migration Card */}
+            <div className="p-6 bg-gradient-to-br from-blue-50/80 to-indigo-50/60 dark:from-slate-900 dark:to-blue-950/30 rounded-2xl border-2 border-blue-200 dark:border-blue-900/50 shadow-sm relative overflow-hidden">
+                <input 
+                    type="file" 
+                    accept=".json" 
+                    ref={masterFileInputRef} 
+                    onChange={handleImportFullMasterBackup} 
+                    className="hidden" 
+                />
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 flex-shrink-0 mt-0.5">
+                            <Icon name="database" className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-base sm:text-lg font-black text-slate-800 dark:text-white">
+                                    النسخة الاحتياطية الشاملة للإعدادات (Master Settings Migration)
+                                </h3>
+                                <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-bold">
+                                    لترحيل النظام
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                                تصدير واستيراد شامل لجميع إعدادات الورشة، هوية التقرير النهائي، باقات وبنود الفحص، وكامل قاعدة بيانات السيارات (الشركات والموديلات). عند استيراد هذا الملف في قاعدة بيانات جديدة، يتم إنشاء الحاويات ورفع الصور كملفات حقيقية ليعمل التطبيق الجديد بنسبة 100% فوراً.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+                        <Button 
+                            onClick={() => masterFileInputRef.current?.click()} 
+                            variant="secondary"
+                            disabled={isMasterImporting || isMasterExporting}
+                            leftIcon={<Icon name="upload" className="w-4 h-4 text-emerald-600" />}
+                            className="flex-1 sm:flex-none border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold text-xs py-2.5 px-4 shadow-sm"
+                        >
+                            {isMasterImporting ? 'جاري الاستيراد...' : 'استيراد النسخة الشاملة'}
+                        </Button>
+                        <Button 
+                            onClick={handleExportFullMasterBackup} 
+                            disabled={isMasterImporting || isMasterExporting}
+                            leftIcon={<DownloadIcon className="w-4 h-4" />}
+                            className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 shadow-md shadow-blue-500/20"
+                        >
+                            {isMasterExporting ? 'جاري التجميع...' : 'تصدير النسخة الشاملة'}
+                        </Button>
+                    </div>
+                </div>
+            </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Database Usage Card */}
@@ -618,6 +1047,75 @@ const DatabaseManagement: React.FC = () => {
 
             {/* Danger Zone */}
             <DangerZone />
+
+            {/* Master Export/Import Progress Modal */}
+            <Modal 
+                isOpen={isMasterModalOpen} 
+                onClose={() => { if (!isMasterImporting && !isMasterExporting) setIsMasterModalOpen(false); }} 
+                title={isMasterExporting ? "تصدير النسخة الاحتياطية الشاملة للإعدادات" : "استيراد النسخة الاحتياطية الشاملة للإعدادات"} 
+                size="md"
+            >
+                <div className="space-y-6 p-2 text-right">
+                    <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${masterImportProgress === 100 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50' : 'bg-blue-100 text-blue-600 dark:bg-blue-950/50'}`}>
+                            {masterImportProgress === 100 ? <CheckCircleIcon className="w-7 h-7 text-emerald-600" /> : <RefreshCwIcon className="w-6 h-6 animate-spin text-blue-600" />}
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-slate-800 dark:text-white text-base">
+                                {masterImportProgress === 100 
+                                    ? (isMasterExporting ? 'اكتمل التصدير بنجاح 100%!' : 'اكتمل الترحيل والاستيراد بنجاح 100%!') 
+                                    : (isMasterExporting ? 'جاري تجهيز وتصدير البيانات...' : 'جاري تهيئة ونقل البيانات...')}
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                                {masterImportStatus}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+                            <span>نسبة الإنجاز</span>
+                            <span>{masterImportProgress}%</span>
+                        </div>
+                        <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-200 dark:border-slate-700">
+                            <div 
+                                className={`h-full rounded-full transition-all duration-300 ${masterImportProgress === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`} 
+                                style={{ width: `${masterImportProgress}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300 space-y-2.5">
+                        <div className="flex items-center gap-2">
+                            <span className={masterImportProgress >= 15 ? 'text-emerald-500 font-bold' : 'text-slate-400'}>✓</span>
+                            <span>{isMasterExporting ? 'فحص وتجهيز حاويات التخزين' : 'إنشاء وفحص حاويات التخزين (logos, finding_images)'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className={masterImportProgress >= 42 ? 'text-emerald-500 font-bold' : 'text-slate-400'}>✓</span>
+                            <span>{isMasterExporting ? 'تضمين شعار الورشة وختم التقرير كـ Base64' : 'رفع شعار الورشة وختم التقرير كملفات حقيقية'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className={masterImportProgress >= 58 ? 'text-emerald-500 font-bold' : 'text-slate-400'}>✓</span>
+                            <span>{isMasterExporting ? 'تضمين باقات وبنود الفحص والصور المرجعية' : 'استيراد باقات وبنود الفحص ورفع الصور المرجعية'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className={masterImportProgress >= 88 ? 'text-emerald-500 font-bold' : 'text-slate-400'}>✓</span>
+                            <span>{isMasterExporting ? 'تصدير كافة الشركات والموديلات والشعارات' : 'استيراد كافة شركات وموديلات السيارات ورفع الشعارات'}</span>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                        <Button 
+                            onClick={() => setIsMasterModalOpen(false)} 
+                            disabled={isMasterImporting || isMasterExporting}
+                            className="px-6"
+                        >
+                            {masterImportProgress === 100 ? 'تم الانتهاء بنجاح' : 'إغلاق'}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

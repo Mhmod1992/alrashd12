@@ -1,20 +1,219 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
 import ImageIcon from '../../components/icons/ImageIcon';
+import DownloadIcon from '../../components/icons/DownloadIcon';
 import { supabase } from '../../lib/supabaseClient';
+import { urlToBase64Safe, uploadImageWithAutoBucket, ensureBucketExists } from '../../lib/storageUtils';
+import OperationProgressModal from '../../components/OperationProgressModal';
 
 const GeneralSettings: React.FC = () => {
   const { settings, updateSettings, addNotification, uploadImage } = useAppContext();
   const [currentSettings, setCurrentSettings] = useState(settings);
   const [isUploading, setIsUploading] = useState(false);
-  const formInputClasses = "mt-1 block w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
+  const [progressModal, setProgressModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description?: string;
+    currentStep: string;
+    progress: number;
+    totalItems?: number;
+    currentItemIndex?: number;
+    itemTypeLabel?: string;
+    status?: 'in_progress' | 'success' | 'error';
+    errorMessage?: string;
+  }>({
+    isOpen: false,
+    title: '',
+    currentStep: '',
+    progress: 0,
+    status: 'in_progress',
+  });
+
+  const formInputClasses = "mt-1 block w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-200 transition-colors duration-200";
 
   useEffect(() => {
     setCurrentSettings(settings);
   }, [settings]);
+
+  const handleExportWorkshopSettings = async () => {
+    setIsExporting(true);
+    setProgressModal({
+      isOpen: true,
+      title: 'تصدير بيانات وهوية الورشة',
+      description: 'يتم الآن تجميع بيانات الورشة والروابط وتضمين الشعار...',
+      currentStep: 'جاري جلب بيانات الورشة...',
+      progress: 20,
+      status: 'in_progress',
+    });
+
+    try {
+      let logoBase64: string | null = null;
+      if (currentSettings.logoUrl) {
+        setProgressModal(prev => ({
+          ...prev,
+          progress: 50,
+          currentStep: 'جاري تحويل شعار الورشة إلى صيغة Base64...',
+        }));
+        logoBase64 = await urlToBase64Safe(currentSettings.logoUrl);
+      }
+
+      setProgressModal(prev => ({
+        ...prev,
+        progress: 85,
+        currentStep: 'جاري تجهيز وتنزيل ملف النسخة الاحتياطية...',
+      }));
+
+      const exportData = {
+        version: '1.0',
+        type: 'workshop_settings',
+        timestamp: new Date().toISOString(),
+        data: {
+          appName: currentSettings.appName,
+          locationUrl: currentSettings.locationUrl,
+          googleMapsLink: currentSettings.googleMapsLink,
+          allowSignup: currentSettings.allowSignup,
+          enableReviewPrompt: currentSettings.enableReviewPrompt,
+          reviewLink: currentSettings.reviewLink,
+          reviewMessage: currentSettings.reviewMessage,
+          whatsappReviewMode: currentSettings.whatsappReviewMode,
+          logoUrl: currentSettings.logoUrl,
+          logoBase64: logoBase64
+        }
+      };
+
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `workshop_settings_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setProgressModal(prev => ({
+        ...prev,
+        progress: 100,
+        status: 'success',
+        currentStep: 'تم تصدير بيانات وهوية الورشة بنجاح!',
+      }));
+
+      addNotification({ title: 'تم التصدير', message: 'تم تصدير بيانات الورشة بنجاح.', type: 'success' });
+    } catch (error: any) {
+      console.error('Failed to export workshop settings:', error);
+      setProgressModal(prev => ({
+        ...prev,
+        status: 'error',
+        errorMessage: error?.message || 'حدث خطأ أثناء تصدير بيانات الورشة.',
+      }));
+      addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء تصدير بيانات الورشة.', type: 'error' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportWorkshopSettings = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setProgressModal({
+      isOpen: true,
+      title: 'استيراد بيانات وهوية الورشة',
+      description: 'يتم الآن استيراد البيانات وتخزين الشعار كصورة حقيقية في السيرفر الجديد...',
+      currentStep: 'جاري فحص وتدقيق ملف البيانات...',
+      progress: 10,
+      status: 'in_progress',
+    });
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+
+      if (parsed.type !== 'workshop_settings' && !parsed.data?.appName) {
+        throw new Error('الملف غير صالح أو لا يحتوي على بيانات ورشة متوافقة.');
+      }
+
+      const data = parsed.data || parsed;
+      let finalLogoUrl = currentSettings.logoUrl;
+
+      // Ensure bucket exists
+      setProgressModal(prev => ({
+        ...prev,
+        progress: 30,
+        currentStep: 'جاري تهيئة حاوية تخزين الشعارات (logos)...',
+      }));
+      await ensureBucketExists('logos');
+
+      // Process Logo: Upload as real image to bucket 'logos'
+      const logoSource = data.logoBase64 || data.logoUrl;
+      if (logoSource) {
+        setProgressModal(prev => ({
+          ...prev,
+          progress: 55,
+          currentStep: 'جاري رفع شعار الورشة كصورة حقيقية إلى حاوية التخزين...',
+        }));
+
+        const uploadedLogo = await uploadImageWithAutoBucket(logoSource, 'logos', undefined, `workshop_logo_${Date.now()}`);
+        if (uploadedLogo) {
+          finalLogoUrl = uploadedLogo;
+        } else if (data.logoUrl) {
+          finalLogoUrl = data.logoUrl;
+        }
+      }
+
+      setProgressModal(prev => ({
+        ...prev,
+        progress: 85,
+        currentStep: 'جاري حفظ وتطبيق إعدادات الورشة والروابط...',
+      }));
+
+      const updatedData = {
+        appName: data.appName || currentSettings.appName,
+        logoUrl: finalLogoUrl,
+        locationUrl: data.locationUrl ?? currentSettings.locationUrl,
+        googleMapsLink: data.googleMapsLink ?? currentSettings.googleMapsLink,
+        allowSignup: data.allowSignup ?? currentSettings.allowSignup,
+        enableReviewPrompt: data.enableReviewPrompt ?? currentSettings.enableReviewPrompt,
+        reviewLink: data.reviewLink ?? currentSettings.reviewLink,
+        reviewMessage: data.reviewMessage ?? currentSettings.reviewMessage,
+        whatsappReviewMode: data.whatsappReviewMode ?? currentSettings.whatsappReviewMode,
+      };
+
+      setCurrentSettings(prev => ({ ...prev, ...updatedData }));
+      await updateSettings(updatedData);
+
+      setProgressModal(prev => ({
+        ...prev,
+        progress: 100,
+        status: 'success',
+        currentStep: 'تم استيراد بيانات وهوية الورشة والشعار بنجاح!',
+      }));
+
+      addNotification({ title: 'تم الاستيراد', message: 'تم استيراد بيانات الورشة والشعار وحفظها بنجاح.', type: 'success' });
+    } catch (error: any) {
+      console.error('Failed to import workshop settings:', error);
+      setProgressModal(prev => ({
+        ...prev,
+        status: 'error',
+        errorMessage: error.message || 'فشل استيراد بيانات الورشة.',
+      }));
+      addNotification({ title: 'خطأ', message: error.message || 'فشل استيراد بيانات الورشة.', type: 'error' });
+    } finally {
+      setIsImporting(false);
+      if (importFileInputRef.current) {
+        importFileInputRef.current.value = '';
+      }
+    }
+  };
+
   
   const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,11 +251,47 @@ const GeneralSettings: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                <Icon name="workshop" className="w-5 h-5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm">
+                    <Icon name="workshop" className="w-6 h-6" />
+                </div>
+                <div>
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">هوية الورشة وبياناتها</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">الاسم، الشعار، وروابط الخرائط والتقييمات</p>
+                </div>
             </div>
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">هوية الورشة</h3>
+
+            {/* Export and Import Actions */}
+            <div className="flex items-center gap-2 flex-wrap">
+                <input 
+                    type="file" 
+                    ref={importFileInputRef} 
+                    onChange={handleImportWorkshopSettings} 
+                    accept=".json" 
+                    className="hidden" 
+                />
+                <Button 
+                    onClick={() => importFileInputRef.current?.click()} 
+                    variant="secondary" 
+                    size="sm" 
+                    disabled={isImporting || isExporting}
+                    leftIcon={<Icon name="upload" className="w-4 h-4 text-emerald-600"/>}
+                    className="hover:border-emerald-500 hover:text-emerald-600"
+                >
+                    {isImporting ? 'جاري الاستيراد...' : 'استيراد بيانات الورشة'}
+                </Button>
+                <Button 
+                    onClick={handleExportWorkshopSettings} 
+                    variant="secondary" 
+                    size="sm" 
+                    disabled={isImporting || isExporting}
+                    leftIcon={<DownloadIcon className="w-4 h-4 text-blue-600"/>}
+                    className="hover:border-blue-500 hover:text-blue-600"
+                >
+                    {isExporting ? 'جاري التصدير...' : 'تصدير بيانات الورشة'}
+                </Button>
+            </div>
         </div>
 
         <div className="space-y-5">
@@ -218,6 +453,20 @@ const GeneralSettings: React.FC = () => {
       <div className="flex justify-end sticky bottom-0 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm py-4 border-t border-slate-200 dark:border-slate-800">
           <Button onClick={handleSaveChanges} leftIcon={<Icon name="save" className="w-5 h-5"/>} disabled={isUploading} className="shadow-lg shadow-blue-500/20">حفظ الإعدادات</Button>
       </div>
+
+      <OperationProgressModal
+          isOpen={progressModal.isOpen}
+          title={progressModal.title}
+          description={progressModal.description}
+          currentStep={progressModal.currentStep}
+          progress={progressModal.progress}
+          totalItems={progressModal.totalItems}
+          currentItemIndex={progressModal.currentItemIndex}
+          itemTypeLabel={progressModal.itemTypeLabel}
+          status={progressModal.status}
+          errorMessage={progressModal.errorMessage}
+          onClose={() => setProgressModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

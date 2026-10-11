@@ -6,6 +6,8 @@ import Button from '../../components/Button';
 import Icon from '../../components/Icon';
 import Modal from '../../components/Modal';
 import { compressImageToBase64, uuidv4, urlToBase64, base64ToFile } from '../../lib/utils';
+import { urlToBase64Safe, uploadImageWithAutoBucket, ensureBucketExists } from '../../lib/storageUtils';
+import OperationProgressModal from '../../components/OperationProgressModal';
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
 import ArrowLeftIcon from '../../components/icons/ArrowLeftIcon';
 import DownloadIcon from '../../components/icons/DownloadIcon';
@@ -43,17 +45,71 @@ const InspectionSettingsTab: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
 
+    const [progressModal, setProgressModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        description?: string;
+        currentStep: string;
+        progress: number;
+        totalItems?: number;
+        currentItemIndex?: number;
+        itemTypeLabel?: string;
+        status?: 'in_progress' | 'success' | 'error';
+        errorMessage?: string;
+    }>({
+        isOpen: false,
+        title: '',
+        currentStep: '',
+        progress: 0,
+        status: 'in_progress',
+    });
+
     const handleExportInspectionSettings = async () => {
         setIsExporting(true);
-        try {
-            addNotification({ title: 'جاري التصدير', message: 'يتم الآن تجميع بيانات الفحص والصور، يرجى الانتظار...', type: 'info' });
+        const totalFindings = predefinedFindings.length;
 
-            const processedFindings = await Promise.all(predefinedFindings.map(async (finding) => {
+        setProgressModal({
+            isOpen: true,
+            title: 'تصدير باقات وبنود الفحص',
+            description: 'يتم الآن تجميع الباقات، التبويبات، والبنود وتضمين الصور المرجعية...',
+            currentStep: 'جاري تجميع بيانات باقات وتبويبات الفحص...',
+            progress: 10,
+            totalItems: totalFindings,
+            currentItemIndex: 0,
+            itemTypeLabel: 'بند',
+            status: 'in_progress',
+            errorMessage: '',
+        });
+
+        try {
+            const processedFindings = [];
+            for (let i = 0; i < totalFindings; i++) {
+                const finding = predefinedFindings[i];
                 let imageBase64 = null;
+
+                const stepPercent = 10 + Math.round(((i + 1) / totalFindings) * 80);
+                setProgressModal(prev => ({
+                    ...prev,
+                    progress: stepPercent,
+                    currentStep: `جاري معالجة الصورة المرجعية للبند: ${finding.name}...`,
+                    currentItemIndex: i + 1,
+                }));
+
                 if (finding.reference_image) {
-                    imageBase64 = await urlToBase64(finding.reference_image);
+                    try {
+                        imageBase64 = await urlToBase64Safe(finding.reference_image);
+                    } catch (e) {
+                        console.warn(`Could not convert finding image for ${finding.name}:`, e);
+                    }
                 }
-                return { ...finding, imageBase64 };
+
+                processedFindings.push({ ...finding, imageBase64 });
+            }
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 95,
+                currentStep: 'جاري تجميع ملف النسخة الاحتياطية وتجهيز التنزيل...',
             }));
 
             const exportData = {
@@ -67,7 +123,7 @@ const InspectionSettingsTab: React.FC = () => {
                 }
             };
 
-            const dataStr = JSON.stringify(exportData);
+            const dataStr = JSON.stringify(exportData, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -78,10 +134,26 @@ const InspectionSettingsTab: React.FC = () => {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
-            addNotification({ title: 'تم التصدير', message: 'تم تصدير إعدادات الفحص بنجاح.', type: 'success' });
-        } catch (error) {
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 100,
+                status: 'success',
+                currentStep: `تم تصدير ${inspectionTypes.length} باقة و ${customFindingCategories.length} فئة و ${processedFindings.length} بند فحص بنجاح!`,
+            }));
+
+            addNotification({ 
+                title: 'تم التصدير بنجاح', 
+                message: `تم تصدير ${inspectionTypes.length} باقة و ${customFindingCategories.length} فئة و ${predefinedFindings.length} بند فحص بنجاح.`, 
+                type: 'success' 
+            });
+        } catch (error: any) {
             console.error("Export failed:", error);
-            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء التصدير.', type: 'error' });
+            setProgressModal(prev => ({
+                ...prev,
+                status: 'error',
+                errorMessage: error?.message || 'حدث خطأ أثناء تصدير إعدادات الفحص.',
+            }));
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء تصدير إعدادات الفحص.', type: 'error' });
         } finally {
             setIsExporting(false);
         }
@@ -92,27 +164,63 @@ const InspectionSettingsTab: React.FC = () => {
         if (!file) return;
 
         setIsImporting(true);
+        setProgressModal({
+            isOpen: true,
+            title: 'استيراد باقات وبنود الفحص',
+            description: 'يتم الآن استيراد الباقات والبنود وتخزين الصور المرجعية في السيرفر الجديد...',
+            currentStep: 'جاري فحص وتدقيق ملف البيانات...',
+            progress: 5,
+            totalItems: 0,
+            currentItemIndex: 0,
+            itemTypeLabel: 'بند',
+            status: 'in_progress',
+            errorMessage: '',
+        });
+
         try {
             const text = await file.text();
             const parsedData = JSON.parse(text);
 
             if (parsedData.type !== 'inspection_settings' || !parsedData.data) {
-                throw new Error("ملف غير صالح أو غير مدعوم.");
+                throw new Error("ملف غير صالح أو غير مدعوم. يرجى اختيار ملف نسخة إعدادات فحص صحيحة.");
             }
 
             const data = parsedData.data;
-            addNotification({ title: 'جاري الاستيراد', message: 'يتم الآن استيراد باقات وبنود الفحص...', type: 'info' });
+
+            // Ensure bucket exists in the new Supabase storage
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 10,
+                currentStep: 'جاري تهيئة حاوية تخزين الصور المرجعية (finding_images)...',
+            }));
+            await ensureBucketExists('finding_images');
             
             const categoryIdMap: Record<string, string> = {};
 
-            for (const cat of data.customFindingCategories || []) {
+            // 1. Import Finding Categories
+            const rawCategories = data.customFindingCategories || [];
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 15,
+                currentStep: `جاري استيراد ${rawCategories.length} تبويب فحص...`,
+            }));
+
+            for (const cat of rawCategories) {
                 const newCat = await addFindingCategory({ name: cat.name });
                 if (newCat) {
                     categoryIdMap[cat.id] = newCat.id;
                 }
             }
 
-            for (const type of data.inspectionTypes || []) {
+            // 2. Import Inspection Types
+            const rawTypes = data.inspectionTypes || [];
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 25,
+                currentStep: `جاري استيراد ${rawTypes.length} باقة فحص...`,
+            }));
+
+            for (const type of rawTypes) {
                 const newFindingCategoryIds = (type.finding_category_ids || [])
                     .map((oldId: string) => categoryIdMap[oldId])
                     .filter(Boolean);
@@ -124,16 +232,47 @@ const InspectionSettingsTab: React.FC = () => {
                 } as any);
             }
 
+            // 3. Import Predefined Findings (with real image upload to the storage bucket)
             const findingsToProcess = data.predefinedFindings || [];
+            const totalFindings = findingsToProcess.length;
+            const findingIdMap: Record<string, string> = {};
 
-            for (const finding of findingsToProcess) {
+            setProgressModal(prev => ({
+                ...prev,
+                totalItems: totalFindings,
+                currentStep: `جاري استيراد ${totalFindings} بند فحص وتخزين الصور المرجعية...`,
+            }));
+
+            for (let i = 0; i < totalFindings; i++) {
+                const finding = findingsToProcess[i];
                 let newImageUrl = finding.reference_image;
-                if (finding.imageBase64) {
-                    const imageFile = base64ToFile(finding.imageBase64, `finding_${Date.now()}.png`);
-                    newImageUrl = await uploadImage(imageFile, 'finding_images');
+                
+                setProgressModal(prev => ({
+                    ...prev,
+                    progress: 30 + Math.round(((i + 1) / totalFindings) * 60),
+                    currentStep: `جاري حفظ البند: ${finding.name} ورفع الصورة المرجعية...`,
+                    currentItemIndex: i + 1,
+                }));
+
+                // Upload ANY image (base64 or external url or old supabase link) to finding_images container
+                const source = finding.imageBase64 || finding.reference_image;
+                if (source) {
+                    try {
+                        const uploadedUrl = await uploadImageWithAutoBucket(
+                            source,
+                            'finding_images',
+                            undefined,
+                            `finding_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+                        );
+                        if (uploadedUrl) {
+                            newImageUrl = uploadedUrl;
+                        }
+                    } catch (uploadErr) {
+                        console.warn(`Could not upload image for finding ${finding.name}:`, uploadErr);
+                    }
                 }
 
-                await addPredefinedFinding({
+                const newFinding = await addPredefinedFinding({
                     name: finding.name,
                     category_id: categoryIdMap[finding.category_id] || finding.category_id,
                     options: finding.options,
@@ -147,11 +286,55 @@ const InspectionSettingsTab: React.FC = () => {
                     linked_finding_ids: finding.linked_finding_ids,
                     bundle_default_value: finding.bundle_default_value
                 } as any);
+
+                if (newFinding && finding.id) {
+                    findingIdMap[finding.id] = newFinding.id;
+                }
             }
 
-            addNotification({ title: 'تم الاستيراد', message: 'تم استيراد إعدادات الفحص بنجاح.', type: 'success' });
+            // 4. Update bundled finding references if needed
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 95,
+                currentStep: 'جاري تحديث روابط البنود المجمعة...',
+            }));
+
+            for (const finding of findingsToProcess) {
+                if (finding.is_bundle && finding.linked_finding_ids && finding.linked_finding_ids.length > 0) {
+                    const mappedNewId = findingIdMap[finding.id];
+                    if (mappedNewId) {
+                        const mappedLinked = finding.linked_finding_ids
+                            .map((oldId: string) => findingIdMap[oldId])
+                            .filter(Boolean);
+                        if (mappedLinked.length > 0) {
+                            await updatePredefinedFinding({
+                                id: mappedNewId,
+                                linked_finding_ids: mappedLinked
+                            } as any);
+                        }
+                    }
+                }
+            }
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 100,
+                status: 'success',
+                currentStep: `تم استيراد ${data.inspectionTypes?.length || 0} باقة و ${findingsToProcess.length} بند فحص بنجاح مع تخزين الصور كصور حقيقية!`,
+            }));
+
+            addNotification({ 
+                title: 'تم الاستيراد بنجاح', 
+                message: `تم استيراد ${data.inspectionTypes?.length || 0} باقة و ${findingsToProcess.length} بند فحص مع حفظ الصور بنجاح.`, 
+                type: 'success' 
+            });
         } catch (error: any) {
             console.error("Import failed:", error);
+            setProgressModal(prev => ({
+                ...prev,
+                status: 'error',
+                errorMessage: error.message || 'حدث خطأ أثناء الاستيراد.',
+            }));
             addNotification({ title: 'خطأ', message: error.message || 'حدث خطأ أثناء الاستيراد.', type: 'error' });
         } finally {
             setIsImporting(false);
@@ -690,6 +873,20 @@ const InspectionSettingsTab: React.FC = () => {
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle} size={modalTitle.includes('بند') ? '2xl' : 'lg'}>
                 {modalContent}
             </Modal>
+
+            <OperationProgressModal
+                isOpen={progressModal.isOpen}
+                title={progressModal.title}
+                description={progressModal.description}
+                currentStep={progressModal.currentStep}
+                progress={progressModal.progress}
+                totalItems={progressModal.totalItems}
+                currentItemIndex={progressModal.currentItemIndex}
+                itemTypeLabel={progressModal.itemTypeLabel}
+                status={progressModal.status}
+                errorMessage={progressModal.errorMessage}
+                onClose={() => setProgressModal(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 };

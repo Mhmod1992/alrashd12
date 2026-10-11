@@ -12,6 +12,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 import RefreshCwIcon from '../../components/icons/RefreshCwIcon';
 import PlusIcon from '../../components/icons/PlusIcon';
 import TrashIcon from '../../components/icons/TrashIcon';
+import DownloadIcon from '../../components/icons/DownloadIcon';
+import { urlToBase64Safe, uploadImageWithAutoBucket, ensureBucketExists } from '../../lib/storageUtils';
+import OperationProgressModal from '../../components/OperationProgressModal';
 
 // --- Constants & Helper Components ---
 const PRESET_COLORS = ['#ffffff', '#f1f5f9', '#e2e8f0', '#94a3b8', '#475569', '#1e293b', '#fef2f2', '#ef4444', '#dc2626', '#b91c1c', '#e0f2fe', '#3b82f6', '#2563eb', '#1e40af', '#f0fdfa', '#14b8a6', '#0d9488', '#134e4a', '#fefce8', '#eab308', '#ca8a04', '#a16207', '#eef2ff', '#6366f1', '#4f46e5', '#3730a3'];
@@ -71,6 +74,28 @@ const ReportSettingsPage: React.FC = () => {
     const [newTemplateName, setNewTemplateName] = useState('');
     const [showPreview, setShowPreview] = useState(true);
     const [isPreviewCollapsed, setIsPreviewCollapsed] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const importFileInputRef = useRef<HTMLInputElement>(null);
+
+    const [progressModal, setProgressModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        description?: string;
+        currentStep: string;
+        progress: number;
+        totalItems?: number;
+        currentItemIndex?: number;
+        itemTypeLabel?: string;
+        status?: 'in_progress' | 'success' | 'error';
+        errorMessage?: string;
+    }>({
+        isOpen: false,
+        title: '',
+        currentStep: '',
+        progress: 0,
+        status: 'in_progress',
+    });
 
     // --- Resizable and Draggable State ---
     const [previewPos, setPreviewPos] = useState(() => {
@@ -136,6 +161,191 @@ const ReportSettingsPage: React.FC = () => {
         await updateSettings({ customReportTemplates: [...settings.customReportTemplates, newTemplate] });
         addNotification({ title: 'تم الحفظ', message: 'تمت إضافة القالب إلى قائمة القوالب.', type: 'success' });
         setIsSaveModalOpen(false);
+    };
+
+    const handleExportReportSettings = async () => {
+        setIsExporting(true);
+        setProgressModal({
+            isOpen: true,
+            title: 'تصدير إعدادات التقرير النهائي',
+            description: 'يتم الآن تجميع إعدادات التقرير، الألوان، الخطوط، والأختام...',
+            currentStep: 'جاري جلب إعدادات التقرير...',
+            progress: 20,
+            status: 'in_progress',
+        });
+
+        try {
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 40,
+                currentStep: 'جاري تحويل الشعار والختم إلى صيغة Base64...',
+            }));
+
+            const [logoBase64, stampBase64] = await Promise.all([
+                reportSettings.reportLogoUrl ? urlToBase64Safe(reportSettings.reportLogoUrl) : Promise.resolve(null),
+                reportSettings.workshopStampUrl ? urlToBase64Safe(reportSettings.workshopStampUrl) : Promise.resolve(null)
+            ]);
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 85,
+                currentStep: 'جاري إنشاء وتنزيل ملف النسخة الاحتياطية...',
+            }));
+
+            const exportData = {
+                version: '1.0',
+                type: 'report_settings',
+                timestamp: new Date().toISOString(),
+                data: {
+                    reportSettings: {
+                        ...reportSettings,
+                        logoBase64,
+                        stampBase64
+                    },
+                    customReportTemplates: settings.customReportTemplates || []
+                }
+            };
+
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `report_settings_export_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 100,
+                status: 'success',
+                currentStep: 'تم تصدير إعدادات التقرير النهائي بنجاح!',
+            }));
+
+            addNotification({ title: 'تم التصدير بنجاح', message: 'تم تصدير إعدادات التقرير النهائي بنجاح.', type: 'success' });
+        } catch (error: any) {
+            console.error('Export report settings error:', error);
+            setProgressModal(prev => ({
+                ...prev,
+                status: 'error',
+                errorMessage: error?.message || 'حدث خطأ أثناء تصدير إعدادات التقرير.',
+            }));
+            addNotification({ title: 'خطأ', message: 'حدث خطأ أثناء تصدير إعدادات التقرير.', type: 'error' });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleImportReportSettings = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsImporting(true);
+        setProgressModal({
+            isOpen: true,
+            title: 'استيراد إعدادات التقرير النهائي',
+            description: 'يتم الآن استيراد التصميم وتخزين الختم والشعار في السيرفر الجديد...',
+            currentStep: 'جاري فحص وتدقيق ملف البيانات...',
+            progress: 10,
+            status: 'in_progress',
+        });
+
+        try {
+            const text = await file.text();
+            const parsed = JSON.parse(text);
+
+            if (parsed.type !== 'report_settings' && !parsed.data?.reportSettings && !parsed.reportSettings) {
+                throw new Error('ملف غير صالح أو لا يحتوي على إعدادات تقرير معتمدة.');
+            }
+
+            const incomingReport = parsed.data?.reportSettings || parsed.reportSettings || parsed;
+            const incomingTemplates = parsed.data?.customReportTemplates || parsed.customReportTemplates || [];
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 25,
+                currentStep: 'جاري تهيئة حاوية التخزين (logos)...',
+            }));
+            await ensureBucketExists('logos');
+
+            let finalReportLogo = incomingReport.reportLogoUrl;
+            let finalWorkshopStamp = incomingReport.workshopStampUrl;
+
+            // Upload report logo if base64 or any url exists
+            const logoSource = incomingReport.logoBase64 || incomingReport.reportLogoUrl;
+            if (logoSource) {
+                setProgressModal(prev => ({
+                    ...prev,
+                    progress: 45,
+                    currentStep: 'جاري رفع شعار التقرير إلى التخزين كصورة حقيقية...',
+                }));
+                const uploaded = await uploadImageWithAutoBucket(logoSource, 'logos', undefined, `report_logo_${Date.now()}`);
+                if (uploaded) finalReportLogo = uploaded;
+            }
+
+            // Upload workshop stamp if base64 or any url exists
+            const stampSource = incomingReport.stampBase64 || incomingReport.workshopStampUrl;
+            if (stampSource) {
+                setProgressModal(prev => ({
+                    ...prev,
+                    progress: 65,
+                    currentStep: 'جاري رفع ختم الورشة إلى التخزين كصورة حقيقية...',
+                }));
+                const uploaded = await uploadImageWithAutoBucket(stampSource, 'logos', undefined, `workshop_stamp_${Date.now()}`);
+                if (uploaded) finalWorkshopStamp = uploaded;
+            }
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 85,
+                currentStep: 'جاري حفظ وتطبيق إعدادات التقرير والقوالب...',
+            }));
+
+            const { logoBase64, stampBase64, ...cleanSettings } = incomingReport;
+            const mergedSettings: ReportSettings = {
+                ...reportSettings,
+                ...cleanSettings,
+                reportLogoUrl: finalReportLogo,
+                workshopStampUrl: finalWorkshopStamp,
+                fontSizes: {
+                    ...reportSettings.fontSizes,
+                    ...(cleanSettings.fontSizes || {})
+                }
+            };
+
+            setReportSettings(mergedSettings);
+
+            const updatePayload: any = { reportSettings: mergedSettings };
+            if (Array.isArray(incomingTemplates) && incomingTemplates.length > 0) {
+                updatePayload.customReportTemplates = incomingTemplates;
+            }
+
+            await updateSettings(updatePayload);
+
+            setProgressModal(prev => ({
+                ...prev,
+                progress: 100,
+                status: 'success',
+                currentStep: 'تم استيراد إعدادات التقرير النهائي والأختام بنجاح!',
+            }));
+
+            addNotification({ title: 'تم الاستيراد بنجاح', message: 'تم تطبيق إعدادات التقرير والألوان والشعارات بنجاح.', type: 'success' });
+        } catch (error: any) {
+            console.error('Import report settings error:', error);
+            setProgressModal(prev => ({
+                ...prev,
+                status: 'error',
+                errorMessage: error.message || 'فشل استيراد إعدادات التقرير.',
+            }));
+            addNotification({ title: 'خطأ', message: error.message || 'فشل استيراد إعدادات التقرير.', type: 'error' });
+        } finally {
+            setIsImporting(false);
+            if (importFileInputRef.current) {
+                importFileInputRef.current.value = '';
+            }
+        }
     };
 
     // --- Custom Fields Logic ---
@@ -289,8 +499,35 @@ const ReportSettingsPage: React.FC = () => {
                             </button>
                         ))}
                     </nav>
-                    <div className="flex items-center gap-2 px-2 w-full sm:w-auto border-t sm:border-t-0 pt-2 sm:pt-0">
-                        <Button onClick={handleSave} className="flex-1 sm:flex-none shadow-lg shadow-blue-500/20 py-2 px-6 text-xs" disabled={isUploading}>حفظ الإعدادات</Button>
+                    <div className="flex items-center gap-2 px-2 w-full sm:w-auto border-t sm:border-t-0 pt-2 sm:pt-0 flex-wrap">
+                        <input 
+                            type="file" 
+                            ref={importFileInputRef} 
+                            onChange={handleImportReportSettings} 
+                            accept=".json" 
+                            className="hidden" 
+                        />
+                        <Button 
+                            onClick={() => importFileInputRef.current?.click()} 
+                            variant="secondary" 
+                            size="sm" 
+                            className="py-2 px-3 text-xs hover:border-emerald-500 hover:text-emerald-600" 
+                            disabled={isUploading || isImporting || isExporting}
+                            leftIcon={<Icon name="upload" className="w-3.5 h-3.5 text-emerald-600"/>}
+                        >
+                            {isImporting ? 'جاري الاستيراد...' : 'استيراد'}
+                        </Button>
+                        <Button 
+                            onClick={handleExportReportSettings} 
+                            variant="secondary" 
+                            size="sm" 
+                            className="py-2 px-3 text-xs hover:border-blue-500 hover:text-blue-600" 
+                            disabled={isUploading || isImporting || isExporting}
+                            leftIcon={<DownloadIcon className="w-3.5 h-3.5 text-blue-600"/>}
+                        >
+                            {isExporting ? 'جاري التصدير...' : 'تصدير'}
+                        </Button>
+                        <Button onClick={handleSave} className="flex-1 sm:flex-none shadow-lg shadow-blue-500/20 py-2 px-5 text-xs" disabled={isUploading || isImporting || isExporting}>حفظ الإعدادات</Button>
                     </div>
                 </div>
 
@@ -821,6 +1058,20 @@ const ReportSettingsPage: React.FC = () => {
                     <div className="flex gap-2"><Button variant="secondary" onClick={() => setIsSaveModalOpen(false)} className="flex-1">إلغاء</Button><Button onClick={handleSaveAsTemplate} className="flex-1">حفظ</Button></div>
                 </div>
             </Modal>
+
+            <OperationProgressModal
+                isOpen={progressModal.isOpen}
+                title={progressModal.title}
+                description={progressModal.description}
+                currentStep={progressModal.currentStep}
+                progress={progressModal.progress}
+                totalItems={progressModal.totalItems}
+                currentItemIndex={progressModal.currentItemIndex}
+                itemTypeLabel={progressModal.itemTypeLabel}
+                status={progressModal.status}
+                errorMessage={progressModal.errorMessage}
+                onClose={() => setProgressModal(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 };
