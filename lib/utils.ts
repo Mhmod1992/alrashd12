@@ -685,3 +685,106 @@ export const getCurrentShiftRange = (): { shiftStart: Date; shiftEnd: Date; shif
         shiftEndIso: shiftEnd.toISOString()
     };
 };
+
+export const SAUDI_PLATE_CHAR_MAP: Record<string, string> = {
+    'A': 'أ', 'B': 'ب', 'J': 'ح', 'D': 'د', 'R': 'ر', 'S': 'س',
+    'X': 'ص', 'T': 'ط', 'E': 'ع', 'G': 'ق', 'K': 'ك', 'L': 'ل',
+    'Z': 'م', 'N': 'ن', 'H': 'هـ', 'U': 'و', 'V': 'ى',
+    'أ': 'A', 'ا': 'A', 'آ': 'A', 'ب': 'B', 'ح': 'J', 'د': 'D', 'ر': 'R', 'س': 'S',
+    'ص': 'X', 'ط': 'T', 'ع': 'E', 'ق': 'G', 'ك': 'K', 'ل': 'L',
+    'م': 'Z', 'ن': 'N', 'هـ': 'H', 'ه': 'H', 'و': 'U', 'ى': 'V', 'ي': 'V'
+};
+
+/**
+ * Returns exact plate string variations for database matching (Arabic and English),
+ * ensuring strictly identical numbers and characters without partial digit overlap.
+ */
+export const getPlateSearchVariations = (plateInput: string | null | undefined): string[] => {
+    if (!plateInput) return [];
+
+    const normalized = arabicToEnglishNumerals(plateInput.trim());
+    const digits = normalized.replace(/\D/g, '');
+    const rawLetters = normalized
+        .replace(/[0-9]/g, '')
+        .replace(/[\u064B-\u065F]/g, '')
+        .trim();
+    const cleanLetters = rawLetters.replace(/\s+/g, '');
+
+    if (!cleanLetters || !digits) {
+        const trimmed = normalized.trim();
+        return trimmed ? [trimmed, trimmed.replace(/\s+/g, '')] : [];
+    }
+
+    const variations = new Set<string>();
+    const isArabic = /[\u0600-\u06FF]/.test(cleanLetters);
+
+    let enLetters = '';
+    let arLetters = '';
+
+    if (isArabic) {
+        arLetters = cleanLetters;
+        let directEn = '';
+        for (let i = 0; i < cleanLetters.length; i++) {
+            if (cleanLetters[i] === 'ه' && cleanLetters[i + 1] === 'ـ') {
+                directEn += 'H';
+                i++;
+            } else {
+                directEn += SAUDI_PLATE_CHAR_MAP[cleanLetters[i]] || '';
+            }
+        }
+        directEn = directEn.toUpperCase();
+        // Saudi plate standard reading direction (right-to-left Arabic maps to left-to-right English):
+        const saudiEn = directEn.split('').reverse().join('');
+
+        [saudiEn, directEn].filter(Boolean).forEach(en => {
+            const enSpaced = en.split('').join(' ');
+            variations.add(`${en} ${digits}`);
+            variations.add(`${en}${digits}`);
+            variations.add(`${enSpaced} ${digits}`);
+            variations.add(`${enSpaced} ${digits.split('').join(' ')}`);
+        });
+
+        const arSpaced = arLetters.split('').join(' ');
+        variations.add(`${arLetters} ${digits}`);
+        variations.add(`${arLetters}${digits}`);
+        variations.add(`${arSpaced} ${digits}`);
+        variations.add(`${arSpaced} ${digits.split('').join(' ')}`);
+
+        if (arLetters.includes('هـ')) {
+            const plainAr = arLetters.replace(/هـ/g, 'ه');
+            variations.add(`${plainAr} ${digits}`);
+            variations.add(`${plainAr}${digits}`);
+            variations.add(`${plainAr.split('').join(' ')} ${digits}`);
+        }
+    } else {
+        enLetters = cleanLetters.toUpperCase();
+        let directAr = '';
+        for (const char of enLetters) {
+            directAr += SAUDI_PLATE_CHAR_MAP[char] || '';
+        }
+        // Saudi plate standard reading direction (left-to-right English maps to right-to-left Arabic):
+        const saudiAr = directAr.split('').reverse().join('');
+
+        [saudiAr, directAr].filter(Boolean).forEach(ar => {
+            const arSpaced = ar.split('').join(' ');
+            variations.add(`${ar} ${digits}`);
+            variations.add(`${ar}${digits}`);
+            variations.add(`${arSpaced} ${digits}`);
+            variations.add(`${arSpaced} ${digits.split('').join(' ')}`);
+            if (ar.includes('هـ')) {
+                const plainAr = ar.replace(/هـ/g, 'ه');
+                variations.add(`${plainAr} ${digits}`);
+                variations.add(`${plainAr}${digits}`);
+                variations.add(`${plainAr.split('').join(' ')} ${digits}`);
+            }
+        });
+
+        const enSpaced = enLetters.split('').join(' ');
+        variations.add(`${enLetters} ${digits}`);
+        variations.add(`${enLetters}${digits}`);
+        variations.add(`${enSpaced} ${digits}`);
+        variations.add(`${enSpaced} ${digits.split('').join(' ')}`);
+    }
+
+    return Array.from(variations).filter(v => v.length > 0);
+};

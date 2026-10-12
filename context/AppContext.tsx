@@ -11,7 +11,7 @@ import {
     FinancialStats, ArchiveResult, PaymentType, PayrollDraft, PayrollItem, Reservation, WhatsAppMessage, PendingRequest
 } from '../types';
 import { mockSettings } from '../data/mockData';
-import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile, arabicToEnglishNumerals, getCurrentShiftRange } from '../lib/utils';
+import { uuidv4, estimateObjectSize, compressImageToBase64, cleanJsonString, compressImageFile, arabicToEnglishNumerals, getCurrentShiftRange, getPlateSearchVariations } from '../lib/utils';
 import { AppContextType, CarHistoryResult } from './types';
 import { useNavigationScope } from './scopes/useNavigationScope';
 import { useThemeScope } from './scopes/useThemeScope';
@@ -1594,8 +1594,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         // 2. Find all car records that share the same plate or VIN (consolidating technical duplicates)
         let identifierConditions = [`id.eq.${car.id}`];
-        if (car.plate_number) identifierConditions.push(`plate_number.eq."${car.plate_number.trim()}"`);
-        if (car.plate_number_en) identifierConditions.push(`plate_number_en.eq."${car.plate_number_en.trim()}"`);
+        const carPlate = car.plate_number || car.plate_number_en;
+        if (carPlate) {
+            const plateVars = getPlateSearchVariations(carPlate);
+            plateVars.forEach(v => {
+                const safeVal = v.replace(/"/g, '');
+                identifierConditions.push(`plate_number.eq."${safeVal}"`);
+                identifierConditions.push(`plate_number_en.eq."${safeVal}"`);
+            });
+        }
         if (car.vin) identifierConditions.push(`vin.eq."${car.vin.trim()}"`);
 
         const { data: matchingCars } = await supabase
@@ -1603,7 +1610,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .select('id')
             .or(identifierConditions.join(','));
 
-        const carIds = matchingCars?.map(c => c.id) || [carId];
+        const carIds = matchingCars && matchingCars.length > 0 ? Array.from(new Set(matchingCars.map(c => c.id))) : [carId];
 
         // 3. Fetch all requests for all matching car IDs
         const { data, error } = await supabase
@@ -1679,18 +1686,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             let foundCar: Car | null = null;
 
-            let query = supabase.from('cars').select('*').limit(1);
+            let query = supabase.from('cars').select('*').limit(5);
 
             if (plateNumber) {
-                // Remove all spaces for a clean search string
-                const cleanPlate = plateNumber.replace(/\s/g, '');
-
-                // Create a pattern that allows optional spaces between any character
-                // e.g., "ABC1234" -> "%A%B%C%1%2%3%4%"
-                const fuzzyPattern = '%' + cleanPlate.split('').join('%') + '%';
-
-                // Search in both Arabic and English plate fields
-                query = query.or(`plate_number.ilike.${fuzzyPattern},plate_number_en.ilike.${fuzzyPattern}`);
+                const variations = getPlateSearchVariations(plateNumber);
+                if (variations.length > 0) {
+                    const orFilters = variations.flatMap(v => {
+                        const safeVal = v.replace(/"/g, '');
+                        return [`plate_number.eq."${safeVal}"`, `plate_number_en.eq."${safeVal}"`];
+                    });
+                    query = query.or(orFilters.join(','));
+                }
             }
 
             if (vin) {
@@ -1706,24 +1712,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
 
             if (data && data.length > 0) {
-                foundCar = data[0];
-                // Update local state if not already present
-                setCars(prev => prev.find(c => c.id === foundCar!.id) ? prev : [...prev, foundCar!]);
-            }
-
-            if (foundCar) {
                 // Find all car records that share these identifiers to get consolidated history
-                let identifierConditions = [`id.eq.${foundCar.id}`];
-                if (foundCar.plate_number) identifierConditions.push(`plate_number.eq."${foundCar.plate_number.trim()}"`);
-                if (foundCar.plate_number_en) identifierConditions.push(`plate_number_en.eq."${foundCar.plate_number_en.trim()}"`);
-                if (foundCar.vin) identifierConditions.push(`vin.eq."${foundCar.vin.trim()}"`);
+                let identifierConditions: string[] = [];
+                data.forEach(c => {
+                    identifierConditions.push(`id.eq.${c.id}`);
+                    const p = c.plate_number || c.plate_number_en;
+                    if (p) {
+                        const pVars = getPlateSearchVariations(p);
+                        pVars.forEach(v => {
+                            const safe = v.replace(/"/g, '');
+                            identifierConditions.push(`plate_number.eq."${safe}"`);
+                            identifierConditions.push(`plate_number_en.eq."${safe}"`);
+                        });
+                    }
+                    if (c.vin) identifierConditions.push(`vin.eq."${c.vin.trim()}"`);
+                });
 
                 const { data: matchingCars } = await supabase
                     .from('cars')
-                    .select('id')
+                    .select('id, make_id, model_id, year, plate_number, plate_number_en, vin')
                     .or(identifierConditions.join(','));
 
-                const carIds = matchingCars?.map(c => c.id) || [foundCar.id];
+                const allMatchedCars = matchingCars && matchingCars.length > 0 ? matchingCars : data;
+                const carIds = Array.from(new Set(allMatchedCars.map(c => c.id)));
 
                 const { data: requestHistory } = await supabase
                     .from('inspection_requests')
@@ -1731,6 +1742,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     .in('car_id', carIds)
                     .order('created_at', { ascending: false })
                     .limit(10);
+
+                // Pick the best foundCar: prioritize one with requests or with complete metadata
+                const carWithRequestsId = requestHistory && requestHistory.length > 0 ? requestHistory[0].car_id : null;
+                const bestCar = (allMatchedCars.find(c => c.id === carWithRequestsId) || 
+                                 allMatchedCars.find(c => c.make_id && c.model_id) || 
+                                 data[0]) as Car;
+
+                foundCar = bestCar;
+                // Update local state if not already present
+                setCars(prev => prev.find(c => c.id === foundCar!.id) ? prev : [...prev, foundCar!]);
 
                 let lastClient: Client | undefined;
                 if (requestHistory && requestHistory.length > 0) {

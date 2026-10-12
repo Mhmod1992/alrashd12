@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { uuidv4 } from '../../lib/utils';
+import { uuidv4, getPlateSearchVariations } from '../../lib/utils';
 import {
     InspectionRequest, PendingRequest, Client, Car, CarMake, CarModel, InspectionType,
     Broker, CustomFindingCategory, PredefinedFinding, Expense, Revenue,
@@ -221,29 +221,22 @@ export const useActionsScope = (
                     }
                 }
 
-                // بحث مرن بدون مسافات (fuzzy) إذا لم نجد تطابق تام
+                // بحث بالصيغ الدقيقة للوحة (المسافات واللغات) إذا لم نجد تطابق تام مباشر
                 if (!matchedCar) {
-                    const cleanPlateAr = (newPlate || '').replace(/\s+/g, '');
-                    const cleanPlateEn = (newPlateEn || '').replace(/\s+/g, '');
-                    const orConditions: string[] = [];
-                    if (cleanPlateAr && cleanPlateAr.length >= 3) {
-                        const fuzzyPattern = '%' + cleanPlateAr.split('').join('%') + '%';
-                        orConditions.push(`plate_number.ilike.${fuzzyPattern}`);
-                        orConditions.push(`plate_number_en.ilike.${fuzzyPattern}`);
-                    }
-                    if (cleanPlateEn && cleanPlateEn.length >= 3) {
-                        const fuzzyPatternEn = '%' + cleanPlateEn.split('').join('%') + '%';
-                        orConditions.push(`plate_number.ilike.${fuzzyPatternEn}`);
-                        orConditions.push(`plate_number_en.ilike.${fuzzyPatternEn}`);
-                    }
-                    if (orConditions.length > 0) {
-                        const { data: fuzzyMatches } = await supabase
+                    const plateQuery = newPlate || newPlateEn || '';
+                    const variations = getPlateSearchVariations(plateQuery);
+                    if (variations.length > 0) {
+                        const orConditions = variations.flatMap(v => {
+                            const safeVal = v.replace(/"/g, '');
+                            return [`plate_number.eq."${safeVal}"`, `plate_number_en.eq."${safeVal}"`];
+                        });
+                        const { data: matchedRecords } = await supabase
                             .from('cars')
                             .select('*')
                             .or(orConditions.join(','))
                             .limit(1);
-                        if (fuzzyMatches && fuzzyMatches.length > 0) {
-                            matchedCar = fuzzyMatches[0] as Car;
+                        if (matchedRecords && matchedRecords.length > 0) {
+                            matchedCar = matchedRecords[0] as Car;
                         }
                     }
                 }
@@ -467,6 +460,30 @@ export const useActionsScope = (
 
         // Update local state immediately with the returned data
         setRequests(prev => [newRequest, ...prev]);
+
+        // Keep local clients state in sync with clientName for this request
+        if (newRequest.client_id && payload.clientName) {
+            setClients(prev => {
+                const existingIndex = prev.findIndex(c => c.id === newRequest.client_id);
+                if (existingIndex >= 0) {
+                    const existing = prev[existingIndex];
+                    if (existing.name !== payload.clientName) {
+                        const updated = { ...existing, name: payload.clientName };
+                        const next = [...prev];
+                        next[existingIndex] = updated;
+                        return next;
+                    }
+                    return prev;
+                } else {
+                    return [{
+                        id: newRequest.client_id,
+                        name: payload.clientName,
+                        phone: payload.clientPhone,
+                        created_at: new Date().toISOString()
+                    } as Client, ...prev];
+                }
+            });
+        }
         
         // Sync to TV after creation
         syncToTvDisplay(newRequest);

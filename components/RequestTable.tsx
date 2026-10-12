@@ -26,7 +26,7 @@ import UserXIcon from './icons/UserXIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import ClientHistoryModal from './ClientHistoryModal';
 import SmartPhoneInput from './SmartPhoneInput';
-import { arabicToEnglishNumerals, cleanSaudiPhoneNumber } from '../lib/utils';
+import { arabicToEnglishNumerals, cleanSaudiPhoneNumber, getPlateSearchVariations } from '../lib/utils';
 import { Banknote, CreditCard, ArrowRightLeft, Clock } from 'lucide-react';
 
 const SmartRowWrapper: React.FC<{
@@ -71,16 +71,19 @@ const SmartRowWrapper: React.FC<{
 
                  let matchingCarIds: string[] = targetCarId ? [targetCarId] : [];
 
-                 // 1. If plate is present, search for matching cars via fuzzy plate search
+                 // 1. If plate is present, search for matching cars via exact plate variations
                  if (hasValidPlate || hasValidPlateEn) {
                      const rawP = hasValidPlate ? plate : plateEn;
-                     const cleanP = rawP.replace(/\s/g, '');
-                     if (cleanP.length > 1) {
-                         const fuzzy = '%' + cleanP.split('').join('%') + '%';
+                     const variations = getPlateSearchVariations(rawP);
+                     if (variations.length > 0) {
+                         const orFilters = variations.flatMap(v => {
+                             const safeVal = v.replace(/"/g, '');
+                             return [`plate_number.eq."${safeVal}"`, `plate_number_en.eq."${safeVal}"`];
+                         });
                          const { data: carsFound } = await supabase
                              .from('cars')
                              .select('id')
-                             .or(`plate_number.ilike.${fuzzy},plate_number_en.ilike.${fuzzy}`);
+                             .or(orFilters.join(','));
                          if (carsFound && carsFound.length > 0) {
                              matchingCarIds = Array.from(new Set([...matchingCarIds, ...carsFound.map(c => c.id)]));
                          }

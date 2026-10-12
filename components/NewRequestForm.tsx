@@ -112,6 +112,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
     const [clientName, setClientName] = useState('');
     const [clientPhone, setClientPhone] = useState('');
+    const [selectedClient, setSelectedClient] = useState<Client | null>(null);
     const [carMakeId, setCarMakeId] = useState('');
     const [carModelId, setCarModelId] = useState('');
     const [carYear, setCarYear] = useState(new Date().getFullYear());
@@ -905,6 +906,13 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         setClientPhone(digits);
         setErrors(prev => ({ ...prev, clientPhone: false }));
 
+        if (selectedClient) {
+            const cleanOrigPhone = cleanSaudiPhoneNumber(selectedClient.phone) || selectedClient.phone?.replace(/\D/g, '');
+            if (cleanOrigPhone !== digits) {
+                setSelectedClient(null);
+            }
+        }
+
         if (digits.trim().length < 9) {
             setPhoneSuggestions([]);
             setIsPhoneSuggestionsOpen(false);
@@ -1057,6 +1065,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const handleClientSelection = async (client: Client, currentInput?: HTMLElement) => {
+        setSelectedClient(client);
         setClientName(client.name);
         setClientPhone(client.phone);
         setIsPhoneSuggestionsOpen(false);
@@ -1724,7 +1733,42 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
-            } else if (newStatus === RequestStatus.WAITING_PAYMENT || isReceptionistMode) {
+            } else {
+                // --- SYNC / UPDATE CLIENT NAME IF SAME PHONE NUMBER ---
+                const cleanInputPhone = cleanSaudiPhoneNumber(clientPhone) || clientPhone.replace(/\D/g, '');
+                let matchedClientObj = selectedClient;
+
+                if (!matchedClientObj && cleanInputPhone.length >= 8) {
+                    if (existingClientSummary?.clientObj) {
+                        matchedClientObj = existingClientSummary.clientObj;
+                    } else {
+                        matchedClientObj = clients.find(c => {
+                            if (c.is_system_default) return false;
+                            const cPhone = cleanSaudiPhoneNumber(c.phone) || c.phone?.replace(/\D/g, '');
+                            return cPhone === cleanInputPhone || (cPhone.length >= 8 && cPhone.endsWith(cleanInputPhone.slice(-8)));
+                        }) || null;
+                    }
+                }
+
+                if (matchedClientObj && !matchedClientObj.is_system_default && matchedClientObj.phone !== '0000000000') {
+                    const cleanMatchedPhone = cleanSaudiPhoneNumber(matchedClientObj.phone) || matchedClientObj.phone?.replace(/\D/g, '');
+                    const isSamePhone = Boolean(
+                        cleanMatchedPhone && cleanInputPhone &&
+                        (cleanMatchedPhone === cleanInputPhone || (cleanMatchedPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanMatchedPhone.slice(-8) === cleanInputPhone.slice(-8)))
+                    );
+
+                    // إذا كان نفس رقم الهاتف تماماً وتم تعديل الاسم فقط -> نحدث الاسم فقط للعميل نفسه
+                    if (isSamePhone && clientName.trim() && matchedClientObj.name !== clientName.trim()) {
+                        try {
+                            const updatedClientRecord = { ...matchedClientObj, name: clientName.trim() };
+                            await updateClient(updatedClientRecord);
+                        } catch (e) {
+                            console.warn('Failed to update client name before creating request:', e);
+                        }
+                    }
+                }
+
+                if (newStatus === RequestStatus.WAITING_PAYMENT || isReceptionistMode) {
                 // Route to pending_requests table so SERIAL sequence in inspection_requests is not consumed!
                 const pendingReq = await addPendingRequest({
                     client_name: clientName,
@@ -1808,6 +1852,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     onSuccess(newAddedRequest);
                 }
             }
+        }
         } catch (error) {
             console.error(error);
             addNotification({
@@ -1921,6 +1966,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const handleMagicFill = useCallback(() => {
         const defaultClient = systemDefaultClient;
         if (defaultClient) {
+            setSelectedClient(defaultClient);
             setClientName(defaultClient.name);
             setClientPhone(defaultClient.phone);
             addNotification({
