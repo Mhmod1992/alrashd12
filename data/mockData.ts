@@ -71,6 +71,7 @@ export const mockSettings: Settings = {
     backgroundColor: null,
     glassmorphismIntensity: 5,
     geminiApiKey: null,
+    imageGeneratorApiKey: null,
     databaseCapacity: 500,
     storageCapacity: 1, 
     allowSignup: true,

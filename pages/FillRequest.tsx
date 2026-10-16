@@ -207,15 +207,6 @@ export const FillRequest: React.FC = () => {
         return requests.find(r => r.id === selectedRequestId) || searchedRequests?.find(r => r.id === selectedRequestId);
     }, [requests, searchedRequests, selectedRequestId]);
 
-    useEffect(() => {
-        if (selectedRequestId && fetchAttemptedRef.current !== selectedRequestId) {
-            fetchAttemptedRef.current = selectedRequestId;
-            setIsFetchingRequest(true);
-            fetchAndUpdateSingleRequest(selectedRequestId).finally(() => {
-                if (isMounted.current) setIsFetchingRequest(false);
-            });
-        }
-    }, [selectedRequestId, fetchAndUpdateSingleRequest]);
 
     // LOCKED STATE CHECK
     const isLockedByStatus = request?.status === RequestStatus.COMPLETE;
@@ -450,6 +441,10 @@ export const FillRequest: React.FC = () => {
     const deletedNoteIdsRef = useRef<Map<string, number>>(new Map());
     const inspectionDataRef = useRef({ generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog });
     const prevRequestRef = useRef<InspectionRequest | undefined>(undefined);
+    const hasUnsavedChangesRef = useRef(hasUnsavedChanges);
+    useEffect(() => {
+        hasUnsavedChangesRef.current = hasUnsavedChanges;
+    }, [hasUnsavedChanges]);
 
     // Draft Keys for LocalStorage
     const getDraftKey = useCallback((id: string) => `request_draft_${id}`, []);
@@ -500,7 +495,7 @@ export const FillRequest: React.FC = () => {
 
     // --- Persist State to Local Storage on Change ---
     useEffect(() => {
-        if (!request || !isInitialDataLoaded) return;
+        if (!request || !isInitialDataLoaded || isFetchingRequest) return;
         
         if (isLocked) {
             // إذا كان الطلب مكتمل (مقفل)، لا نحتاج لحفظه محلياً. 
@@ -538,7 +533,7 @@ export const FillRequest: React.FC = () => {
         } catch (e) {
             console.warn('Storage quota exceeded when saving draft', e);
         }
-    }, [generalNotes, categoryNotes, structuredFindings, activityLog, request, isInitialDataLoaded, isLocked, getDraftKey]);
+    }, [generalNotes, categoryNotes, structuredFindings, activityLog, request, isInitialDataLoaded, isFetchingRequest, isLocked, getDraftKey]);
 
     // Scroll to Bottom Helper
     const scrollToBottom = useCallback(() => {
@@ -563,7 +558,7 @@ export const FillRequest: React.FC = () => {
 
 
     useEffect(() => {
-        if (!request) return;
+        if (!request || isFetchingRequest) return;
 
         const loadContent = async () => {
             let group: 'general' | 'categories' | 'gallery' | null = null;
@@ -801,7 +796,13 @@ export const FillRequest: React.FC = () => {
         // This prevents overwriting changes from other users (Realtime) with stale local state.
 
         if (loadedTabs.has('general')) {
-            updates.general_notes = clean(uploadedGeneralNotes) as Note[];
+            const cleanedGeneral = clean(uploadedGeneralNotes) as Note[];
+            // Failsafe: if local general notes is empty [], but server currently has notes, only send empty if user explicitly deleted notes
+            if (cleanedGeneral.length === 0 && (currentRequest.general_notes || []).length > 0 && deletedNoteIdsRef.current.size === 0 && !overrides) {
+                console.warn("performSave safety guard: prevent wiping server general_notes with empty array");
+            } else {
+                updates.general_notes = cleanedGeneral;
+            }
         }
 
         if (loadedTabs.has('categories')) {
@@ -812,7 +813,15 @@ export const FillRequest: React.FC = () => {
             for (const catId in uploadedCategoryNotes) {
                 mergedCategoryNotes[catId] = uploadedCategoryNotes[catId];
             }
-            updates.category_notes = cleanCategoryNotes(mergedCategoryNotes);
+            const cleanedCategories = cleanCategoryNotes(mergedCategoryNotes);
+            const serverCatCount = Object.values(serverCategoryNotes).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0);
+            const localCatCount = Object.values(cleanedCategories).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0);
+
+            if (localCatCount === 0 && serverCatCount > 0 && deletedNoteIdsRef.current.size === 0 && !overrides) {
+                console.warn("performSave safety guard: prevent wiping server category_notes with empty object");
+            } else {
+                updates.category_notes = cleanedCategories;
+            }
 
             // Merge Findings
             const serverFindings = currentRequest.structured_findings || [];
@@ -904,12 +913,12 @@ export const FillRequest: React.FC = () => {
     }, [updateRequest, trackDataTransfer, loadedTabs, setHasUnsavedChanges, isLocked, getDraftKey, uploadImage]);
 
     const debouncedSave = useCallback(() => {
-        if (isLocked) return;
+        if (isLocked || !isInitialDataLoaded || isFetchingRequest) return;
         setHasUnsavedChanges(true);
         lastInteractionRef.current = Date.now();
         if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
         debounceTimeoutRef.current = window.setTimeout(() => { if (isMounted.current) performSave(); }, 1500);
-    }, [performSave, setHasUnsavedChanges, isLocked]);
+    }, [performSave, setHasUnsavedChanges, isLocked, isInitialDataLoaded, isFetchingRequest]);
 
     const addActivityLogEntry = useCallback((action: string, details: string, imageUrl?: string, linkId?: string, linkPage?: Page) => {
         if (isLocked) return;
@@ -996,115 +1005,134 @@ export const FillRequest: React.FC = () => {
         });
 
         // 1. General Notes
-        // Server notes is the source of truth for all confirmed notes.
-        // We filter out any notes deleted locally on this device.
-        const serverGeneralNotes = (serverRequest.general_notes || []).filter(
-            sn => !deletedNoteIdsRef.current.has(sn.id)
-        );
-        // Server confirmed presence of note -> no longer pending local protection
-        serverGeneralNotes.forEach(sn => {
-            recentlyAddedNoteIdsRef.current.delete(sn.id);
-        });
-
-        setGeneralNotes(prev => {
-            const merged = [...serverGeneralNotes];
-            // Only preserve local notes that are either unsaved ('saving'/'error')
-            // or were recently created locally on this device (< 30s) and not yet in server payload
-            prev.forEach(localNote => {
-                if (deletedNoteIdsRef.current.has(localNote.id)) return;
-                if (merged.some(sn => sn.id === localNote.id)) return;
-
-                const isUnsaved = localNote.status === 'saving' || localNote.status === 'error';
-                const isRecentlyAddedLocally = recentlyAddedNoteIdsRef.current.has(localNote.id);
-
-                if (isUnsaved || isRecentlyAddedLocally) {
-                    merged.push(localNote);
-                }
-            });
-
-            if (cleanDataForComparison(merged) !== cleanDataForComparison(prev)) return merged;
-            return prev;
-        });
-
-        // 2. Category Notes
-        const serverCategoryNotes = serverRequest.category_notes || {};
-        const cleanedServerCatNotes: Record<string, Note[]> = {};
-        Object.keys(serverCategoryNotes).forEach(catId => {
-            cleanedServerCatNotes[catId] = (serverCategoryNotes[catId] || []).filter(
+        if (serverRequest.general_notes !== undefined && serverRequest.general_notes !== null) {
+            const serverGeneralNotes = (serverRequest.general_notes || []).filter(
                 sn => !deletedNoteIdsRef.current.has(sn.id)
             );
-            cleanedServerCatNotes[catId].forEach(sn => {
+            serverGeneralNotes.forEach(sn => {
                 recentlyAddedNoteIdsRef.current.delete(sn.id);
             });
-        });
 
-        setCategoryNotes(prev => {
-            const newMap: Record<string, Note[]> = {};
+            setGeneralNotes(prev => {
+                // Safety guard: If server notes is empty but we have local notes and none were deleted locally:
+                if (serverGeneralNotes.length === 0 && prev.length > 0 && deletedNoteIdsRef.current.size === 0) {
+                    return prev;
+                }
 
-            // Start with server categories
-            Object.keys(cleanedServerCatNotes).forEach(catId => {
-                newMap[catId] = [...(cleanedServerCatNotes[catId] || [])];
-            });
-
-            // Preserve local category notes that are unsaved or recently added locally
-            Object.keys(prev).forEach(catId => {
-                const localNotes = prev[catId] || [];
-                if (!newMap[catId]) newMap[catId] = [];
-
-                localNotes.forEach(localNote => {
+                const merged = [...serverGeneralNotes];
+                prev.forEach(localNote => {
                     if (deletedNoteIdsRef.current.has(localNote.id)) return;
-                    if (newMap[catId].some(sn => sn.id === localNote.id)) return;
+                    if (merged.some(sn => sn.id === localNote.id)) return;
 
                     const isUnsaved = localNote.status === 'saving' || localNote.status === 'error';
                     const isRecentlyAddedLocally = recentlyAddedNoteIdsRef.current.has(localNote.id);
 
                     if (isUnsaved || isRecentlyAddedLocally) {
-                        newMap[catId].push(localNote);
+                        merged.push(localNote);
                     }
                 });
 
-                if (newMap[catId].length === 0 && !cleanedServerCatNotes[catId]) {
-                    delete newMap[catId];
-                }
+                if (cleanDataForComparison(merged) !== cleanDataForComparison(prev)) return merged;
+                return prev;
+            });
+        }
+
+        // 2. Category Notes
+        if (serverRequest.category_notes !== undefined && serverRequest.category_notes !== null) {
+            const serverCategoryNotes = serverRequest.category_notes || {};
+            const cleanedServerCatNotes: Record<string, Note[]> = {};
+            Object.keys(serverCategoryNotes).forEach(catId => {
+                cleanedServerCatNotes[catId] = (serverCategoryNotes[catId] || []).filter(
+                    sn => !deletedNoteIdsRef.current.has(sn.id)
+                );
+                cleanedServerCatNotes[catId].forEach(sn => {
+                    recentlyAddedNoteIdsRef.current.delete(sn.id);
+                });
             });
 
-            if (cleanDataForComparison(newMap) !== cleanDataForComparison(prev)) return newMap;
-            return newMap;
-        });
+            setCategoryNotes(prev => {
+                const prevCount = Object.values(prev).reduce((acc, arr) => acc + (arr?.length || 0), 0);
+                const serverCount = Object.values(cleanedServerCatNotes).reduce((acc, arr) => acc + (arr?.length || 0), 0);
+                if (serverCount === 0 && prevCount > 0 && deletedNoteIdsRef.current.size === 0) {
+                    return prev;
+                }
+
+                const newMap: Record<string, Note[]> = {};
+                Object.keys(cleanedServerCatNotes).forEach(catId => {
+                    newMap[catId] = [...(cleanedServerCatNotes[catId] || [])];
+                });
+
+                Object.keys(prev).forEach(catId => {
+                    const localNotes = prev[catId] || [];
+                    if (!newMap[catId]) newMap[catId] = [];
+
+                    localNotes.forEach(localNote => {
+                        if (deletedNoteIdsRef.current.has(localNote.id)) return;
+                        if (newMap[catId].some(sn => sn.id === localNote.id)) return;
+
+                        const isUnsaved = localNote.status === 'saving' || localNote.status === 'error';
+                        const isRecentlyAddedLocally = recentlyAddedNoteIdsRef.current.has(localNote.id);
+
+                        if (isUnsaved || isRecentlyAddedLocally) {
+                            newMap[catId].push(localNote);
+                        }
+                    });
+
+                    if (newMap[catId].length === 0 && !cleanedServerCatNotes[catId]) {
+                        delete newMap[catId];
+                    }
+                });
+
+                if (cleanDataForComparison(newMap) !== cleanDataForComparison(prev)) return newMap;
+                return newMap;
+            });
+        }
 
         // 3. Findings
-        const serverFindings = serverRequest.structured_findings || [];
-        setStructuredFindings(prev => {
-            const unsaved = prev.filter(f => f.status === 'error' || f.status === 'saving');
-            const mergedMap = new Map();
-            serverFindings.forEach(f => mergedMap.set(f.findingId, { ...f, status: 'saved' }));
-            unsaved.forEach(f => mergedMap.set(f.findingId, f));
+        if (serverRequest.structured_findings !== undefined && serverRequest.structured_findings !== null) {
+            const serverFindings = serverRequest.structured_findings || [];
+            setStructuredFindings(prev => {
+                const unsaved = prev.filter(f => f.status === 'error' || f.status === 'saving');
+                const mergedMap = new Map();
+                serverFindings.forEach(f => mergedMap.set(f.findingId, { ...f, status: 'saved' }));
+                unsaved.forEach(f => mergedMap.set(f.findingId, f));
 
-            const newArr = Array.from(mergedMap.values());
-            // @ts-ignore
-            if (cleanDataForComparison(newArr) !== cleanDataForComparison(prev)) return newArr;
-            return prev;
-        });
-
-        // 4. Activity Log
-        const serverActivityLog = serverRequest.activity_log || [];
-        setActivityLog(prev => {
-            if (isClearingLogsRef.current) {
-                // If we are actively clearing, only keep the server-side logs
-                // Once the server has our "Cleared" action, we can turn off the flag
-                if (serverActivityLog.some(l => l.action === 'مسح سجل النشاط')) {
-                    isClearingLogsRef.current = false;
-                }
-                return serverActivityLog;
-            }
-            const combined = [...serverActivityLog];
-            prev.forEach(l => {
-                if (!combined.find(sl => sl.id === l.id)) combined.push(l);
+                const newArr = Array.from(mergedMap.values());
+                // @ts-ignore
+                if (cleanDataForComparison(newArr) !== cleanDataForComparison(prev)) return newArr;
+                return prev;
             });
-            combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            if (JSON.stringify(combined) !== JSON.stringify(prev)) return combined;
-            return prev;
-        });
+        }
+
+        // 4. Voice Memos
+        if (serverRequest.voice_memos !== undefined && serverRequest.voice_memos !== null) {
+            setVoiceMemos(prev => {
+                if (cleanDataForComparison(serverRequest.voice_memos) !== cleanDataForComparison(prev)) {
+                    return serverRequest.voice_memos || {};
+                }
+                return prev;
+            });
+        }
+
+        // 5. Activity Log
+        if (serverRequest.activity_log !== undefined && serverRequest.activity_log !== null) {
+            const serverActivityLog = serverRequest.activity_log || [];
+            setActivityLog(prev => {
+                if (isClearingLogsRef.current) {
+                    if (serverActivityLog.some(l => l.action === 'مسح سجل النشاط')) {
+                        isClearingLogsRef.current = false;
+                    }
+                    return serverActivityLog;
+                }
+                const combined = [...serverActivityLog];
+                prev.forEach(l => {
+                    if (!combined.find(sl => sl.id === l.id)) combined.push(l);
+                });
+                combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                if (JSON.stringify(combined) !== JSON.stringify(prev)) return combined;
+                return prev;
+            });
+        }
 
     }, [setRequests, setSearchedRequests]);
 
@@ -1112,118 +1140,192 @@ export const FillRequest: React.FC = () => {
     useEffect(() => {
         if (!request?.id) return;
 
-        const channel = supabase
-            .channel(`request-${request.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'inspection_requests',
-                    filter: `id=eq.${request.id}`
-                },
-                (payload) => {
-                    const newRequest = payload.new as InspectionRequest;
-                    handleServerUpdate(newRequest);
-                }
-            )
-            .subscribe();
+        let channel: any = null;
+
+        const setupChannel = () => {
+            channel = supabase
+                .channel(`request-${request.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'inspection_requests',
+                        filter: `id=eq.${request.id}`
+                    },
+                    (payload) => {
+                        const newRequest = payload.new as InspectionRequest;
+                        handleServerUpdate(newRequest);
+                    }
+                )
+                .subscribe((status) => {
+                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                        console.warn(`Request channel ${request.id} status: ${status}`);
+                    }
+                });
+        };
+
+        setupChannel();
 
         return () => {
-            supabase.removeChannel(channel);
+            if (channel) {
+                supabase.removeChannel(channel);
+            }
         };
     }, [request?.id, handleServerUpdate]);
 
-    // --- MAIN SYNC LOGIC ---
+    // --- BROWSER TAB VISIBILITY & FOCUS RESILIENCY ---
     useEffect(() => {
-        if (!request) return;
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === 'visible' && selectedRequestId && isInitialDataLoaded) {
+                // 1. If we have unsaved local changes, flush them immediately
+                if (hasUnsavedChangesRef.current) {
+                    performSave();
+                }
 
-        // 1. Initial Load (or Request Change) OR First Time Full Request Data Arrived From Server
-        const isRequestChange = request.id !== prevRequestRef.current?.id;
-        const isFullDataArrival = (!prevRequestRef.current?.category_notes && request.category_notes !== undefined);
-
-        if (isRequestChange || isFullDataArrival) {
-            setActivityLog(request.activity_log || []);
-
-            // Try to load from Local Storage first (Persistence)
-            const draftStr = localStorage.getItem(getDraftKey(request.id));
-            if (draftStr) {
+                // 2. Silently fetch the latest state of this request from the server to guarantee freshness
                 try {
-                    const draft = JSON.parse(draftStr);
-                    // Base: Server Data
-                    const combinedGeneral = [...(request.general_notes || [])];
-                    const combinedCategories = { ...(request.category_notes || {}) };
-                    const combinedFindings = [...(request.structured_findings || [])];
+                    const fresh = await fetchAndUpdateSingleRequest(selectedRequestId);
+                    if (fresh && isMounted.current) {
+                        handleServerUpdate(fresh);
+                    }
+                } catch (e) {
+                    console.warn("Visibility re-fetch failed:", e);
+                }
+            }
+        };
 
-                    // Overlay: Local Unsaved Items
-                    if (draft.generalNotes) {
-                        const unsavedGeneral = (draft.generalNotes as Note[]).filter(n => n.status === 'error' || n.status === 'saving');
-                        unsavedGeneral.forEach(n => {
-                            if (!combinedGeneral.find(sn => sn.id === n.id)) combinedGeneral.push(n);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleVisibilityChange);
+        };
+    }, [selectedRequestId, isInitialDataLoaded, performSave, fetchAndUpdateSingleRequest, handleServerUpdate]);
+
+    // --- SERVER-FIRST INITIAL DATA LOADER ---
+    useEffect(() => {
+        if (!selectedRequestId) return;
+
+        let isCancelled = false;
+        setIsFetchingRequest(true);
+        setIsInitialDataLoaded(false);
+
+        const initData = async () => {
+            try {
+                // 1. Always fetch full authoritative request data from server first
+                const serverReq = await fetchAndUpdateSingleRequest(selectedRequestId);
+                if (isCancelled || !isMounted.current) return;
+
+                // 2. Check for any locally unsaved draft items
+                const draftStr = localStorage.getItem(getDraftKey(selectedRequestId));
+                let draft: any = null;
+                if (draftStr) {
+                    try { draft = JSON.parse(draftStr); } catch (e) {}
+                }
+
+                const serverGeneral = (serverReq?.general_notes || []);
+                const serverCategories = (serverReq?.category_notes || {});
+                const serverFindings = (serverReq?.structured_findings || []);
+                const serverMemos = (serverReq?.voice_memos || {});
+                const serverLogs = (serverReq?.activity_log || []);
+
+                let finalGeneral = [...serverGeneral];
+                let finalCategories = { ...serverCategories };
+                let finalFindings = [...serverFindings];
+
+                // Merge only genuinely unsaved local draft items
+                if (draft?.generalNotes) {
+                    const unsaved = (draft.generalNotes as Note[]).filter((n: Note) => n.status === 'saving' || n.status === 'error');
+                    unsaved.forEach((un: Note) => {
+                        if (!finalGeneral.some(sn => sn.id === un.id)) finalGeneral.push(un);
+                    });
+                }
+
+                if (draft?.categoryNotes) {
+                    for (const catId in draft.categoryNotes) {
+                        const unsaved = (draft.categoryNotes[catId] as Note[]).filter((n: Note) => n.status === 'saving' || n.status === 'error');
+                        if (!finalCategories[catId]) finalCategories[catId] = [];
+                        unsaved.forEach((un: Note) => {
+                            if (!finalCategories[catId].some((sn: Note) => sn.id === un.id)) finalCategories[catId].push(un);
                         });
                     }
-                    if (draft.categoryNotes) {
-                        for (const catId in draft.categoryNotes) {
-                            const unsavedCatNotes = (draft.categoryNotes[catId] as Note[]).filter(n => n.status === 'error' || n.status === 'saving');
-                            if (!combinedCategories[catId]) combinedCategories[catId] = [];
-                            unsavedCatNotes.forEach(n => {
-                                if (!combinedCategories[catId].find((sn: Note) => sn.id === n.id)) combinedCategories[catId].push(n);
-                            });
-                        }
-                    }
-                    if (draft.structuredFindings) {
-                        const unsavedFindings = (draft.structuredFindings as StructuredFinding[]).filter(f => f.status === 'error' || f.status === 'saving');
-                        const findingsMap = new Map();
-                        combinedFindings.forEach(f => findingsMap.set(f.findingId, f));
-                        unsavedFindings.forEach(f => findingsMap.set(f.findingId, f)); // Overwrite server with local unsaved
-                        // @ts-ignore
-                        setStructuredFindings(Array.from(findingsMap.values()));
-                    } else {
-                        setStructuredFindings(combinedFindings);
-                    }
-
-                    setGeneralNotes(combinedGeneral);
-                    setCategoryNotes(combinedCategories);
-
-                } catch (e) {
-                    // Fallback to server only
-                    setGeneralNotes(request.general_notes || []);
-                    setCategoryNotes(request.category_notes || {});
-                    setStructuredFindings(request.structured_findings || []);
                 }
-            } else {
-                setGeneralNotes(request.general_notes || []);
-                setCategoryNotes(request.category_notes || {});
-                setStructuredFindings(request.structured_findings || []);
-            }
 
-            setVoiceMemos(request.voice_memos || {});
+                if (draft?.structuredFindings) {
+                    const unsaved = (draft.structuredFindings as StructuredFinding[]).filter((f: StructuredFinding) => f.status === 'saving' || f.status === 'error');
+                    const findingsMap = new Map();
+                    serverFindings.forEach((f: StructuredFinding) => findingsMap.set(f.findingId, f));
+                    unsaved.forEach((f: StructuredFinding) => findingsMap.set(f.findingId, f));
+                    finalFindings = Array.from(findingsMap.values());
+                }
 
-            if (isRequestChange) {
+                setGeneralNotes(finalGeneral);
+                setCategoryNotes(finalCategories);
+                setStructuredFindings(finalFindings);
+                setVoiceMemos(serverMemos);
+                setActivityLog(serverLogs);
+
+                if (serverReq?.inspection_data?.field_tested_categories) {
+                    setFieldTestedCategories(serverReq.inspection_data.field_tested_categories);
+                }
+
                 const defTab = getDefaultTab();
                 setActiveTab(defTab);
                 setActiveFindingGroup(null);
-                setLoadedTabs(new Set());
                 setCategorySubTab('main');
                 setIsFindingsSectionOpen(true);
-            }
-
-            setHasUnsavedChanges(false);
-            if (request.category_notes !== undefined || request.general_notes !== undefined) {
+                setLoadedTabs(new Set(['general', 'categories', 'gallery']));
                 setIsInitialDataLoaded(true);
+                setHasUnsavedChanges(false);
+
+                prevRequestRef.current = serverReq || request;
+            } catch (err) {
+                console.error("Failed to load initial request data from server:", err);
+                const draftStr = localStorage.getItem(getDraftKey(selectedRequestId));
+                if (draftStr && isMounted.current) {
+                    try {
+                        const draft = JSON.parse(draftStr);
+                        if (draft.generalNotes) setGeneralNotes(draft.generalNotes);
+                        if (draft.categoryNotes) setCategoryNotes(draft.categoryNotes);
+                        if (draft.structuredFindings) setStructuredFindings(draft.structuredFindings);
+                        setLoadedTabs(new Set(['general', 'categories', 'gallery']));
+                        setIsInitialDataLoaded(true);
+                        addNotification({
+                            title: 'تنبيه الاتصال',
+                            message: 'فشل الاتصال بالسحابة. يتم عرض نسخة المسودة المحفوظة محلياً.',
+                            type: 'info'
+                        });
+                    } catch (e) {}
+                } else {
+                    addNotification({
+                        title: 'خطأ',
+                        message: 'فشل تحميل بيانات الطلب من السيرفر. يرجى التحقق من الاتصال.',
+                        type: 'error'
+                    });
+                }
+            } finally {
+                if (!isCancelled && isMounted.current) {
+                    setIsFetchingRequest(false);
+                }
             }
+        };
 
-            prevRequestRef.current = request;
-            return;
-        }
+        initData();
 
-        // Only sync if the request updated_at has actually changed from outside
-        if (prevRequestRef.current && request.updated_at && prevRequestRef.current.updated_at !== request.updated_at) {
+        return () => {
+            isCancelled = true;
+        };
+    }, [selectedRequestId, fetchAndUpdateSingleRequest, getDraftKey, getDefaultTab, addNotification]);
+
+    // --- BACKGROUND / PROP SYNC EFFECT ---
+    useEffect(() => {
+        if (!request || !prevRequestRef.current) return;
+        if (request.id === prevRequestRef.current.id && request.updated_at && prevRequestRef.current.updated_at !== request.updated_at) {
             prevRequestRef.current = request;
             handleServerUpdate(request);
         }
-
-    }, [request, getDraftKey, getDefaultTab, setHasUnsavedChanges, handleServerUpdate]);
+    }, [request, handleServerUpdate]);
 
     const client = clients.find(c => c.id === request?.client_id);
     const car = cars.find(c => c.id === request?.car_id);

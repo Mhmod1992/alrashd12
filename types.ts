@@ -513,6 +513,7 @@ export interface Settings {
   draftSettings?: DraftSettings;
   customReportTemplates: CustomReportTemplate[];
   geminiApiKey: string | null;
+  imageGeneratorApiKey?: string | null;
   googleMapsLink?: string;
   locationUrl?: string;
   databaseCapacity: number;
