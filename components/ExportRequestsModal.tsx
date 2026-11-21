@@ -61,6 +61,7 @@ const ExportRequestsModal: React.FC<ExportRequestsModalProps> = ({ isOpen, onClo
                 status,
                 broker,
                 employee_id,
+                inspection_data,
                 client:clients(id, name, phone),
                 car:cars(
                     id,
@@ -235,7 +236,7 @@ const ExportRequestsModal: React.FC<ExportRequestsModalProps> = ({ isOpen, onClo
                 const csvRows = [headers.join(',')];
 
                 data.forEach(req => {
-                    const clientName = req.client?.name || '';
+                    const clientName = (req as any).client_snapshot?.name || (req as any).inspection_data?.client_snapshot?.name || req.client?.name || '';
                     const clientPhone = req.client?.phone || '';
                     const carName = req.car ? `${req.car.make?.name_ar || ''} ${req.car.model?.name_ar || ''} ${req.car.year || ''}` : '';
                     const plate = req.car?.plate_number || '';

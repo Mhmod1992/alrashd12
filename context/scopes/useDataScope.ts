@@ -114,8 +114,8 @@ export const useDataScope = (
     const ensureEntitiesLoaded = useCallback(async (fetchedRequests: InspectionRequest[]) => {
         if (!fetchedRequests || fetchedRequests.length === 0) return;
 
-        const currentClients = clientsRef.current.length > 0 ? clientsRef.current : clients;
-        const currentCars = carsRef.current.length > 0 ? carsRef.current : cars;
+        const currentClients = clientsRef.current;
+        const currentCars = carsRef.current;
 
         const clientIdsToFetch = Array.from(new Set(fetchedRequests.map(r => r.client_id)))
             .filter(id => id && !currentClients.some(c => c.id === id)) as string[];
@@ -178,7 +178,7 @@ export const useDataScope = (
         if (promises.length > 0) {
             await Promise.all(promises);
         }
-    }, [clients, cars]);
+    }, []);
 
     const refreshEntitiesForRequests = useCallback(async (requestsToRefresh: InspectionRequest[]) => {
         if (!requestsToRefresh || requestsToRefresh.length === 0) return;
@@ -431,7 +431,10 @@ export const useDataScope = (
             if (changedReqs && changedReqs.length > 0) {
                 setRequests(prev => {
                     const map = new Map(prev.map(r => [r.id, r]));
-                    changedReqs.forEach(r => map.set(r.id, r));
+                    changedReqs.forEach(r => {
+                        const existing = map.get(r.id);
+                        map.set(r.id, existing ? { ...existing, ...r } : r);
+                    });
                     return Array.from(map.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                 });
                 await ensureEntitiesLoaded(changedReqs);

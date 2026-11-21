@@ -788,3 +788,111 @@ export const getPlateSearchVariations = (plateInput: string | null | undefined):
 
     return Array.from(variations).filter(v => v.length > 0);
 };
+
+// --- Inspection Type Usage & Sorting Utilities ---
+const STORAGE_KEY_INSPECTION_TYPE_USAGE = 'inspection_types_usage_map';
+
+export const getInspectionTypeUsageMap = (): Record<string, number> => {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY_INSPECTION_TYPE_USAGE);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+                return parsed;
+            }
+        }
+    } catch {
+        // ignore storage errors
+    }
+    return {};
+};
+
+export const recordInspectionTypeUsage = (typeId: string): void => {
+    if (!typeId) return;
+    try {
+        const current = getInspectionTypeUsageMap();
+        current[typeId] = (current[typeId] || 0) + 1;
+        localStorage.setItem(STORAGE_KEY_INSPECTION_TYPE_USAGE, JSON.stringify(current));
+    } catch {
+        // ignore storage errors
+    }
+};
+
+export const sortInspectionTypesByUsage = <T extends { id: string; name: string }>(
+    types: T[],
+    currentRequests: { inspection_type_id?: string | null }[] = []
+): T[] => {
+    const localUsage = getInspectionTypeUsageMap();
+    
+    // Combine local persistent usage with currently loaded requests
+    const combinedCounts: Record<string, number> = { ...localUsage };
+    currentRequests.forEach(r => {
+        if (r.inspection_type_id) {
+            combinedCounts[r.inspection_type_id] = (combinedCounts[r.inspection_type_id] || 0) + 1;
+        }
+    });
+
+    return [...types].sort((a, b) => {
+        const countA = combinedCounts[a.id] || 0;
+        const countB = combinedCounts[b.id] || 0;
+        
+        if (countB !== countA) {
+            return countB - countA;
+        }
+
+        // Default smart priority if counts are equal (e.g. first run): prioritize "شامل"
+        const aIsShamil = a.name.includes('شامل');
+        const bIsShamil = b.name.includes('شامل');
+        if (aIsShamil && !bIsShamil) return -1;
+        if (!aIsShamil && bIsShamil) return 1;
+
+        return 0;
+    });
+};
+
+/**
+ * Resolves the client's name at the time a request was created.
+ * Uses request.client_snapshot if present, otherwise checks client.name_history timeline.
+ */
+export const getClientNameAtDate = (
+    client?: { name: string; name_history?: { old_name: string; new_name: string; changed_at: string; changed_by?: string }[] } | null,
+    requestDate?: string,
+    snapshotName?: string
+): string => {
+    if (snapshotName && snapshotName.trim()) return snapshotName.trim();
+    if (!client) return 'غير معروف';
+    if (!client.name_history || !Array.isArray(client.name_history) || client.name_history.length === 0 || !requestDate) {
+        return client.name || 'غير معروف';
+    }
+
+    const reqTime = new Date(requestDate).getTime();
+    if (isNaN(reqTime)) return client.name || 'غير معروف';
+
+    // Sort history chronologically (oldest to newest)
+    const sorted = [...client.name_history].sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime());
+
+    // Find the first change that happened AFTER the request was created.
+    // That means at the time of the request, the client still had the 'old_name' of that change!
+    for (const entry of sorted) {
+        const changeTime = new Date(entry.changed_at).getTime();
+        if (!isNaN(changeTime) && reqTime < changeTime) {
+            return entry.old_name || client.name;
+        }
+    }
+
+    return client.name || 'غير معروف';
+};
+
+/**
+ * Convenience helper that resolves a request's client name from either
+ * request.client_snapshot, request.inspection_data.client_snapshot, or client.name_history.
+ */
+export const resolveRequestClientName = (
+    req?: { created_at?: string; client_snapshot?: { name?: string }; inspection_data?: any } | null,
+    client?: { name: string; name_history?: { old_name: string; new_name: string; changed_at: string; changed_by?: string }[] } | null
+): string => {
+    const snapshotName = req?.client_snapshot?.name || req?.inspection_data?.client_snapshot?.name;
+    return getClientNameAtDate(client, req?.created_at, snapshotName);
+};
+
+

@@ -2,7 +2,7 @@
 import React from 'react';
 import { Document, Page, View, StyleSheet, Image, Font } from '@react-pdf/renderer';
 import { ArabicText as Text } from './ArabicText';
-import { formatPhoneNumberDisplay } from '../lib/utils';
+import { formatPhoneNumberDisplay, resolveRequestClientName } from '../lib/utils';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor } from '../types';
 
 // Register Arabic Font (Tajawal - Local & Robust)
@@ -432,7 +432,7 @@ const InspectionReportPdf: React.FC<InspectionReportPdfProps> = ({
           <View style={styles.sectionContent}>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>{isRtl ? 'الاسم:' : 'Name:'}</Text>
-              <Text style={styles.infoValue}>{client.name}</Text>
+              <Text style={styles.infoValue}>{resolveRequestClientName(request, client)}</Text>
               <Text style={[styles.infoLabel, { marginLeft: 20 }]}>{isRtl ? 'الجوال:' : 'Phone:'}</Text>
               <Text style={styles.infoValue}>{formatPhoneNumberDisplay(client.phone)}</Text>
             </View>

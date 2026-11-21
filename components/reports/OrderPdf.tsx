@@ -2,7 +2,7 @@
 import React from 'react';
 import { Document, Page, View, StyleSheet, Image, Font, Svg, Path, Circle } from '@react-pdf/renderer';
 import { ArabicText as Text } from '../ArabicText';
-import { formatPhoneNumberDisplay } from '../../lib/utils';
+import { formatPhoneNumberDisplay, resolveRequestClientName } from '../../lib/utils';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, HighlightColor, ReportStamp, Technician, Employee } from '../../types';
 
 // Register Arabic Font (Tajawal - Local & Robust)
@@ -937,7 +937,7 @@ const OrderPdf: React.FC<OrderPdfProps> = ({
           <View style={styles.clientDataBody}>
             <View style={[styles.clientDataRow, { width: reportSettings.showPriceOnReport ? '32%' : '49%' }]}>
               <Text style={styles.clientDataLabel}>{reportDirection === 'ltr' ? 'Name:' : 'الاسم:'}</Text>
-              <Text style={styles.clientDataValue}>{client.name}</Text>
+              <Text style={styles.clientDataValue}>{resolveRequestClientName(request, client)}</Text>
             </View>
             <View style={[styles.clientDataRow, { width: reportSettings.showPriceOnReport ? '32%' : '49%' }]}>
               <Text style={styles.clientDataLabel}>{reportDirection === 'ltr' ? 'Phone:' : 'الجوال:'}</Text>

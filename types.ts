@@ -127,6 +127,13 @@ export interface PayrollDraft {
   status: 'draft' | 'approved';
 }
 
+export interface ClientNameHistoryEntry {
+  old_name: string;
+  new_name: string;
+  changed_at: string;
+  changed_by?: string;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -140,6 +147,7 @@ export interface Client {
   address?: string;
   created_at?: string;
   notes?: string;
+  name_history?: ClientNameHistoryEntry[];
 }
 
 export interface AgedDebt {
@@ -312,12 +320,21 @@ export interface SplitPaymentDetails {
 
 export type ReportStamp = 'CUSTOMER_REQUEST_INCOMPLETE';
 
+export interface PendingClientNameSuggestion {
+  suggested_name: string;
+  original_name?: string;
+  entered_by_name?: string;
+  entered_at?: string;
+  dismissed?: boolean;
+}
+
 export interface InspectionRequest {
   id: string;
   request_number: number;
   client_id: string;
   car_id: string;
   car_snapshot?: CarSnapshot;
+  client_snapshot?: { name: string; phone?: string };
   inspection_type_id: string;
   payment_type: PaymentType;
   split_payment_details?: SplitPaymentDetails;
@@ -497,6 +514,11 @@ export interface DraftSettings {
   defaultPrintAsDraft?: boolean;
 }
 
+export interface CardPositionsSettings {
+  groupOrderByCategory?: Record<string, string[]>;
+  findingOrderByGroup?: Record<string, string[]>;
+}
+
 export interface Settings {
   appName: string;
   logoUrl: string | null;
@@ -511,6 +533,7 @@ export interface Settings {
   platePreviewSettings: PlatePreviewSettings;
   reportSettings: ReportSettings;
   draftSettings?: DraftSettings;
+  cardPositionsSettings?: CardPositionsSettings;
   customReportTemplates: CustomReportTemplate[];
   geminiApiKey: string | null;
   imageGeneratorApiKey?: string | null;
@@ -540,7 +563,7 @@ export interface UserPreferences {
   disableAutoSortRequests?: boolean;
 }
 
-export type SettingsPage = 'general' | 'appearance' | 'request' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management' | 'technical' | 'whatsapp' | 'reports_archive' | 'storage';
+export type SettingsPage = 'general' | 'appearance' | 'request' | 'card_positions' | 'employees' | 'technicians' | 'cars' | 'plate' | 'report' | 'api' | 'draft' | 'data_management' | 'technical' | 'whatsapp' | 'reports_archive' | 'storage';
 
 export interface Employee {
   id: string;

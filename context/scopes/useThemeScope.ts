@@ -86,7 +86,9 @@ export const useThemeScope = (
             const { error } = await supabase.from('employees').update({ preferences: newPrefs }).eq('id', authUser.id);
             if (!error) setAuthUser(prev => prev ? ({ ...prev, preferences: newPrefs }) : null);
         }
-        if (Object.keys(globalUpdates).length > 0 && can('manage_settings_general')) {
+        const TECHNICAL_SETTING_KEYS: Array<keyof Settings> = ['cardPositionsSettings', 'draftSettings', 'plateCharacters', 'platePreviewSettings'];
+        const hasOnlyTechnicalUpdates = Object.keys(globalUpdates).every(k => TECHNICAL_SETTING_KEYS.includes(k as keyof Settings));
+        if (Object.keys(globalUpdates).length > 0 && (can('manage_settings_general') || (hasOnlyTechnicalUpdates && can('manage_settings_technical')))) {
             const updatedGlobalSettings = { ...globalSettings, ...globalUpdates };
             setGlobalSettings(updatedGlobalSettings);
             

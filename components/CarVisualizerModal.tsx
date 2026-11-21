@@ -35,8 +35,27 @@ interface TestPreset {
 
 const TEST_PRESETS: TestPreset[] = [
   {
+    id: 'hyundai-accent-2018',
+    title: '🚗 هيونداي اكسنت 2018 (رش جنب يسار كامل + كبوت + شنطة + صدامات + جنب يمين خلفي)',
+    carText: 'هيونداي اكسنت 2018',
+    mockFindings: [
+      { name: 'الرفرف الأمامي الأيسر', value: 'رش الجانب الأيسر بالكامل' },
+      { name: 'باب السائق (الأمامي الأيسر)', value: 'رش الجانب الأيسر بالكامل' },
+      { name: 'الباب الخلفي الأيسر', value: 'رش الجانب الأيسر بالكامل' },
+      { name: 'الرفرف الخلفي الأيسر', value: 'رش الجانب الأيسر بالكامل' },
+      { name: 'قائم فوق الباب يسار', value: 'رش الجانب الأيسر بالكامل' },
+      { name: 'غطاء المحرك (الكبوت)', value: 'رش / سمكرة' },
+      { name: 'باب الشنطة (الخلفي)', value: 'رش / سمكرة' },
+      { name: 'الرفرف الخلفي الأيمن', value: 'رش / سمكرة' },
+      { name: 'الباب الخلفي الأيمن', value: 'رش / سمكرة' },
+      { name: 'الصدام الأمامي', value: 'رش / سمكرة' },
+      { name: 'الصدام الخلفي', value: 'رش / سمكرة' },
+    ],
+    notesText: 'رش الجانب الأيسر بالكامل مع الكبوت وباب الشنطة والصدامات والرفرف الخلفي الأيمن والباب الخلفي الأيمن',
+  },
+  {
     id: 'report-image-example',
-    title: '📄 تقرير صورتك المرفقة (باب الشنطة + رفرف خلفي يمين + قائم يمين)',
+    title: '📄 تويوتا كامري (باب الشنطة + رفرف خلفي يمين + قائم يمين)',
     carText: 'تويوتا كامري 2023',
     mockFindings: [
       { name: 'باب الشنطة', value: 'رش نصف الباب + اجزاء معجون' },
@@ -93,10 +112,10 @@ const CarVisualizerModal: React.FC<CarVisualizerModalProps> = ({
   const [isLoadingDbRequest, setIsLoadingDbRequest] = useState(false);
   
   // Selected preset (default to user's report image)
-  const [selectedPresetId, setSelectedPresetId] = useState<string>('report-image-example');
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('hyundai-accent-2018');
 
   // Custom inputs
-  const [customCarName, setCustomCarName] = useState<string>('فورد تورس 2013');
+  const [customCarName, setCustomCarName] = useState<string>('هيونداي اكسنت 2018');
   const [customNotes, setCustomNotes] = useState<string>('حكات - دقات - تعديلات في البدي ورش في الرفرف الأيمن');
 
   // Inspection section tabs for viewing panels
@@ -113,12 +132,12 @@ const CarVisualizerModal: React.FC<CarVisualizerModalProps> = ({
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [editablePrompt, setEditablePrompt] = useState<string>('');
 
-  // Active API key resolution (prioritizes imageGeneratorApiKey, falls back to geminiApiKey)
+  // Active API key resolution: STRICTLY uses imageGeneratorApiKey. Never falls back to geminiApiKey.
   const activeApiKey = useMemo(() => {
-    return settings.imageGeneratorApiKey?.trim() || settings.geminiApiKey?.trim() || null;
-  }, [settings.imageGeneratorApiKey, settings.geminiApiKey]);
+    return settings.imageGeneratorApiKey?.trim() || null;
+  }, [settings.imageGeneratorApiKey]);
 
-  const isUsingDedicatedKey = Boolean(settings.imageGeneratorApiKey?.trim());
+  const isUsingDedicatedKey = Boolean(activeApiKey);
 
   // Set initial selected request if provided
   useEffect(() => {
@@ -228,8 +247,8 @@ const CarVisualizerModal: React.FC<CarVisualizerModalProps> = ({
   const handleGenerate = async () => {
     if (!activeApiKey) {
       addNotification({
-        title: 'مفتاح API مفقود',
-        message: 'يرجى إعداد "مفتاح مولد الصور" في الإعدادات > ربط الخدمات (API).',
+        title: 'مفتاح مولد الصور مفقود',
+        message: 'يعمل هذا المولد بمفتاح خاص به فقط. يرجى إدخال "مفتاح مولد صور الهيكل" في الإعدادات > ربط الخدمات (API).',
         type: 'error',
       });
       return;
@@ -308,14 +327,12 @@ const CarVisualizerModal: React.FC<CarVisualizerModalProps> = ({
               حالة مفتاح التوليد:
             </span>
             {activeApiKey ? (
-              <span className="px-2 py-0.5 rounded font-mono bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                {isUsingDedicatedKey
-                  ? 'مفتاح مولد الصور المخصص مفعّل'
-                  : 'يعمل عبر مفتاح Gemini الأساسي'}
+              <span className="px-2 py-0.5 rounded font-mono bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold">
+                مفتاح مولد الصور الخاص مفعّل
               </span>
             ) : (
               <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 font-bold">
-                غير متوفر - يرجى إدخال المفتاح في الإعدادات
+                غير متوفر - يتطلب إدخال مفتاح خاص به في الإعدادات
               </span>
             )}
           </div>

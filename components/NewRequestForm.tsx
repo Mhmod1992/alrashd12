@@ -1,9 +1,9 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode } from '../types';
+import { Client, Car, CarMake, CarModel, InspectionRequest, PaymentType, RequestStatus, CarSnapshot, InspectionType, Broker, Reservation, TaxMode, PendingClientNameSuggestion } from '../types';
 import Button from './Button';
-import { uuidv4, formatPendingNumber, cleanSaudiPhoneNumber } from '../lib/utils';
+import { uuidv4, formatPendingNumber, cleanSaudiPhoneNumber, sortInspectionTypesByUsage, recordInspectionTypeUsage } from '../lib/utils';
 import Modal from './Modal';
 import CameraScannerModal from './CameraScannerModal';
 import ChevronRightIcon from './icons/ChevronRightIcon';
@@ -113,6 +113,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const [clientName, setClientName] = useState('');
     const [clientPhone, setClientPhone] = useState('');
     const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+    const [isNameSuggestionDismissed, setIsNameSuggestionDismissed] = useState(false);
     const [carMakeId, setCarMakeId] = useState('');
     const [carModelId, setCarModelId] = useState('');
     const [carYear, setCarYear] = useState(new Date().getFullYear());
@@ -226,6 +227,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
 
     useEffect(() => {
         if (initialData && populatedIdRef.current !== initialData.id) {
+            setIsNameSuggestionDismissed(false);
             const req = initialData;
             const rawPending = (req as any)?._rawPending;
 
@@ -926,6 +928,15 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             setPhoneSuggestions(results);
             setIsPhoneSuggestionsOpen(results.length > 0);
             setIsSearchingClientPhone(false);
+
+            // If on mobile and a single matching client is found, auto-select to prevent duplicate client creation
+            if (isMobile && results.length === 1) {
+                const matched = results[0];
+                const cleanMatchPhone = cleanSaudiPhoneNumber(matched.phone) || matched.phone?.replace(/\D/g, '');
+                if (cleanMatchPhone === digits || cleanMatchPhone.endsWith(digits) || digits.endsWith(cleanMatchPhone)) {
+                    handleClientSelection(matched);
+                }
+            }
         }, 300);
     };
 
@@ -1263,6 +1274,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const handleTypeSelection = (type: InspectionType) => {
         setInspectionTypeId(type.id);
         setInspectionTypeSearchTerm(type.name);
+        recordInspectionTypeUsage(type.id);
         // Removed setInspectionPrice(type.price) to prevent overwriting user-entered price
         setIsTypeDropdownOpen(false);
         setErrors(prev => ({ ...prev, inspectionType: false }));
@@ -1270,14 +1282,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
     };
 
     const displayInspectionTypes = useMemo(() => {
-        const counts: Record<string, number> = {};
-        requests.forEach(r => {
-            if (r.inspection_type_id) {
-                counts[r.inspection_type_id] = (counts[r.inspection_type_id] || 0) + 1;
-            }
-        });
-        
-        let types = [...inspectionTypes].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+        const types = sortInspectionTypesByUsage(inspectionTypes, requests);
         
         const term = inspectionTypeSearchTerm.trim().toLowerCase();
         if (term) {
@@ -1617,7 +1622,10 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 if (!initialClient && initialData.client_id) {
                     try {
                         const { data: dbClient } = await supabase.from('clients').select('*').eq('id', initialData.client_id).single();
-                        if (dbClient) initialClient = dbClient;
+                        if (dbClient) {
+                            initialClient = dbClient;
+                            ensureLocalClient(dbClient as Client);
+                        }
                     } catch (e) {
                         console.warn('Failed to load initial client details:', e);
                     }
@@ -1640,11 +1648,12 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 const isSamePhoneAsInitial = Boolean(
                     initialClient &&
                     !isInitialGeneralClient &&
-                    cleanInitialPhone &&
-                    cleanInputPhone &&
                     (
-                        cleanInitialPhone === cleanInputPhone ||
-                        (cleanInitialPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanInitialPhone.slice(-8) === cleanInputPhone.slice(-8))
+                        (cleanInitialPhone && cleanInputPhone && (
+                            cleanInitialPhone === cleanInputPhone ||
+                            (cleanInitialPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanInitialPhone.slice(-8) === cleanInputPhone.slice(-8))
+                        )) ||
+                        (!cleanInitialPhone && !cleanInputPhone && (initialClient.phone || '').trim() === clientPhone.trim())
                     )
                 );
 
@@ -1656,7 +1665,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     // If user corrected their name, update client name.
                     client = initialClient;
                     const isGeneralClient = client.is_system_default || client.id === systemDefaultClient?.id || client.phone === '0000000000';
-                    if (!isGeneralClient && clientName.trim() && client.name !== clientName.trim()) {
+                    if (!isGeneralClient && clientName.trim() && (client.name || '').trim() !== clientName.trim()) {
                         const updatedClient = { ...client, name: clientName.trim() };
                         await updateClient(updatedClient);
                         client = updatedClient;
@@ -1701,6 +1710,27 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     }
                 }
 
+                 const updatedClientSnapshot = {
+                     name: clientName.trim() || client.name,
+                     phone: clientPhone.trim() || client.phone
+                 };
+
+                 const nextInspectionData: Record<string, any> = {
+                     ...(initialData.inspection_data || {}),
+                     client_snapshot: updatedClientSnapshot
+                 };
+                 const existingSuggestion = initialData.inspection_data?.pending_name_suggestion as PendingClientNameSuggestion | undefined;
+                 if (existingSuggestion) {
+                     if (clientName.trim() === (existingSuggestion.suggested_name || '').trim()) {
+                         delete nextInspectionData.pending_name_suggestion;
+                     } else if (isNameSuggestionDismissed) {
+                         nextInspectionData.pending_name_suggestion = {
+                             ...existingSuggestion,
+                             dismissed: true
+                         };
+                     }
+                 }
+
                  await updateRequestAndAssociatedData({
                     originalRequest: initialData,
                     formData: {
@@ -1715,6 +1745,8 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                         },
                         request: {
                             client_id: client.id,
+                            client_snapshot: updatedClientSnapshot,
+                            inspection_data: nextInspectionData,
                             car_snapshot: carSnapshot,
                             inspection_type_id: inspectionTypeId,
                             payment_type: finalPaymentType as PaymentType,
@@ -1734,41 +1766,45 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                 addNotification({ title: 'نجاح', message: 'تم تحديث الطلب بنجاح.', type: 'success' });
                 onSuccess(initialData);
             } else {
-                // --- SYNC / UPDATE CLIENT NAME IF SAME PHONE NUMBER ---
-                const cleanInputPhone = cleanSaudiPhoneNumber(clientPhone) || clientPhone.replace(/\D/g, '');
-                let matchedClientObj = selectedClient;
+                const isPendingCreation = newStatus === RequestStatus.WAITING_PAYMENT || isReceptionistMode;
 
-                if (!matchedClientObj && cleanInputPhone.length >= 8) {
-                    if (existingClientSummary?.clientObj) {
-                        matchedClientObj = existingClientSummary.clientObj;
-                    } else {
-                        matchedClientObj = clients.find(c => {
-                            if (c.is_system_default) return false;
-                            const cPhone = cleanSaudiPhoneNumber(c.phone) || c.phone?.replace(/\D/g, '');
-                            return cPhone === cleanInputPhone || (cPhone.length >= 8 && cPhone.endsWith(cleanInputPhone.slice(-8)));
-                        }) || null;
+                // Only sync/update client name in DB immediately when creating a direct active request (not pending)
+                if (!isPendingCreation) {
+                    const cleanInputPhone = cleanSaudiPhoneNumber(clientPhone) || clientPhone.replace(/\D/g, '');
+                    let matchedClientObj = selectedClient;
+
+                    if (!matchedClientObj && cleanInputPhone.length >= 8) {
+                        if (existingClientSummary?.clientObj) {
+                            matchedClientObj = existingClientSummary.clientObj;
+                        } else {
+                            matchedClientObj = clients.find(c => {
+                                if (c.is_system_default) return false;
+                                const cPhone = cleanSaudiPhoneNumber(c.phone) || c.phone?.replace(/\D/g, '');
+                                return cPhone === cleanInputPhone || (cPhone.length >= 8 && cPhone.endsWith(cleanInputPhone.slice(-8)));
+                            }) || null;
+                        }
                     }
-                }
 
-                if (matchedClientObj && !matchedClientObj.is_system_default && matchedClientObj.phone !== '0000000000') {
-                    const cleanMatchedPhone = cleanSaudiPhoneNumber(matchedClientObj.phone) || matchedClientObj.phone?.replace(/\D/g, '');
-                    const isSamePhone = Boolean(
-                        cleanMatchedPhone && cleanInputPhone &&
-                        (cleanMatchedPhone === cleanInputPhone || (cleanMatchedPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanMatchedPhone.slice(-8) === cleanInputPhone.slice(-8)))
-                    );
+                    if (matchedClientObj && !matchedClientObj.is_system_default && matchedClientObj.phone !== '0000000000') {
+                        const cleanMatchedPhone = cleanSaudiPhoneNumber(matchedClientObj.phone) || matchedClientObj.phone?.replace(/\D/g, '');
+                        const isSamePhone = Boolean(
+                            cleanMatchedPhone && cleanInputPhone &&
+                            (cleanMatchedPhone === cleanInputPhone || (cleanMatchedPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanMatchedPhone.slice(-8) === cleanInputPhone.slice(-8)))
+                        );
 
-                    // إذا كان نفس رقم الهاتف تماماً وتم تعديل الاسم فقط -> نحدث الاسم فقط للعميل نفسه
-                    if (isSamePhone && clientName.trim() && matchedClientObj.name !== clientName.trim()) {
-                        try {
-                            const updatedClientRecord = { ...matchedClientObj, name: clientName.trim() };
-                            await updateClient(updatedClientRecord);
-                        } catch (e) {
-                            console.warn('Failed to update client name before creating request:', e);
+                        // إذا كان نفس رقم الهاتف تماماً وتم تعديل الاسم فقط -> نحدث الاسم فقط للعميل نفسه
+                        if (isSamePhone && clientName.trim() && matchedClientObj.name !== clientName.trim()) {
+                            try {
+                                const updatedClientRecord = { ...matchedClientObj, name: clientName.trim() };
+                                await updateClient(updatedClientRecord);
+                            } catch (e) {
+                                console.warn('Failed to update client name before creating request:', e);
+                            }
                         }
                     }
                 }
 
-                if (newStatus === RequestStatus.WAITING_PAYMENT || isReceptionistMode) {
+                if (isPendingCreation) {
                 // Route to pending_requests table so SERIAL sequence in inspection_requests is not consumed!
                 const pendingReq = await addPendingRequest({
                     client_name: clientName,
@@ -2258,6 +2294,16 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             setSendWhatsAppStartNotify={setSendWhatsAppStartNotify}
                             sendWhatsAppReservationConfirm={sendWhatsAppReservationConfirm}
                             setSendWhatsAppReservationConfirm={setSendWhatsAppReservationConfirm}
+                            pendingNameSuggestion={
+                                isEditMode && initialData?.inspection_data?.pending_name_suggestion && !isNameSuggestionDismissed
+                                    ? (initialData.inspection_data.pending_name_suggestion as PendingClientNameSuggestion)
+                                    : null
+                            }
+                            onApplySuggestedName={(name) => {
+                                setClientName(name);
+                                setErrors(prev => ({ ...prev, clientName: false }));
+                            }}
+                            onDismissSuggestedName={() => setIsNameSuggestionDismissed(true)}
                         />
                     )}
                 </div>

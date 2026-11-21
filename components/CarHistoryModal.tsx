@@ -7,7 +7,7 @@ import AlertTriangleIcon from './icons/AlertTriangleIcon';
 import CarIcon from './icons/CarIcon';
 import LicensePlatePreview from './LicensePlatePreview';
 import { format } from 'date-fns';
-import { timeAgo } from '../lib/utils';
+import { timeAgo, resolveRequestClientName } from '../lib/utils';
 
 interface CarHistoryModalProps {
     isOpen: boolean;
@@ -130,7 +130,20 @@ const CarHistoryModal: React.FC<CarHistoryModalProps> = ({ isOpen, car, requests
                                     {/* Column 2: Client Info */}
                                     <div className="flex-1 min-w-0">
                                         <div className="flex flex-col truncate">
-                                            <span className="font-black text-slate-800 dark:text-slate-100 text-sm truncate">{client?.name || 'عميل غير معروف'}</span>
+                                            {(() => {
+                                                const resolvedName = client ? resolveRequestClientName(req, client) : (req.client_snapshot?.name || req.inspection_data?.client_snapshot?.name || 'عميل غير معروف');
+                                                const isPrev = Boolean(client && resolvedName !== client.name);
+                                                return (
+                                                    <div className="flex items-center gap-1.5 truncate">
+                                                        <span className="font-black text-slate-800 dark:text-slate-100 text-sm truncate">{resolvedName}</span>
+                                                        {isPrev && (
+                                                            <span className="text-[9px] bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-1.5 py-0.2 rounded font-bold shrink-0" title={`الاسم الحالي: ${client?.name}`}>
+                                                                سابق
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 mt-0.5">
                                                 {client?.phone || 'بدون هاتف'}
                                                 {isUnpaid && <span className="text-red-600 dark:text-red-400 ml-1 flex items-center gap-0.5"><AlertTriangleIcon className="w-2.5 h-2.5" /></span>}

@@ -21,9 +21,12 @@ import CheckCircleIcon from '../components/icons/CheckCircleIcon';
 import UserCircleIcon from '../components/icons/UserCircleIcon';
 import TechnicianSelectionModal from '../components/TechnicianSelectionModal';
 import WhatsAppRecipientModal from '../components/WhatsAppRecipientModal';
+import AlertTriangleIcon from '../components/icons/AlertTriangleIcon';
+import CalendarClockIcon from '../components/icons/CalendarClockIcon';
 import { motion, AnimatePresence } from 'motion/react';
 import { pdf } from '@react-pdf/renderer';
 import { supabase } from '../lib/supabaseClient';
+import { resolveRequestClientName } from '../lib/utils';
 import OrderPdf from '../components/reports/OrderPdf';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
@@ -141,92 +144,201 @@ const ensureFonts = async () => {
     await document.fonts.ready;
 };
 
-const compressImageForPdf = async (url: string, maxWidth: number = 600, quality: number = 0.5): Promise<string> => {
+// Bounded in-memory cache for PDF image conversions (prevents re-downloading static/repeated images from Supabase Storage)
+const PDF_IMAGE_CACHE_MAX = 80;
+const pdfImageCache = new Map<string, string>();
+const pdfImageInFlight = new Map<string, Promise<string>>();
+
+const getCachedPdfImage = (key: string): string | undefined => {
+    const val = pdfImageCache.get(key);
+    if (val !== undefined) {
+        // Refresh LRU recency
+        pdfImageCache.delete(key);
+        pdfImageCache.set(key, val);
+    }
+    return val;
+};
+
+const setCachedPdfImage = (key: string, val: string): void => {
+    if (!val || !val.startsWith('data:')) return;
+    if (pdfImageCache.has(key)) {
+        pdfImageCache.delete(key);
+    } else if (pdfImageCache.size >= PDF_IMAGE_CACHE_MAX) {
+        const oldestKey = pdfImageCache.keys().next().value;
+        if (oldestKey !== undefined) pdfImageCache.delete(oldestKey);
+    }
+    pdfImageCache.set(key, val);
+};
+
+const compressImageForPdf = async (
+    url: string,
+    maxWidth: number = 600,
+    quality: number = 0.5,
+    preserveTransparency: boolean = false
+): Promise<string> => {
     if (!url) return '';
-    
-    return new Promise(async (resolve) => {
-        try {
-            if (url.startsWith('data:')) {
-                const img = new Image();
-                img.onload = () => {
-                   const result = processImage(img);
-                   resolve(result);
-                };
-                img.onerror = () => resolve(url);
-                img.src = url;
-                return;
+
+    const cacheKey = `c:${preserveTransparency ? 'png' : 'jpg'}:${maxWidth}:${quality}:${url}`;
+    const cached = getCachedPdfImage(cacheKey);
+    if (cached) return cached;
+
+    const existingFlight = pdfImageInFlight.get(cacheKey);
+    if (existingFlight) return existingFlight;
+
+    const task = (async (): Promise<string> => {
+        const processImage = (img: HTMLImageElement): string => {
+            let width = img.naturalWidth || img.width || maxWidth;
+            let height = img.naturalHeight || img.height || maxWidth;
+
+            if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
             }
 
-            const processImage = (img: HTMLImageElement) => {
-                let width = img.width;
-                let height = img.height;
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return url;
 
-                if (width > maxWidth) {
-                    height = Math.round((height * maxWidth) / width);
-                    width = maxWidth;
-                }
-
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return url;
-
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, width, height);
+            if (preserveTransparency) {
+                ctx.clearRect(0, 0, width, height);
                 ctx.drawImage(img, 0, 0, width, height);
-                
-                return canvas.toDataURL('image/jpeg', quality);
-            };
+                return canvas.toDataURL('image/png');
+            }
 
-            const tryLoad = (src: string, isProxy: boolean = false): Promise<string> => {
-                return new Promise((res, rej) => {
-                    const img = new Image();
-                    if (!isProxy) img.crossOrigin = "anonymous";
-                    img.onload = () => res(processImage(img));
-                    img.onerror = rej;
-                    img.src = src;
-                });
-            };
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
 
-            try {
-                // Try direct load with crossOrigin and cache-busting for Supabase
-                const cacheBuster = url.includes('supabase.co') ? (url.includes('?') ? '&' : '?') + `t=${Date.now()}` : '';
-                resolve(await tryLoad(url + cacheBuster));
-            } catch (e) {
-                try {
-                    // Fallback to weserv.nl proxy - very reliable for images
-                    const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=${maxWidth}&output=jpg&q=${Math.round(quality * 100)}`;
-                    resolve(await tryLoad(proxyUrl, true));
-                } catch (e2) {
+            return canvas.toDataURL('image/jpeg', quality);
+        };
+
+        const blobToDataUrl = (blob: Blob): Promise<string> => {
+            return new Promise((res, rej) => {
+                const reader = new FileReader();
+                reader.onloadend = () => res(reader.result as string);
+                reader.onerror = rej;
+                reader.readAsDataURL(blob);
+            });
+        };
+
+        const loadFromBlob = async (blob: Blob): Promise<string> => {
+            // Avoid inflating already-compact PNG/JPEG logos/stamps via lossless canvas re-encoding
+            if (
+                preserveTransparency &&
+                (blob.type === 'image/png' || blob.type === 'image/jpeg') &&
+                blob.size > 0 &&
+                blob.size <= 60 * 1024
+            ) {
+                return await blobToDataUrl(blob);
+            }
+
+            return new Promise((res, rej) => {
+                const objectUrl = URL.createObjectURL(blob);
+                const img = new Image();
+                img.onload = () => {
                     try {
-                        // All-origins fallback
-                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                        resolve(await tryLoad(proxyUrl, true));
-                    } catch (e3) {
-                        console.warn('Compression failed all methods, using original', url);
-                        resolve(url);
+                        res(processImage(img));
+                    } finally {
+                        URL.revokeObjectURL(objectUrl);
+                    }
+                };
+                img.onerror = (err) => {
+                    URL.revokeObjectURL(objectUrl);
+                    rej(err);
+                };
+                img.src = objectUrl;
+            });
+        };
+
+        try {
+            if (url.startsWith('data:')) {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const dataUrl = await loadFromBlob(blob);
+                setCachedPdfImage(cacheKey, dataUrl);
+                return dataUrl;
+            }
+
+            // 1. Fetch using standard browser HTTP cache (NO ?t=Date.now() cache-busting, NO no-store)
+            try {
+                const res = await fetch(url, { mode: 'cors', cache: 'default' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const dataUrl = await loadFromBlob(await res.blob());
+                setCachedPdfImage(cacheKey, dataUrl);
+                return dataUrl;
+            } catch {
+                // 2. If browser cached a non-CORS <img> entry without ACAO header, revalidate once with CORS Origin
+                try {
+                    const res = await fetch(url, { mode: 'cors', cache: 'reload' });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const dataUrl = await loadFromBlob(await res.blob());
+                    setCachedPdfImage(cacheKey, dataUrl);
+                    return dataUrl;
+                } catch {
+                    // 3. Fallback to weserv.nl proxy (keep PNG transparency for logos/stamps, or force white bg for JPEG)
+                    try {
+                        const proxyUrl = preserveTransparency
+                            ? `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=${maxWidth}&output=png`
+                            : `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=${maxWidth}&output=jpg&bg=white&q=${Math.round(quality * 100)}`;
+                        const res = await fetch(proxyUrl);
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const dataUrl = await loadFromBlob(await res.blob());
+                        setCachedPdfImage(cacheKey, dataUrl);
+                        return dataUrl;
+                    } catch {
+                        // 4. All-origins fallback
+                        try {
+                            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                            const res = await fetch(proxyUrl);
+                            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                            const dataUrl = await loadFromBlob(await res.blob());
+                            setCachedPdfImage(cacheKey, dataUrl);
+                            return dataUrl;
+                        } catch {
+                            console.warn('Compression failed all methods, using original', url);
+                            return url;
+                        }
                     }
                 }
             }
         } catch (err) {
             console.error('Compression error:', err);
-            resolve(url);
+            return url;
+        } finally {
+            pdfImageInFlight.delete(cacheKey);
         }
-    });
+    })();
+
+    pdfImageInFlight.set(cacheKey, task);
+    return task;
 };
 
-const urlToBase64 = async (url: string, compress: boolean = false): Promise<string> => {
+const urlToBase64 = async (
+    url: string,
+    compress: boolean = false,
+    preserveTransparency: boolean = false,
+    maxWidth: number = 600,
+    quality: number = 0.5
+): Promise<string> => {
     if (!url) return '';
-    if (compress) return await compressImageForPdf(url);
+    if (compress) return await compressImageForPdf(url, maxWidth, quality, preserveTransparency);
     if (url.startsWith('data:')) return url;
+
+    const cacheKey = `r:${url}`;
+    const cached = getCachedPdfImage(cacheKey);
+    if (cached) return cached;
+
+    const existingFlight = pdfImageInFlight.get(cacheKey);
+    if (existingFlight) return existingFlight;
 
     const FALLBACK_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-    const fetchImage = async (targetUrl: string, useCors: boolean = true): Promise<string> => {
-        const options: RequestInit = { cache: 'no-store' };
+    const fetchImage = async (targetUrl: string, useCors: boolean = true, cacheMode: RequestCache = 'default'): Promise<string> => {
+        const options: RequestInit = { cache: cacheMode };
         if (useCors) options.mode = 'cors';
-        
+
         const response = await fetch(targetUrl, options);
         if (!response.ok) throw new Error('Network response was not ok');
         const blob = await response.blob();
@@ -238,24 +350,41 @@ const urlToBase64 = async (url: string, compress: boolean = false): Promise<stri
         });
     };
 
-    try {
-        // Direct attempt with cache-busting
-        const cacheBuster = url.includes('supabase.co') ? (url.includes('?') ? '&' : '?') + `t=${Date.now()}` : '';
-        return await fetchImage(url + cacheBuster);
-    } catch (e1) {
+    const task = (async (): Promise<string> => {
         try {
-            // Weserv.nl proxy - more reliable
-            return await fetchImage(`https://images.weserv.nl/?url=${encodeURIComponent(url)}`, false);
-        } catch (e2) {
+            // Direct attempt using browser HTTP cache (NO ?t=Date.now() cache-busting, NO no-store)
+            const res = await fetchImage(url, true, 'default');
+            setCachedPdfImage(cacheKey, res);
+            return res;
+        } catch {
             try {
-                // Allorigins fallback
-                return await fetchImage(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, false);
-            } catch (e3) {
-                console.warn(`Failed to convert image: ${url}. Using fallback.`);
-                return FALLBACK_IMAGE;
+                // Revalidate once with CORS Origin if browser cached a non-CORS <img> entry
+                const res = await fetchImage(url, true, 'reload');
+                setCachedPdfImage(cacheKey, res);
+                return res;
+            } catch {
+                try {
+                    const res = await fetchImage(`https://images.weserv.nl/?url=${encodeURIComponent(url)}`, false, 'default');
+                    setCachedPdfImage(cacheKey, res);
+                    return res;
+                } catch {
+                    try {
+                        const res = await fetchImage(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, false, 'default');
+                        setCachedPdfImage(cacheKey, res);
+                        return res;
+                    } catch {
+                        console.warn(`Failed to convert image: ${url}. Using fallback.`);
+                        return FALLBACK_IMAGE;
+                    }
+                }
             }
+        } finally {
+            pdfImageInFlight.delete(cacheKey);
         }
-    }
+    })();
+
+    pdfImageInFlight.set(cacheKey, task);
+    return task;
 };
 
 const formatArabicDateTime = (date: Date) => {
@@ -347,6 +476,7 @@ const PrintReport: React.FC = () => {
         setDirectRequest(null);
         setDirectClient(null);
         setDirectCar(null);
+        setIsOldReportStampCollapsed(false);
     }, [selectedRequestId]);
     
     // Translation State
@@ -393,6 +523,7 @@ const PrintReport: React.FC = () => {
     const [uploadStats, setUploadStats] = useState<{ original: string; compressed: string; savings: number } | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isExtraMenuOpen, setIsExtraMenuOpen] = useState(false);
+    const [isOldReportStampCollapsed, setIsOldReportStampCollapsed] = useState(false);
     
     // Check if coming from print button to hide back button
     const searchParams = new URLSearchParams(window.location.search);
@@ -441,6 +572,40 @@ const PrintReport: React.FC = () => {
     const isHandwritten = useMemo(() => {
         return originalRequest?.general_notes?.some(n => n.text === '__HANDWRITTEN_REPORT_TRUE__') || false;
     }, [originalRequest]);
+
+    const oldReportInfo = useMemo(() => {
+        const createdAtStr = originalRequest?.created_at;
+        if (!createdAtStr) return null;
+        const createdDate = new Date(createdAtStr);
+        if (isNaN(createdDate.getTime())) return null;
+
+        const now = new Date();
+        const diffMs = now.getTime() - createdDate.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        if (diffDays < 30) return null;
+
+        const formattedDate = `${createdDate.getFullYear()}/${String(createdDate.getMonth() + 1).padStart(2, '0')}/${String(createdDate.getDate()).padStart(2, '0')}`;
+
+        const years = Math.floor(diffDays / 365);
+        const remainingAfterYears = diffDays % 365;
+        const months = Math.floor(remainingAfterYears / 30);
+        const days = remainingAfterYears % 30;
+
+        const parts: string[] = [];
+        if (years > 0) parts.push(years === 1 ? 'سنة' : years === 2 ? 'سنتين' : years <= 10 ? `${years} سنوات` : `${years} سنة`);
+        if (months > 0) parts.push(months === 1 ? 'شهر' : months === 2 ? 'شهرين' : months <= 10 ? `${months} أشهر` : `${months} شهراً`);
+        if (years === 0 && days > 0) parts.push(days === 1 ? 'يوم' : days === 2 ? 'يومين' : days <= 10 ? `${days} أيام` : `${days} يوماً`);
+
+        const ageText = parts.length > 0 ? `منذ ${parts.join(' و ')}` : `منذ ${diffDays} يوماً`;
+        const isSevere = diffDays >= 90;
+
+        return {
+            diffDays,
+            formattedDate,
+            ageText,
+            isSevere,
+        };
+    }, [originalRequest?.created_at]);
 
     const isReportEmpty = useMemo(() => {
         if (!request) return true;
@@ -788,12 +953,21 @@ const PrintReport: React.FC = () => {
     };
 
 
-    const client = directClient || (request ? clients.find(c => c.id === request.client_id) : undefined) || (request?.client_id ? {
+    const rawClient = directClient || (request ? clients.find(c => c.id === request.client_id) : undefined) || (request?.client_id ? {
         id: request.client_id,
         name: 'العميل',
         phone: '',
         created_at: ''
     } as Client : undefined);
+
+    const client = useMemo(() => {
+        if (!rawClient) return undefined;
+        const resolvedName = resolveRequestClientName(request, rawClient);
+        return {
+            ...rawClient,
+            name: resolvedName || rawClient.name
+        };
+    }, [rawClient, request]);
 
     const car = directCar || (request ? cars.find(c => c.id === request.car_id) : undefined) || (request?.car_snapshot ? {
         id: request.car_id || 'fallback_car',
@@ -1153,10 +1327,16 @@ const PrintReport: React.FC = () => {
             const validAttachments = (originalRequest?.attached_files || []).filter(f => f.type !== 'internal_draft');
             
             // 3. Convert all essential images to base64 with compression to reduce PDF size
-            const processImage = async (url: string, shouldCompress: boolean = true) => {
+            const processImage = async (
+                url: string,
+                shouldCompress: boolean = true,
+                preserveTransparency: boolean = false,
+                maxWidth: number = 600,
+                quality: number = 0.5
+            ) => {
                 if (!url) return undefined;
                 try {
-                    return await urlToBase64(url, shouldCompress);
+                    return await urlToBase64(url, shouldCompress, preserveTransparency, maxWidth, quality);
                 } catch (e) {
                     console.warn('Failed to process image for PDF:', url);
                     return url;
@@ -1164,17 +1344,17 @@ const PrintReport: React.FC = () => {
             };
 
             const [logoBase64, carLogoBase64, stampBase64] = await Promise.all([
-                processImage(reportSettings.reportLogoUrl || '', true),
-                processImage(carMake?.logo_url || '', true),
-                processImage(reportSettings.workshopStampUrl || '', true)
+                processImage(reportSettings.reportLogoUrl || '', true, true, 220),
+                processImage(carMake?.logo_url || '', true, true, 150),
+                processImage(reportSettings.workshopStampUrl || '', true, true, 150)
             ]);
 
-            // Process finding images (if any were added to the PDF component)
+            // Process finding images (use compact white-background JPEG to keep PDF small and avoid black backgrounds)
             setLoadingState('جاري ضغط صور الفحص...');
             const usedFindingIds = new Set(request.structured_findings?.map(f => f.findingId) || []);
             const processedPredefinedFindings = await Promise.all(predefinedFindings.map(async pf => {
                 if (usedFindingIds.has(pf.id) && pf.reference_image) {
-                    const base64 = await processImage(pf.reference_image, true);
+                    const base64 = await processImage(pf.reference_image, true, false, 300, 0.55);
                     return { ...pf, reference_image: base64 };
                 }
                 return pf;
@@ -1265,12 +1445,41 @@ const PrintReport: React.FC = () => {
         const publicUrl = await uploadImage(file, 'reports', undefined, customNameWithoutExt);
         
         // Only update the database if we are NOT in translation mode
-        if (originalRequest && !translatedRequest) { 
+        if (originalRequest && !translatedRequest) {
+            // Account for DB server trigger timestamp / minor client clock skew so reuse check stays accurate
+            let generatedAtIso = new Date(Date.now() + 2000).toISOString();
             await updateRequest({ 
                 id: originalRequest.id, 
                 report_url: publicUrl, 
-                report_generated_at: new Date().toISOString() 
+                report_generated_at: generatedAtIso 
             });
+
+            // Verify server updated_at in case client clock is behind server clock by > 2s
+            try {
+                const { data: latestRow } = await supabase
+                    .from('inspection_requests')
+                    .select('updated_at')
+                    .eq('id', originalRequest.id)
+                    .single();
+                if (latestRow?.updated_at) {
+                    const serverUpdatedMs = new Date(latestRow.updated_at).getTime();
+                    if (serverUpdatedMs >= new Date(generatedAtIso).getTime()) {
+                        generatedAtIso = new Date(serverUpdatedMs + 2000).toISOString();
+                        await updateRequest({
+                            id: originalRequest.id,
+                            report_generated_at: generatedAtIso
+                        });
+                    }
+                }
+            } catch {
+                // Non-critical check
+            }
+
+            setDirectRequest(prev => prev ? {
+                ...prev,
+                report_url: publicUrl,
+                report_generated_at: generatedAtIso
+            } : prev);
         }
         return publicUrl;
     };
@@ -1338,10 +1547,24 @@ ${reviewLink}
                 };
                 updatedNotes.push(newNote);
 
-                await updateRequest({
+                // Preserve existing report_url validity when only adding a hidden system notification tag (not rendered in PDF)
+                const hadValidReportUrl = Boolean(
+                    originalRequest.report_url &&
+                    originalRequest.report_generated_at &&
+                    new Date(originalRequest.report_generated_at).getTime() >= (originalRequest.updated_at ? new Date(originalRequest.updated_at).getTime() : 0)
+                );
+
+                const notifUpdatePayload: Partial<InspectionRequest> & { id: string } = {
                     id: originalRequest.id,
                     general_notes: updatedNotes
-                });
+                };
+
+                if (hadValidReportUrl && originalRequest.report_generated_at) {
+                    const nextGenMs = Math.max(Date.now() + 2000, new Date(originalRequest.report_generated_at).getTime() + 2000);
+                    notifUpdatePayload.report_generated_at = new Date(nextGenMs).toISOString();
+                }
+
+                await updateRequest(notifUpdatePayload);
 
                 addNotification({ title: 'نجاح', message: 'تم إرسال إشعار جاهزية التقرير بنجاح.', type: 'success' });
             } else {
@@ -1366,11 +1589,12 @@ ${reviewLink}
                 const generatedAt = new Date(originalRequest.report_generated_at).getTime();
                 const updatedAt = originalRequest.updated_at ? new Date(originalRequest.updated_at).getTime() : 0;
                 
-                if (generatedAt > updatedAt) {
+                if (generatedAt >= updatedAt) {
                     try {
                         const response = await fetch(originalRequest.report_url, { method: 'HEAD' });
                         if (response.ok) {
-                            await openWhatsapp(`${originalRequest.report_url}?t=${Date.now()}`, recipientPhone, recipientName);
+                            // Send clean immutable URL without ?t= cache-buster so Supabase CDN cache is utilized
+                            await openWhatsapp(originalRequest.report_url, recipientPhone, recipientName);
                             return;
                         } else {
                             console.log("Existing report URL returned non-OK status. Generating a new one.");
@@ -1386,7 +1610,8 @@ ${reviewLink}
             if (!blob) return;
             
             const publicUrl = await uploadReportToStorage(blob);
-            await openWhatsapp(`${publicUrl}?t=${Date.now()}`, recipientPhone, recipientName);
+            // Send clean immutable URL without ?t= cache-buster so Supabase CDN cache is utilized
+            await openWhatsapp(publicUrl, recipientPhone, recipientName);
         } catch (error: any) { 
             console.error('WhatsApp Share Error:', error);
             addNotification({ title: 'خطأ', message: 'فشل الإرسال.', type: 'error' }); 
@@ -1810,6 +2035,28 @@ ${reviewLink}
                     <p className="text-sm opacity-75">يرجى الانتظار...</p>
                 </div>
             )}
+
+            {/* Old Report Notice for Small/Medium Screens (Preview Only - Strictly Hidden in Print & PDF) */}
+            {oldReportInfo && (
+                <div className={`no-print print:hidden lg:hidden px-3 py-2.5 border-b flex items-center justify-between gap-3 flex-shrink-0 z-40 ${
+                    oldReportInfo.isSevere
+                        ? 'bg-red-50 dark:bg-red-950/60 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
+                        : 'bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                }`}>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`w-2.5 h-2.5 rounded-full animate-ping flex-shrink-0 ${oldReportInfo.isSevere ? 'bg-red-500' : 'bg-amber-500'}`} />
+                        <AlertTriangleIcon className={`w-5 h-5 flex-shrink-0 ${oldReportInfo.isSevere ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`} />
+                        <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-black truncate">
+                                تنبيه: تقرير قديم ({oldReportInfo.ageText})
+                            </p>
+                            <p className="text-[11px] font-bold opacity-90">
+                                تاريخ الطلب: <span dir="ltr" className="font-mono">{oldReportInfo.formattedDate}</span> • للمعاينة فقط
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
             
             <main className="flex-1 bg-gray-200 dark:bg-gray-900/50 py-8 overflow-y-auto overflow-x-auto print-container print:!py-0 print:!bg-white print:!overflow-visible print:!px-0 print:!mx-0 print:!border-none" dir={reportDirection}>
                 <div className="flex justify-center w-full min-h-full print:block print:!w-full print:!h-auto print:!m-0 print:!p-0 print:!bg-white print:!border-none print:!overflow-visible">
@@ -2120,169 +2367,269 @@ ${reviewLink}
                 </div>
             </Modal>
             
-            {/* Floating Price Card - Desktop only, hidden during print */}
-            {(() => {
-                const pType = originalRequest?.payment_type;
-                let cardBg = "bg-white/95 dark:bg-slate-800/95 border-slate-200/50 dark:border-slate-700/50 text-slate-800 dark:text-slate-100";
-                let priceColor = "text-blue-600 dark:text-blue-400";
-                let badgeStyle = "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/50 dark:text-slate-300 dark:border-slate-600/50";
-                let iconColor = "text-slate-400 dark:text-slate-500";
-                let dividerColor = "via-slate-200 dark:via-slate-700";
-                let subBadgeStyle = "bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400";
+            {/* Left Desktop Floating Stack (Price, Report Ready Notification & Old Report Ghost Stamp - hidden in Print & PDF) */}
+            <div className="no-print print:hidden fixed top-24 left-8 bottom-24 z-[60] hidden lg:flex flex-col items-center gap-3 pointer-events-none select-none">
+                {(() => {
+                    const pType = originalRequest?.payment_type;
+                    let cardBg = "bg-white/95 dark:bg-slate-800/95 border-slate-200/50 dark:border-slate-700/50 text-slate-800 dark:text-slate-100";
+                    let priceColor = "text-blue-600 dark:text-blue-400";
+                    let badgeStyle = "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/50 dark:text-slate-300 dark:border-slate-600/50";
+                    let iconColor = "text-slate-400 dark:text-slate-500";
+                    let dividerColor = "via-slate-200 dark:via-slate-700";
+                    let subBadgeStyle = "bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400";
+                    
+                    if (pType === 'نقدي') {
+                        cardBg = "bg-emerald-50/95 dark:bg-emerald-950/80 border-emerald-200 dark:border-emerald-800/50 text-emerald-900 dark:text-emerald-100";
+                        priceColor = "text-emerald-600 dark:text-emerald-400";
+                        badgeStyle = "bg-emerald-600 text-white border-emerald-500";
+                        iconColor = "text-emerald-500/80 dark:text-emerald-400/80";
+                        dividerColor = "via-emerald-200/70 dark:via-emerald-800/50";
+                        subBadgeStyle = "bg-emerald-100/80 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300";
+                    } else if (pType === 'تحويل') {
+                        cardBg = "bg-amber-50/95 dark:bg-amber-950/80 border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-100";
+                        priceColor = "text-amber-600 dark:text-amber-400";
+                        badgeStyle = "bg-amber-600 text-white border-amber-500";
+                        iconColor = "text-amber-500/80 dark:text-amber-400/80";
+                        dividerColor = "via-amber-200/70 dark:via-amber-800/50";
+                        subBadgeStyle = "bg-amber-100/80 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300";
+                    } else if (pType === 'بطاقة') {
+                        cardBg = "bg-blue-50/95 dark:bg-blue-950/80 border-blue-200 dark:border-blue-800/50 text-blue-900 dark:text-blue-100";
+                        priceColor = "text-blue-600 dark:text-blue-400";
+                        badgeStyle = "bg-blue-600 text-white border-blue-500";
+                        iconColor = "text-blue-500/80 dark:text-blue-400/80";
+                        dividerColor = "via-blue-200/70 dark:via-blue-800/50";
+                        subBadgeStyle = "bg-blue-100/80 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300";
+                    } else if (pType === 'غير مدفوع') {
+                        cardBg = "bg-rose-50/95 dark:bg-rose-950/80 border-rose-200 dark:border-rose-800/50 text-rose-900 dark:text-rose-100";
+                        priceColor = "text-rose-600 dark:text-rose-400";
+                        badgeStyle = "bg-rose-600 text-white border-rose-500";
+                        iconColor = "text-rose-500/80 dark:text-rose-400/80";
+                        dividerColor = "via-rose-200/70 dark:via-rose-800/50";
+                        subBadgeStyle = "bg-rose-100/80 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300";
+                    } else if (pType === PaymentType.Split || (pType as string) === 'نقدي - بطاقة') {
+                        cardBg = "bg-violet-50/95 dark:bg-violet-950/80 border-violet-200 dark:border-violet-800/50 text-violet-900 dark:text-violet-100";
+                        priceColor = "text-violet-600 dark:text-violet-400";
+                        badgeStyle = "bg-violet-600 text-white border-violet-500";
+                        iconColor = "text-violet-500/80 dark:text-violet-400/80";
+                        dividerColor = "via-violet-200/70 dark:via-violet-800/50";
+                        subBadgeStyle = "bg-violet-100/80 dark:bg-violet-900/40 text-violet-800 dark:text-violet-300";
+                    }
+                    
+                    return (
+                        <AnimatePresence>
+                            <motion.div 
+                                initial={{ opacity: 0, x: -50 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.6, ease: "easeOut" }}
+                                className={`pointer-events-auto flex flex-col items-center gap-2 p-5 backdrop-blur-md rounded-2xl shadow-2xl border hover:scale-105 transition-all duration-300 ${cardBg}`}
+                            >
+                                <div className={`flex items-center gap-2 ${iconColor}`}>
+                                    <Icon name="car" className="w-4 h-4" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">سعر الطلب</span>
+                                </div>
+                                <div className="flex flex-col items-center gap-1">
+                                    <div className="flex items-baseline gap-1.5">
+                                        <span className={`text-4xl font-black drop-shadow-sm ${priceColor}`}>
+                                            {originalRequest?.price || 0}
+                                        </span>
+                                        <span className="text-sm font-black opacity-80">ر.س</span>
+                                    </div>
+                                    {pType && (
+                                        <div className={`text-[10px] font-bold px-3 py-1 rounded-full border shadow-sm ${badgeStyle}`}>
+                                            {pType === 'غير مدفوع' ? 'آجل' : 
+                                             pType === 'بطاقة' ? 'شبكة' : pType}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className={`w-full h-px bg-gradient-to-r from-transparent to-transparent my-1 ${dividerColor}`} />
+                                <div className="flex flex-col items-center gap-1">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${subBadgeStyle}`}>
+                                        {inspectionType?.name || 'فحص فني'}
+                                    </span>
+                                    <div className="flex items-center gap-1 text-[9px] opacity-75">
+                                        <Icon name="history" className="w-3 h-3" />
+                                        <span>رقم الطلب: {originalRequest?.request_number}</span>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </AnimatePresence>
+                    );
+                })()}
                 
-                if (pType === 'نقدي') {
-                    cardBg = "bg-emerald-50/95 dark:bg-emerald-950/80 border-emerald-200 dark:border-emerald-800/50 text-emerald-900 dark:text-emerald-100";
-                    priceColor = "text-emerald-600 dark:text-emerald-400";
-                    badgeStyle = "bg-emerald-600 text-white border-emerald-500";
-                    iconColor = "text-emerald-500/80 dark:text-emerald-400/80";
-                    dividerColor = "via-emerald-200/70 dark:via-emerald-800/50";
-                    subBadgeStyle = "bg-emerald-100/80 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300";
-                } else if (pType === 'تحويل') {
-                    cardBg = "bg-amber-50/95 dark:bg-amber-950/80 border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-100";
-                    priceColor = "text-amber-600 dark:text-amber-400";
-                    badgeStyle = "bg-amber-600 text-white border-amber-500";
-                    iconColor = "text-amber-500/80 dark:text-amber-400/80";
-                    dividerColor = "via-amber-200/70 dark:via-amber-800/50";
-                    subBadgeStyle = "bg-amber-100/80 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300";
-                } else if (pType === 'بطاقة') {
-                    cardBg = "bg-blue-50/95 dark:bg-blue-950/80 border-blue-200 dark:border-blue-800/50 text-blue-900 dark:text-blue-100";
-                    priceColor = "text-blue-600 dark:text-blue-400";
-                    badgeStyle = "bg-blue-600 text-white border-blue-500";
-                    iconColor = "text-blue-500/80 dark:text-blue-400/80";
-                    dividerColor = "via-blue-200/70 dark:via-blue-800/50";
-                    subBadgeStyle = "bg-blue-100/80 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300";
-                } else if (pType === 'غير مدفوع') {
-                    cardBg = "bg-rose-50/95 dark:bg-rose-950/80 border-rose-200 dark:border-rose-800/50 text-rose-900 dark:text-rose-100";
-                    priceColor = "text-rose-600 dark:text-rose-400";
-                    badgeStyle = "bg-rose-600 text-white border-rose-500";
-                    iconColor = "text-rose-500/80 dark:text-rose-400/80";
-                    dividerColor = "via-rose-200/70 dark:via-rose-800/50";
-                    subBadgeStyle = "bg-rose-100/80 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300";
-                } else if (pType === PaymentType.Split || (pType as string) === 'نقدي - بطاقة') {
-                    cardBg = "bg-violet-50/95 dark:bg-violet-950/80 border-violet-200 dark:border-violet-800/50 text-violet-900 dark:text-violet-100";
-                    priceColor = "text-violet-600 dark:text-violet-400";
-                    badgeStyle = "bg-violet-600 text-white border-violet-500";
-                    iconColor = "text-violet-500/80 dark:text-violet-400/80";
-                    dividerColor = "via-violet-200/70 dark:via-violet-800/50";
-                    subBadgeStyle = "bg-violet-100/80 dark:bg-violet-900/40 text-violet-800 dark:text-violet-300";
-                }
-                
-                return (
+                {/* Desktop Floating Report Ready Notification Card */}
+                {whatsappApiStatus === 'connected' && (
                     <AnimatePresence>
                         <motion.div 
                             initial={{ opacity: 0, x: -50 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.6, ease: "easeOut" }}
-                            className={`fixed top-24 left-8 z-[60] hidden lg:flex flex-col items-center gap-2 p-5 backdrop-blur-md rounded-2xl shadow-2xl border print:hidden select-none hover:scale-105 transition-all duration-300 ${cardBg}`}
+                            transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
+                            className="pointer-events-auto flex flex-col items-center gap-2.5 p-4 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/50 dark:border-slate-700/50 hover:scale-105 transition-transform w-[160px]"
                         >
-                            <div className={`flex items-center gap-2 ${iconColor}`}>
-                                <Icon name="car" className="w-4 h-4" />
-                                <span className="text-[10px] font-black uppercase tracking-widest">سعر الطلب</span>
+                            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+                                <WhatsappIcon className="w-4 h-4 text-emerald-500" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">إشعار جاهزية</span>
                             </div>
-                            <div className="flex flex-col items-center gap-1">
-                                <div className="flex items-baseline gap-1.5">
-                                    <span className={`text-4xl font-black drop-shadow-sm ${priceColor}`}>
-                                        {originalRequest?.price || 0}
-                                    </span>
-                                    <span className="text-sm font-black opacity-80">ر.س</span>
-                                </div>
-                                {pType && (
-                                    <div className={`text-[10px] font-bold px-3 py-1 rounded-full border shadow-sm ${badgeStyle}`}>
-                                        {pType === 'غير مدفوع' ? 'آجل' : 
-                                         pType === 'بطاقة' ? 'شبكة' : pType}
-                                    </div>
-                                )}
-                            </div>
-                            <div className={`w-full h-px bg-gradient-to-r from-transparent to-transparent my-1 ${dividerColor}`} />
-                            <div className="flex flex-col items-center gap-1">
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${subBadgeStyle}`}>
-                                    {inspectionType?.name || 'فحص فني'}
+                            
+                            <button 
+                                onClick={handleSendReportReadyNotification}
+                                disabled={isSendingWhatsApp || sentCount >= 2 || originalRequest?.status === RequestStatus.COMPLETE || client?.phone === '0000000000'}
+                                className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none text-white text-xs font-bold py-2 px-3 rounded-xl w-full flex items-center justify-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all text-center leading-tight cursor-pointer disabled:cursor-not-allowed"
+                            >
+                                {isSendingWhatsApp ? 'جاري الإرسال...' : originalRequest?.status === RequestStatus.COMPLETE ? 'الطلب مكتمل' : client?.phone === '0000000000' ? 'رقم غير صالح' : sentCount >= 2 ? 'مكتمل (مرتان)' : 'إرسال الإشعار'}
+                            </button>
+                            
+                            <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent my-0.5" />
+                            
+                            <div className="flex flex-col items-center gap-0.5 text-center">
+                                <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full ${
+                                    sentCount === 2 ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400' :
+                                    sentCount === 1 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
+                                    'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                }`}>
+                                    {sentCount === 0 ? 'بانتظار الإرسال (0/2)' : 
+                                     sentCount === 1 ? 'أرسل مرة (1/2)' : 
+                                     'أرسل مرتين (2/2)'}
                                 </span>
-                                <div className="flex items-center gap-1 text-[9px] opacity-75">
-                                    <Icon name="history" className="w-3 h-3" />
-                                    <span>رقم الطلب: {originalRequest?.request_number}</span>
-                                </div>
                             </div>
                         </motion.div>
                     </AnimatePresence>
-                );
-            })()}
+                )}
+
+                {/* Subtle Old Report Stamp Below Left Cards (Extra-Wide Monitors, Preview Only) */}
+                {oldReportInfo && (
+                    <div className="hidden 2xl:flex mt-2 pointer-events-none select-none">
+                        <div className={`px-5 py-3 rounded-2xl border-4 border-dashed transform rotate-6 opacity-55 text-center backdrop-blur-[2px] ${
+                            oldReportInfo.isSevere
+                                ? 'bg-red-50/50 dark:bg-red-950/30 border-red-500 text-red-600 dark:text-red-400'
+                                : 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-600 text-amber-700 dark:text-amber-400'
+                        }`}>
+                            <p className="text-base font-black tracking-wider">تقرير قديم</p>
+                            <p dir="ltr" className="text-sm font-black font-mono mt-0.5">{oldReportInfo.formattedDate}</p>
+                            <p className="text-xs font-bold mt-0.5">{oldReportInfo.ageText}</p>
+                        </div>
+                    </div>
+                )}
+            </div>
             
-            {/* Desktop Floating Report Ready Notification Card */}
-            {whatsappApiStatus === 'connected' && (
+            {/* Right Desktop Floating Stack (Technicians Card + Old Report Watermark Stamp Below It - hidden in Print & PDF) */}
+            <div className="no-print print:hidden fixed top-24 right-8 bottom-6 z-[60] hidden lg:flex flex-col items-end gap-4 pointer-events-none select-none">
                 <AnimatePresence>
                     <motion.div 
-                        initial={{ opacity: 0, x: -50 }}
+                        initial={{ opacity: 0, x: 50 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
-                        className="fixed top-[20rem] left-8 z-[60] hidden lg:flex flex-col items-center gap-2.5 p-4 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/50 dark:border-slate-700/50 print:hidden select-none hover:scale-105 transition-transform w-[160px]"
+                        className="pointer-events-auto flex flex-col gap-2 p-4 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/50 dark:border-slate-700/50 hover:scale-105 transition-transform w-full max-w-[280px]"
                     >
-                        <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
-                            <WhatsappIcon className="w-4 h-4 text-emerald-500" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">إشعار جاهزية</span>
+                        <div className="flex items-center justify-between mb-1 pb-2 border-b border-slate-100 dark:border-slate-700">
+                            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                                <UserCircleIcon className="w-4 h-4" />
+                                <span className="text-xs font-black uppercase tracking-widest">فريق العمل</span>
+                            </div>
+                            {originalRequest?.status !== RequestStatus.COMPLETE && (
+                                <button onClick={() => setIsTechnicianModalOpen(true)} className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg text-blue-600 transition-colors" title="إدارة الفنيين">
+                                    <Icon name="plus" className="w-4 h-4" />
+                                </button>
+                            )}
                         </div>
                         
-                        <button 
-                            onClick={handleSendReportReadyNotification}
-                            disabled={isSendingWhatsApp || sentCount >= 2 || originalRequest?.status === RequestStatus.COMPLETE || client?.phone === '0000000000'}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none text-white text-xs font-bold py-2 px-3 rounded-xl w-full flex items-center justify-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all text-center leading-tight cursor-pointer disabled:cursor-not-allowed"
-                        >
-                            {isSendingWhatsApp ? 'جاري الإرسال...' : originalRequest?.status === RequestStatus.COMPLETE ? 'الطلب مكتمل' : client?.phone === '0000000000' ? 'رقم غير صالح' : sentCount >= 2 ? 'مكتمل (مرتان)' : 'إرسال الإشعار'}
-                        </button>
-                        
-                        <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent my-0.5" />
-                        
-                        <div className="flex flex-col items-center gap-0.5 text-center">
-                            <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full ${
-                                sentCount === 2 ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400' :
-                                sentCount === 1 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
-                                'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                            }`}>
-                                {sentCount === 0 ? 'بانتظار الإرسال (0/2)' : 
-                                 sentCount === 1 ? 'أرسل مرة (1/2)' : 
-                                 'أرسل مرتين (2/2)'}
-                            </span>
+                        <div className="flex flex-col gap-2 max-h-[35vh] overflow-y-auto w-full custom-scrollbar pe-1">
+                            {assignedTechsGrouped.length > 0 ? (
+                                assignedTechsGrouped.map((group, idx) => (
+                                    <div key={idx} className={`${group.style.bg} rounded-lg p-2 border ${group.style.border}`}>
+                                        <div className={`text-[10px] font-bold ${group.style.muted} mb-1`}>{group.categoryName}</div>
+                                        <div className={`text-xs font-semibold ${group.style.text} leading-relaxed`}>
+                                            {group.names.join('، ')}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-xs text-center text-slate-400 py-4 font-medium bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-200 dark:border-slate-700">لم يتم تعيين فنيين</div>
+                            )}
                         </div>
                     </motion.div>
                 </AnimatePresence>
-            )}
-            
-            {/* Desktop Floating Technicians Card */}
-            <AnimatePresence>
-                <motion.div 
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
-                    className="fixed top-48 right-8 z-[60] hidden lg:flex flex-col gap-2 p-4 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/50 dark:border-slate-700/50 print:hidden select-none hover:scale-105 transition-transform max-w-[280px]"
-                >
-                    <div className="flex items-center justify-between mb-1 pb-2 border-b border-slate-100 dark:border-slate-700">
-                        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                            <UserCircleIcon className="w-4 h-4" />
-                            <span className="text-xs font-black uppercase tracking-widest">فريق العمل</span>
-                        </div>
-                        {originalRequest?.status !== RequestStatus.COMPLETE && (
-                            <button onClick={() => setIsTechnicianModalOpen(true)} className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg text-blue-600 transition-colors" title="إدارة الفنيين">
-                                <Icon name="plus" className="w-4 h-4" />
+
+                {/* Prominent Side Watermark Stamp Below Technicians Card (Preview Only - Strictly Hidden in Print & PDF) */}
+                {oldReportInfo && (
+                    <div className="pointer-events-auto select-none">
+                        {isOldReportStampCollapsed ? (
+                            <button
+                                type="button"
+                                onClick={() => setIsOldReportStampCollapsed(false)}
+                                className={`flex items-center gap-2 px-3 py-2.5 rounded-2xl shadow-xl border-2 border-dashed font-black text-xs transition-all hover:scale-105 cursor-pointer ${
+                                    oldReportInfo.isSevere
+                                        ? 'bg-red-50/95 dark:bg-red-950/90 border-red-500 text-red-700 dark:text-red-200'
+                                        : 'bg-amber-50/95 dark:bg-amber-950/90 border-amber-500 text-amber-800 dark:text-amber-200'
+                                }`}
+                                title="إظهار علامة التقرير القديم"
+                            >
+                                <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${oldReportInfo.isSevere ? 'bg-red-500' : 'bg-amber-500'}`} />
+                                <span>تقرير قديم ({oldReportInfo.formattedDate})</span>
                             </button>
-                        )}
-                    </div>
-                    
-                    <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto w-full custom-scrollbar pe-1">
-                        {assignedTechsGrouped.length > 0 ? (
-                            assignedTechsGrouped.map((group, idx) => (
-                                <div key={idx} className={`${group.style.bg} rounded-lg p-2 border ${group.style.border}`}>
-                                    <div className={`text-[10px] font-bold ${group.style.muted} mb-1`}>{group.categoryName}</div>
-                                    <div className={`text-xs font-semibold ${group.style.text} leading-relaxed`}>
-                                        {group.names.join('، ')}
-                                    </div>
-                                </div>
-                            ))
                         ) : (
-                            <div className="text-xs text-center text-slate-400 py-4 font-medium bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-200 dark:border-slate-700">لم يتم تعيين فنيين</div>
+                            <div
+                                className={`relative w-48 xl:w-52 p-3.5 rounded-2xl border-[3px] border-dashed shadow-2xl backdrop-blur-sm transform -rotate-3 hover:rotate-0 transition-all duration-300 ${
+                                    oldReportInfo.isSevere
+                                        ? 'bg-red-50/90 dark:bg-red-950/85 border-red-500/85 text-red-800 dark:text-red-100 ring-4 ring-red-500/15'
+                                        : 'bg-amber-50/90 dark:bg-amber-950/85 border-amber-500/85 text-amber-900 dark:text-amber-100 ring-4 ring-amber-500/15'
+                                }`}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => setIsOldReportStampCollapsed(true)}
+                                    className="absolute -top-2.5 -left-2.5 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-500 hover:text-slate-800 dark:hover:text-white shadow-md flex items-center justify-center text-xs font-bold cursor-pointer"
+                                    title="تصغير العلامة"
+                                >
+                                    ×
+                                </button>
+
+                                <div className="flex flex-col items-center text-center gap-2">
+                                    <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black tracking-wide ${
+                                        oldReportInfo.isSevere
+                                            ? 'bg-red-600 text-white'
+                                            : 'bg-amber-500 text-white'
+                                    }`}>
+                                        <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                                        <span>تقرير قديم</span>
+                                    </div>
+
+                                    <div className={`p-2 rounded-full ${
+                                        oldReportInfo.isSevere
+                                            ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300'
+                                            : 'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-300'
+                                    }`}>
+                                        <CalendarClockIcon className="w-7 h-7" />
+                                    </div>
+
+                                    <div className="space-y-1 w-full">
+                                        <p className="text-sm font-black leading-snug">
+                                            {oldReportInfo.ageText}
+                                        </p>
+                                        <p className="text-[11px] font-bold opacity-80">
+                                            ({oldReportInfo.diffDays} يوم مضت)
+                                        </p>
+                                    </div>
+
+                                    <div className={`w-full py-1.5 px-2 rounded-xl border text-center ${
+                                        oldReportInfo.isSevere
+                                            ? 'bg-white/80 dark:bg-red-900/40 border-red-300 dark:border-red-700'
+                                            : 'bg-white/80 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700'
+                                    }`}>
+                                        <span className="block text-[10px] font-bold opacity-75">تاريخ إنشاء الطلب</span>
+                                        <span dir="ltr" className="block text-sm font-black font-mono tracking-wider mt-0.5">
+                                            {oldReportInfo.formattedDate}
+                                        </span>
+                                    </div>
+
+                                    <span className="text-[9px] font-bold opacity-70 leading-tight">
+                                        للمعاينة فقط • لا يظهر في الطباعة أو PDF
+                                    </span>
+                                </div>
+                            </div>
                         )}
                     </div>
-                </motion.div>
-            </AnimatePresence>
+                )}
+            </div>
             
             <TechnicianSelectionModal 
                 isOpen={isTechnicianModalOpen} 

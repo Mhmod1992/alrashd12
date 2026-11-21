@@ -119,24 +119,50 @@ export const useActionsScope = (
 
     // --- REQUESTS ---
     const updateRequest = useCallback(async (updatedRequest: Partial<InspectionRequest> & { id: string }): Promise<void> => {
+        const { client_snapshot, ...rawUpdate } = updatedRequest as any;
         const fullRequest = requests.find(r => r.id === updatedRequest.id);
-        const merged = { ...(fullRequest || {}), ...updatedRequest } as InspectionRequest;
+        const effectiveSnapshot = client_snapshot || rawUpdate.inspection_data?.client_snapshot;
 
-        setRequests(prev => prev.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } : r));
+        if (effectiveSnapshot) {
+            let baseInspectionData = rawUpdate.inspection_data || fullRequest?.inspection_data;
+            if (!baseInspectionData) {
+                try {
+                    const { data: existingRow } = await supabase
+                        .from('inspection_requests')
+                        .select('inspection_data')
+                        .eq('id', updatedRequest.id)
+                        .maybeSingle();
+                    baseInspectionData = existingRow?.inspection_data;
+                } catch {}
+            }
+            rawUpdate.inspection_data = {
+                ...(baseInspectionData || {}),
+                client_snapshot: effectiveSnapshot
+            };
+        }
+
+        const localPatch: Partial<InspectionRequest> & { id: string } = {
+            ...rawUpdate,
+            ...(effectiveSnapshot ? { client_snapshot: effectiveSnapshot } : {})
+        };
+        const merged = { ...(fullRequest || {}), ...localPatch } as InspectionRequest;
+
+        setRequests(prev => prev.map(r => r.id === updatedRequest.id ? { ...r, ...localPatch } : r));
         setSearchedRequests(prev => {
             if (!prev) return null;
-            return prev.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } : r);
+            return prev.map(r => r.id === updatedRequest.id ? { ...r, ...localPatch } : r);
         });
 
         if (setLastUpdatedRequest) {
             setLastUpdatedRequest(merged);
         }
 
-        const { error } = await supabase.from('inspection_requests').update(updatedRequest).eq('id', updatedRequest.id);
+        const { error } = await supabase.from('inspection_requests').update(rawUpdate).eq('id', updatedRequest.id);
         if (error) throw error;
 
         // Broadcast lean request change to all other devices in real-time immediately via active channel
         // Only essential metadata fields are sent (~200 bytes) without heavy findings/notes/logs to protect egress bandwidth
+        const leanSnapshot = merged.client_snapshot || merged.inspection_data?.client_snapshot;
         const leanRecord: Partial<InspectionRequest> & { id: string } = {
             id: merged.id,
             request_number: merged.request_number,
@@ -146,6 +172,7 @@ export const useActionsScope = (
             payment_note: merged.payment_note,
             split_payment_details: merged.split_payment_details,
             client_id: merged.client_id,
+            ...(leanSnapshot ? { client_snapshot: leanSnapshot } : {}),
             car_id: merged.car_id,
             car_snapshot: merged.car_snapshot,
             employee_id: merged.employee_id,
@@ -384,16 +411,26 @@ export const useActionsScope = (
     }, [authUser, setRequests, setSearchedRequests, setSystemLogs, broadcastEvent]);
 
     const addRequest = useCallback(async (request: Omit<InspectionRequest, 'request_number'>): Promise<InspectionRequest> => {
-        const { request_number, ...requestData } = request as any;
+        const { request_number, client_snapshot, ...requestData } = request as any;
+        if (client_snapshot) {
+            requestData.inspection_data = {
+                ...(requestData.inspection_data || {}),
+                client_snapshot,
+            };
+        }
         const { data, error } = await supabase.from('inspection_requests').insert(requestData).select().single();
         if (error) throw error;
-        setRequests(prev => [data as InspectionRequest, ...prev]);
+        const createdReq = data as InspectionRequest;
+        if (client_snapshot && !createdReq.client_snapshot) {
+            createdReq.client_snapshot = client_snapshot;
+        }
+        setRequests(prev => [createdReq, ...prev]);
         
         // Sync to TV after creation
-        if (data) syncToTvDisplay(data as InspectionRequest);
+        if (createdReq) syncToTvDisplay(createdReq);
         
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
-        return data;
+        return createdReq;
     }, [sendSystemNotification, setRequests, addNotification, syncToTvDisplay]);
 
     const addRequestOptimized = useCallback(async (payload: {
@@ -443,32 +480,60 @@ export const useActionsScope = (
         if (error) throw error;
         
         let newRequest = data as InspectionRequest;
-        
-        // --- OVERRIDE REQUEST NUMBER IF PROVIDED ---
-        // This ensures the client-generated sequence number is respected without altering the database schema
-        if (payload.requestNumber && newRequest.request_number !== payload.requestNumber) {
+        const clientSnapshot = { name: payload.clientName, phone: payload.clientPhone };
+        const needsRequestNumberOverride = Boolean(payload.requestNumber && newRequest.request_number !== payload.requestNumber);
+        const needsSnapshotInInspectionData = !newRequest.inspection_data?.client_snapshot?.name && Boolean(payload.clientName);
+
+        if (needsRequestNumberOverride || needsSnapshotInInspectionData) {
+            const updatePayload: Record<string, any> = {};
+            if (needsRequestNumberOverride && payload.requestNumber) {
+                updatePayload.request_number = payload.requestNumber;
+            }
+            if (needsSnapshotInInspectionData) {
+                updatePayload.inspection_data = {
+                    ...(newRequest.inspection_data || {}),
+                    client_snapshot: clientSnapshot,
+                };
+            }
             const { error: updateError } = await supabase
                 .from('inspection_requests')
-                .update({ request_number: payload.requestNumber })
+                .update(updatePayload)
                 .eq('id', newRequest.id);
-                
+
             if (!updateError) {
-                newRequest.request_number = payload.requestNumber;
+                if (needsRequestNumberOverride && payload.requestNumber) {
+                    newRequest.request_number = payload.requestNumber;
+                }
+                if (needsSnapshotInInspectionData) {
+                    newRequest.inspection_data = updatePayload.inspection_data;
+                }
             }
         }
-        // ------------------------------------------
 
-        // Update local state immediately with the returned data
-        setRequests(prev => [newRequest, ...prev]);
+        if (!newRequest.client_snapshot && payload.clientName) {
+            newRequest.client_snapshot = clientSnapshot;
+        }
 
         // Keep local clients state in sync with clientName for this request
         if (newRequest.client_id && payload.clientName) {
+            let changedFromName: string | null = null;
             setClients(prev => {
                 const existingIndex = prev.findIndex(c => c.id === newRequest.client_id);
                 if (existingIndex >= 0) {
                     const existing = prev[existingIndex];
-                    if (existing.name !== payload.clientName) {
-                        const updated = { ...existing, name: payload.clientName };
+                    if (existing.name.trim() !== payload.clientName.trim()) {
+                        changedFromName = existing.name.trim();
+                        const historyEntry = {
+                            old_name: existing.name.trim(),
+                            new_name: payload.clientName.trim(),
+                            changed_at: new Date().toISOString(),
+                            changed_by: authUser?.name || 'إنشاء طلب جديد'
+                        };
+                        const updated = { 
+                            ...existing, 
+                            name: payload.clientName.trim(),
+                            name_history: [...(existing.name_history || []), historyEntry]
+                        };
                         const next = [...prev];
                         next[existingIndex] = updated;
                         return next;
@@ -483,8 +548,41 @@ export const useActionsScope = (
                     } as Client, ...prev];
                 }
             });
+
+            // Persist name_history in DB if client existed locally with a different name and DB trigger didn't already log it
+            if (changedFromName) {
+                try {
+                    const { data: dbClient } = await supabase
+                        .from('clients')
+                        .select('name_history')
+                        .eq('id', newRequest.client_id)
+                        .maybeSingle();
+                    if (dbClient) {
+                        const dbHist = Array.isArray((dbClient as any).name_history) ? (dbClient as any).name_history : [];
+                        const last = dbHist[dbHist.length - 1];
+                        const alreadyLogged = last && last.old_name === changedFromName && last.new_name === payload.clientName.trim();
+                        if (!alreadyLogged) {
+                            const nextHist = [
+                                ...dbHist,
+                                {
+                                    old_name: changedFromName,
+                                    new_name: payload.clientName.trim(),
+                                    changed_at: new Date().toISOString(),
+                                    changed_by: authUser?.name || 'إنشاء طلب جديد'
+                                }
+                            ];
+                            await supabase.from('clients').update({ name_history: nextHist } as any).eq('id', newRequest.client_id);
+                        }
+                    }
+                } catch (histErr) {
+                    console.warn('Could not sync client name_history on request creation:', histErr);
+                }
+            }
         }
         
+        // Update local state immediately with the returned data
+        setRequests(prev => [newRequest, ...prev]);
+
         // Sync to TV after creation
         syncToTvDisplay(newRequest);
 
@@ -493,7 +591,7 @@ export const useActionsScope = (
         
         addNotification({ title: 'نجاح', message: 'تم إضافة الطلب بنجاح.', type: 'success' });
         return newRequest;
-    }, [setRequests, addNotification, syncToTvDisplay, broadcastEvent]);
+    }, [authUser, setClients, setRequests, addNotification, syncToTvDisplay, broadcastEvent]);
 
     // --- PENDING REQUESTS ---
     const addPendingRequest = useCallback(async (payload: Omit<PendingRequest, 'id' | 'pending_number' | 'created_at'>): Promise<PendingRequest> => {
@@ -628,14 +726,33 @@ export const useActionsScope = (
             createdAt: now,
         });
 
-        // Store creator & collector info in inspection_data
-        const updatedInspectionData = {
+        const pendingEnteredName = (pendingReq.client_name || '').trim();
+        const collectedName = (clientName || '').trim();
+        const cleanPhoneCheck = (clientPhone || '').trim();
+        const isDifferentPendingName = Boolean(
+            pendingEnteredName &&
+            collectedName &&
+            cleanPhoneCheck !== '0000000000' &&
+            pendingEnteredName !== collectedName
+        );
+
+        // Store creator & collector info (and name suggestion memory if collected with a different name) in inspection_data
+        const updatedInspectionData: Record<string, any> = {
             ...(officialRequest.inspection_data || {}),
             created_by_employee_id: creatorId,
             created_by_employee_name: creatorName,
             collected_by_employee_id: collectorId,
             collected_by_employee_name: collectorName,
-            collected_at: now
+            collected_at: now,
+            ...(isDifferentPendingName ? {
+                pending_name_suggestion: {
+                    suggested_name: pendingEnteredName,
+                    original_name: collectedName,
+                    entered_by_name: creatorName || 'موظف الاستقبال',
+                    entered_at: pendingReq.created_at || now,
+                    dismissed: false
+                }
+            } : {})
         };
 
         const { error: updateErr } = await supabase.from('inspection_requests').update({
@@ -649,11 +766,52 @@ export const useActionsScope = (
             setRequests(prev => prev.map(r => r.id === officialRequest.id ? { ...r, inspection_data: updatedInspectionData, employee_id: creatorId } : r));
         }
 
+        // If collected with the new/edited name (not differing from pending) for a real client, ensure DB clients.name is also synced
+        if (!isDifferentPendingName && collectedName && cleanPhoneCheck !== '0000000000' && officialRequest.client_id) {
+            try {
+                const { data: dbClient } = await supabase
+                    .from('clients')
+                    .select('*')
+                    .eq('id', officialRequest.client_id)
+                    .maybeSingle();
+                if (dbClient && !dbClient.is_system_default && dbClient.phone !== '0000000000' && (dbClient.name || '').trim() !== collectedName) {
+                    const currentHist = Array.isArray(dbClient.name_history) ? dbClient.name_history : [];
+                    const lastEntry = currentHist[currentHist.length - 1];
+                    const nextHist = (!lastEntry || lastEntry.old_name !== (dbClient.name || '').trim() || lastEntry.new_name !== collectedName)
+                        ? [
+                            ...currentHist,
+                            {
+                                old_name: (dbClient.name || '').trim(),
+                                new_name: collectedName,
+                                changed_at: now,
+                                changed_by: collectorName || authUser?.name || 'مستخدم النظام'
+                            }
+                        ]
+                        : currentHist;
+                    const { error: cliUpdErr } = await supabase
+                        .from('clients')
+                        .update({ name: collectedName, name_history: nextHist } as any)
+                        .eq('id', dbClient.id);
+                    if (!cliUpdErr) {
+                        const updatedClient = { ...dbClient, name: collectedName, name_history: nextHist } as Client;
+                        setClients(prev => prev.some(c => c.id === updatedClient.id)
+                            ? prev.map(c => c.id === updatedClient.id ? { ...c, ...updatedClient } : c)
+                            : [updatedClient, ...prev]
+                        );
+                        if (setLastUpdatedClient) setLastUpdatedClient(updatedClient);
+                        broadcastEvent('client_change', { action: 'UPDATE', record: updatedClient });
+                    }
+                }
+            } catch (syncErr) {
+                console.warn('Could not sync client DB name after pending conversion:', syncErr);
+            }
+        }
+
         // Broadcast to all other devices in real-time immediately via active channel
         broadcastEvent('official_request_change', { action: 'INSERT', record: officialRequest });
 
         return officialRequest;
-    }, [addRequestOptimized, authUser, employees, setPendingRequests, setRequests, broadcastEvent]);
+    }, [addRequestOptimized, authUser, employees, setPendingRequests, setRequests, setClients, setLastUpdatedClient, broadcastEvent]);
 
 
     // --- CLIENTS ---
@@ -691,9 +849,35 @@ export const useActionsScope = (
 
     const updateClient = useCallback(async (client: Client) => {
         const { inspection_requests, ...updateData } = client;
+        let finalUpdateData: any = { ...updateData };
+
+        // If client name has changed and name_history was not already updated, record the old name
+        try {
+            const { data: currentDbClient } = await supabase.from('clients').select('name, name_history').eq('id', client.id).maybeSingle();
+            if (currentDbClient && currentDbClient.name && client.name && currentDbClient.name.trim() !== client.name.trim()) {
+                const currentHist = Array.isArray(currentDbClient.name_history) ? currentDbClient.name_history : [];
+                // Check if this specific change is not already at the end of history
+                const lastEntry = currentHist[currentHist.length - 1];
+                if (!lastEntry || lastEntry.old_name !== currentDbClient.name.trim() || lastEntry.new_name !== client.name.trim()) {
+                    const newHistory = [
+                        ...currentHist,
+                        {
+                            old_name: currentDbClient.name.trim(),
+                            new_name: client.name.trim(),
+                            changed_at: new Date().toISOString(),
+                            changed_by: authUser?.name || 'مستخدم النظام'
+                        }
+                    ];
+                    finalUpdateData.name_history = newHistory;
+                    client.name_history = newHistory;
+                }
+            }
+        } catch (e) {
+            console.warn("Could not check client previous name:", e);
+        }
 
         // If this client is being set as the system default, unset any others first
-        if (updateData.is_system_default) {
+        if (finalUpdateData.is_system_default) {
             const { error: unsetError } = await supabase
                 .from('clients')
                 .update({ is_system_default: false } as any)
@@ -703,23 +887,24 @@ export const useActionsScope = (
             if (unsetError) console.error("Failed to unset previous system default client:", unsetError);
         }
 
-        const { error } = await supabase.from('clients').update(updateData as any).eq('id', client.id);
+        const { error } = await supabase.from('clients').update(finalUpdateData as any).eq('id', client.id);
         if (error) throw error;
         
         setClients(prev => {
-            let newClients = prev.map(c => c.id === client.id ? client : c);
-            if (updateData.is_system_default) {
+            let newClients = prev.map(c => c.id === client.id ? { ...c, ...client, name_history: finalUpdateData.name_history || c.name_history } : c);
+            if (finalUpdateData.is_system_default) {
                 // Also update local state for others to be false
                 newClients = newClients.map(c => c.id !== client.id ? { ...c, is_system_default: false } : c);
             }
             return newClients;
         });
 
-        if (setLastUpdatedClient) setLastUpdatedClient(client);
+        const fullUpdatedClient = { ...client, name_history: finalUpdateData.name_history || client.name_history };
+        if (setLastUpdatedClient) setLastUpdatedClient(fullUpdatedClient);
 
         // Broadcast to all other devices in real-time immediately
-        broadcastEvent('client_change', { action: 'UPDATE', record: client });
-    }, [setClients, setLastUpdatedClient, broadcastEvent]);
+        broadcastEvent('client_change', { action: 'UPDATE', record: fullUpdatedClient });
+    }, [authUser, setClients, setLastUpdatedClient, broadcastEvent]);
 
     const deleteClient = useCallback(async (id: string) => {
         const { count } = await supabase.from('inspection_requests').select('id', { count: 'exact', head: true }).eq('client_id', id);

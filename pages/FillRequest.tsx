@@ -151,10 +151,26 @@ export const FillRequest: React.FC = () => {
         setLoadedTabs(new Set());
 
         return () => {
+            if (debounceTimeoutRef.current || hasUnsavedChangesRef.current) {
+                if (debounceTimeoutRef.current) {
+                    clearTimeout(debounceTimeoutRef.current);
+                    debounceTimeoutRef.current = null;
+                }
+                if (hasUnsavedChangesRef.current && performSaveRef.current) {
+                    performSaveRef.current(false, undefined, { skipStateUpdate: true }).catch((err: any) => {
+                        console.error('Flush save on unmount/switch failed:', err);
+                    });
+                }
+            }
             isMounted.current = false;
             setIsFocusMode(false);
             setHasUnsavedChanges(false);
+            hasUnsavedChangesRef.current = false;
             if (syncDelayTimeoutRef.current) clearTimeout(syncDelayTimeoutRef.current);
+            recentlyAddedNoteIdsRef.current.clear();
+            deletedNoteIdsRef.current.clear();
+            recentlyAddedFindingIdsRef.current.clear();
+            deletedFindingIdsRef.current.clear();
         };
     }, [selectedRequestId, setIsFocusMode, setHasUnsavedChanges]);
 
@@ -439,6 +455,23 @@ export const FillRequest: React.FC = () => {
     // Tracks note IDs explicitly deleted on this device.
     // Prevents zombie/stale events from resurrecting notes deleted by this user.
     const deletedNoteIdsRef = useRef<Map<string, number>>(new Map());
+    // Tracks finding IDs created or edited locally on this device within the last 30s.
+    const recentlyAddedFindingIdsRef = useRef<Map<string, number>>(new Map());
+    // Tracks finding IDs explicitly deleted on this device.
+    const deletedFindingIdsRef = useRef<Map<string, number>>(new Map());
+    // Serializes concurrent performSave executions to prevent out-of-order overwrites.
+    const activeSavePromiseRef = useRef<Promise<void> | null>(null);
+    const performSaveRef = useRef<any>(null);
+    const setPageRef = useRef(setPage);
+    useEffect(() => { setPageRef.current = setPage; }, [setPage]);
+    const isInitialDataLoadedRef = useRef(isInitialDataLoaded);
+    useEffect(() => { isInitialDataLoadedRef.current = isInitialDataLoaded; }, [isInitialDataLoaded]);
+    const isFetchingRequestRef = useRef(isFetchingRequest);
+    useEffect(() => { isFetchingRequestRef.current = isFetchingRequest; }, [isFetchingRequest]);
+    const loadedTabsRef = useRef(loadedTabs);
+    useEffect(() => { loadedTabsRef.current = loadedTabs; }, [loadedTabs]);
+    const isLockedRef = useRef(isLocked);
+    useEffect(() => { isLockedRef.current = isLocked; }, [isLocked]);
     const inspectionDataRef = useRef({ generalNotes, categoryNotes, structuredFindings, voiceMemos, activityLog });
     const prevRequestRef = useRef<InspectionRequest | undefined>(undefined);
     const hasUnsavedChangesRef = useRef(hasUnsavedChanges);
@@ -665,266 +698,304 @@ export const FillRequest: React.FC = () => {
         }
     }, [request]);
 
-    const performSave = useCallback(async (isFinalSave = false, finalStatus?: RequestStatus, overrides?: { activityLog?: ActivityLog[], structuredFindings?: StructuredFinding[], deletedFindingIds?: string[] }) => {
-        const currentRequest = latestRequestRef.current;
-        if (!currentRequest) return;
-        if (isLocked && !finalStatus) return;
+    const performSave = useCallback(async (isFinalSave = false, finalStatus?: RequestStatus, overrides?: { activityLog?: ActivityLog[], structuredFindings?: StructuredFinding[], deletedFindingIds?: string[], skipStateUpdate?: boolean }) => {
+        const executeSave = async (): Promise<void> => {
+            const currentRequest = latestRequestRef.current;
+            if (!currentRequest) return;
+            if (isLockedRef.current && !finalStatus) return;
 
-        // Update interaction timestamp to prevent immediate sync from overwriting local state
-        lastInteractionRef.current = Date.now();
+            // Update interaction timestamp to prevent immediate sync from overwriting local state
+            lastInteractionRef.current = Date.now();
 
-        // Failsafe: Don't save if we haven't successfully loaded the initial state or still fetching
-        if (!isInitialDataLoaded || isFetchingRequest) {
-            console.warn("Save aborted: Initial cloud data not loaded yet.");
-            return;
-        }
-
-        const { generalNotes: localGeneralNotes, categoryNotes: localCategoryNotes, voiceMemos: localVoiceMemos } = inspectionDataRef.current;
-        // Use overridden findings if provided (crucial for deletion), otherwise use current Ref
-        const localFindings = overrides?.structuredFindings ?? inspectionDataRef.current.structuredFindings;
-
-        const finalActivityLog = overrides?.activityLog ?? inspectionDataRef.current.activityLog;
-
-        const clean = (items: (Note | StructuredFinding | VoiceMemo | ActivityLog)[]) => items.map(({ status, localFile, localBlob, isTranscribing, isEditingTranscription, ...item }: any) => item);
-        const cleanCategoryNotes = (notesMap: Record<string, Note[]>) => {
-            const newMap: Record<string, Note[]> = {};
-            for (const key in notesMap) { newMap[key] = clean(notesMap[key]) as Note[]; }
-            return newMap;
-        };
-        const cleanVoiceMemos = (memosMap: Record<string, VoiceMemo[]>) => {
-            const newMap: Record<string, VoiceMemo[]> = {};
-            for (const key in memosMap) { newMap[key] = clean(memosMap[key]) as VoiceMemo[]; }
-            return newMap;
-        }
-
-        // Handle Image Uploads for items that have localFile (e.g. after a failed attempt)
-        const uploadedGeneralNotes = [...localGeneralNotes];
-        for (let i = 0; i < uploadedGeneralNotes.length; i++) {
-            const note = uploadedGeneralNotes[i];
-            if ((note.status === 'saving' || note.status === 'error') && note.localFile) {
-                try {
-                    const timestamp = Date.now();
-                    const customFileName = `Req-${request.request_number}_Colored_${timestamp}_${i+1}`;
-                    const url = await uploadImage(note.localFile, 'note_images', 'colored_attachments', customFileName);
-                    uploadedGeneralNotes[i] = { ...note, image: url, localFile: undefined };
-                } catch (e) {
-                    console.error("Retry upload failed for general note:", note.id, e);
-                    // Keep status as saving/error so retry logic picks it up again? 
-                    // Actually if upload fails, we should throw to trigger error state in UI
-                    throw e;
-                }
+            // Failsafe: Don't save if we haven't successfully loaded the initial state or still fetching
+            if (!isInitialDataLoadedRef.current || isFetchingRequestRef.current) {
+                console.warn("Save aborted: Initial cloud data not loaded yet.");
+                return;
             }
-        }
 
-        const uploadedCategoryNotes = { ...localCategoryNotes };
-        for (const catId in uploadedCategoryNotes) {
-            uploadedCategoryNotes[catId] = [...(uploadedCategoryNotes[catId] || [])];
-            for (let i = 0; i < uploadedCategoryNotes[catId].length; i++) {
-                const note = uploadedCategoryNotes[catId][i];
+            const currentLoadedTabs = loadedTabsRef.current;
+            const { generalNotes: localGeneralNotes, categoryNotes: localCategoryNotes, voiceMemos: localVoiceMemos } = inspectionDataRef.current;
+            // Use overridden findings if provided (crucial for deletion / immediate save), otherwise use current Ref
+            const localFindings = overrides?.structuredFindings ?? inspectionDataRef.current.structuredFindings;
+
+            const finalActivityLog = overrides?.activityLog ?? inspectionDataRef.current.activityLog;
+
+            const clean = (items: (Note | StructuredFinding | VoiceMemo | ActivityLog)[]) => items.map(({ status, localFile, localBlob, isTranscribing, isEditingTranscription, ...item }: any) => item);
+            const cleanCategoryNotes = (notesMap: Record<string, Note[]>) => {
+                const newMap: Record<string, Note[]> = {};
+                for (const key in notesMap) { newMap[key] = clean(notesMap[key]) as Note[]; }
+                return newMap;
+            };
+            const cleanVoiceMemos = (memosMap: Record<string, VoiceMemo[]>) => {
+                const newMap: Record<string, VoiceMemo[]> = {};
+                for (const key in memosMap) { newMap[key] = clean(memosMap[key]) as VoiceMemo[]; }
+                return newMap;
+            }
+
+            // Handle Image Uploads for items that have localFile (e.g. after a failed attempt)
+            const uploadedGeneralNotes = [...localGeneralNotes];
+            for (let i = 0; i < uploadedGeneralNotes.length; i++) {
+                const note = uploadedGeneralNotes[i];
                 if ((note.status === 'saving' || note.status === 'error') && note.localFile) {
                     try {
                         const timestamp = Date.now();
-                        const customFileName = `Req-${request.request_number}_Colored_${timestamp}_${catId}_${i+1}`;
+                        const customFileName = `Req-${currentRequest.request_number}_Colored_${timestamp}_${i+1}`;
                         const url = await uploadImage(note.localFile, 'note_images', 'colored_attachments', customFileName);
-                        uploadedCategoryNotes[catId][i] = { ...note, image: url, localFile: undefined };
+                        uploadedGeneralNotes[i] = { ...note, image: url, localFile: undefined };
                     } catch (e) {
-                        console.error("Retry upload failed for category note:", note.id, e);
+                        console.error("Retry upload failed for general note:", note.id, e);
                         throw e;
                     }
                 }
             }
-        }
 
-        // ... Similar logic for voice memos ...
-
-        const updates: Partial<InspectionRequest> & { id: string } = {
-            id: currentRequest.id,
-            updated_at: new Date().toISOString()
-        };
-
-        if (finalStatus) updates.status = finalStatus;
-        
-        // Merge Activity Log
-        // Identify logs that are in local state but not in server state (New Logs)
-        const serverActivityLog = currentRequest.activity_log || [];
-        const localActivityLog = finalActivityLog || [];
-        
-        // Find logs created locally that aren't on server yet
-        // We assume logs have unique IDs.
-        const newLogs = localActivityLog.filter(localLog => !serverActivityLog.some(serverLog => serverLog.id === localLog.id));
-        
-        // Combine: New Logs + Server Logs. 
-        // Note: Activity Log is usually sorted desc by date.
-        // If we just prepend new logs to server logs, it should be correct for most cases.
-        if (newLogs.length > 0) {
-             updates.activity_log = [...newLogs, ...serverActivityLog];
-        } else if (overrides?.activityLog) {
-             // If we have an override (e.g. from deletion), use it, but be careful not to lose server logs?
-             // Deletion usually passes the *full* new log list.
-             // If deletion happened, we removed an item.
-             // If we use the merge logic above, the deleted item (which is in serverActivityLog) will reappear!
-             
-             // If 'overrides' is present, it means an explicit action (like delete) happened.
-             // In that case, we might want to trust the override, BUT we still need to respect *other* users' additions.
-             
-             // This is tricky. 'handleRemoveGeneralNote' calls updateRequest directly, so it doesn't use performSave.
-             // So 'overrides' here is likely only used if we call performSave manually?
-             // 'performSave' is called with overrides in 'handleSave' (manual save button)? No.
-             
-             // Let's assume for standard 'debouncedSave', overrides is undefined.
-             updates.activity_log = [...newLogs, ...serverActivityLog];
-        } else {
-             // No local changes to log, but we might want to ensure we don't send stale log if we are just saving notes.
-             // Actually, if we don't send activity_log in updates, it won't be changed.
-             // But if we *do* send it, it overwrites.
-             
-             // If there are no new logs, do we need to send activity_log?
-             // Only if we want to update it.
-             // If we don't include it in 'updates', Supabase won't change it.
-             // That's the safest bet!
-             
-             // But wait, 'finalActivityLog' is derived from 'inspectionDataRef.current.activityLog'.
-             // If we added a log 5 seconds ago, it's in 'inspectionDataRef'.
-             // Is it in 'serverActivityLog'? Maybe not yet if sync blocked.
-             // So 'newLogs' logic handles it.
-             
-             // If newLogs is empty, we don't need to send activity_log.
-             // UNLESS we deleted something? But deletions are handled separately.
-        }
-
-        // --- SMART MERGE: Server State + Local Unsaved Changes ---
-        // This prevents overwriting changes from other users (Realtime) with stale local state.
-
-        if (loadedTabs.has('general')) {
-            const cleanedGeneral = clean(uploadedGeneralNotes) as Note[];
-            // Failsafe: if local general notes is empty [], but server currently has notes, only send empty if user explicitly deleted notes
-            if (cleanedGeneral.length === 0 && (currentRequest.general_notes || []).length > 0 && deletedNoteIdsRef.current.size === 0 && !overrides) {
-                console.warn("performSave safety guard: prevent wiping server general_notes with empty array");
-            } else {
-                updates.general_notes = cleanedGeneral;
-            }
-        }
-
-        if (loadedTabs.has('categories')) {
-            // Merge Category Notes
-            const serverCategoryNotes = currentRequest.category_notes || {};
-            const mergedCategoryNotes: Record<string, Note[]> = { ...serverCategoryNotes };
-            
+            const uploadedCategoryNotes = { ...localCategoryNotes };
             for (const catId in uploadedCategoryNotes) {
-                mergedCategoryNotes[catId] = uploadedCategoryNotes[catId];
-            }
-            const cleanedCategories = cleanCategoryNotes(mergedCategoryNotes);
-            const serverCatCount = Object.values(serverCategoryNotes).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0);
-            const localCatCount = Object.values(cleanedCategories).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0);
-
-            if (localCatCount === 0 && serverCatCount > 0 && deletedNoteIdsRef.current.size === 0 && !overrides) {
-                console.warn("performSave safety guard: prevent wiping server category_notes with empty object");
-            } else {
-                updates.category_notes = cleanedCategories;
-            }
-
-            // Merge Findings
-            const serverFindings = currentRequest.structured_findings || [];
-            const localUnsavedFindings = localFindings.filter(f => f.status === 'saving' || f.status === 'error');
-            
-            const mergedFindingsMap = new Map();
-            serverFindings.forEach(f => mergedFindingsMap.set(f.findingId, f));
-            localUnsavedFindings.forEach(f => mergedFindingsMap.set(f.findingId, f)); // Local overrides server for same finding ID
-            
-            // Apply Deletions
-            if (overrides?.deletedFindingIds) {
-                overrides.deletedFindingIds.forEach(id => mergedFindingsMap.delete(id));
+                uploadedCategoryNotes[catId] = [...(uploadedCategoryNotes[catId] || [])];
+                for (let i = 0; i < uploadedCategoryNotes[catId].length; i++) {
+                    const note = uploadedCategoryNotes[catId][i];
+                    if ((note.status === 'saving' || note.status === 'error') && note.localFile) {
+                        try {
+                            const timestamp = Date.now();
+                            const customFileName = `Req-${currentRequest.request_number}_Colored_${timestamp}_${catId}_${i+1}`;
+                            const url = await uploadImage(note.localFile, 'note_images', 'colored_attachments', customFileName);
+                            uploadedCategoryNotes[catId][i] = { ...note, image: url, localFile: undefined };
+                        } catch (e) {
+                            console.error("Retry upload failed for category note:", note.id, e);
+                            throw e;
+                        }
+                    }
+                }
             }
 
-            updates.structured_findings = clean(Array.from(mergedFindingsMap.values())) as StructuredFinding[];
+            const updates: Partial<InspectionRequest> & { id: string } = {
+                id: currentRequest.id,
+                updated_at: new Date().toISOString()
+            };
+
+            if (finalStatus) updates.status = finalStatus;
             
-            // Merge Voice Memos (Simplified - assuming append only for now)
-            updates.voice_memos = cleanVoiceMemos(localVoiceMemos); 
-        }
+            // Merge Activity Log
+            const serverActivityLog = currentRequest.activity_log || [];
+            const localActivityLog = finalActivityLog || [];
+            const newLogs = localActivityLog.filter(localLog => !serverActivityLog.some(serverLog => serverLog.id === localLog.id));
+            
+            if (newLogs.length > 0) {
+                 updates.activity_log = [...newLogs, ...serverActivityLog];
+            } else if (overrides?.activityLog) {
+                 updates.activity_log = [...newLogs, ...serverActivityLog];
+            }
 
-        // Avoid unnecessary network calls if no actual data changed
-        const hasStatusChange = !!(finalStatus && finalStatus !== currentRequest.status);
-        const hasGeneralChange = loadedTabs.has('general') && cleanDataForComparison(updates.general_notes) !== cleanDataForComparison(currentRequest.general_notes || []);
-        const hasCategoryChange = loadedTabs.has('categories') && (
-            cleanDataForComparison(updates.category_notes) !== cleanDataForComparison(currentRequest.category_notes || {}) ||
-            cleanDataForComparison(updates.structured_findings) !== cleanDataForComparison(currentRequest.structured_findings || []) ||
-            cleanDataForComparison(updates.voice_memos) !== cleanDataForComparison(currentRequest.voice_memos || {})
-        );
-        const hasLogChange = (newLogs.length > 0) || !!overrides?.activityLog;
+            // --- SMART MERGE: Server State + Local State ---
+            if (currentLoadedTabs.has('general')) {
+                const cleanedGeneral = clean(uploadedGeneralNotes) as Note[];
+                if (cleanedGeneral.length === 0 && (currentRequest.general_notes || []).length > 0 && deletedNoteIdsRef.current.size === 0 && !overrides) {
+                    console.warn("performSave safety guard: prevent wiping server general_notes with empty array");
+                } else {
+                    updates.general_notes = cleanedGeneral;
+                }
+            }
 
-        if (!hasStatusChange && !hasGeneralChange && !hasCategoryChange && !hasLogChange && !overrides) {
-            setHasUnsavedChanges(false);
-            return;
-        }
+            if (currentLoadedTabs.has('categories')) {
+                const serverCategoryNotes = currentRequest.category_notes || {};
+                const mergedCategoryNotes: Record<string, Note[]> = { ...serverCategoryNotes };
+                
+                for (const catId in uploadedCategoryNotes) {
+                    mergedCategoryNotes[catId] = uploadedCategoryNotes[catId];
+                }
+                const cleanedCategories = cleanCategoryNotes(mergedCategoryNotes);
+                const serverCatCount = Object.values(serverCategoryNotes).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0);
+                const localCatCount = Object.values(cleanedCategories).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0);
 
-        const payloadSize = estimateObjectSize(updates);
-        trackDataTransfer(payloadSize);
+                if (localCatCount === 0 && serverCatCount > 0 && deletedNoteIdsRef.current.size === 0 && !overrides) {
+                    console.warn("performSave safety guard: prevent wiping server category_notes with empty object");
+                } else {
+                    updates.category_notes = cleanedCategories;
+                }
 
-        try {
-            await updateRequest(updates);
+                // Merge Findings: merge server findings (excluding locally deleted) with ALL localFindings
+                // so previously saved findings are never dropped even if currentRequest.structured_findings was stale.
+                const serverFindings = (currentRequest.structured_findings || []).filter(
+                    f => !deletedFindingIdsRef.current.has(f.findingId) && !overrides?.deletedFindingIds?.includes(f.findingId)
+                );
+                const mergedFindingsMap = new Map<string, StructuredFinding>();
+                serverFindings.forEach(f => mergedFindingsMap.set(f.findingId, f));
+                localFindings.forEach(f => {
+                    if (!deletedFindingIdsRef.current.has(f.findingId) && !overrides?.deletedFindingIds?.includes(f.findingId)) {
+                        mergedFindingsMap.set(f.findingId, f);
+                    }
+                });
 
-            const updateItemsAfterSave = <T extends { status?: 'saving' | 'saved' | 'error' }>(prevItems: T[], currentUploaded: T[], idKey: keyof T = 'id' as keyof T): T[] => {
+                if (overrides?.deletedFindingIds) {
+                    overrides.deletedFindingIds.forEach(id => mergedFindingsMap.delete(id));
+                }
+
+                const cleanedFindings = clean(Array.from(mergedFindingsMap.values())) as StructuredFinding[];
+                if (
+                    cleanedFindings.length === 0 &&
+                    (currentRequest.structured_findings || []).length > 0 &&
+                    deletedFindingIdsRef.current.size === 0 &&
+                    !overrides?.deletedFindingIds?.length
+                ) {
+                    console.warn("performSave safety guard: prevent wiping server structured_findings with empty array");
+                } else {
+                    updates.structured_findings = cleanedFindings;
+                }
+                
+                updates.voice_memos = cleanVoiceMemos(localVoiceMemos); 
+            }
+
+            // Avoid unnecessary network calls if no actual data changed
+            const hasStatusChange = !!(finalStatus && finalStatus !== currentRequest.status);
+            const hasGeneralChange = currentLoadedTabs.has('general') && updates.general_notes !== undefined && cleanDataForComparison(updates.general_notes) !== cleanDataForComparison(currentRequest.general_notes || []);
+            const hasCategoryChange = currentLoadedTabs.has('categories') && (
+                (updates.category_notes !== undefined && cleanDataForComparison(updates.category_notes) !== cleanDataForComparison(currentRequest.category_notes || {})) ||
+                (updates.structured_findings !== undefined && cleanDataForComparison(updates.structured_findings) !== cleanDataForComparison(currentRequest.structured_findings || [])) ||
+                cleanDataForComparison(updates.voice_memos) !== cleanDataForComparison(currentRequest.voice_memos || {})
+            );
+            const hasLogChange = (newLogs.length > 0) || !!overrides?.activityLog;
+
+            const isItemUploadedMatch = <T extends { status?: 'saving' | 'saved' | 'error' }>(item: T, uploaded: T | undefined): boolean => {
+                if (!uploaded) return false;
+                if ((item as any).localFile && !(uploaded as any).localFile && (uploaded as any).image && (item as any).text === (uploaded as any).text) {
+                    return true;
+                }
+                return cleanDataForComparison(uploaded) === cleanDataForComparison(item);
+            };
+
+            const markMatchedItemsSaved = <T extends { status?: 'saving' | 'saved' | 'error' }>(prevItems: T[], currentUploaded: T[], idKey: keyof T = 'id' as keyof T): T[] => {
                 return prevItems.map(item => {
-                    // Mark as saved if it was saving/error AND exists in the uploaded payload
-                    // @ts-ignore
                     if (item.status === 'saving' || item.status === 'error') {
-                        // @ts-ignore
                         const uploaded = currentUploaded.find(u => u[idKey] === item[idKey]);
-                        return { ...item, ...(uploaded || {}), status: 'saved' } as T;
+                        if (!isItemUploadedMatch(item, uploaded)) {
+                            return item;
+                        }
+                        return { ...item, ...uploaded, status: 'saved' } as T;
                     }
                     return item;
                 });
             };
 
-            if (isMounted.current) {
-                if (loadedTabs.has('general')) {
-                    setGeneralNotes(prev => updateItemsAfterSave(prev, uploadedGeneralNotes));
+            if (!hasStatusChange && !hasGeneralChange && !hasCategoryChange && !hasLogChange && !overrides?.deletedFindingIds?.length) {
+                if (isMounted.current && !overrides?.skipStateUpdate && latestRequestRef.current?.id === currentRequest.id) {
+                    setHasUnsavedChanges(false);
+                    hasUnsavedChangesRef.current = false;
                 }
-                if (loadedTabs.has('categories')) {
-                    setStructuredFindings(prev => updateItemsAfterSave(prev, localFindings, 'findingId' as keyof StructuredFinding));
-                    setCategoryNotes(prev => {
-                        const newMap = { ...prev };
-                        for (const key in newMap) {
-                            newMap[key] = updateItemsAfterSave(newMap[key], uploadedCategoryNotes[key] || []);
-                        }
-                        return newMap;
-                    });
-                    // Voice memos update ...
-                }
-
-                setHasUnsavedChanges(false);
-                // We DON'T clear the draft entirely, but we could update it to reflect 'saved' status
-                // Or just rely on the useEffect that syncs state to local storage.
+                return;
             }
 
-        } catch (error) {
-            console.error("Failed to auto-save request:", error);
-            if (isMounted.current) {
-                // Mark items as 'error' so user sees retry button
-                const updateStatusToError = <T extends { status?: 'saving' | 'saved' | 'error' }>(items: T[]): T[] => items.map(item => item.status === 'saving' ? { ...item, status: 'error' } : item);
+            const payloadSize = estimateObjectSize(updates);
+            trackDataTransfer(payloadSize);
 
-                setGeneralNotes(prev => updateStatusToError(prev));
-                setStructuredFindings(prev => updateStatusToError(prev));
-                setCategoryNotes(prev => { const newMap = { ...prev }; for (const key in newMap) { newMap[key] = updateStatusToError(newMap[key]); } return newMap; });
-                // Voice memos...
+            try {
+                await updateRequest(updates);
+
+                // Keep latestRequestRef immediately up to date for any queued sequential save
+                if (latestRequestRef.current?.id === currentRequest.id) {
+                    latestRequestRef.current = { ...currentRequest, ...updates } as InspectionRequest;
+                }
+
+                // Update inspectionDataRef synchronously for any queued save
+                if (currentLoadedTabs.has('general')) {
+                    inspectionDataRef.current.generalNotes = markMatchedItemsSaved(inspectionDataRef.current.generalNotes, uploadedGeneralNotes);
+                }
+                if (currentLoadedTabs.has('categories')) {
+                    inspectionDataRef.current.structuredFindings = markMatchedItemsSaved(inspectionDataRef.current.structuredFindings, localFindings, 'findingId' as keyof StructuredFinding);
+                    const nextCatMap = { ...inspectionDataRef.current.categoryNotes };
+                    for (const key in nextCatMap) {
+                        nextCatMap[key] = markMatchedItemsSaved(nextCatMap[key], uploadedCategoryNotes[key] || []);
+                    }
+                    inspectionDataRef.current.categoryNotes = nextCatMap;
+                }
+
+                const stillHasUnsaved =
+                    inspectionDataRef.current.generalNotes.some(n => n.status === 'saving' || n.status === 'error') ||
+                    inspectionDataRef.current.structuredFindings.some(f => f.status === 'saving' || f.status === 'error') ||
+                    Object.values(inspectionDataRef.current.categoryNotes).some(arr => (arr || []).some(n => n.status === 'saving' || n.status === 'error'));
+
+                if (isMounted.current && !overrides?.skipStateUpdate && latestRequestRef.current?.id === currentRequest.id) {
+                    if (currentLoadedTabs.has('general')) {
+                        setGeneralNotes(prev => markMatchedItemsSaved(prev, uploadedGeneralNotes));
+                    }
+                    if (currentLoadedTabs.has('categories')) {
+                        setStructuredFindings(prev => markMatchedItemsSaved(prev, localFindings, 'findingId' as keyof StructuredFinding));
+                        setCategoryNotes(prev => {
+                            const newMap = { ...prev };
+                            for (const key in newMap) {
+                                newMap[key] = markMatchedItemsSaved(newMap[key], uploadedCategoryNotes[key] || []);
+                            }
+                            return newMap;
+                        });
+                    }
+
+                    if (stillHasUnsaved) {
+                        setHasUnsavedChanges(true);
+                        hasUnsavedChangesRef.current = true;
+                        if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+                        debounceTimeoutRef.current = window.setTimeout(() => {
+                            if (isMounted.current && performSaveRef.current) performSaveRef.current();
+                        }, 800);
+                    } else {
+                        setHasUnsavedChanges(false);
+                        hasUnsavedChangesRef.current = false;
+                    }
+                }
+
+            } catch (error) {
+                console.error("Failed to auto-save request:", error);
+                if (isMounted.current && !overrides?.skipStateUpdate && latestRequestRef.current?.id === currentRequest.id) {
+                    const toError = <T extends { status?: 'saving' | 'saved' | 'error' }>(items: T[]): T[] => items.map(item => item.status === 'saving' ? { ...item, status: 'error' } : item);
+
+                    setGeneralNotes(prev => toError(prev));
+                    setStructuredFindings(prev => toError(prev));
+                    setCategoryNotes(prev => { const newMap = { ...prev }; for (const key in newMap) { newMap[key] = toError(newMap[key]); } return newMap; });
+                    setHasUnsavedChanges(true);
+                    hasUnsavedChangesRef.current = true;
+                }
+                throw error;
             }
-            throw error;
+        };
+
+        const prevPromise = activeSavePromiseRef.current;
+        const currentPromise = (async () => {
+            if (prevPromise) {
+                try { await prevPromise; } catch { /* previous failure does not block subsequent save */ }
+            }
+            await executeSave();
+        })();
+
+        activeSavePromiseRef.current = currentPromise;
+        try {
+            await currentPromise;
+        } finally {
+            if (activeSavePromiseRef.current === currentPromise) {
+                activeSavePromiseRef.current = null;
+            }
         }
-    }, [updateRequest, trackDataTransfer, loadedTabs, setHasUnsavedChanges, isLocked, getDraftKey, uploadImage]);
+    }, [updateRequest, trackDataTransfer, setHasUnsavedChanges, uploadImage]);
+
+    useEffect(() => {
+        performSaveRef.current = performSave;
+    }, [performSave]);
 
     const debouncedSave = useCallback(() => {
-        if (isLocked || !isInitialDataLoaded || isFetchingRequest) return;
+        if (isLockedRef.current || !isInitialDataLoadedRef.current || isFetchingRequestRef.current) return;
         setHasUnsavedChanges(true);
+        hasUnsavedChangesRef.current = true;
         lastInteractionRef.current = Date.now();
         if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
         debounceTimeoutRef.current = window.setTimeout(() => { if (isMounted.current) performSave(); }, 1500);
-    }, [performSave, setHasUnsavedChanges, isLocked, isInitialDataLoaded, isFetchingRequest]);
+    }, [performSave, setHasUnsavedChanges]);
 
     const addActivityLogEntry = useCallback((action: string, details: string, imageUrl?: string, linkId?: string, linkPage?: Page) => {
         if (isLocked) return;
         const newLog = createActivityLog(action, details, imageUrl, linkId, linkPage);
         if (newLog) {
-            setActivityLog(prev => [newLog, ...prev]);
+            setActivityLog(prev => {
+                const updated = [newLog, ...prev];
+                inspectionDataRef.current.activityLog = updated;
+                return updated;
+            });
             debouncedSave();
         }
     }, [createActivityLog, debouncedSave, isLocked]);
@@ -1002,6 +1073,12 @@ export const FillRequest: React.FC = () => {
         });
         deletedNoteIdsRef.current.forEach((time, id) => {
             if (now - time > 60000) deletedNoteIdsRef.current.delete(id);
+        });
+        recentlyAddedFindingIdsRef.current.forEach((time, id) => {
+            if (now - time > 30000) recentlyAddedFindingIdsRef.current.delete(id);
+        });
+        deletedFindingIdsRef.current.forEach((time, id) => {
+            if (now - time > 60000) deletedFindingIdsRef.current.delete(id);
         });
 
         // 1. General Notes
@@ -1090,12 +1167,27 @@ export const FillRequest: React.FC = () => {
 
         // 3. Findings
         if (serverRequest.structured_findings !== undefined && serverRequest.structured_findings !== null) {
-            const serverFindings = serverRequest.structured_findings || [];
+            const serverFindings = (serverRequest.structured_findings || []).filter(
+                sf => !deletedFindingIdsRef.current.has(sf.findingId)
+            );
             setStructuredFindings(prev => {
-                const unsaved = prev.filter(f => f.status === 'error' || f.status === 'saving');
-                const mergedMap = new Map();
+                if (serverFindings.length === 0 && prev.length > 0 && deletedFindingIdsRef.current.size === 0) {
+                    return prev;
+                }
+
+                const mergedMap = new Map<string, StructuredFinding>();
                 serverFindings.forEach(f => mergedMap.set(f.findingId, { ...f, status: 'saved' }));
-                unsaved.forEach(f => mergedMap.set(f.findingId, f));
+
+                prev.forEach(localFinding => {
+                    if (deletedFindingIdsRef.current.has(localFinding.findingId)) return;
+
+                    const isUnsaved = localFinding.status === 'error' || localFinding.status === 'saving';
+                    const isRecentlyAddedLocally = recentlyAddedFindingIdsRef.current.has(localFinding.findingId);
+
+                    if (isUnsaved || isRecentlyAddedLocally) {
+                        mergedMap.set(localFinding.findingId, localFinding);
+                    }
+                });
 
                 const newArr = Array.from(mergedMap.values());
                 // @ts-ignore
@@ -1203,6 +1295,15 @@ export const FillRequest: React.FC = () => {
         };
     }, [selectedRequestId, isInitialDataLoaded, performSave, fetchAndUpdateSingleRequest, handleServerUpdate]);
 
+    const fetchAndUpdateSingleRequestRef = useRef(fetchAndUpdateSingleRequest);
+    useEffect(() => { fetchAndUpdateSingleRequestRef.current = fetchAndUpdateSingleRequest; }, [fetchAndUpdateSingleRequest]);
+    const getDraftKeyRef = useRef(getDraftKey);
+    useEffect(() => { getDraftKeyRef.current = getDraftKey; }, [getDraftKey]);
+    const getDefaultTabRef = useRef(getDefaultTab);
+    useEffect(() => { getDefaultTabRef.current = getDefaultTab; }, [getDefaultTab]);
+    const addNotificationRef = useRef(addNotification);
+    useEffect(() => { addNotificationRef.current = addNotification; }, [addNotification]);
+
     // --- SERVER-FIRST INITIAL DATA LOADER ---
     useEffect(() => {
         if (!selectedRequestId) return;
@@ -1214,11 +1315,11 @@ export const FillRequest: React.FC = () => {
         const initData = async () => {
             try {
                 // 1. Always fetch full authoritative request data from server first
-                const serverReq = await fetchAndUpdateSingleRequest(selectedRequestId);
+                const serverReq = await fetchAndUpdateSingleRequestRef.current(selectedRequestId);
                 if (isCancelled || !isMounted.current) return;
 
                 // 2. Check for any locally unsaved draft items
-                const draftStr = localStorage.getItem(getDraftKey(selectedRequestId));
+                const draftStr = localStorage.getItem(getDraftKeyRef.current(selectedRequestId));
                 let draft: any = null;
                 if (draftStr) {
                     try { draft = JSON.parse(draftStr); } catch (e) {}
@@ -1256,9 +1357,25 @@ export const FillRequest: React.FC = () => {
                     const unsaved = (draft.structuredFindings as StructuredFinding[]).filter((f: StructuredFinding) => f.status === 'saving' || f.status === 'error');
                     const findingsMap = new Map();
                     serverFindings.forEach((f: StructuredFinding) => findingsMap.set(f.findingId, f));
-                    unsaved.forEach((f: StructuredFinding) => findingsMap.set(f.findingId, f));
+                    unsaved.forEach((f: StructuredFinding) => {
+                        recentlyAddedFindingIdsRef.current.set(f.findingId, Date.now());
+                        findingsMap.set(f.findingId, f);
+                    });
                     finalFindings = Array.from(findingsMap.values());
                 }
+
+                const hasRestoredUnsaved =
+                    finalGeneral.some(n => n.status === 'saving' || n.status === 'error') ||
+                    Object.values(finalCategories).some(arr => (arr || []).some(n => n.status === 'saving' || n.status === 'error')) ||
+                    finalFindings.some(f => f.status === 'saving' || f.status === 'error');
+
+                inspectionDataRef.current = {
+                    generalNotes: finalGeneral,
+                    categoryNotes: finalCategories,
+                    structuredFindings: finalFindings,
+                    voiceMemos: serverMemos,
+                    activityLog: serverLogs
+                };
 
                 setGeneralNotes(finalGeneral);
                 setCategoryNotes(finalCategories);
@@ -1270,19 +1387,31 @@ export const FillRequest: React.FC = () => {
                     setFieldTestedCategories(serverReq.inspection_data.field_tested_categories);
                 }
 
-                const defTab = getDefaultTab();
+                const defTab = getDefaultTabRef.current();
                 setActiveTab(defTab);
                 setActiveFindingGroup(null);
                 setCategorySubTab('main');
                 setIsFindingsSectionOpen(true);
-                setLoadedTabs(new Set(['general', 'categories', 'gallery']));
+                const initialTabs = new Set(['general', 'categories', 'gallery']);
+                loadedTabsRef.current = initialTabs;
+                setLoadedTabs(initialTabs);
+                isInitialDataLoadedRef.current = true;
                 setIsInitialDataLoaded(true);
-                setHasUnsavedChanges(false);
+                setHasUnsavedChanges(hasRestoredUnsaved);
+                hasUnsavedChangesRef.current = hasRestoredUnsaved;
 
-                prevRequestRef.current = serverReq || request;
+                prevRequestRef.current = serverReq || latestRequestRef.current;
+
+                if (hasRestoredUnsaved) {
+                    window.setTimeout(() => {
+                        if (isMounted.current && performSaveRef.current) {
+                            performSaveRef.current().catch(() => {});
+                        }
+                    }, 500);
+                }
             } catch (err) {
                 console.error("Failed to load initial request data from server:", err);
-                const draftStr = localStorage.getItem(getDraftKey(selectedRequestId));
+                const draftStr = localStorage.getItem(getDraftKeyRef.current(selectedRequestId));
                 if (draftStr && isMounted.current) {
                     try {
                         const draft = JSON.parse(draftStr);
@@ -1291,14 +1420,14 @@ export const FillRequest: React.FC = () => {
                         if (draft.structuredFindings) setStructuredFindings(draft.structuredFindings);
                         setLoadedTabs(new Set(['general', 'categories', 'gallery']));
                         setIsInitialDataLoaded(true);
-                        addNotification({
+                        addNotificationRef.current({
                             title: 'تنبيه الاتصال',
                             message: 'فشل الاتصال بالسحابة. يتم عرض نسخة المسودة المحفوظة محلياً.',
                             type: 'info'
                         });
                     } catch (e) {}
                 } else {
-                    addNotification({
+                    addNotificationRef.current({
                         title: 'خطأ',
                         message: 'فشل تحميل بيانات الطلب من السيرفر. يرجى التحقق من الاتصال.',
                         type: 'error'
@@ -1316,7 +1445,7 @@ export const FillRequest: React.FC = () => {
         return () => {
             isCancelled = true;
         };
-    }, [selectedRequestId, fetchAndUpdateSingleRequest, getDraftKey, getDefaultTab, addNotification]);
+    }, [selectedRequestId]);
 
     // --- BACKGROUND / PROP SYNC EFFECT ---
     useEffect(() => {
@@ -1631,6 +1760,10 @@ export const FillRequest: React.FC = () => {
                 setActivityLog(newActivityLog);
             }
 
+            if (inspectionDataRef.current.structuredFindings.some(f => f.status === 'saving' || f.status === 'error')) {
+                debouncedSave();
+            }
+
         } catch (error) {
             console.error("Deletion failed:", error);
             addNotification({ title: 'خطأ', message: 'فشل حذف الملاحظة.', type: 'error' });
@@ -1742,6 +1875,10 @@ export const FillRequest: React.FC = () => {
             if (isMounted.current) {
                 setCategoryNotes(newCategoryNotes);
                 setActivityLog(newActivityLog);
+            }
+
+            if (inspectionDataRef.current.structuredFindings.some(f => f.status === 'saving' || f.status === 'error')) {
+                debouncedSave();
             }
 
         } catch (error) {
@@ -2036,7 +2173,14 @@ export const FillRequest: React.FC = () => {
 
     const handleUpdateFindingFromReview = useCallback((findingId: string, newValue: string) => {
         if (isLocked) return;
-        setStructuredFindings(prev => prev.map(sf => sf.findingId === findingId ? { ...sf, value: newValue, status: 'saving' } : sf));
+        lastInteractionRef.current = Date.now();
+        recentlyAddedFindingIdsRef.current.set(findingId, Date.now());
+        deletedFindingIdsRef.current.delete(findingId);
+        setStructuredFindings(prev => {
+            const next = prev.map(sf => sf.findingId === findingId ? { ...sf, value: newValue, status: 'saving' as const } : sf);
+            inspectionDataRef.current.structuredFindings = next;
+            return next;
+        });
         addActivityLogEntry('تعديل بند فحص (مراجعة)', `تم تعديل قيمة البند إلى "${newValue}"`, undefined, findingId);
         debouncedSave();
     }, [addActivityLogEntry, debouncedSave, isLocked]);
@@ -2051,52 +2195,66 @@ export const FillRequest: React.FC = () => {
             }
         } else { // type === 'finding'
             if (deletingFindingIds.has(item.id) || !request) return;
+            lastInteractionRef.current = Date.now();
+            deletedFindingIdsRef.current.set(item.id, Date.now());
+            recentlyAddedFindingIdsRef.current.delete(item.id);
             setDeletingFindingIds(prev => new Set(prev).add(item.id));
 
             try {
                 if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-                const newStructuredFindings = structuredFindings.filter(sf => sf.findingId !== item.id);
+                const currentFindings = inspectionDataRef.current.structuredFindings;
+                const newStructuredFindings = currentFindings.filter(sf => sf.findingId !== item.id);
+                inspectionDataRef.current.structuredFindings = newStructuredFindings;
                 const categoryName = item.categoryName;
                 const newLog = createActivityLog('حذف بند فحص (مراجعة)', `تم حذف بند "${item.title}" من قسم "${categoryName}"`);
-                const newActivityLog = newLog ? [newLog, ...activityLog] : activityLog;
+                const newActivityLog = newLog ? [newLog, ...inspectionDataRef.current.activityLog] : inspectionDataRef.current.activityLog;
+                inspectionDataRef.current.activityLog = newActivityLog;
 
-                const updatedRequest: Partial<InspectionRequest> & { id: string } = {
-                    id: request.id,
-                    structured_findings: newStructuredFindings.map(({ status, ...rest }) => rest as StructuredFinding),
-                    activity_log: newActivityLog,
-                    updated_at: new Date().toISOString()
-                };
+                setStructuredFindings(newStructuredFindings);
+                setActivityLog(newActivityLog);
 
-                trackDataTransfer(estimateObjectSize(updatedRequest));
-                updateRequest(updatedRequest).then(() => {
+                performSave(false, undefined, {
+                    structuredFindings: newStructuredFindings,
+                    deletedFindingIds: [item.id],
+                    activityLog: newActivityLog
+                }).catch((e) => {
+                    console.error("Delete failed from review", e);
+                }).finally(() => {
                     if (isMounted.current) {
-                        setStructuredFindings(newStructuredFindings);
-                        setActivityLog(newActivityLog);
+                        setDeletingFindingIds(prev => { const newSet = new Set(prev); newSet.delete(item.id); return newSet; });
                     }
                 });
             } catch (e) {
                 console.error("Delete failed from review", e);
-            } finally {
                 if (isMounted.current) {
-                    setDeletingNoteIds(prev => { const newSet = new Set(prev); newSet.delete(item.id); return newSet; });
+                    setDeletingFindingIds(prev => { const newSet = new Set(prev); newSet.delete(item.id); return newSet; });
                 }
             }
         }
-    }, [handleRemoveGeneralNote, handleRemoveCategoryNote, structuredFindings, request, deletingFindingIds, activityLog, createActivityLog, updateRequest, trackDataTransfer, isLocked]);
+    }, [handleRemoveGeneralNote, handleRemoveCategoryNote, request, deletingFindingIds, createActivityLog, performSave, isLocked]);
 
 
     const openImagePreview = useCallback((imageUrl: string) => { setPreviewImageUrl(imageUrl); setIsPreviewModalOpen(true); }, []);
 
-    const handleSave = async () => {
-        if (isLocked) return;
-        if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+    const handleSave = async (): Promise<boolean> => {
+        if (isLocked) return true;
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+            debounceTimeoutRef.current = null;
+        }
         try {
             const newLog = createActivityLog('حفظ مؤقت', 'تم حفظ جميع التغييرات يدوياً.');
-            const newLogArray = newLog ? [newLog, ...activityLog] : activityLog;
+            const newLogArray = newLog ? [newLog, ...inspectionDataRef.current.activityLog] : inspectionDataRef.current.activityLog;
+            inspectionDataRef.current.activityLog = newLogArray;
             setActivityLog(newLogArray);
             await performSave(false, undefined, { activityLog: newLogArray });
             addNotification({ title: 'نجاح', message: 'تم حفظ التغييرات بنجاح.', type: 'success' });
-        } catch { }
+            return true;
+        } catch (error) {
+            console.error("Manual save failed:", error);
+            addNotification({ title: 'خطأ في الحفظ', message: 'فشل حفظ التغييرات في السيرفر. يرجى التحقق من الاتصال والمحاولة مرة أخرى.', type: 'error' });
+            return false;
+        }
     };
 
     const handleGoBack = async () => {
@@ -2105,6 +2263,11 @@ export const FillRequest: React.FC = () => {
                 title: 'تغييرات غير محفوظة',
                 message: 'لديك تغييرات لم يتم حفظها. هل أنت متأكد من الخروج؟ ستفقد التعديلات الأخيرة.',
                 onConfirm: () => {
+                    if (debounceTimeoutRef.current) {
+                        clearTimeout(debounceTimeoutRef.current);
+                        debounceTimeoutRef.current = null;
+                    }
+                    hasUnsavedChangesRef.current = false;
                     setHasUnsavedChanges(false);
                     goBack();
                 }
@@ -2115,6 +2278,15 @@ export const FillRequest: React.FC = () => {
     };
 
     const handlePreviewAndPrint = async () => {
+        const proceedToPrint = async () => {
+            if (!isLockedByStatus) {
+                const saved = await handleSave();
+                if (!saved) return;
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+            setPageRef.current('print-report');
+        };
+
         // Find if any category lacks technicians
         const categoriesWithNoTechs = visibleFindingCategories.filter(cat => {
             const assigned = request?.technician_assignments?.[cat.id] || [];
@@ -2125,18 +2297,12 @@ export const FillRequest: React.FC = () => {
             showConfirmModal({
                 title: 'تحديد الفنيين مطلوب',
                 message: `لم يتم تحديد فنيين للأقسام التالية: ${categoriesWithNoTechs.map(c => c.name).join('، ')}. هل تود المتابعة للطباعة بأي حال؟`,
-                onConfirm: async () => {
-                    if (!isLockedByStatus) await handleSave();
-                    setPage('print-report');
-                }
+                onConfirm: proceedToPrint
             });
             return;
         }
 
-        if (!isLockedByStatus) {
-            await handleSave();
-        }
-        setPage('print-report');
+        await proceedToPrint();
     };
 
     const handleComplete = async () => {
@@ -2361,7 +2527,8 @@ export const FillRequest: React.FC = () => {
         });
 
         // Deduplication: prevent adding already existing findings in this session
-        const existingFindingIds = new Set(structuredFindings.map(sf => sf.findingId));
+        const currentFindings = inspectionDataRef.current.structuredFindings;
+        const existingFindingIds = new Set(currentFindings.map(sf => sf.findingId));
         const filteredPayload = expandedFindingsPayload.filter(f => !existingFindingIds.has(f.findingId));
 
         // Internal deduplication: case where bundle expansion or selection has internal duplicates
@@ -2375,52 +2542,84 @@ export const FillRequest: React.FC = () => {
         });
 
         if (finalUniquePayload.length > 0) {
-            setStructuredFindings(prev => [...prev, ...finalUniquePayload]);
+            lastInteractionRef.current = Date.now();
+            finalUniquePayload.forEach(f => {
+                recentlyAddedFindingIdsRef.current.set(f.findingId, Date.now());
+                deletedFindingIdsRef.current.delete(f.findingId);
+            });
+            const nextFindings = [...currentFindings, ...finalUniquePayload];
+            inspectionDataRef.current.structuredFindings = nextFindings;
+            setStructuredFindings(nextFindings);
 
             const activeCategory = customFindingCategories.find(c => c.id === activeTab);
             const categoryName = activeCategory?.name || 'قسم غير معروف';
             const addedNames = filteredPayload.map(f => f.findingName);
-            addActivityLogEntry('إضافة بنود فحص', `تمت إضافة: ${addedNames.map(n => `"${n}"`).join('، ')} إلى قسم "${categoryName}"`);
-            debouncedSave();
+            const newLog = createActivityLog('إضافة بنود فحص', `تمت إضافة: ${addedNames.map(n => `"${n}"`).join('، ')} إلى قسم "${categoryName}"`);
+            const nextLogs = newLog ? [newLog, ...inspectionDataRef.current.activityLog] : inspectionDataRef.current.activityLog;
+            if (newLog) {
+                inspectionDataRef.current.activityLog = nextLogs;
+                setActivityLog(nextLogs);
+            }
+            setHasUnsavedChanges(true);
+            hasUnsavedChangesRef.current = true;
+            performSave(false, undefined, { structuredFindings: nextFindings, activityLog: nextLogs }).catch(() => {});
         }
     };
 
     const handleFindingValueChange = useCallback((findingId: string, newValue: string) => {
         if (isLocked) return;
-        setStructuredFindings(prev => prev.map(sf => sf.findingId === findingId ? { ...sf, value: newValue, status: 'saving' } : sf));
-        const finding = structuredFindings.find(f => f.findingId === findingId);
+        lastInteractionRef.current = Date.now();
+        recentlyAddedFindingIdsRef.current.set(findingId, Date.now());
+        deletedFindingIdsRef.current.delete(findingId);
+
+        const finding = inspectionDataRef.current.structuredFindings.find(f => f.findingId === findingId);
+        setStructuredFindings(prev => {
+            const next = prev.map(sf => sf.findingId === findingId ? { ...sf, value: newValue, status: 'saving' as const } : sf);
+            inspectionDataRef.current.structuredFindings = next;
+            return next;
+        });
         if (finding) {
             const categoryName = customFindingCategories.find(c => c.id === finding.categoryId)?.name || 'غير معروف';
             addActivityLogEntry('تعديل بند فحص', `تغيير قيمة البند "${finding.findingName}" إلى "${newValue}" في قسم "${categoryName}"`, undefined, findingId);
         }
         debouncedSave();
-    }, [debouncedSave, isLocked]);
+    }, [debouncedSave, isLocked, customFindingCategories, addActivityLogEntry]);
 
     const handleRemoveFinding = useCallback((findingId: string) => {
         if (isLocked) return;
         if (!request) return;
 
-        const findingToDelete = structuredFindings.find(sf => sf.findingId === findingId);
+        const currentFindings = inspectionDataRef.current.structuredFindings;
+        const findingToDelete = currentFindings.find(sf => sf.findingId === findingId);
         if (!findingToDelete) return;
 
-        // 1. Optimistic UI update: Remove it immediately from state
-        const newStructuredFindings = structuredFindings.filter(sf => sf.findingId !== findingId);
+        lastInteractionRef.current = Date.now();
+        deletedFindingIdsRef.current.set(findingId, Date.now());
+        recentlyAddedFindingIdsRef.current.delete(findingId);
+
+        // 1. Optimistic UI update: Remove it immediately from state & ref
+        const newStructuredFindings = currentFindings.filter(sf => sf.findingId !== findingId);
+        inspectionDataRef.current.structuredFindings = newStructuredFindings;
         setStructuredFindings(newStructuredFindings);
 
         // 2. Add to activity log 
         const categoryName = customFindingCategories.find(c => c.id === findingToDelete.categoryId)?.name || 'غير معروف';
-        addActivityLogEntry('حذف بند فحص', `تم حذف بند "${findingToDelete.findingName}" من قسم "${categoryName}"`);
+        const newLog = createActivityLog('حذف بند فحص', `تم حذف بند "${findingToDelete.findingName}" من قسم "${categoryName}"`);
+        const nextLogs = newLog ? [newLog, ...inspectionDataRef.current.activityLog] : inspectionDataRef.current.activityLog;
+        if (newLog) {
+            inspectionDataRef.current.activityLog = nextLogs;
+            setActivityLog(nextLogs);
+        }
 
-        // 3. IMMEDIATE SAVE with Override: 
-        // Pass the new list directly to performSave to bypass any state/ref race conditions.
-        // This ensures the backend gets the list *without* the deleted item.
-        performSave(false, undefined, { structuredFindings: newStructuredFindings, deletedFindingIds: [findingId] });
+        // 3. IMMEDIATE SAVE with Override
+        performSave(false, undefined, { structuredFindings: newStructuredFindings, deletedFindingIds: [findingId], activityLog: nextLogs }).catch(() => {});
 
-    }, [structuredFindings, request, customFindingCategories, addActivityLogEntry, isLocked, performSave]);
+    }, [request, customFindingCategories, createActivityLog, isLocked, performSave]);
 
     const handleDeleteAllFindingsForCategory = (categoryId: string) => {
         if (isLocked) return;
-        const findingsInCategory = structuredFindings.filter(sf => sf.categoryId === categoryId);
+        const currentFindings = inspectionDataRef.current.structuredFindings;
+        const findingsInCategory = currentFindings.filter(sf => sf.categoryId === categoryId);
         if (findingsInCategory.length === 0) return;
 
         showConfirmModal({
@@ -2429,16 +2628,29 @@ export const FillRequest: React.FC = () => {
             onConfirm: () => {
                 if (!request) return;
 
+                lastInteractionRef.current = Date.now();
+                const latestFindings = inspectionDataRef.current.structuredFindings;
                 const categoryName = customFindingCategories.find(c => c.id === categoryId)?.name || 'غير معروف';
-                const newStructuredFindings = structuredFindings.filter(sf => sf.categoryId !== categoryId);
-                const deletedIds = findingsInCategory.map(f => f.findingId);
+                const newStructuredFindings = latestFindings.filter(sf => sf.categoryId !== categoryId);
+                const deletedIds = latestFindings.filter(sf => sf.categoryId === categoryId).map(f => f.findingId);
+
+                deletedIds.forEach(id => {
+                    deletedFindingIdsRef.current.set(id, Date.now());
+                    recentlyAddedFindingIdsRef.current.delete(id);
+                });
 
                 // Optimistic UI updates
+                inspectionDataRef.current.structuredFindings = newStructuredFindings;
                 setStructuredFindings(newStructuredFindings);
-                addActivityLogEntry('حذف جماعي', `تم حذف جميع البنود من قسم "${categoryName}"`);
+                const newLog = createActivityLog('حذف جماعي', `تم حذف جميع البنود من قسم "${categoryName}"`);
+                const nextLogs = newLog ? [newLog, ...inspectionDataRef.current.activityLog] : inspectionDataRef.current.activityLog;
+                if (newLog) {
+                    inspectionDataRef.current.activityLog = nextLogs;
+                    setActivityLog(nextLogs);
+                }
 
                 // Immediate Save
-                performSave(false, undefined, { structuredFindings: newStructuredFindings, deletedFindingIds: deletedIds });
+                performSave(false, undefined, { structuredFindings: newStructuredFindings, deletedFindingIds: deletedIds, activityLog: nextLogs }).catch(() => {});
 
                 addNotification({ title: 'نجاح', message: 'تم حذف البنود.', type: 'success' });
             }
@@ -3852,7 +4064,8 @@ export const FillRequest: React.FC = () => {
                                     expandedFindings.push({ findingId: f.findingId, findingName: original?.name || '', value: f.value, categoryId: activeTab, status: 'saving' });
                                 }
                             });
-                            const existingIds = new Set(structuredFindings.map(sf => sf.findingId));
+                            const currentFindings = inspectionDataRef.current.structuredFindings;
+                            const existingIds = new Set(currentFindings.map(sf => sf.findingId));
                             const uniqueInState = expandedFindings.filter(f => !existingIds.has(f.findingId));
 
                             const finalUniqueFindings: StructuredFinding[] = [];
@@ -3865,15 +4078,30 @@ export const FillRequest: React.FC = () => {
                             });
 
                             if (finalUniqueFindings.length > 0) {
-                                setStructuredFindings(prev => [...prev, ...finalUniqueFindings]);
+                                lastInteractionRef.current = Date.now();
+                                finalUniqueFindings.forEach(f => {
+                                    recentlyAddedFindingIdsRef.current.set(f.findingId, Date.now());
+                                    deletedFindingIdsRef.current.delete(f.findingId);
+                                });
+
+                                const nextFindings = [...currentFindings, ...finalUniqueFindings];
+                                inspectionDataRef.current.structuredFindings = nextFindings;
+                                setStructuredFindings(nextFindings);
 
                                 // LOGGING THE ADDITION
                                 const categoryName = activeCategory?.name || 'قسم غير معروف';
                                 const addedNames = finalUniqueFindings.map(f => f.findingName);
                                 const namesPreview = addedNames.slice(0, 3).join('، ') + (addedNames.length > 3 ? '...' : '');
-                                addActivityLogEntry('إضافة بنود فحص', `تمت إضافة ${finalUniqueFindings.length} بند/بنود إلى قسم "${categoryName}" تشمل: ${namesPreview}`);
+                                const newLog = createActivityLog('إضافة بنود فحص', `تمت إضافة ${finalUniqueFindings.length} بند/بنود إلى قسم "${categoryName}" تشمل: ${namesPreview}`);
+                                const nextLogs = newLog ? [newLog, ...inspectionDataRef.current.activityLog] : inspectionDataRef.current.activityLog;
+                                if (newLog) {
+                                    inspectionDataRef.current.activityLog = nextLogs;
+                                    setActivityLog(nextLogs);
+                                }
 
-                                debouncedSave();
+                                setHasUnsavedChanges(true);
+                                hasUnsavedChangesRef.current = true;
+                                performSave(false, undefined, { structuredFindings: nextFindings, activityLog: nextLogs }).catch(() => {});
                             }
                             setIsFindingModalOpen(false);
                         }}

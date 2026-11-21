@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { PredefinedFinding } from '../../../types';
 import { uuidv4 } from '../../../lib/utils';
+import { useAppContext } from '../../../context/AppContext';
 import Icon from '../../../components/Icon';
 import Button from '../../../components/Button';
 import CheckCircleIcon from '../../../components/icons/CheckCircleIcon';
@@ -15,6 +16,7 @@ interface BatchFindingEntryProps {
 }
 
 const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, availableFindings, existingFindingIds, onSave, onClose }) => {
+    const { settings } = useAppContext();
     // Add 'bundles' to state
     const [viewMode, setViewMode] = useState<'rows' | 'gallery' | 'bundles'>('gallery');
     const [rows, setRows] = useState<{ id: string; findingId: string; value: string }[]>([{ id: uuidv4(), findingId: '', value: '' }]);
@@ -124,9 +126,27 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
             list = list.filter(f => f.group === selectedGroup || f.groups?.includes(selectedGroup));
         }
 
+        // Apply custom card positions configured in settings (visual display order only)
+        const groupKey = `${categoryId}::${selectedGroup ?? '__ALL__'}`;
+        const fallbackAllKey = `${categoryId}::__ALL__`;
+        const customFindingOrder =
+            settings.cardPositionsSettings?.findingOrderByGroup?.[groupKey] ||
+            (selectedGroup ? settings.cardPositionsSettings?.findingOrderByGroup?.[fallbackAllKey] : undefined);
+
+        if (customFindingOrder && customFindingOrder.length > 0) {
+            const orderMap = new Map<string, number>();
+            customFindingOrder.forEach((id, idx) => orderMap.set(id, idx));
+            list = [...list].sort((a, b) => {
+                const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : Number.MAX_SAFE_INTEGER;
+                const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : Number.MAX_SAFE_INTEGER;
+                if (idxA !== idxB) return idxA - idxB;
+                return 0;
+            });
+        }
+
         if (!searchTerm) return list;
         return list.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    }, [availableFindings, searchTerm, viewMode, selectedGroup, existingFindingIds]);
+    }, [availableFindings, searchTerm, viewMode, selectedGroup, existingFindingIds, settings.cardPositionsSettings, categoryId]);
 
     const availableGroups = useMemo(() => {
         const groups = new Set<string>();
@@ -134,8 +154,20 @@ const BatchFindingEntry: React.FC<BatchFindingEntryProps> = ({ categoryId, avail
             if (f.group) groups.add(f.group);
             if (f.groups) f.groups.forEach(g => groups.add(g));
         });
-        return Array.from(groups).sort();
-    }, [availableFindings]);
+        const rawGroups = Array.from(groups).sort();
+        const customGroupOrder = settings.cardPositionsSettings?.groupOrderByCategory?.[categoryId];
+        if (!customGroupOrder || customGroupOrder.length === 0) return rawGroups;
+
+        const orderMap = new Map<string, number>();
+        customGroupOrder.forEach((g, idx) => orderMap.set(g, idx));
+
+        return [...rawGroups].sort((a, b) => {
+            const idxA = orderMap.has(a) ? orderMap.get(a)! : Number.MAX_SAFE_INTEGER;
+            const idxB = orderMap.has(b) ? orderMap.get(b)! : Number.MAX_SAFE_INTEGER;
+            if (idxA !== idxB) return idxA - idxB;
+            return a.localeCompare(b);
+        });
+    }, [availableFindings, settings.cardPositionsSettings, categoryId]);
 
     const groupNameMapping: Record<string, string> = {
         'الجهة الأمامية': 'الأمام',

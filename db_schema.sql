@@ -23,6 +23,32 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- دالة تسجيل تغييرات اسم العميل تلقائياً
+CREATE OR REPLACE FUNCTION track_client_name_change()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF btrim(COALESCE(OLD.name, '')) IS DISTINCT FROM btrim(COALESCE(NEW.name, '')) THEN
+        IF NEW.name_history IS NOT DISTINCT FROM OLD.name_history OR NEW.name_history IS NULL THEN
+            NEW.name_history = COALESCE(OLD.name_history, '[]'::jsonb) || jsonb_build_array(
+                jsonb_build_object(
+                    'old_name', OLD.name,
+                    'new_name', NEW.name,
+                    'changed_at', now(),
+                    'changed_by', 'تعديل تلقائي'
+                )
+            );
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_track_client_name_change ON clients;
+CREATE TRIGGER trg_track_client_name_change
+BEFORE UPDATE ON clients
+FOR EACH ROW
+EXECUTE FUNCTION track_client_name_change();
+
 
 -- ================================================================
 -- دالة إنشاء طلب فحص متكاملة (Single Shot RPC)
@@ -90,16 +116,19 @@ BEGIN
 
     -- 3. إنشاء طلب الفحص
     INSERT INTO inspection_requests (
-        client_id, car_id, car_snapshot, inspection_type_id,
+        client_id, car_id, car_snapshot, client_snapshot, inspection_type_id,
         payment_type, payment_note, split_payment_details,
         price, status, employee_id, broker, created_at, reservation_id,
         inspection_data, general_notes, category_notes, structured_findings, activity_log, attached_files
     )
     VALUES (
-        v_client_id, v_car_id, p_car_snapshot, p_inspection_type_id,
+        v_client_id, v_car_id, p_car_snapshot,
+        jsonb_build_object('name', p_client_name, 'phone', p_client_phone),
+        p_inspection_type_id,
         p_payment_type, p_payment_note, p_split_payment_details,
         p_price, p_status, p_employee_id, p_broker, p_created_at, p_reservation_id,
-        '{}'::jsonb, '[]'::jsonb, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb
+        jsonb_build_object('client_snapshot', jsonb_build_object('name', p_client_name, 'phone', p_client_phone)),
+        '[]'::jsonb, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb
     )
     RETURNING id INTO v_request_id;
 
@@ -167,6 +196,7 @@ CREATE TABLE IF NOT EXISTS clients (
     email             TEXT,
     address           TEXT,
     notes             TEXT,
+    name_history      JSONB DEFAULT '[]'::jsonb,
     created_at        TIMESTAMPTZ DEFAULT now()
 );
 
@@ -349,6 +379,7 @@ CREATE TABLE IF NOT EXISTS inspection_requests (
     client_id              UUID REFERENCES clients(id),
     car_id                 UUID REFERENCES cars(id),
     car_snapshot           JSONB,
+    client_snapshot        JSONB,
     inspection_type_id     UUID REFERENCES inspection_types(id),
     payment_type           TEXT,
     payment_note           TEXT,

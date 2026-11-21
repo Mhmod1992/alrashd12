@@ -3,7 +3,7 @@ import React, { useMemo, useEffect, useRef } from 'react';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings, ReportStamp, ReportFontSizes, HighlightColor } from '../types';
 import { useAppContext } from '../context/AppContext';
 import Icon from './Icon';
-import { formatPhoneNumberDisplay } from '../lib/utils';
+import { formatPhoneNumberDisplay, resolveRequestClientName } from '../lib/utils';
 
 interface InspectionReportProps {
     request: InspectionRequest;
@@ -356,8 +356,9 @@ const InspectionReport = React.forwardRef<HTMLDivElement, InspectionReportProps>
     const { technicians, employees, authUser } = useAppContext();
     const isCustomerRequestIncomplete = (request?.report_stamps || []).includes('CUSTOMER_REQUEST_INCOMPLETE');
 
-    const isGeneralClient = client?.phone === '0000000000' || client?.name === 'بدون اسم' || client?.phone === '0';
-    const displayClientName = isGeneralClient ? (reportDirection === 'ltr' ? 'General Client' : 'عميل عام') : (client?.name || '');
+    const resolvedClientName = resolveRequestClientName(request, client);
+    const isGeneralClient = client?.phone === '0000000000' || resolvedClientName === 'بدون اسم' || client?.name === 'بدون اسم' || client?.phone === '0';
+    const displayClientName = isGeneralClient ? (reportDirection === 'ltr' ? 'General Client' : 'عميل عام') : (resolvedClientName || '');
     const showClientPhone = !isGeneralClient;
 
     const carDetails = useMemo(() => {

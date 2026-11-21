@@ -5,6 +5,7 @@ import XIcon from './icons/XIcon';
 import ClipboardListIcon from './icons/ClipboardListIcon';
 import CarIcon from './icons/CarIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
+import { resolveRequestClientName } from '../lib/utils';
 
 interface TodayRequestsDrawerProps {
     isOpen: boolean;
@@ -110,7 +111,7 @@ export const TodayRequestsDrawer: React.FC<TodayRequestsDrawerProps> = ({
         const client = clients.find(c => c.id === req.client_id);
         if (client) {
             return {
-                name: client.name || 'عميل نقدي',
+                name: resolveRequestClientName(req, client) || 'عميل نقدي',
                 phone: client.phone || '',
             };
         }

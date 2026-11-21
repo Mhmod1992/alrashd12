@@ -1,7 +1,7 @@
 import React from 'react';
 import { Document, Page, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import { ArabicText as Text } from './ArabicText';
-import { formatPhoneNumberDisplay } from '../lib/utils';
+import { formatPhoneNumberDisplay, resolveRequestClientName } from '../lib/utils';
 import { InspectionRequest, Client, Car, CarMake, CarModel, InspectionType, CustomFindingCategory, PredefinedFinding, Settings, Note, StructuredFinding, ReportSettings } from '../types';
 
 // Register Arabic font
@@ -242,7 +242,7 @@ const ReportPdf: React.FC<ReportPdfProps> = ({
             </Text>
             <View style={[styles.row, { flexDirection: isLtr ? 'row' : 'row-reverse' }]}>
               <Text style={styles.label}>{isLtr ? 'Name:' : 'الاسم:'}</Text>
-              <Text style={styles.value}>{client.name}</Text>
+              <Text style={styles.value}>{resolveRequestClientName(request, client)}</Text>
             </View>
             <View style={[styles.row, { flexDirection: isLtr ? 'row' : 'row-reverse' }]}>
               <Text style={styles.label}>{isLtr ? 'Phone:' : 'الجوال:'}</Text>

@@ -54,6 +54,7 @@ export default ({ mode }) => {
           ]
         },
         workbox: {
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           // استراتيجيات التخزين المؤقت (Cache) لوضع الإنتاج فقط
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           cleanupOutdatedCaches: true,

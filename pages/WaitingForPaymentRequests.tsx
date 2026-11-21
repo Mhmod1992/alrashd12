@@ -530,43 +530,65 @@ const WaitingForPaymentRequests: React.FC = () => {
             const now = new Date().toISOString();
             const currentReq = requests.find(r => r.id === paymentRequest.id) || paymentRequest;
 
+            let initialClient = paymentRequest.client_id ? clients.find(c => c.id === paymentRequest.client_id) : undefined;
+            if (!initialClient && paymentRequest.client_id) {
+                try {
+                    const { data: dbClient } = await supabase
+                        .from('clients')
+                        .select('*')
+                        .eq('id', paymentRequest.client_id)
+                        .maybeSingle();
+                    if (dbClient) {
+                        initialClient = dbClient as Client;
+                        ensureLocalClient(initialClient);
+                    }
+                } catch (e) {
+                    console.warn('Failed to fetch initial client in payment modal:', e);
+                }
+            }
+
             const isInitialGeneralClient = Boolean(
                 paymentRequest.client_id && (
                     paymentRequest.client_id === systemDefaultClient?.id ||
-                    clients.find(c => c.id === paymentRequest.client_id)?.is_system_default ||
-                    clients.find(c => c.id === paymentRequest.client_id)?.phone === '0000000000'
+                    initialClient?.is_system_default ||
+                    initialClient?.phone === '0000000000'
                 )
             );
 
             const isCurrentInputGeneral = editableClientPhone === '0000000000' || (systemDefaultClient && editableClientPhone === systemDefaultClient.phone);
             const cleanInputPhone = cleanSaudiPhoneNumber(editableClientPhone) || editableClientPhone.replace(/\D/g, '');
-            const initialClient = paymentRequest.client_id ? clients.find(c => c.id === paymentRequest.client_id) : undefined;
             const cleanInitialPhone = initialClient ? (cleanSaudiPhoneNumber(initialClient.phone) || initialClient.phone?.replace(/\D/g, '')) : '';
 
             const isSamePhoneAsInitial = Boolean(
                 initialClient &&
                 !isInitialGeneralClient &&
-                cleanInitialPhone &&
-                cleanInputPhone &&
                 (
-                    cleanInitialPhone === cleanInputPhone ||
-                    (cleanInitialPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanInitialPhone.slice(-8) === cleanInputPhone.slice(-8))
+                    (cleanInitialPhone && cleanInputPhone && (
+                        cleanInitialPhone === cleanInputPhone ||
+                        (cleanInitialPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanInitialPhone.slice(-8) === cleanInputPhone.slice(-8))
+                    )) ||
+                    (!cleanInitialPhone && !cleanInputPhone && (initialClient.phone || '').trim() === editableClientPhone.trim())
                 )
             );
 
             // Determine target client ID
             let targetClientId: string | null = null;
+            let resolvedClientRecord: Client | undefined = initialClient;
 
             if (isCurrentInputGeneral) {
                 targetClientId = systemDefaultClient?.id || null;
+                resolvedClientRecord = systemDefaultClient || undefined;
             } else if (selectedPaymentClientId) {
                 targetClientId = selectedPaymentClientId;
+                resolvedClientRecord = clients.find(c => c.id === selectedPaymentClientId);
             } else if (isSamePhoneAsInitial && initialClient) {
                 // Same client as original - just update name if edited
                 targetClientId = initialClient.id;
                 const isGeneral = initialClient.is_system_default || initialClient.id === systemDefaultClient?.id || initialClient.phone === '0000000000';
-                if (!isGeneral && editableClientName.trim() && initialClient.name !== editableClientName.trim()) {
-                    await updateClient({ ...initialClient, name: editableClientName.trim() });
+                if (!isGeneral && editableClientName.trim() && (initialClient.name || '').trim() !== editableClientName.trim()) {
+                    const updatedClient = { ...initialClient, name: editableClientName.trim() };
+                    await updateClient(updatedClient);
+                    resolvedClientRecord = updatedClient;
                 }
             } else if (cleanInputPhone.length >= 8) {
                 // Phone changed! Unlink previous client without modifying their record. Search or create new client.
@@ -574,11 +596,13 @@ const WaitingForPaymentRequests: React.FC = () => {
                 const localMatch = clients.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanInputPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
                 if (localMatch) {
                     targetClientId = localMatch.id;
+                    resolvedClientRecord = localMatch;
                 } else {
                     const existingDbClients = await searchClients(editableClientPhone);
                     const matched = existingDbClients.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanInputPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
                     if (matched) {
                         targetClientId = matched.id;
+                        resolvedClientRecord = matched;
                         ensureLocalClient(matched);
                     } else if (editableClientName.trim()) {
                         const newClient = await addClient({
@@ -587,6 +611,7 @@ const WaitingForPaymentRequests: React.FC = () => {
                             phone: editableClientPhone.trim()
                         });
                         targetClientId = newClient.id;
+                        resolvedClientRecord = newClient;
                     }
                 }
             } else {
@@ -595,6 +620,9 @@ const WaitingForPaymentRequests: React.FC = () => {
 
             const newLog = createActivityLog ? createActivityLog('تحصيل وتفعيل الطلب', `تم تحصيل المبلغ (${editablePrice} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي`) : null;
             const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
+            const snapshotName = editableClientName.trim() || resolvedClientRecord?.name || currentReq.client_snapshot?.name || currentReq.inspection_data?.client_snapshot?.name || '';
+            const snapshotPhone = editableClientPhone.trim() || resolvedClientRecord?.phone || currentReq.client_snapshot?.phone || currentReq.inspection_data?.client_snapshot?.phone || '';
+            const updatedSnapshot = (snapshotName || snapshotPhone) ? { name: snapshotName, phone: snapshotPhone } : undefined;
 
             await updateRequest({
                 id: paymentRequest.id,
@@ -604,7 +632,14 @@ const WaitingForPaymentRequests: React.FC = () => {
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
                 created_at: now,
                 activity_log: updatedLog,
-                ...(targetClientId ? { client_id: targetClientId } : {})
+                ...(targetClientId ? { client_id: targetClientId } : {}),
+                ...(updatedSnapshot ? {
+                    client_snapshot: updatedSnapshot,
+                    inspection_data: {
+                        ...(currentReq.inspection_data || {}),
+                        client_snapshot: updatedSnapshot
+                    }
+                } : {})
             });
 
             if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected' && paymentMethod !== PaymentType.Unpaid) {

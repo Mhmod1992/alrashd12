@@ -126,8 +126,8 @@ const ApiSettings: React.FC = () => {
                             {isSavingImageKey ? 'جاري...' : 'حفظ'}
                         </Button>
                     </div>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                        * إذا تركت هذا المفتاح فارغاً، سيستخدم النظام مفتاح Gemini الأساسي كخيار احتياطي تلقائياً.
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold leading-relaxed">
+                        * تنبيه: يعمل هذا المولد حصراً بالمفتاح الخاص به فقط، ولا يُسمح له باستخدام مفتاح Gemini الأساسي منعاً لاستهلاك الحصص.
                     </p>
                 </div>
 

@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { InspectionRequest, PaymentType, Client, Car, CarMake, CarModel } from '../types';
+import { resolveRequestClientName } from '../lib/utils';
 
 interface ExcelPrintTableProps {
   requests: InspectionRequest[];
@@ -11,7 +12,10 @@ interface ExcelPrintTableProps {
 }
 
 const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, cars, carMakes, carModels }) => {
-  const getClientName = (clientId: string) => clients.find(c => c.id === clientId)?.name || 'غير معروف';
+  const getClientName = (request: InspectionRequest) => {
+    const client = clients.find(c => c.id === request.client_id);
+    return resolveRequestClientName(request, client);
+  };
   
   const getCarInfo = (request: InspectionRequest) => {
     if (request.car_snapshot) {
@@ -82,7 +86,7 @@ const ExcelPrintTable: React.FC<ExcelPrintTableProps> = ({ requests, clients, ca
             return (
               <tr key={request.id}>
                 <td className="border border-black p-1 text-center text-[7.5pt]">{request.request_number}</td>
-                <td className="border border-black p-1 text-right font-bold text-[8pt]">{getClientName(request.client_id)}</td>
+                <td className="border border-black p-1 text-right font-bold text-[8pt]">{getClientName(request)}</td>
                 <td className="border border-black p-1 text-right text-[7pt]">{getCarInfo(request)}</td>
                 <td className="border border-black p-1 text-center text-[7.5pt] font-mono whitespace-nowrap">
                   {new Date(request.created_at).toLocaleDateString('en-GB')}

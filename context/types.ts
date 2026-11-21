@@ -52,6 +52,15 @@ export interface AppContextType {
     hasMoreRequests: boolean;
     isLoadingMore: boolean;
     searchRequestByNumber: (query: string | number, exactOnly?: boolean) => Promise<void>;
+    searchRequestsByCarSpecs: (params: {
+        makeId?: string;
+        modelId?: string;
+        year?: number | null;
+        startDate?: string | null;
+        endDate?: string | null;
+        offset?: number;
+        limit?: number;
+    }) => Promise<{ data: InspectionRequest[]; hasMore: boolean }>;
     clearSearchedRequests: () => void;
     searchedRequests: InspectionRequest[] | null;
     setSearchedRequests: React.Dispatch<React.SetStateAction<InspectionRequest[] | null>>;

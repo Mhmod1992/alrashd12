@@ -1489,6 +1489,136 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [requests, clients, cars, carMakes, carModels, ensureEntitiesLoaded, clearSearchedRequests, setIsRefreshing, setSearchedRequests]);
 
+    const searchRequestsByCarSpecs = useCallback(async ({
+        makeId,
+        modelId,
+        year,
+        startDate,
+        endDate,
+        offset = 0,
+        limit = 50
+    }: {
+        makeId?: string;
+        modelId?: string;
+        year?: number | null;
+        startDate?: string | null;
+        endDate?: string | null;
+        offset?: number;
+        limit?: number;
+    }): Promise<{ data: InspectionRequest[]; hasMore: boolean }> => {
+        if (!makeId && !modelId && !year && !startDate && !endDate) {
+            return { data: [], hasMore: false };
+        }
+
+        const toBoundaryIso = (dateStr: string, isEnd: boolean): string => {
+            if (dateStr.includes('T')) return dateStr;
+            const parts = dateStr.split('-').map(Number);
+            if (parts.length === 3 && parts.every(n => !isNaN(n))) {
+                const [y, m, d] = parts;
+                const dt = isEnd
+                    ? new Date(y, m - 1, d, 23, 59, 59, 999)
+                    : new Date(y, m - 1, d, 0, 0, 0, 0);
+                return dt.toISOString();
+            }
+            const fallback = new Date(dateStr);
+            if (isEnd) fallback.setHours(23, 59, 59, 999);
+            else fallback.setHours(0, 0, 0, 0);
+            return fallback.toISOString();
+        };
+
+        const startIso = startDate ? toBoundaryIso(startDate, false) : null;
+        const endIso = endDate ? toBoundaryIso(endDate, true) : null;
+        const hasCarFilters = Boolean(makeId || modelId || year);
+
+        try {
+            const selectCols = hasCarFilters
+                ? `${LIGHTWEIGHT_REQUEST_COLUMNS}, cars!inner(id, make_id, model_id, year)`
+                : LIGHTWEIGHT_REQUEST_COLUMNS;
+
+            let query = supabase
+                .from('inspection_requests')
+                .select(selectCols)
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit);
+
+            if (makeId) {
+                query = query.eq('cars.make_id', makeId);
+            }
+            if (modelId) {
+                query = query.eq('cars.model_id', modelId);
+            }
+            if (year) {
+                query = query.eq('cars.year', year);
+            }
+            if (startIso) {
+                query = query.gte('created_at', startIso);
+            }
+            if (endIso) {
+                query = query.lte('created_at', endIso);
+            }
+
+            const { data, error } = await query;
+
+            if (!error && data) {
+                const hasMore = data.length > limit;
+                const sliced = hasMore ? data.slice(0, limit) : data;
+                const cleanRequests: InspectionRequest[] = sliced.map((row: any) => {
+                    const { cars: _joinedCar, ...req } = row;
+                    return req as InspectionRequest;
+                });
+
+                if (cleanRequests.length > 0) {
+                    await ensureEntitiesLoaded(cleanRequests);
+                }
+                return { data: cleanRequests, hasMore };
+            }
+
+            if (!hasCarFilters) {
+                console.error('Date-only search failed:', error);
+                return { data: [], hasMore: false };
+            }
+
+            // Fallback: Two-step query if embedded join fails
+            console.warn('Inner join car specs search failed, using fallback:', error);
+            let carQuery = supabase.from('cars').select('id');
+            if (makeId) carQuery = carQuery.eq('make_id', makeId);
+            if (modelId) carQuery = carQuery.eq('model_id', modelId);
+            if (year) carQuery = carQuery.eq('year', year);
+
+            const { data: matchedCars, error: carsError } = await carQuery.limit(1000);
+            if (carsError || !matchedCars || matchedCars.length === 0) {
+                return { data: [], hasMore: false };
+            }
+
+            const matchedCarIds = matchedCars.map(c => c.id);
+            let reqQuery = supabase
+                .from('inspection_requests')
+                .select(LIGHTWEIGHT_REQUEST_COLUMNS)
+                .in('car_id', matchedCarIds)
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit);
+
+            if (startIso) reqQuery = reqQuery.gte('created_at', startIso);
+            if (endIso) reqQuery = reqQuery.lte('created_at', endIso);
+
+            const { data: reqs, error: reqsError } = await reqQuery;
+
+            if (reqsError || !reqs) {
+                return { data: [], hasMore: false };
+            }
+
+            const hasMore = reqs.length > limit;
+            const cleanRequests = (hasMore ? reqs.slice(0, limit) : reqs) as InspectionRequest[];
+            if (cleanRequests.length > 0) {
+                await ensureEntitiesLoaded(cleanRequests);
+            }
+            return { data: cleanRequests, hasMore };
+        } catch (err) {
+            console.error('Error in searchRequestsByCarSpecs:', err);
+            return { data: [], hasMore: false };
+        }
+    }, [ensureEntitiesLoaded]);
+
     const fetchClientRequests = useCallback(async (clientId: string): Promise<InspectionRequest[]> => {
         const { data } = await supabase.from('inspection_requests').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
         if (data) {
@@ -2532,7 +2662,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const value: AppContextType = {
         theme, toggleTheme, themeSetting, setThemeSetting, page, setPage, goBack, settingsPage, setSettingsPage,
         requests, setRequests, pendingRequests, addPendingRequest, updatePendingRequest, deletePendingRequest, convertPendingToOfficialRequest, clients, systemDefaultClient, setClients, cars, setCars, carMakes, carModels, fetchCarModelsByMake, inspectionTypes, brokers, employees, expenses, technicians,
-        loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, clearSearchedRequests, searchedRequests, setSearchedRequests,
+        loadMoreRequests, hasMoreRequests, isLoadingMore, searchRequestByNumber, searchRequestsByCarSpecs, clearSearchedRequests, searchedRequests, setSearchedRequests,
         searchQuery, setSearchQuery, highlightedRequestId, triggerHighlight,
         customFindingCategories, predefinedFindings, selectedRequestId, setSelectedRequestId, selectedClientId, setSelectedClientId,
         authUser, setAuthUser, login, logout, updateOwnPassword, settings, updateSettings, addRequest, addRequestOptimized, updateRequest, deleteRequest, deleteRequestsBatch,

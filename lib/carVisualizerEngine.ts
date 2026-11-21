@@ -222,6 +222,10 @@ export function extractBodyDamageData(
     const partSide = matchedPart ? matchedPart.side : detectSideFromName(cardTitle);
 
     const conditionText = rawVal || 'رش / سمكرة';
+    const isDefect = (valNormalized.includes('فك') || valNormalized.includes('تعديل') || valNormalized.includes('دقة') || valNormalized.includes('دقات') || valNormalized.includes('ملاحظ') || valNormalized.includes('حكة') || valNormalized.includes('ترميل') || valNormalized.includes('ضربة')) &&
+      !valNormalized.includes('رش') && !valNormalized.includes('معجون') && !valNormalized.includes('صبغ') && !valNormalized.includes('سمكرة');
+
+    const panelType: PanelDamageType = isDefect ? 'defect' : 'repainted';
     const key = partNameAr;
 
     if (!processedKeys.has(key)) {
@@ -230,9 +234,9 @@ export function extractBodyDamageData(
         id: `finding-${sf.findingId}-${Math.random()}`,
         nameAr: partNameAr,
         nameEn: partNameEn,
-        type: 'repainted', // All body cards represent repainted/bodywork damages in the report
+        type: panelType,
         descriptionAr: conditionText,
-        descriptionEn: 'Repainted / Resprayed Body Panel',
+        descriptionEn: isDefect ? 'Disassembly / Dent / Adjustment Note' : 'Repainted / Resprayed Body Panel',
         side: partSide,
         source: 'finding'
       });
@@ -391,20 +395,11 @@ export function extractBodyDamageData(
       };
     }
   } else if (activeSides.length > 1) {
-    // If damage spans rear and right (like in the user's report image)
-    if (activeSides.includes('rear') && activeSides.includes('right') && !activeSides.includes('left')) {
-      recommendedViewport = {
-        titleAr: 'منظور خلفي-أيمن مائل مخصص (Rear-Right Perspective View)',
-        titleEn: 'Dedicated Rear-Right 3/4 Perspective View',
-        description: 'توجيه الكاميرا بدقة نحو الشنطة والرفرف الخلفي الأيمن والقائم الأيمن مع استبعاد الجانب الأيسر السليم.'
-      };
-    } else {
-      recommendedViewport = {
-        titleAr: 'شبكة زوايا ديناميكية مجمعة (Cohesive Multi-Angle Layout)',
-        titleEn: 'Cohesive Multi-Angle Dynamic Technical Layout',
-        description: `عرض الزوايا المتضررة فقط (${activeSides.map(translateSide).join(' و ')}) واستبعاد الزوايا السليمة تماماً.`
-      };
-    }
+    recommendedViewport = {
+      titleAr: 'شبكة رباعية فنية متكاملة (2x2 Grid Presentation)',
+      titleEn: 'A professional 2x2 grid presentation of a 3D technical exploded view diagram',
+      description: 'عرض شبكي رباعي احترافي (واجهة أمامية، واجهة خلفية، الجانب الأيسر، الجانب الأيمن) مع شريط الدليل السفلي.'
+    };
   }
 
   // Build the strict technical prompt
@@ -451,31 +446,79 @@ function buildTechnicalExplodedPrompt(params: {
   activeSides: CarSide[];
   viewport: string;
 }): string {
-  const { carTitle, damagedPanels, viewport } = params;
+  const { carTitle, damagedPanels, activeSides } = params;
 
-  // Format list of repainted panels
-  const repaintedList = damagedPanels
-    .filter(p => p.type === 'repainted')
-    .map(p => `- ${p.nameAr} (${p.nameEn}): ${p.descriptionAr}`)
-    .join('\n');
+  // Categorize by damage type: repainted (Red) vs defect/disassembly (Amber)
+  const repaintedPanels = damagedPanels.filter(p => p.type === 'repainted');
+  const defectPanels = damagedPanels.filter(p => p.type === 'defect');
 
-  // Format list of defect/mechanical/structural panels
-  const defectList = damagedPanels
-    .filter(p => p.type === 'defect')
-    .map(p => `- ${p.nameAr} (${p.nameEn}): ${p.descriptionAr}`)
-    .join('\n');
+  // Dynamic Camera Rule
+  let cameraRuleText = '';
+  if (activeSides.includes('right') && activeSides.includes('rear') && !activeSides.includes('left')) {
+    cameraRuleText = `- DYNAMIC VIEWPORT SELECTION: Cohesive Multi-Angle Dynamic Technical Layout.
+  * Render ONLY the specific view angle(s) relevant to the damaged sections listed in the input data:
+  * If damages are on the RIGHT/REAR side -> Focus strictly on Rear-Right Perspective.
+  * Completely avoid showing angles that have zero reported damages.`;
+  } else if (activeSides.includes('left') && activeSides.includes('rear') && !activeSides.includes('right')) {
+    cameraRuleText = `- DYNAMIC VIEWPORT SELECTION: Cohesive Multi-Angle Dynamic Technical Layout.
+  * Render ONLY the specific view angle(s) relevant to the damaged sections listed in the input data:
+  * If damages are on the LEFT/REAR side -> Focus strictly on Rear-Left Perspective.
+  * Completely avoid showing angles that have zero reported damages.`;
+  } else if (activeSides.length === 1 && activeSides[0] === 'left') {
+    cameraRuleText = `- DYNAMIC VIEWPORT SELECTION: Dedicated Left Lateral Profile Perspective.
+  * Render ONLY the specific view angle(s) relevant to the damaged sections listed in the input data:
+  * Damages are on the LEFT side -> Focus strictly on Left Lateral Profile Perspective.
+  * Completely avoid showing angles that have zero reported damages.`;
+  } else if (activeSides.length === 1 && activeSides[0] === 'right') {
+    cameraRuleText = `- DYNAMIC VIEWPORT SELECTION: Dedicated Right Lateral Profile Perspective.
+  * Render ONLY the specific view angle(s) relevant to the damaged sections listed in the input data:
+  * Damages are on the RIGHT side -> Focus strictly on Right Lateral Profile Perspective.
+  * Completely avoid showing angles that have zero reported damages.`;
+  } else if (activeSides.length === 1 && activeSides[0] === 'front') {
+    cameraRuleText = `- DYNAMIC VIEWPORT SELECTION: Front 3/4 Perspective.
+  * Render ONLY the specific view angle(s) relevant to the damaged sections listed in the input data:
+  * Damages are on the FRONT side -> Focus strictly on Front-Quarter Perspective.
+  * Completely avoid showing angles that have zero reported damages.`;
+  } else if (activeSides.length === 1 && activeSides[0] === 'rear') {
+    cameraRuleText = `- DYNAMIC VIEWPORT SELECTION: Rear 3/4 Perspective.
+  * Render ONLY the specific view angle(s) relevant to the damaged sections listed in the input data:
+  * Damages are on the REAR side -> Focus strictly on Rear-Quarter Perspective.
+  * Completely avoid showing angles that have zero reported damages.`;
+  } else {
+    cameraRuleText = `- DYNAMIC VIEWPORT SELECTION: Cohesive Multi-Angle Dynamic Technical Layout.
+  * Render ONLY the specific view angle(s) relevant to the damaged sections listed in the input data:
+  * If damages are on the RIGHT/REAR side -> Focus strictly on Rear-Right Perspective.
+  * Completely avoid showing angles that have zero reported damages.`;
+  }
+
+  // Format Repainted Panels (Red #FF0000)
+  let repaintedLines = '';
+  if (repaintedPanels.length > 0) {
+    repaintedLines = repaintedPanels
+      .map(p => `- ${p.nameAr} (${p.nameEn}): ${p.descriptionAr || 'رش / سمكرة'}`)
+      .join('\n');
+  } else {
+    repaintedLines = '- None reported (all body panels retain factory OEM white)';
+  }
+
+  // Format Defect / Disassembly Panels (Amber #FF8C00)
+  let defectLines = '';
+  if (defectPanels.length > 0) {
+    defectLines = defectPanels
+      .map(p => `- ${p.nameAr} (${p.nameEn}): ${p.descriptionAr}`)
+      .join('\n');
+  } else {
+    defectLines = '- None reported';
+  }
 
   return `[Role & Context]
 You are a top-tier automotive engineering visualizer and 3D technical illustrator. Your objective is to process vehicle inspection reports and automatically render precise, dynamic 3D exploded technical diagrams (3D Exploded View) of the car's exterior body based strictly on the reported damages and locations.
 
 [Vehicle Specification]
-Vehicle: ${carTitle || 'Modern Sedan'}
+Vehicle: ${carTitle || 'هيونداي اكسنت 2018'}
 
 [Dynamic Camera Angle & Composition Rules - CRITICAL]
-- DYNAMIC VIEWPORT SELECTION: ${viewport}.
-  * Render ONLY the specific view angle(s) relevant to the damaged sections listed in the input data:
-  * If damages are on the RIGHT/REAR side -> Focus strictly on Rear-Right Perspective.
-  * Completely avoid showing angles that have zero reported damages.
+${cameraRuleText}
 
 [Visual Style, Wheels & Realistic Colors]
 - Rendering Style: Clean 3D Exploded View / Technical Diagram (ألواح الهيكل التفكيكية العائمة بدقة هندسية).
@@ -493,12 +536,11 @@ Vehicle: ${carTitle || 'Modern Sedan'}
 - Labels MUST be bilingual (Arabic & English) stating the exact component name and condition.
 
 [INSPECTION DAMAGE DATA TO RENDER]
-${repaintedList ? `* REPAINTED / SPRAYED PANELS (RED #FF0000):\n${repaintedList}` : '* No repainted panels reported.'}
+* REPAINTED / SPRAYED PANELS (RED #FF0000):
+${repaintedLines}
 
-${defectList ? `* NON-PAINT DEFECTS / DENTS / ADJUSTMENTS (AMBER #FF8C00):\n${defectList}` : '* No body dents or mechanical adjustments reported.'}
-
-${damagedPanels.length === 0 ? '* All body panels intact in clean factory white.' : ''}
-`;
+* NON-PAINT DEFECT / MECHANICAL & STRUCTURAL NOTES (AMBER #FF8C00):
+${defectLines}`;
 }
 
 /**

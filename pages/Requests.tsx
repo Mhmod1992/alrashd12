@@ -3,8 +3,10 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import useSessionStorage from '../hooks/useSessionStorage';
 import { useAppContext } from '../context/AppContext';
 import { supabase } from '../lib/supabaseClient';
-import { InspectionRequest, RequestStatus, Car, Client, PaymentType, Reservation, Employee } from '../types';
+import { InspectionRequest, RequestStatus, Car, CarMake, CarModel, Client, PaymentType, Reservation, Employee } from '../types';
 import Button from '../components/Button';
+import CarSpecsSearchPanel from '../components/CarSpecsSearchPanel';
+import CarIcon from '../components/icons/CarIcon';
 import PlusIcon from '../components/icons/PlusIcon';
 import SearchIcon from '../components/icons/SearchIcon';
 import FilterIcon from '../components/icons/FilterIcon';
@@ -73,7 +75,7 @@ const Requests: React.FC = () => {
     const {
         requests, pendingRequests, convertPendingToOfficialRequest, clients, setClients, cars, setCars, carMakes, carModels, inspectionTypes, brokers, can, authUser, settings, updateSettings,
         initialRequestModalState, setInitialRequestModalState,
-        searchedRequests, searchRequestByNumber, clearSearchedRequests, searchQuery, setSearchQuery,
+        searchedRequests, searchRequestByNumber, searchRequestsByCarSpecs, clearSearchedRequests, searchQuery, setSearchQuery,
         loadMoreRequests, hasMoreRequests, isLoadingMore, isRefreshing,
         page, setPage, selectedRequestId, setSelectedRequestId, addNotification, fetchRequestsByCarId, sendWhatsAppMessage, whatsappApiStatus,
         updateRequest, updateClient, employees, showConfirmModal, fetchRequestsByDateRange,
@@ -92,7 +94,37 @@ const Requests: React.FC = () => {
     const [employeeFilter, setEmployeeFilter] = useSessionStorage<string>('requests_employee_filter', 'الكل');
     const [paymentFilter, setPaymentFilter] = useSessionStorage<PaymentType | 'الكل'>('requests_payment_filter', 'الكل');
 
-    const isSearchActive = (requestNumberQuery.trim().length > 0 || comprehensiveQuery.trim().length > 0);
+    // Dedicated Car Specs Search State (Draft inputs + Applied search on submit)
+    const [isCarSearchPanelOpen, setIsCarSearchPanelOpen] = useState(false);
+    const [carSearchMake, setCarSearchMake] = useState<CarMake | null>(null);
+    const [carSearchModel, setCarSearchModel] = useState<CarModel | null>(null);
+    const [carSearchYear, setCarSearchYear] = useState<number | null>(null);
+    const [carSearchStartDate, setCarSearchStartDate] = useState<string>('');
+    const [carSearchEndDate, setCarSearchEndDate] = useState<string>('');
+    const [appliedCarSearch, setAppliedCarSearch] = useState<{
+        make: CarMake | null;
+        model: CarModel | null;
+        year: number | null;
+        startDate: string;
+        endDate: string;
+    } | null>(null);
+    const [carSearchResults, setCarSearchResults] = useState<InspectionRequest[] | null>(null);
+    const [carSearchHasMore, setCarSearchHasMore] = useState(false);
+    const [isCarSearching, setIsCarSearching] = useState(false);
+    const [isLoadingMoreCarSearch, setIsLoadingMoreCarSearch] = useState(false);
+    const carSearchSeqRef = useRef(0);
+
+    const isCarSearchActive = appliedCarSearch !== null;
+    const hasCarSearchPendingChanges = Boolean(
+        appliedCarSearch && (
+            (appliedCarSearch.make?.id || null) !== (carSearchMake?.id || null) ||
+            (appliedCarSearch.model?.id || null) !== (carSearchModel?.id || null) ||
+            (appliedCarSearch.year || null) !== (carSearchYear || null) ||
+            appliedCarSearch.startDate !== carSearchStartDate ||
+            appliedCarSearch.endDate !== carSearchEndDate
+        )
+    );
+    const isSearchActive = (requestNumberQuery.trim().length > 0 || comprehensiveQuery.trim().length > 0 || isCarSearchActive);
 
     // Date Filter State
     const [dateFilter, setDateFilter] = useSessionStorage<'today' | 'all' | 'yesterday' | 'month' | 'range'>('requests_date_filter', 'today');
@@ -501,12 +533,15 @@ const Requests: React.FC = () => {
 
     // --- Listen for Remote Deletion Events ---
     useEffect(() => {
-        if (lastRemoteDeleteId && serverFetchedData) {
-            setServerFetchedData(prev => {
-                const updated = prev ? prev.filter(r => r.id !== lastRemoteDeleteId) : null;
-                moduleCachedServerData = updated;
-                return updated;
-            });
+        if (lastRemoteDeleteId) {
+            if (serverFetchedData) {
+                setServerFetchedData(prev => {
+                    const updated = prev ? prev.filter(r => r.id !== lastRemoteDeleteId) : null;
+                    moduleCachedServerData = updated;
+                    return updated;
+                });
+            }
+            setCarSearchResults(prev => prev ? prev.filter(r => r.id !== lastRemoteDeleteId) : null);
         }
     }, [lastRemoteDeleteId]);
 
@@ -641,6 +676,20 @@ const Requests: React.FC = () => {
 
     const [isSearching, setIsSearching] = useState(false);
 
+    const clearCarSearch = useCallback(() => {
+        carSearchSeqRef.current += 1;
+        setCarSearchMake(null);
+        setCarSearchModel(null);
+        setCarSearchYear(null);
+        setCarSearchStartDate('');
+        setCarSearchEndDate('');
+        setAppliedCarSearch(null);
+        setCarSearchResults(null);
+        setCarSearchHasMore(false);
+        setIsCarSearching(false);
+        setIsLoadingMoreCarSearch(false);
+    }, []);
+
     const clearFilters = useCallback(() => {
         if (searchDebounceRef.current) {
             window.clearTimeout(searchDebounceRef.current);
@@ -649,6 +698,8 @@ const Requests: React.FC = () => {
         setRequestNumberQuery('');
         setComprehensiveQuery('');
         setSearchQuery('');
+        clearCarSearch();
+        setIsCarSearchPanelOpen(false);
         setStatusFilter('الكل');
         setEmployeeFilter('الكل');
         setPaymentFilter('الكل');
@@ -672,7 +723,7 @@ const Requests: React.FC = () => {
             const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
             window.history.replaceState(window.history.state, '', newUrl);
         }
-    }, [setRequestNumberQuery, setComprehensiveQuery, setSearchQuery, setStatusFilter, setEmployeeFilter, setRangeStartDate, setRangeEndDate, setDateFilter, clearSearchedRequests]);
+    }, [setRequestNumberQuery, setComprehensiveQuery, setSearchQuery, clearCarSearch, setStatusFilter, setEmployeeFilter, setPaymentFilter, setRangeStartDate, setRangeEndDate, setDateFilter, clearSearchedRequests]);
 
     const hasScrolledRef = useRef<string | null>(null);
 
@@ -786,17 +837,109 @@ const Requests: React.FC = () => {
         }, 400);
     }, [requestNumberQuery, comprehensiveQuery, searchRequestByNumber, clearSearchedRequests, clearFilters]);
 
+    // Execute dedicated car specs + optional date range search ONLY when user clicks "بدء البحث"
+    const handleSubmitCarSearch = useCallback(async () => {
+        if (!carSearchMake && !carSearchModel && !carSearchYear && !carSearchStartDate && !carSearchEndDate) {
+            return;
+        }
+
+        const currentSeq = ++carSearchSeqRef.current;
+        const criteria = {
+            make: carSearchMake,
+            model: carSearchModel,
+            year: carSearchYear,
+            startDate: carSearchStartDate,
+            endDate: carSearchEndDate,
+        };
+
+        setAppliedCarSearch(criteria);
+        setIsCarSearching(true);
+        setIsLoadingMoreCarSearch(false);
+
+        // Ensure text search does not overlap
+        setRequestNumberQuery('');
+        setComprehensiveQuery('');
+        setSearchQuery('');
+        clearSearchedRequests();
+        if (paymentFilter !== 'الكل') {
+            setPaymentFilter('الكل');
+        }
+
+        try {
+            const { data, hasMore } = await searchRequestsByCarSpecs({
+                makeId: criteria.make?.id,
+                modelId: criteria.model?.id,
+                year: criteria.year,
+                startDate: criteria.startDate || null,
+                endDate: criteria.endDate || null,
+                offset: 0,
+                limit: 50,
+            });
+            if (carSearchSeqRef.current !== currentSeq) return;
+            setCarSearchResults(data);
+            setCarSearchHasMore(hasMore);
+        } catch (error) {
+            console.error('Car specs search error:', error);
+            if (carSearchSeqRef.current !== currentSeq) return;
+            setCarSearchResults([]);
+            setCarSearchHasMore(false);
+        } finally {
+            if (carSearchSeqRef.current === currentSeq) {
+                setIsCarSearching(false);
+            }
+        }
+    }, [carSearchMake, carSearchModel, carSearchYear, carSearchStartDate, carSearchEndDate, searchRequestsByCarSpecs, clearSearchedRequests, setSearchQuery, paymentFilter, setPaymentFilter]);
+
+    const handleLoadMoreCarSearch = useCallback(async () => {
+        if (!appliedCarSearch || isLoadingMoreCarSearch || !carSearchHasMore || !carSearchResults) return;
+
+        const currentSeq = carSearchSeqRef.current;
+        setIsLoadingMoreCarSearch(true);
+        try {
+            const { data, hasMore } = await searchRequestsByCarSpecs({
+                makeId: appliedCarSearch.make?.id,
+                modelId: appliedCarSearch.model?.id,
+                year: appliedCarSearch.year,
+                startDate: appliedCarSearch.startDate || null,
+                endDate: appliedCarSearch.endDate || null,
+                offset: carSearchResults.length,
+                limit: 50,
+            });
+            if (carSearchSeqRef.current !== currentSeq) return;
+
+            setCarSearchResults(prev => {
+                const existing = prev || [];
+                const existingIds = new Set(existing.map(r => r.id));
+                const nextItems = data.filter(r => !existingIds.has(r.id));
+                return [...existing, ...nextItems];
+            });
+            setCarSearchHasMore(hasMore);
+        } catch (error) {
+            console.error('Load more car search error:', error);
+        } finally {
+            if (carSearchSeqRef.current === currentSeq) {
+                setIsLoadingMoreCarSearch(false);
+            }
+        }
+    }, [appliedCarSearch, isLoadingMoreCarSearch, carSearchHasMore, carSearchResults, searchRequestsByCarSpecs]);
+
     const handleRequestNumberQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value.replace(/\D/g, '');
         setRequestNumberQuery(term);
-        if (term) setComprehensiveQuery('');
+        if (term) {
+            setComprehensiveQuery('');
+            if (isCarSearchActive) clearCarSearch();
+        }
         executeSearch(term, term ? '' : undefined);
     };
 
     const handleComprehensiveQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;
         setComprehensiveQuery(term);
-        if (term) setRequestNumberQuery('');
+        if (term) {
+            setRequestNumberQuery('');
+            if (isCarSearchActive) clearCarSearch();
+        }
         executeSearch(term ? '' : undefined, term);
     };
 
@@ -1253,43 +1396,65 @@ const Requests: React.FC = () => {
             const now = new Date().toISOString();
             const currentReq = requests.find(r => r.id === paymentRequest.id) || paymentRequest;
 
+            let initialClient = paymentRequest.client_id ? clients.find(c => c.id === paymentRequest.client_id) : undefined;
+            if (!initialClient && paymentRequest.client_id) {
+                try {
+                    const { data: dbClient } = await supabase
+                        .from('clients')
+                        .select('*')
+                        .eq('id', paymentRequest.client_id)
+                        .maybeSingle();
+                    if (dbClient) {
+                        initialClient = dbClient as Client;
+                        ensureLocalClient(initialClient);
+                    }
+                } catch (e) {
+                    console.warn('Failed to fetch initial client in payment modal:', e);
+                }
+            }
+
             const isInitialGeneralClient = Boolean(
                 paymentRequest.client_id && (
                     paymentRequest.client_id === systemDefaultClient?.id ||
-                    clients.find(c => c.id === paymentRequest.client_id)?.is_system_default ||
-                    clients.find(c => c.id === paymentRequest.client_id)?.phone === '0000000000'
+                    initialClient?.is_system_default ||
+                    initialClient?.phone === '0000000000'
                 )
             );
 
             const isCurrentInputGeneral = editableClientPhone === '0000000000' || (systemDefaultClient && editableClientPhone === systemDefaultClient.phone);
             const cleanInputPhone = cleanSaudiPhoneNumber(editableClientPhone) || editableClientPhone.replace(/\D/g, '');
-            const initialClient = paymentRequest.client_id ? clients.find(c => c.id === paymentRequest.client_id) : undefined;
             const cleanInitialPhone = initialClient ? (cleanSaudiPhoneNumber(initialClient.phone) || initialClient.phone?.replace(/\D/g, '')) : '';
 
             const isSamePhoneAsInitial = Boolean(
                 initialClient &&
                 !isInitialGeneralClient &&
-                cleanInitialPhone &&
-                cleanInputPhone &&
                 (
-                    cleanInitialPhone === cleanInputPhone ||
-                    (cleanInitialPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanInitialPhone.slice(-8) === cleanInputPhone.slice(-8))
+                    (cleanInitialPhone && cleanInputPhone && (
+                        cleanInitialPhone === cleanInputPhone ||
+                        (cleanInitialPhone.length >= 8 && cleanInputPhone.length >= 8 && cleanInitialPhone.slice(-8) === cleanInputPhone.slice(-8))
+                    )) ||
+                    (!cleanInitialPhone && !cleanInputPhone && (initialClient.phone || '').trim() === editableClientPhone.trim())
                 )
             );
 
             // Determine target client ID
             let targetClientId: string | null = null;
+            let resolvedClientRecord: Client | undefined = initialClient;
 
             if (isCurrentInputGeneral) {
                 targetClientId = systemDefaultClient?.id || null;
+                resolvedClientRecord = systemDefaultClient || undefined;
             } else if (selectedPaymentClientId) {
                 targetClientId = selectedPaymentClientId;
+                resolvedClientRecord = clients.find(c => c.id === selectedPaymentClientId);
             } else if (isSamePhoneAsInitial && initialClient) {
                 // Same client as original - just update name if edited
                 targetClientId = initialClient.id;
                 const isGeneral = initialClient.is_system_default || initialClient.id === systemDefaultClient?.id || initialClient.phone === '0000000000';
-                if (!isGeneral && editableClientName.trim() && initialClient.name !== editableClientName.trim()) {
-                    await updateClient({ ...initialClient, name: editableClientName.trim() });
+                if (!isGeneral && editableClientName.trim() && (initialClient.name || '').trim() !== editableClientName.trim()) {
+                    const updatedClient = { ...initialClient, name: editableClientName.trim() };
+                    await updateClient(updatedClient);
+                    resolvedClientRecord = updatedClient;
                 }
             } else if (cleanInputPhone.length >= 8) {
                 // Phone changed! Unlink previous client without modifying their record. Search or create new client.
@@ -1297,11 +1462,13 @@ const Requests: React.FC = () => {
                 const localMatch = clients.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanInputPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
                 if (localMatch) {
                     targetClientId = localMatch.id;
+                    resolvedClientRecord = localMatch;
                 } else {
                     const existingDbClients = await searchClients(editableClientPhone);
                     const matched = existingDbClients.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanInputPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
                     if (matched) {
                         targetClientId = matched.id;
+                        resolvedClientRecord = matched;
                         ensureLocalClient(matched);
                     } else if (editableClientName.trim()) {
                         const newClient = await addClient({
@@ -1310,6 +1477,7 @@ const Requests: React.FC = () => {
                             phone: editableClientPhone.trim()
                         });
                         targetClientId = newClient.id;
+                        resolvedClientRecord = newClient;
                     }
                 }
             } else {
@@ -1318,6 +1486,9 @@ const Requests: React.FC = () => {
 
             const newLog = createActivityLog ? createActivityLog('تحصيل وتفعيل الطلب', `تم تحصيل المبلغ (${editablePrice} ريال - ${paymentMethod}) وتحديث وقت الطلب إلى وقت التحصيل الفعلي`) : null;
             const updatedLog = newLog ? [newLog, ...(currentReq.activity_log || [])] : (currentReq.activity_log || []);
+            const snapshotName = editableClientName.trim() || resolvedClientRecord?.name || currentReq.client_snapshot?.name || currentReq.inspection_data?.client_snapshot?.name || '';
+            const snapshotPhone = editableClientPhone.trim() || resolvedClientRecord?.phone || currentReq.client_snapshot?.phone || currentReq.inspection_data?.client_snapshot?.phone || '';
+            const updatedSnapshot = (snapshotName || snapshotPhone) ? { name: snapshotName, phone: snapshotPhone } : undefined;
 
             await updateRequest({
                 id: paymentRequest.id,
@@ -1327,7 +1498,14 @@ const Requests: React.FC = () => {
                 split_payment_details: paymentMethod === PaymentType.Split ? { cash: splitCashAmount, card: splitCardAmount } : undefined,
                 created_at: now,
                 activity_log: updatedLog,
-                ...(targetClientId ? { client_id: targetClientId } : {})
+                ...(targetClientId ? { client_id: targetClientId } : {}),
+                ...(updatedSnapshot ? {
+                    client_snapshot: updatedSnapshot,
+                    inspection_data: {
+                        ...(currentReq.inspection_data || {}),
+                        client_snapshot: updatedSnapshot
+                    }
+                } : {})
             });
 
             if (sendWhatsAppStartNotify && whatsappApiStatus === 'connected') {
@@ -1367,14 +1545,18 @@ const Requests: React.FC = () => {
         if (serverFetchedData) {
             setServerFetchedData(prev => prev ? prev.filter(r => r.id !== id) : null);
         }
+        setCarSearchResults(prev => prev ? prev.filter(r => r.id !== id) : null);
     }, [serverFetchedData]);
 
-    const isLoadMoreVisible = searchedRequests === null && serverFetchedData === null && hasMoreRequests && dateFilter === 'all';
-    const isAnyFilterActive = requestNumberQuery.trim() !== '' || comprehensiveQuery.trim() !== '' || statusFilter !== 'الكل' || employeeFilter !== 'الكل' || dateFilter !== 'today';
+    const isLoadMoreVisible = searchedRequests === null && carSearchResults === null && serverFetchedData === null && hasMoreRequests && dateFilter === 'all';
+    const isAnyFilterActive = requestNumberQuery.trim() !== '' || comprehensiveQuery.trim() !== '' || isCarSearchActive || statusFilter !== 'الكل' || employeeFilter !== 'الكل' || dateFilter !== 'today';
     const isMainSearchActive = Boolean(
         requestNumberQuery.trim() !== '' ||
         comprehensiveQuery.trim() !== '' ||
         (searchQuery && searchQuery.trim() !== '') ||
+        isCarSearchActive ||
+        isCarSearching ||
+        carSearchResults !== null ||
         isSearchActive ||
         isSearching ||
         searchedRequests !== null
@@ -1420,7 +1602,10 @@ const Requests: React.FC = () => {
     const { dataToDisplay, waitingPaymentRequests, carsWithHistory } = useMemo(() => {
         let sourceData: InspectionRequest[];
 
-        if (searchedRequests !== null) {
+        if (isCarSearchActive) {
+            sourceData = carSearchResults || [];
+        }
+        else if (searchedRequests !== null) {
             sourceData = searchedRequests;
         }
         else if (serverFetchedData !== null) {
@@ -1502,13 +1687,15 @@ const Requests: React.FC = () => {
             waitingReqs = waitingReqs.filter(r => String(r.request_number).includes(waitingSearchTerm.trim()));
         }
 
-        let statusFilteredReqs = otherReqs.filter(req => {
-            if (statusFilter === 'الكل') return true;
-            if (statusFilter === 'active') return req.status === RequestStatus.NEW || req.status === RequestStatus.IN_PROGRESS;
-            return req.status === statusFilter;
-        });
+        let statusFilteredReqs = isCarSearchActive
+            ? [...otherReqs]
+            : otherReqs.filter(req => {
+                if (statusFilter === 'الكل') return true;
+                if (statusFilter === 'active') return req.status === RequestStatus.NEW || req.status === RequestStatus.IN_PROGRESS;
+                return req.status === statusFilter;
+            });
 
-        if (employeeFilter !== 'الكل') {
+        if (!isCarSearchActive && employeeFilter !== 'الكل') {
             statusFilteredReqs = statusFilteredReqs.filter(req => req.employee_id === employeeFilter);
         }
 
@@ -1517,6 +1704,10 @@ const Requests: React.FC = () => {
         }
 
         statusFilteredReqs.sort((a, b) => {
+            if (isCarSearchActive) {
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            }
+
             const aIsComplete = a.status === RequestStatus.COMPLETE;
             const bIsComplete = b.status === RequestStatus.COMPLETE;
             
@@ -1534,7 +1725,7 @@ const Requests: React.FC = () => {
         });
 
         return { dataToDisplay: statusFilteredReqs, waitingPaymentRequests: waitingReqs, carsWithHistory: carsWithHistorySet };
-    }, [requests, pendingRequests, clients, cars, searchedRequests, serverFetchedData, statusFilter, employeeFilter, authUser, waitingSearchTerm, can, disableAutoSortRequests]);
+    }, [requests, pendingRequests, clients, cars, searchedRequests, carSearchResults, isCarSearchActive, serverFetchedData, statusFilter, employeeFilter, authUser, waitingSearchTerm, can, disableAutoSortRequests]);
 
 
     const [serverCarsWithHistory, setServerCarsWithHistory] = useState<Set<string>>(new Set());
@@ -1675,8 +1866,11 @@ const Requests: React.FC = () => {
     }, [paymentRequest, employees]);
 
     const paginatedDataToDisplay = useMemo(() => {
+        if (isCarSearchActive) {
+            return dataToDisplay;
+        }
         return dataToDisplay.slice(0, displayLimit);
-    }, [dataToDisplay, displayLimit]);
+    }, [dataToDisplay, displayLimit, isCarSearchActive]);
 
     const handleLoadMore = useCallback(() => {
         // First try to show more of what we already have locally
@@ -2023,8 +2217,8 @@ const Requests: React.FC = () => {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                        <div className={`relative ${!isSearchActive ? 'md:col-span-2' : 'md:col-span-4'} flex items-center gap-2`}>
-                            <div className="relative flex-grow">
+                        <div className={`relative ${!isSearchActive ? 'md:col-span-2' : 'md:col-span-4'} flex items-center gap-2 flex-wrap sm:flex-nowrap`}>
+                            <div className="relative flex-grow min-w-[140px]">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                                     <SearchIcon className="h-5 w-5 text-slate-400" />
                                 </span>
@@ -2038,7 +2232,7 @@ const Requests: React.FC = () => {
                                     className={searchInputClasses}
                                 />
                             </div>
-                            <div className="relative flex-grow">
+                            <div className="relative flex-grow min-w-[170px]">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                                     <SearchIcon className="h-5 w-5 text-slate-400" />
                                 </span>
@@ -2052,9 +2246,24 @@ const Requests: React.FC = () => {
                                     className={searchInputClasses}
                                 />
                             </div>
-                            <Button variant="secondary" onClick={() => setIsScannerOpen(true)} className="p-3" title="مسح الرمز ضوئياً">
-                                <Icon name="scan-plate" className="w-5 h-5" />
-                            </Button>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <Button
+                                    variant={isCarSearchPanelOpen || isCarSearchActive ? 'primary' : 'secondary'}
+                                    onClick={() => setIsCarSearchPanelOpen(prev => !prev)}
+                                    className={`p-3 flex items-center gap-1.5 whitespace-nowrap ${
+                                        isCarSearchActive && !isCarSearchPanelOpen
+                                            ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-slate-800'
+                                            : ''
+                                    }`}
+                                    title="بحث مخصص بمواصفات السيارة (الشركة، الموديل، السنة)"
+                                >
+                                    <CarIcon className="w-5 h-5" />
+                                    <span className="text-xs font-bold">بحث بالسيارة</span>
+                                </Button>
+                                <Button variant="secondary" onClick={() => setIsScannerOpen(true)} className="p-3" title="مسح الرمز ضوئياً">
+                                    <Icon name="scan-plate" className="w-5 h-5" />
+                                </Button>
+                            </div>
                         </div>
                         
                         {!isSearchActive && (
@@ -2115,23 +2324,94 @@ const Requests: React.FC = () => {
                         )}
                     </div>
 
+                    {/* Collapsible Car Specs Search Panel */}
+                    {(isCarSearchPanelOpen || isCarSearchActive) && (
+                        <CarSpecsSearchPanel
+                            carMakes={carMakes}
+                            carModels={carModels}
+                            selectedMake={carSearchMake}
+                            selectedModel={carSearchModel}
+                            selectedYear={carSearchYear}
+                            startDate={carSearchStartDate}
+                            endDate={carSearchEndDate}
+                            onSelectMake={(make) => {
+                                setCarSearchMake(make);
+                                setCarSearchModel(null);
+                            }}
+                            onSelectModel={setCarSearchModel}
+                            onSelectYear={setCarSearchYear}
+                            onChangeStartDate={setCarSearchStartDate}
+                            onChangeEndDate={setCarSearchEndDate}
+                            onSubmitSearch={handleSubmitCarSearch}
+                            onClearAll={clearCarSearch}
+                            fetchCarModelsByMake={fetchCarModelsByMake}
+                            searchCarMakes={searchCarMakes}
+                            searchCarModels={searchCarModels}
+                            isSearching={isCarSearching}
+                            hasPendingChanges={hasCarSearchPendingChanges}
+                            isSearchApplied={isCarSearchActive}
+                        />
+                    )}
+
                     {/* Search Active Status Banner */}
                     {isSearchActive && (
                         <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 p-3 rounded-xl animate-fade-in shadow-sm">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 animate-pulse">
-                                    <SearchIcon className="w-4 h-4" />
+                                    {isCarSearchActive ? <CarIcon className="w-4 h-4" /> : <SearchIcon className="w-4 h-4" />}
                                 </div>
                                 <div>
-                                    <p className="text-sm font-bold text-blue-900 dark:text-blue-200">وضع البحث نشط حالياً</p>
-                                    <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 font-medium">يتم عرض الطلبات التي تطابق معايير البحث فقط. اضغط على (X) للعودة.</p>
+                                    {isCarSearchActive && appliedCarSearch ? (
+                                        <>
+                                            <p className="text-sm font-bold text-blue-900 dark:text-blue-200 flex flex-wrap items-center gap-1.5">
+                                                <span>بحث السيارة المخصص:</span>
+                                                {appliedCarSearch.make && (
+                                                    <span className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-slate-800 text-blue-700 dark:text-blue-300 text-xs border border-blue-200 dark:border-blue-700">
+                                                        {appliedCarSearch.make.name_en}{appliedCarSearch.make.name_ar ? ` (${appliedCarSearch.make.name_ar})` : ''}
+                                                    </span>
+                                                )}
+                                                {appliedCarSearch.model && (
+                                                    <span className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-slate-800 text-blue-700 dark:text-blue-300 text-xs border border-blue-200 dark:border-blue-700">
+                                                        {appliedCarSearch.model.name_en}{appliedCarSearch.model.name_ar ? ` (${appliedCarSearch.model.name_ar})` : ''}
+                                                    </span>
+                                                )}
+                                                {appliedCarSearch.year && (
+                                                    <span className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-slate-800 text-blue-700 dark:text-blue-300 text-xs font-numeric border border-blue-200 dark:border-blue-700">
+                                                        {appliedCarSearch.year}
+                                                    </span>
+                                                )}
+                                                {appliedCarSearch.startDate && (
+                                                    <span className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 text-xs font-numeric border border-emerald-200 dark:border-emerald-700">
+                                                        من: {appliedCarSearch.startDate}
+                                                    </span>
+                                                )}
+                                                {appliedCarSearch.endDate && (
+                                                    <span className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 text-xs font-numeric border border-emerald-200 dark:border-emerald-700">
+                                                        إلى: {appliedCarSearch.endDate}
+                                                    </span>
+                                                )}
+                                            </p>
+                                            <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 font-medium mt-0.5">
+                                                يتم عرض الطلبات المطابقة مرتبة من الأقرب لليوم (50 نتيجة لكل دفعة — مرر للأسفل لتحميل المزيد).
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className="text-sm font-bold text-blue-900 dark:text-blue-200">وضع البحث نشط حالياً</p>
+                                            <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 font-medium">يتم عرض الطلبات التي تطابق معايير البحث فقط. اضغط على (X) للعودة.</p>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="flex flex-col items-center justify-center px-4 border-r-2 border-blue-200 dark:border-blue-800">
-                                    <span className="text-[10px] font-bold text-blue-500/80 dark:text-blue-400/80 uppercase tracking-tighter">إجمالي النتائج</span>
-                                    <span className="text-2xl font-black text-blue-700 dark:text-blue-300 leading-tight">
-                                        {searchedRequests ? searchedRequests.length : '...'}
+                                    <span className="text-[10px] font-bold text-blue-500/80 dark:text-blue-400/80 uppercase tracking-tighter">
+                                        {isCarSearchActive ? 'النتائج المعروضة' : 'إجمالي النتائج'}
+                                    </span>
+                                    <span className="text-2xl font-black text-blue-700 dark:text-blue-300 leading-tight font-numeric">
+                                        {isCarSearchActive
+                                            ? (isCarSearching ? '...' : `${carSearchResults?.length ?? 0}${carSearchHasMore ? '+' : ''}`)
+                                            : (searchedRequests ? searchedRequests.length : '...')}
                                     </span>
                                 </div>
                                 <button
@@ -2243,12 +2523,18 @@ const Requests: React.FC = () => {
                         carModels={carModels}
                         inspectionTypes={inspectionTypes}
                         employees={employees}
-                        title={searchedRequests ? "نتائج البحث" : (dateFilter !== 'all' ? `الطلبات (${dateFilter === 'today' ? 'اليوم' : dateFilter === 'yesterday' ? 'أمس' : 'المحددة'})` : "قائمة الطلبات النشطة")}
+                        title={
+                            isCarSearchActive
+                                ? "نتائج البحث المخصص للسيارة"
+                                : searchedRequests
+                                ? "نتائج البحث"
+                                : (dateFilter !== 'all' ? `الطلبات (${dateFilter === 'today' ? 'اليوم' : dateFilter === 'yesterday' ? 'أمس' : 'المحددة'})` : "قائمة الطلبات النشطة")
+                        }
                         onOpenUpdateModal={handleOpenUpdateModal}
                         plateDisplayLanguage={plateDisplayLanguage}
                         setPlateDisplayLanguage={setPlateDisplayLanguage}
-                        disableAutoSortRequests={disableAutoSortRequests}
-                        onToggleAutoSort={handleToggleAutoSort}
+                        disableAutoSortRequests={isCarSearchActive ? true : disableAutoSortRequests}
+                        onToggleAutoSort={isCarSearchActive ? undefined : handleToggleAutoSort}
                         isRefreshing={isRefreshing}
                         isLive={true}
                         onRowClick={handleRowClick}
@@ -2256,10 +2542,10 @@ const Requests: React.FC = () => {
                         carsWithHistory={combinedCarsWithHistory}
                         onDeleteSuccess={handleDeleteSuccess} // Callback for immediate update
                         onRefresh={fetchRequests}
-                        isLoading={isSearching || isFetchingDateRange}
-                        onLoadMore={handleLoadMore}
-                        hasMore={isLoadMoreVisible || displayLimit < dataToDisplay.length}
-                        isLoadingMore={isLoadingMore || isPaginatingLocal}
+                        isLoading={(isCarSearchActive ? isCarSearching : isSearching) || isFetchingDateRange}
+                        onLoadMore={isCarSearchActive ? handleLoadMoreCarSearch : handleLoadMore}
+                        hasMore={isCarSearchActive ? carSearchHasMore : (isLoadMoreVisible || displayLimit < dataToDisplay.length)}
+                        isLoadingMore={isCarSearchActive ? isLoadingMoreCarSearch : (isLoadingMore || isPaginatingLocal)}
                         searchTokens={searchedRequests ? (requestNumberQuery || comprehensiveQuery).toLowerCase().split(/\s+/).filter(t => t.length > 0) : undefined}
                         highlightedRequestId={selectedRequestId}
                         triggerHighlight={triggerHighlight}

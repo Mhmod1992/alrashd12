@@ -5,6 +5,7 @@ import { InspectionType, CarMake, CarModel } from '../types';
 import Button from './Button';
 import Icon from './Icon';
 import { motion, AnimatePresence } from 'motion/react';
+import { sortInspectionTypesByUsage, recordInspectionTypeUsage } from '../lib/utils';
 
 interface NewReservationManualFormProps {
     onCancel: () => void;
@@ -23,13 +24,7 @@ const NewReservationManualForm: React.FC<NewReservationManualFormProps> = ({ onC
     } = useAppContext();
 
     const sortedInspectionTypes = React.useMemo(() => {
-        const counts: Record<string, number> = {};
-        requests.forEach(r => {
-            if (r.inspection_type_id) {
-                counts[r.inspection_type_id] = (counts[r.inspection_type_id] || 0) + 1;
-            }
-        });
-        return [...inspectionTypes].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+        return sortInspectionTypesByUsage(inspectionTypes, requests);
     }, [inspectionTypes, requests]);
 
     // LocalStorage keys
@@ -237,6 +232,7 @@ const NewReservationManualForm: React.FC<NewReservationManualFormProps> = ({ onC
                             value={inspectionTypeId} 
                             onChange={(e) => {
                                 setInspectionTypeId(e.target.value);
+                                if (e.target.value) recordInspectionTypeUsage(e.target.value);
                                 setErrors(prev => ({ ...prev, inspectionType: false }));
                             }}
                             className={`w-full p-3 border rounded-lg bg-white dark:bg-slate-800 text-sm transition-all ${

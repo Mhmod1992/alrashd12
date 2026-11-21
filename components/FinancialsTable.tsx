@@ -4,6 +4,7 @@ import { InspectionRequest, PaymentType, Client, Car, CarMake, CarModel } from '
 import Icon from './Icon';
 import BanknotesIcon from './icons/BanknotesIcon';
 import CreditCardIcon from './icons/CreditCardIcon';
+import { resolveRequestClientName } from '../lib/utils';
 
 const PaymentMethodBadge: React.FC<{ request: InspectionRequest }> = ({ request }) => {
     const baseClasses = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap border";
@@ -37,7 +38,10 @@ const FinancialsTable: React.FC<{
   carModels: CarModel[];
 }> = ({ requests, clients, cars, carMakes, carModels }) => {
 
-  const getClientName = (clientId: string) => clients.find(c => c.id === clientId)?.name || 'غير معروف';
+  const getClientName = (request: InspectionRequest) => {
+    const client = clients.find(c => c.id === request.client_id);
+    return resolveRequestClientName(request, client);
+  };
   const getCarInfo = (request: InspectionRequest) => {
     if (request.car_snapshot) {
       const { make_en, model_en, year } = request.car_snapshot;
@@ -96,7 +100,7 @@ const FinancialsTable: React.FC<{
                     #{request.request_number}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-slate-200">{getClientName(request.client_id)}</td>
+                <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-slate-200">{getClientName(request)}</td>
                 <td className="px-3 py-2.5 text-[11px] text-slate-600 dark:text-slate-300">{getCarInfo(request)}</td>
                 <td className="px-3 py-2.5 whitespace-nowrap text-[10px] font-mono text-slate-500 font-numeric">{new Date(request.created_at).toLocaleDateString('en-GB')}</td>
                 <td className="px-3 py-2.5 font-black font-numeric">{request.price.toLocaleString('en-US')}</td>

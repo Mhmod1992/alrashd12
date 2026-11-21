@@ -11,6 +11,7 @@ import EmployeesManagement from './settings/EmployeesManagement';
 import TechniciansManagement from './settings/TechniciansManagement';
 import BrokersManagement from './settings/BrokersManagement';
 import InspectionSettings from './settings/InspectionSettings';
+import CardPositionsSettings from './settings/CardPositionsSettings';
 import CarsManagement from './settings/CarsManagement';
 import DraftSettings from './settings/DraftSettings';
 import PlateSettings from './settings/PlateSettings';
@@ -68,6 +69,7 @@ const Settings: React.FC = () => {
             title: 'الفحص والعمليات',
             items: [
                 { id: 'request', label: 'باقات وبنود الفحص', icon: 'clipboard-check', permission: 'manage_settings_technical', component: InspectionSettings },
+                { id: 'card_positions', label: 'ضبط مواقع البطاقات البنود الخاصة', icon: 'gallery', permission: 'manage_settings_technical', component: CardPositionsSettings },
                 { id: 'cars', label: 'قاعدة بيانات السيارات', icon: 'cars', permission: 'manage_settings_technical', component: CarsManagement },
                 { id: 'draft', label: 'إعدادات المسودة اليدوية', icon: 'edit', permission: 'manage_settings_technical', component: DraftSettings },
                 { id: 'plate', label: 'تصميم اللوحة', icon: 'scan-plate', permission: 'manage_settings_technical', component: PlateSettings },

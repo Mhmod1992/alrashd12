@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabaseClient';
-import { InspectionRequest, RequestStatus, Client, Car, CarMake, CarModel, InspectionType, Employee, PaymentType } from '../types';
+import { InspectionRequest, RequestStatus, Client, Car, CarMake, CarModel, InspectionType, Employee, PaymentType, PendingClientNameSuggestion } from '../types';
 import { useAppContext } from '../context/AppContext';
 import EditIcon from './icons/EditIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -26,7 +26,7 @@ import UserXIcon from './icons/UserXIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import ClientHistoryModal from './ClientHistoryModal';
 import SmartPhoneInput from './SmartPhoneInput';
-import { arabicToEnglishNumerals, cleanSaudiPhoneNumber, getPlateSearchVariations } from '../lib/utils';
+import { arabicToEnglishNumerals, cleanSaudiPhoneNumber, getPlateSearchVariations, resolveRequestClientName } from '../lib/utils';
 import { Banknote, CreditCard, ArrowRightLeft, Clock } from 'lucide-react';
 
 const SmartRowWrapper: React.FC<{
@@ -265,13 +265,14 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
     settings, setPage, setSelectedRequestId, showConfirmModal, 
     deleteRequest, deletePendingRequest, updatePendingRequest, addNotification, can, updateRequest, createActivityLog,
     brokers, ensureEntitiesLoaded, updateClient, addClient, sendWhatsAppMessage, fetchCarModelsByMake,
-    searchClients, ensureLocalClient
+    searchClients, ensureLocalClient, systemDefaultClient
   } = useAppContext();
 
   // Quick Edit Modals for Waiting Payment Requests
   const [clientModalRequest, setClientModalRequest] = useState<InspectionRequest | null>(null);
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
+  const [dismissedModalSuggestion, setDismissedModalSuggestion] = useState(false);
   const [isSavingClient, setIsSavingClient] = useState(false);
 
   const [carModalRequest, setCarModalRequest] = useState<InspectionRequest | null>(null);
@@ -331,6 +332,7 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
 
   const openQuickEditClient = (req: InspectionRequest) => {
     setClientModalRequest(req);
+    setDismissedModalSuggestion(false);
     const info = getClientInfo(req.client_id, req);
     const client = clients.find(c => c.id === req.client_id);
     const clientName = (info.name && info.name !== 'غير معروف') ? info.name : (client?.name || '');
@@ -355,20 +357,71 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
           client_phone: editClientPhone.trim()
         });
       } else {
-        const client = clients.find(c => c.id === clientModalRequest.client_id);
+        let client = clients.find(c => c.id === clientModalRequest.client_id);
+        if (!client && clientModalRequest.client_id) {
+          try {
+            const { data: dbClient } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', clientModalRequest.client_id)
+              .maybeSingle();
+            if (dbClient) {
+              client = dbClient as Client;
+              if (ensureLocalClient) ensureLocalClient(client);
+            }
+          } catch (fetchErr) {
+            console.warn('Failed to fetch client from DB before saving:', fetchErr);
+          }
+        }
+
         const cleanEditPhone = cleanSaudiPhoneNumber(editClientPhone) || editClientPhone.replace(/\D/g, '');
         const cleanExistingPhone = client ? (cleanSaudiPhoneNumber(client.phone) || client.phone?.replace(/\D/g, '')) : '';
+        const trimmedName = editClientName.trim();
+        const trimmedPhone = editClientPhone.trim();
+        const currentSnapshotName = clientModalRequest.client_snapshot?.name || clientModalRequest.inspection_data?.client_snapshot?.name;
+
+        const isGeneralClient = Boolean(
+          client?.is_system_default ||
+          client?.phone === '0000000000' ||
+          (systemDefaultClient && clientModalRequest.client_id === systemDefaultClient.id)
+        );
 
         const isSamePhone = Boolean(
           client &&
-          !client.is_system_default &&
-          cleanExistingPhone &&
-          cleanEditPhone &&
-          (cleanExistingPhone === cleanEditPhone || (cleanExistingPhone.length >= 8 && cleanEditPhone.length >= 8 && cleanExistingPhone.slice(-8) === cleanEditPhone.slice(-8)))
+          !isGeneralClient &&
+          (
+            (cleanExistingPhone && cleanEditPhone && (
+              cleanExistingPhone === cleanEditPhone ||
+              (cleanExistingPhone.length >= 8 && cleanEditPhone.length >= 8 && cleanExistingPhone.slice(-8) === cleanEditPhone.slice(-8))
+            )) ||
+            (!cleanExistingPhone && !cleanEditPhone && (client.phone || '').trim() === trimmedPhone)
+          )
         );
 
-        if (client?.is_system_default || editClientPhone === '0000000000') {
-          if (editClientPhone !== '0000000000' && cleanEditPhone.length >= 8) {
+        const buildUpdatedInspectionData = (snapshot?: { name: string; phone: string }) => {
+          const nextData: Record<string, any> = {
+            ...(clientModalRequest.inspection_data || {}),
+            ...(snapshot ? { client_snapshot: snapshot } : {})
+          };
+          const existingSug = nextData.pending_name_suggestion as PendingClientNameSuggestion | undefined;
+          if (existingSug) {
+            if (trimmedName && trimmedName === (existingSug.suggested_name || '').trim()) {
+              delete nextData.pending_name_suggestion;
+            } else if (dismissedModalSuggestion) {
+              nextData.pending_name_suggestion = { ...existingSug, dismissed: true };
+            }
+          }
+          return nextData;
+        };
+
+        const existingModalSuggestion = clientModalRequest.inspection_data?.pending_name_suggestion as PendingClientNameSuggestion | undefined;
+        const shouldPersistSuggestionState = Boolean(
+          existingModalSuggestion &&
+          ((trimmedName && trimmedName === (existingModalSuggestion.suggested_name || '').trim()) || dismissedModalSuggestion)
+        );
+
+        if (isGeneralClient || trimmedPhone === '0000000000') {
+          if (trimmedPhone !== '0000000000' && cleanEditPhone.length >= 8) {
             const searchPart = cleanEditPhone.slice(-8);
             let target = clients.find(c => !c.is_system_default && c.phone && (cleanSaudiPhoneNumber(c.phone) === cleanEditPhone || c.phone.replace(/\D/g, '').endsWith(searchPart)));
             if (!target) {
@@ -379,22 +432,41 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
             if (!target) {
               target = await addClient({
                 id: `cli_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                name: editClientName.trim() || 'عميل',
-                phone: editClientPhone.trim(),
+                name: trimmedName || 'عميل',
+                phone: trimmedPhone,
                 created_at: new Date().toISOString()
               } as Client);
             }
+            const updatedSnapshot = { name: trimmedName || target.name, phone: trimmedPhone || target.phone };
             await updateRequest({
-              ...clientModalRequest,
-              client_id: target.id
+              id: clientModalRequest.id,
+              client_id: target.id,
+              client_snapshot: updatedSnapshot,
+              inspection_data: buildUpdatedInspectionData(updatedSnapshot)
+            });
+          } else if ((trimmedName && currentSnapshotName !== trimmedName) || shouldPersistSuggestionState) {
+            const updatedSnapshot = { name: trimmedName || currentSnapshotName || client?.name || 'عميل عام', phone: trimmedPhone || client?.phone || '0000000000' };
+            await updateRequest({
+              id: clientModalRequest.id,
+              client_snapshot: updatedSnapshot,
+              inspection_data: buildUpdatedInspectionData(updatedSnapshot)
             });
           }
         } else if (isSamePhone && client) {
-          // Same client! Only name was corrected
-          if (editClientName.trim() && client.name !== editClientName.trim()) {
+          // Same client (same real phone)! Update client name in DB and request snapshot
+          if (trimmedName && (client.name || '').trim() !== trimmedName) {
             await updateClient({
               ...client,
-              name: editClientName.trim()
+              name: trimmedName
+            });
+          }
+          // Update the current request's own snapshot so the corrected name reflects immediately on this request
+          if ((trimmedName && currentSnapshotName !== trimmedName) || shouldPersistSuggestionState) {
+            const updatedSnapshot = { name: trimmedName || currentSnapshotName || client.name, phone: trimmedPhone || client.phone };
+            await updateRequest({
+              id: clientModalRequest.id,
+              client_snapshot: updatedSnapshot,
+              inspection_data: buildUpdatedInspectionData(updatedSnapshot)
             });
           }
         } else {
@@ -409,14 +481,17 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
           if (!target) {
             target = await addClient({
               id: `cli_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              name: editClientName.trim() || 'عميل',
-              phone: editClientPhone.trim(),
+              name: trimmedName || 'عميل',
+              phone: trimmedPhone,
               created_at: new Date().toISOString()
             } as Client);
           }
+          const updatedSnapshot = { name: trimmedName || target.name, phone: trimmedPhone || target.phone };
           await updateRequest({
-            ...clientModalRequest,
-            client_id: target.id
+            id: clientModalRequest.id,
+            client_id: target.id,
+            client_snapshot: updatedSnapshot,
+            inspection_data: buildUpdatedInspectionData(updatedSnapshot)
           });
         }
       }
@@ -803,8 +878,9 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
     }
     const client = clients.find(c => c.id === clientId);
     if (client) {
+      const resolvedName = resolveRequestClientName(req, client);
       return {
-        name: client.name || 'غير معروف',
+        name: resolvedName || client.name || 'غير معروف',
         phone: client.phone || '',
       };
     }
@@ -1269,7 +1345,54 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
                                                         <span>عميل عام</span>
                                                     </span>
                                                 ) : (
-                                                    <HighlightText text={clientInfo.name} tokens={expandedSearchTokens} />
+                                                    (() => {
+                                                        const nameSug = !isWaitingPayment ? (request.inspection_data?.pending_name_suggestion as PendingClientNameSuggestion | undefined) : undefined;
+                                                        const hasPendingSuggestion = Boolean(
+                                                            nameSug &&
+                                                            !nameSug.dismissed &&
+                                                            nameSug.suggested_name &&
+                                                            nameSug.suggested_name.trim() !== (clientInfo.name || '').trim()
+                                                        );
+                                                        return (
+                                                            <span className="flex items-center gap-1.5 flex-wrap">
+                                                                <span
+                                                                    className={hasPendingSuggestion
+                                                                        ? 'text-amber-700 dark:text-amber-300 font-bold drop-shadow-[0_0_8px_rgba(245,158,11,0.55)] dark:drop-shadow-[0_0_8px_rgba(251,191,36,0.65)] transition-colors'
+                                                                        : ''
+                                                                    }
+                                                                    title={hasPendingSuggestion && nameSug
+                                                                        ? `الاسم الحالي قديم — الاسم المقترح: "${nameSug.suggested_name}"`
+                                                                        : undefined
+                                                                    }
+                                                                >
+                                                                    <HighlightText text={clientInfo.name} tokens={expandedSearchTokens} />
+                                                                </span>
+                                                                {client && clientInfo.name !== client.name && (
+                                                                    <span
+                                                                        className="inline-flex items-center justify-center p-1 rounded-full bg-amber-100/90 text-amber-700 dark:bg-amber-900/35 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/50 opacity-85 group-hover/client:opacity-100 transition-opacity"
+                                                                        title={`اسم وقت الطلب — الاسم الحالي للعميل: ${client.name}`}
+                                                                        aria-label={`اسم وقت الطلب — الاسم الحالي للعميل: ${client.name}`}
+                                                                    >
+                                                                        <HistoryIcon className="w-3.5 h-3.5" />
+                                                                    </span>
+                                                                )}
+                                                                {hasPendingSuggestion && nameSug && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            openQuickEditClient(request);
+                                                                        }}
+                                                                        className="inline-flex items-center justify-center p-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/45 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 hover:bg-amber-200 dark:hover:bg-amber-800/60 shadow-[0_0_8px_rgba(245,158,11,0.4)] transition-all"
+                                                                        title={`الاسم الحالي قديم — أدخل ${nameSug.entered_by_name || 'موظف الاستقبال'} عند الإنشاء: "${nameSug.suggested_name}" — اضغط للتعديل السريع`}
+                                                                        aria-label={`الاسم الحالي قديم — الاسم المقترح: ${nameSug.suggested_name}`}
+                                                                    >
+                                                                        <AlertTriangleIcon className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
+                                                            </span>
+                                                        );
+                                                    })()
                                                 )}
                                                 {isWaitingPayment && (
                                                     <span className="text-[10px] text-amber-600 dark:text-amber-400 opacity-60 group-hover/client:opacity-100 transition-opacity" title="تعديل سريع">
@@ -1726,8 +1849,13 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
         onClose={() => setSelectedClientForHistory(null)} 
       />
 
-      {/* Quick Edit Client Modal for Waiting Payment */}
-      {clientModalRequest && (
+      {/* Quick Edit Client Modal */}
+      {clientModalRequest && (() => {
+        const isModalWaiting =
+          clientModalRequest.status === RequestStatus.WAITING_PAYMENT ||
+          clientModalRequest.payment_type === PaymentType.WaitingPayment ||
+          Boolean((clientModalRequest as any)._isPending);
+        return (
         <Modal
           isOpen={!!clientModalRequest}
           onClose={() => !isSavingClient && setClientModalRequest(null)}
@@ -1735,9 +1863,54 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
           size="md"
         >
           <div className="space-y-4">
-            <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200/60 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-300 font-medium">
-              💡 يمكنك تعديل بيانات العميل مباشرة، واختيار "حفظ وإرسال وتساب" لإرسال رسالة تذكير بالدفع إلى الرقم الجديد فوراً.
-            </div>
+            {isModalWaiting && (
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200/60 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-300 font-medium">
+                💡 يمكنك تعديل بيانات العميل مباشرة، واختيار "حفظ وإرسال وتساب" لإرسال رسالة تذكير بالدفع إلى الرقم الجديد فوراً.
+              </div>
+            )}
+
+            {(() => {
+              const modalSug = clientModalRequest.inspection_data?.pending_name_suggestion as PendingClientNameSuggestion | undefined;
+              const showModalSug = Boolean(
+                modalSug &&
+                !modalSug.dismissed &&
+                !dismissedModalSuggestion &&
+                modalSug.suggested_name &&
+                modalSug.suggested_name.trim() !== editClientName.trim()
+              );
+              if (!showModalSug || !modalSug) return null;
+              return (
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/35 rounded-xl border border-amber-300 dark:border-amber-700/60 text-xs">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangleIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-bold text-amber-900 dark:text-amber-200">
+                        الاسم الحالي قديم — أدخل {modalSug.entered_by_name || 'موظف الاستقبال'} عند الإنشاء:{' '}
+                        <span className="underline decoration-amber-500 underline-offset-2 font-extrabold">
+                          {modalSug.suggested_name}
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setEditClientName(modalSug.suggested_name)}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+                        >
+                          اعتماد الاسم: {modalSug.suggested_name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDismissedModalSuggestion(true)}
+                          className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-white/80 hover:bg-white dark:bg-slate-800 dark:hover:bg-slate-700 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 transition-colors"
+                        >
+                          تجاهل التلميح
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -1766,23 +1939,36 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
-              <button
-                type="button"
-                disabled={isSavingClient}
-                onClick={() => handleSaveClient(true)}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all disabled:opacity-50"
-              >
-                <WhatsappIcon className="w-4 h-4" />
-                <span>{isSavingClient ? 'جاري الحفظ...' : 'حفظ وإرسال وتساب'}</span>
-              </button>
-              <button
-                type="button"
-                disabled={isSavingClient}
-                onClick={() => handleSaveClient(false)}
-                className="py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-50"
-              >
-                حفظ فقط
-              </button>
+              {isModalWaiting ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={isSavingClient}
+                    onClick={() => handleSaveClient(true)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all disabled:opacity-50"
+                  >
+                    <WhatsappIcon className="w-4 h-4" />
+                    <span>{isSavingClient ? 'جاري الحفظ...' : 'حفظ وإرسال وتساب'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingClient}
+                    onClick={() => handleSaveClient(false)}
+                    className="py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-50"
+                  >
+                    حفظ فقط
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isSavingClient}
+                  onClick={() => handleSaveClient(false)}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-50"
+                >
+                  {isSavingClient ? 'جاري الحفظ...' : 'حفظ التعديل'}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={isSavingClient}
@@ -1794,7 +1980,8 @@ const RequestTable: React.FC<RequestTableProps> = React.memo(({
             </div>
           </div>
         </Modal>
-      )}
+        );
+      })()}
 
       {/* Quick Edit Car & Inspection Modal for Waiting Payment */}
       {carModalRequest && (

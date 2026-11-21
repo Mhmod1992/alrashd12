@@ -15,7 +15,7 @@ import FilterIcon from '../components/icons/FilterIcon';
 import CalendarIcon from '../components/icons/HistoryIcon';
 import DollarSignIcon from '../components/icons/DollarSignIcon';
 import WhatsappIcon from '../components/icons/WhatsappIcon';
-import { uuidv4 } from '../lib/utils';
+import { uuidv4, resolveRequestClientName } from '../lib/utils';
 import SmartPhoneInput from '../components/SmartPhoneInput';
 import { Skeleton, SkeletonTable } from '../components/Skeleton';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -71,6 +71,8 @@ const Clients: React.FC = () => {
     const [historyEndDate, setHistoryEndDate] = useState('');
     const [paymentStatusFilter, setPaymentStatusFilter] = useState<'all' | 'unpaid'>('all');
     const [debtAgeStatusFilter, setDebtAgeStatusFilter] = useState<'all' | 'current' | 'late' | 'critical'>('all');
+    const [requestNameFilter, setRequestNameFilter] = useState<string>('all');
+    const [isNameHistoryModalOpen, setIsNameHistoryModalOpen] = useState(false);
 
     const [totalClientsAmount, setTotalClientsAmount] = useState<number>(0);
 
@@ -389,6 +391,22 @@ const Clients: React.FC = () => {
         return { totalRevenue, totalPaid, totalRemaining, loyaltyPoints, tier, agedDebt };
     }, [clientSummary, selectedClient]);
 
+    const clientAllNames = useMemo(() => {
+        if (!selectedClient) return [];
+        const names = new Set<string>();
+        if (selectedClient.name) names.add(selectedClient.name);
+        if (Array.isArray(selectedClient.name_history)) {
+            selectedClient.name_history.forEach(h => {
+                if (h.old_name) names.add(h.old_name);
+                if (h.new_name) names.add(h.new_name);
+            });
+        }
+        return Array.from(names);
+    }, [selectedClient]);
+
+    useEffect(() => {
+        setRequestNameFilter('all');
+    }, [selectedClientId]);
 
     const filteredClientRequests = useMemo(() => {
         if (!selectedClient) return [];
@@ -400,8 +418,10 @@ const Clients: React.FC = () => {
             reqs = reqs.filter(req => {
                 const carInfo = getCarInfo(req.car_id);
                 const carName = req.car_snapshot ? `${req.car_snapshot.make_ar} ${req.car_snapshot.model_ar}` : carInfo.name;
+                const reqClientName = resolveRequestClientName(req, selectedClient);
                 return carName.toLowerCase().includes(lowercasedTerm) ||
                        (carInfo.plate && carInfo.plate.toLowerCase().includes(lowercasedTerm)) || 
+                       reqClientName.toLowerCase().includes(lowercasedTerm) ||
                        String(req.request_number).includes(lowercasedTerm);
             });
         }
@@ -422,8 +442,15 @@ const Clients: React.FC = () => {
             });
         }
 
+        if (requestNameFilter !== 'all') {
+            reqs = reqs.filter(req => {
+                const reqName = resolveRequestClientName(req, selectedClient);
+                return reqName === requestNameFilter;
+            });
+        }
+
         return reqs;
-    }, [clientRequests, selectedClient, requestSearchTerm, cars, carMakes, carModels, debtAgeStatusFilter]);
+    }, [clientRequests, selectedClient, requestSearchTerm, cars, carMakes, carModels, debtAgeStatusFilter, requestNameFilter]);
 
 
     const handleToggleDebtAgeFilter = (status: 'current' | 'late' | 'critical') => {
@@ -729,7 +756,7 @@ const Clients: React.FC = () => {
                                                   {selectedClient.name.charAt(0)}
                                               </div>
                                               <div>
-                                                  <div className="flex items-center gap-3">
+                                                  <div className="flex flex-wrap items-center gap-3">
                                                       <h3 className="text-3xl font-black text-slate-800 dark:text-white font-sans">{selectedClient.name}</h3>
                                                       {selectedClient.is_system_default && (
                                                           <div className="flex items-center gap-1.5 px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-black rounded-full shadow-sm font-sans">
@@ -738,6 +765,16 @@ const Clients: React.FC = () => {
                                                           </div>
                                                       )}
                                                       {selectedClient.is_vip && <div className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-black rounded-full shadow-sm font-sans">VIP</div>}
+                                                      {selectedClient.name_history && selectedClient.name_history.length > 0 && (
+                                                          <button 
+                                                              onClick={() => setIsNameHistoryModalOpen(true)}
+                                                              className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs font-black rounded-full border border-amber-200 dark:border-amber-700/60 transition-all shadow-sm"
+                                                              title="عرض سجل تغييرات الاسم السابقة"
+                                                          >
+                                                              <HistoryIcon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                                              <span>سجل الأسماء ({selectedClient.name_history.length})</span>
+                                                          </button>
+                                                      )}
                                                   </div>
                                                   <div className="flex items-center gap-4 mt-3">
                                                       <div className="flex items-center gap-2 group cursor-pointer">
@@ -950,7 +987,42 @@ const Clients: React.FC = () => {
                                          </motion.div>
                                      )}
 
-                                     <div className="flex-1 overflow-x-auto custom-scrollbar border border-slate-100 dark:border-slate-700 rounded-3xl overflow-hidden">
+                                     {/* Name History Filter - Show if client ever had multiple names */}
+                                      {clientAllNames.length > 1 && (
+                                          <div className="flex flex-wrap items-center gap-2 mb-4 p-3 bg-amber-50/70 dark:bg-amber-900/20 border border-amber-200/70 dark:border-amber-800/50 rounded-2xl font-sans">
+                                              <span className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5 px-1">
+                                                  <HistoryIcon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                                  فلترة الطلبات بالاسم:
+                                              </span>
+                                              <button
+                                                  onClick={() => setRequestNameFilter('all')}
+                                                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${requestNameFilter === 'all' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-amber-100'}`}
+                                              >
+                                                  كل الطلبات ({clientRequests.length})
+                                              </button>
+                                              {clientAllNames.map(name => {
+                                                  const count = clientRequests.filter(req => resolveRequestClientName(req, selectedClient) === name).length;
+                                                  const isCurrent = name === selectedClient.name;
+                                                  return (
+                                                      <button
+                                                          key={name}
+                                                          onClick={() => setRequestNameFilter(name)}
+                                                          className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${requestNameFilter === name ? 'bg-amber-500 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-amber-100'}`}
+                                                      >
+                                                          <span>{name}</span>
+                                                          <span className="text-[10px] opacity-75 font-mono">({count})</span>
+                                                          {isCurrent ? (
+                                                              <span className="text-[9px] bg-green-100 dark:bg-green-900/60 text-green-700 dark:text-green-300 px-1 rounded font-sans">الاسم الحالي</span>
+                                                          ) : (
+                                                              <span className="text-[9px] bg-amber-100 dark:bg-amber-800/60 text-amber-700 dark:text-amber-300 px-1 rounded font-sans">اسم سابق</span>
+                                                          )}
+                                                      </button>
+                                                  );
+                                              })}
+                                          </div>
+                                      )}
+
+                                      <div className="flex-1 overflow-x-auto custom-scrollbar border border-slate-100 dark:border-slate-700 rounded-3xl overflow-hidden">
                                           {isLoadingClientRequests ? (
                                               <SkeletonTable rows={5} />
                                           ) : filteredClientRequests.length > 0 ? (
@@ -958,6 +1030,7 @@ const Clients: React.FC = () => {
                                                   <thead className="bg-slate-50/50 dark:bg-slate-700/50 sticky top-0 z-10 backdrop-blur-md">
                                                       <tr>
                                                           <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-slate-400 font-sans">الطلب</th>
+                                                           <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-slate-400 font-sans">الاسم عند الفحص</th>
                                                           <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-slate-400 font-sans">السيارة</th>
                                                           <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-slate-400 font-sans">التاريخ</th>
                                                           <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-slate-400 font-sans">المبلغ</th>
@@ -970,6 +1043,8 @@ const Clients: React.FC = () => {
                                                           const carInfo = getCarInfo(req.car_id);
                                                           const carName = req.car_snapshot ? `${req.car_snapshot.make_ar} ${req.car_snapshot.model_ar}` : carInfo.name;
                                                           const isUnpaid = req.payment_type === PaymentType.Unpaid && req.status !== RequestStatus.WAITING_PAYMENT;
+                                                           const reqClientName = resolveRequestClientName(req, selectedClient);
+                                                           const isPrevName = reqClientName !== selectedClient.name;
                                                           return (
                                                               <motion.tr 
                                                                   key={req.id} 
@@ -979,6 +1054,19 @@ const Clients: React.FC = () => {
                                                                   className="group hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors"
                                                               >
                                                                   <td className="px-6 py-5 font-black text-blue-600 dark:text-blue-400 font-numeric">#{req.request_number}</td>
+                                                                   <td className="px-6 py-5">
+                                                                       {isPrevName ? (
+                                                                           <span className="inline-flex items-center gap-1.5 text-xs font-bold bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-700/60 shadow-xs">
+                                                                               <HistoryIcon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                                                               <span>{reqClientName}</span>
+                                                                               <span className="text-[9px] bg-amber-200/70 dark:bg-amber-800/70 text-amber-900 dark:text-amber-100 px-1 py-0.2 rounded font-sans">سابق</span>
+                                                                           </span>
+                                                                       ) : (
+                                                                           <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                                               {reqClientName}
+                                                                           </span>
+                                                                       )}
+                                                                   </td>
                                                                   <td className="px-6 py-5 font-bold text-slate-700 dark:text-slate-300">{carName}</td>
                                                                   <td className="px-6 py-5 text-xs text-slate-400 font-mono">{new Date(req.created_at).toLocaleDateString('en-GB')}</td>
                                                                   <td className={`px-6 py-5 font-black font-mono ${isUnpaid ? 'text-red-500' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -1069,6 +1157,54 @@ const Clients: React.FC = () => {
                 <div className="flex justify-end gap-2 pt-4 mt-4 border-t dark:border-slate-700">
                     <Button variant="secondary" onClick={() => setIsModalOpen(false)}>إلغاء</Button>
                     <Button onClick={handleSaveClient}>حفظ</Button>
+                </div>
+            </Modal>
+
+            {/* Modal for Client Name Change History */}
+            <Modal 
+                isOpen={isNameHistoryModalOpen} 
+                onClose={() => setIsNameHistoryModalOpen(false)} 
+                title={`سجل تغييرات اسم العميل: ${selectedClient?.name || ''}`}
+            >
+                <div className="space-y-4 font-sans">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        يعرض هذا السجل جميع الأسماء السابقة لهذا العميل والتواريخ التي تم التعديل فيها:
+                    </p>
+                    {selectedClient?.name_history && selectedClient.name_history.length > 0 ? (
+                        <div className="divide-y divide-slate-100 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+                            {selectedClient.name_history.map((item, idx) => (
+                                <div key={idx} className="p-4 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs shrink-0">
+                                            {idx + 1}
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2 font-bold text-sm">
+                                                <span className="line-through text-slate-400 dark:text-slate-500">{item.old_name}</span>
+                                                <span className="text-slate-400">←</span>
+                                                <span className="text-slate-800 dark:text-slate-100 font-black">{item.new_name}</span>
+                                            </div>
+                                            {item.changed_by && (
+                                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                                    بواسطة: <span className="font-semibold text-slate-600 dark:text-slate-300">{item.changed_by}</span>
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="text-left text-xs text-slate-400 font-mono">
+                                        {new Date(item.changed_at).toLocaleString('ar-SA', { dateStyle: 'medium', timeStyle: 'short' })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-8 text-slate-400 text-sm">
+                            لا يوجد تعديلات سابقة مسجلة على اسم هذا العميل.
+                        </div>
+                    )}
+                    <div className="flex justify-end pt-2">
+                        <Button variant="secondary" onClick={() => setIsNameHistoryModalOpen(false)}>إغلاق</Button>
+                    </div>
                 </div>
             </Modal>
         </div>

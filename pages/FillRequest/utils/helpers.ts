@@ -40,7 +40,7 @@ export const updateStatusToError = <T extends { id: string; status?: string }>(i
  * تنظيف البيانات للمقارنة (إزالة الخصائص المؤقتة)
  */
 export const cleanDataForComparison = (data: any) => {
-    return JSON.parse(JSON.stringify(data, (key, value) => (key === 'status' || key === 'localFile' || key === 'localBlob' || key === 'isTranscribing' || key === 'isEditingTranscription') ? undefined : value));
+    return JSON.stringify(data, (key, value) => (key === 'status' || key === 'localFile' || key === 'localBlob' || key === 'isTranscribing' || key === 'isEditingTranscription') ? undefined : value);
 };
 
 /**
