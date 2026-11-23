@@ -208,12 +208,15 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                         )}
                     </div>
                     {props.isPhoneSuggestionsOpen && props.phoneSuggestions.length > 0 && (
-                        <ul className="absolute z-20 w-full bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
+                        <ul data-client-dropdown="phone" className="absolute z-20 w-full bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
                             {props.phoneSuggestions.map((client, index) => (
                                 <li
                                     key={client.id}
                                     id={`suggestion-phone-${index}`}
-                                    onMouseDown={() => props.onClientSelection(client, props.nameInputRef.current!)}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        props.onClientSelection(client, props.nameInputRef.current!);
+                                    }}
                                     onMouseOver={() => props.setPhoneSuggestionIndex(index)}
                                     className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.phoneSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
                                 >
@@ -288,12 +291,15 @@ const StepClient: React.FC<StepClientProps> = (props) => {
                                 </p>
                             )}
                             {props.isNameSuggestionsOpen && props.nameSuggestions.length > 0 && (
-                                <ul className="absolute z-20 w-full bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
+                                <ul data-client-dropdown="name" className="absolute z-20 w-full bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
                                     {props.nameSuggestions.map((client, index) => (
                                         <li
                                             key={client.id}
                                             id={`suggestion-name-${index}`}
-                                            onMouseDown={() => props.onClientSelection(client, props.phoneInputRef.current!)}
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                props.onClientSelection(client, props.phoneInputRef.current!);
+                                            }}
                                             onMouseOver={() => props.setNameSuggestionIndex(index)}
                                             className={`px-4 py-2 cursor-pointer dark:text-slate-200 ${index === props.nameSuggestionIndex ? 'bg-blue-100 dark:bg-slate-600' : 'hover:bg-blue-50 dark:hover:bg-slate-600/50'}`}
                                         >

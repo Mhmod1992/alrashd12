@@ -96,7 +96,7 @@ const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client,
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="ملف وتاريخ العميل" size="4xl">
+        <Modal isOpen={isOpen} onClose={onClose} title="ملف وتاريخ العميل" size="2xl">
             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl mb-6 shadow-inner border border-slate-200 dark:border-slate-700">
                 <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -204,90 +204,96 @@ const ClientHistoryModal: React.FC<ClientHistoryModalProps> = ({ isOpen, client,
                     لا توجد طلبات سابقة لهذا العميل.
                 </div>
             ) : (
-                <div className="relative border-r-2 border-slate-100 dark:border-slate-700/50 mr-4 pr-6 space-y-2.5">
-                    {displayedRequests.map((req) => {
-                        const car = cars.find(c => c.id === req.car_id) || extraCarsMap[req.car_id];
-                        let carDisplayName = 'غير محدد';
-                        if (req.car_snapshot && (req.car_snapshot.make_ar || req.car_snapshot.make_en || req.car_snapshot.model_ar || req.car_snapshot.model_en)) {
-                            const makeName = req.car_snapshot.make_ar || req.car_snapshot.make_en || '';
-                            const modelName = req.car_snapshot.model_ar || req.car_snapshot.model_en || '';
-                            const yearStr = req.car_snapshot.year ? String(req.car_snapshot.year) : '';
-                            carDisplayName = [makeName, modelName, yearStr].filter(Boolean).join(' ') || 'غير محدد';
-                        } else if (car) {
-                            const makeObj = carMakes.find(m => m.id === car.make_id);
-                            const modelObj = carModels.find(m => m.id === car.model_id);
-                            const makeName = makeObj?.name_ar || makeObj?.name_en || '';
-                            const modelName = modelObj?.name_ar || modelObj?.name_en || '';
-                            const yearStr = car.year ? String(car.year) : '';
-                            carDisplayName = [makeName, modelName, yearStr].filter(Boolean).join(' ') || 'سيارة مسجلة';
-                        }
-                        const inspectionType = inspectionTypes.find(t => t.id === req.inspection_type_id);
-                        const inspectionTypeName = inspectionType?.name || 'غير محدد';
-                        const isUnpaid = req.status !== RequestStatus.CANCELLED && req.status !== RequestStatus.WAITING_PAYMENT && req.payment_type === PaymentType.Unpaid;
-                        const isWaiting = req.status === RequestStatus.WAITING_PAYMENT;
+                <div className="overflow-x-auto custom-scrollbar pb-1">
+                    <div className="min-w-[460px] pr-1">
+                        <div className="mr-4 pr-6 mb-2 px-3.5 grid grid-cols-[minmax(160px,1.4fr)_minmax(135px,1.1fr)_105px] gap-x-4 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                            <div>الطلب والسيارة</div>
+                            <div>نوع الفحص والسعر</div>
+                            <div className="text-left">التاريخ والمدة</div>
+                        </div>
+                        <div className="relative border-r-2 border-slate-100 dark:border-slate-700/50 mr-4 pr-6 space-y-2.5">
+                            {displayedRequests.map((req) => {
+                                const car = cars.find(c => c.id === req.car_id) || extraCarsMap[req.car_id];
+                                let carDisplayName = 'غير محدد';
+                                if (req.car_snapshot && (req.car_snapshot.make_ar || req.car_snapshot.make_en || req.car_snapshot.model_ar || req.car_snapshot.model_en)) {
+                                    const makeName = req.car_snapshot.make_ar || req.car_snapshot.make_en || '';
+                                    const modelName = req.car_snapshot.model_ar || req.car_snapshot.model_en || '';
+                                    const yearStr = req.car_snapshot.year ? String(req.car_snapshot.year) : '';
+                                    carDisplayName = [makeName, modelName, yearStr].filter(Boolean).join(' ') || 'غير محدد';
+                                } else if (car) {
+                                    const makeObj = carMakes.find(m => m.id === car.make_id);
+                                    const modelObj = carModels.find(m => m.id === car.model_id);
+                                    const makeName = makeObj?.name_ar || makeObj?.name_en || '';
+                                    const modelName = modelObj?.name_ar || modelObj?.name_en || '';
+                                    const yearStr = car.year ? String(car.year) : '';
+                                    carDisplayName = [makeName, modelName, yearStr].filter(Boolean).join(' ') || 'سيارة مسجلة';
+                                }
+                                const inspectionType = inspectionTypes.find(t => t.id === req.inspection_type_id);
+                                const inspectionTypeName = inspectionType?.name || 'غير محدد';
+                                const isUnpaid = req.status !== RequestStatus.CANCELLED && req.status !== RequestStatus.WAITING_PAYMENT && req.payment_type === PaymentType.Unpaid;
+                                const isWaiting = req.status === RequestStatus.WAITING_PAYMENT;
 
-                        return (
-                            <div key={req.id} className="relative">
-                                {/* Timeline Dot */}
-                                <div className={`absolute -right-[33px] top-3.5 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 ${isUnpaid ? 'bg-red-500 dark:bg-red-400' : (isWaiting ? 'bg-purple-500 dark:bg-purple-400' : 'bg-slate-300 dark:bg-slate-600')}`}></div>
-                                
-                                <div className={`px-3.5 py-2.5 rounded-lg border ${isUnpaid ? 'bg-red-50/50 border-red-200 dark:bg-red-900/10 dark:border-red-900/30' : (isWaiting ? 'bg-purple-50/40 border-purple-100 dark:bg-purple-900/10 dark:border-purple-900/30' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700')} shadow-sm hover:shadow-md transition-shadow`}>
-                                    <div className="overflow-x-auto pb-1 sm:pb-0">
-                                        <div className="min-w-[680px] grid grid-cols-[68px_minmax(150px,1fr)_120px_125px_175px] items-center gap-x-3 text-xs sm:text-sm">
-                                            {/* 1. رقم الطلب */}
-                                            <div className="min-w-0">
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${req.id}&from=print`;
-                                                        window.open(url, '_blank');
-                                                    }}
-                                                    className="font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-mono hover:underline cursor-pointer whitespace-nowrap"
-                                                    title="معاينة الطلب في صفحة جديدة"
-                                                >
-                                                    #{req.request_number}
-                                                </button>
-                                            </div>
-
-                                            {/* 2. اسم السيارة */}
-                                            <div className="min-w-0">
-                                                <span className="block font-bold text-slate-800 dark:text-slate-100 truncate" title={carDisplayName}>
-                                                    {carDisplayName}
-                                                </span>
-                                            </div>
-
-                                            {/* 3. نوع الفحص */}
-                                            <div className="min-w-0">
-                                                <span className="inline-block max-w-full truncate text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/60" title={inspectionTypeName}>
-                                                    {inspectionTypeName}
-                                                </span>
-                                            </div>
-
-                                            {/* 4. المبلغ (مع تنبيه غير مدفوع للمديونية فقط) */}
-                                            <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                                <span className={`font-black ${isUnpaid ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                                    {req.price} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">ريال</span>
-                                                </span>
-                                                {isUnpaid && (
-                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
-                                                        غير مدفوع
+                                return (
+                                    <div key={req.id} className="relative">
+                                        {/* Timeline Dot */}
+                                        <div className={`absolute -right-[33px] top-4 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 ${isUnpaid ? 'bg-red-500 dark:bg-red-400' : (isWaiting ? 'bg-purple-500 dark:bg-purple-400' : 'bg-slate-300 dark:bg-slate-600')}`}></div>
+                                        
+                                        <div className={`px-3.5 py-2.5 rounded-lg border ${isUnpaid ? 'bg-red-50/50 border-red-200 dark:bg-red-900/10 dark:border-red-900/30' : (isWaiting ? 'bg-purple-50/40 border-purple-100 dark:bg-purple-900/10 dark:border-purple-900/30' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700')} shadow-sm hover:shadow-md transition-shadow`}>
+                                            <div className="grid grid-cols-[minmax(160px,1.4fr)_minmax(135px,1.1fr)_105px] items-center gap-x-4 text-xs sm:text-sm">
+                                                {/* 1. رقم الطلب وأسفله اسم السيارة */}
+                                                <div className="min-w-0 flex flex-col gap-1">
+                                                    <div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const url = `${window.location.origin}${window.location.pathname}?page=print-report&requestId=${req.id}&from=print`;
+                                                                window.open(url, '_blank');
+                                                            }}
+                                                            className="font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-mono hover:underline cursor-pointer whitespace-nowrap"
+                                                            title="معاينة الطلب في صفحة جديدة"
+                                                        >
+                                                            #{req.request_number}
+                                                        </button>
+                                                    </div>
+                                                    <span className="block font-bold text-slate-800 dark:text-slate-100 truncate text-xs sm:text-sm" title={carDisplayName}>
+                                                        {carDisplayName}
                                                     </span>
-                                                )}
-                                            </div>
+                                                </div>
 
-                                            {/* 5. المدة (منذ ...) والتاريخ */}
-                                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap text-xs">
-                                                <span className="font-bold text-slate-700 dark:text-slate-200">{timeAgo(req.created_at)}</span>
-                                                <span className="text-slate-300 dark:text-slate-600">·</span>
-                                                <span className="font-mono text-slate-400 dark:text-slate-500">{format(new Date(req.created_at), 'yyyy/MM/dd')}</span>
+                                                {/* 2. نوع الفحص وأسفله السعر */}
+                                                <div className="min-w-0 flex flex-col gap-1 items-start">
+                                                    <span className="inline-block max-w-full truncate text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/60" title={inspectionTypeName}>
+                                                        {inspectionTypeName}
+                                                    </span>
+                                                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                        <span className={`font-black text-xs sm:text-sm ${isUnpaid ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                                            {req.price} <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">ريال</span>
+                                                        </span>
+                                                        {isUnpaid && (
+                                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+                                                                غير مدفوع
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* 3. التاريخ وأسفله المدة */}
+                                                <div className="flex flex-col items-end gap-1 whitespace-nowrap text-xs">
+                                                    <span className="font-mono text-slate-600 dark:text-slate-300 font-semibold">
+                                                        {format(new Date(req.created_at), 'yyyy/MM/dd')}
+                                                    </span>
+                                                    <span className="font-bold text-slate-500 dark:text-slate-400 text-[11px]">
+                                                        {timeAgo(req.created_at)}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                        );
-                    })}
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
             )}
         </Modal>

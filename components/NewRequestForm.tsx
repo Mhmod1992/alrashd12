@@ -709,10 +709,18 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target as Node)) {
                 setIsTypeDropdownOpen(false);
             }
-            if (phoneInputRef.current && !phoneInputRef.current.parentElement?.contains(event.target as Node)) {
+            if (
+                phoneInputRef.current &&
+                !phoneInputRef.current.parentElement?.contains(event.target as Node) &&
+                !(event.target as HTMLElement | null)?.closest('[data-client-dropdown="phone"]')
+            ) {
                 setIsPhoneSuggestionsOpen(false);
             }
-            if (nameInputRef.current && !nameInputRef.current.parentElement?.contains(event.target as Node)) {
+            if (
+                nameInputRef.current &&
+                !nameInputRef.current.parentElement?.contains(event.target as Node) &&
+                !(event.target as HTMLElement | null)?.closest('[data-client-dropdown="name"]')
+            ) {
                 setIsNameSuggestionsOpen(false);
             }
         };
@@ -928,15 +936,6 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
             setPhoneSuggestions(results);
             setIsPhoneSuggestionsOpen(results.length > 0);
             setIsSearchingClientPhone(false);
-
-            // If on mobile and a single matching client is found, auto-select to prevent duplicate client creation
-            if (isMobile && results.length === 1) {
-                const matched = results[0];
-                const cleanMatchPhone = cleanSaudiPhoneNumber(matched.phone) || matched.phone?.replace(/\D/g, '');
-                if (cleanMatchPhone === digits || cleanMatchPhone.endsWith(digits) || digits.endsWith(cleanMatchPhone)) {
-                    handleClientSelection(matched);
-                }
-            }
         }, 300);
     };
 
@@ -1411,19 +1410,84 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
         return true;
     };
 
+    const isCarStepComplete = useMemo(() => {
+        if (!isReservationMode) {
+            if (useChassisNumber) {
+                if (chassisNumber.length < 5) return false;
+            } else if (showPlateField) {
+                if (plateChars.trim().length < 1 || plateNums.trim().length < 1) return false;
+            }
+        }
+        if (!foundHistory) {
+            if (!carMakeId || !carModelId || !carYear || carYear < 1900 || carYear > 2100) return false;
+        }
+        return true;
+    }, [isReservationMode, useChassisNumber, chassisNumber, showPlateField, plateChars, plateNums, foundHistory, carMakeId, carModelId, carYear]);
+
+    const isDetailsStepComplete = useMemo(() => {
+        if (!inspectionTypeId || Number(inspectionPrice) <= 0) return false;
+        if (!isReservationMode && !isReceptionistMode) {
+            if (!paymentType) return false;
+            if (paymentType === PaymentType.Split) {
+                const totalSplit = splitCashAmount + splitCardAmount;
+                if (Math.abs(totalSplit - (Number(inspectionPrice) || 0)) > 0.01) return false;
+            }
+        }
+        return true;
+    }, [inspectionTypeId, inspectionPrice, isReservationMode, isReceptionistMode, paymentType, splitCashAmount, splitCardAmount]);
+
+    const isClientStepComplete = useMemo(() => {
+        if (showClientFields) {
+            if (!clientName.trim() || clientPhone.length < 10) return false;
+        }
+        return true;
+    }, [showClientFields, clientName, clientPhone]);
+
+    const isMobileStepIncomplete = useCallback((stepNum: number) => {
+        if (stepNum === 1) return !isCarStepComplete;
+        if (stepNum === 2) return !isDetailsStepComplete;
+        if (stepNum === 3 && hasBrokerStep) return false;
+        if ((stepNum === 3 && !hasBrokerStep) || stepNum === 4) return !isClientStepComplete;
+        return false;
+    }, [isCarStepComplete, isDetailsStepComplete, isClientStepComplete, hasBrokerStep]);
+
+    const nextIncompleteMobileStep = useMemo(() => {
+        const clientStepNum = hasBrokerStep ? 4 : 3;
+        if (!isClientStepComplete) {
+            return { step: clientStepNum, title: 'بيانات العميل', validate: validateClient };
+        }
+        if (!isCarStepComplete) {
+            return { step: 1, title: 'بيانات السيارة', validate: validateCar };
+        }
+        if (!isDetailsStepComplete) {
+            return { step: 2, title: 'تفاصيل الطلب', validate: validateDetails };
+        }
+        return null;
+    }, [hasBrokerStep, isClientStepComplete, isCarStepComplete, isDetailsStepComplete, validateClient, validateCar, validateDetails]);
+
+    const handleGoToIncompleteStep = () => {
+        if (!nextIncompleteMobileStep) return;
+        if (currentStep !== nextIncompleteMobileStep.step) {
+            setCurrentStep(nextIncompleteMobileStep.step);
+        }
+        nextIncompleteMobileStep.validate();
+    };
+
     const handleNext = () => {
+        if (isMobile) {
+            setCurrentStep(prev => Math.min(TOTAL_STEPS, prev + 1));
+            return;
+        }
         if (validateStep(currentStep)) {
             setCurrentStep(prev => prev + 1);
-            if (!isMobile) {
-                setTimeout(() => {
-                    if (currentStep === 1) {
-                        typeInputRef.current?.focus();
-                    } else if (currentStep === 2) {
-                        if (useChassisNumber) chassisInputRef.current?.focus();
-                        else plateCharInputRef.current?.focus();
-                    }
-                }, 300);
-            }
+            setTimeout(() => {
+                if (currentStep === 1) {
+                    typeInputRef.current?.focus();
+                } else if (currentStep === 2) {
+                    if (useChassisNumber) chassisInputRef.current?.focus();
+                    else plateCharInputRef.current?.focus();
+                }
+            }, 300);
         }
     };
 
@@ -2063,11 +2127,7 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                             type="button"
                             onClick={() => {
                                 if (currentStep < TOTAL_STEPS) {
-                                    if (isEditMode) {
-                                        setCurrentStep(prev => prev + 1);
-                                    } else {
-                                        handleNext();
-                                    }
+                                    setCurrentStep(prev => prev + 1);
                                 }
                             }}
                             disabled={currentStep === TOTAL_STEPS}
@@ -2086,31 +2146,25 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                     <div className="flex items-center justify-between gap-1 mb-2">
                         {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((stepNum) => {
                             const isActive = stepNum === currentStep;
-                            const isCompleted = stepNum < currentStep;
+                            const isIncomplete = isMobileStepIncomplete(stepNum);
+                            const isCompleted = !isIncomplete && stepNum !== currentStep;
                             return (
                                 <button
                                     key={stepNum}
                                     type="button"
-                                    onClick={() => {
-                                        if (isEditMode || stepNum < currentStep) {
-                                            setCurrentStep(stepNum);
-                                        } else if (stepNum === currentStep + 1) {
-                                            handleNext();
-                                        } else {
-                                            if (validateStep(currentStep)) {
-                                                setCurrentStep(stepNum);
-                                            }
-                                        }
-                                    }}
-                                    className={`flex-1 py-1 px-1 rounded-md text-[11px] font-bold transition-all text-center truncate ${
+                                    onClick={() => setCurrentStep(stepNum)}
+                                    className={`flex-1 py-1 px-1 rounded-md text-[11px] font-bold transition-all text-center truncate flex items-center justify-center gap-1 ${
                                         isActive
                                             ? 'bg-blue-600 text-white shadow-xs'
                                             : isCompleted
-                                            ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50'
-                                            : 'bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400'
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50'
+                                            : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300'
                                     }`}
                                 >
-                                    {getStepTitle(stepNum)}
+                                    {isIncomplete && (
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-amber-300' : 'bg-amber-500'}`} />
+                                    )}
+                                    <span className="truncate">{getStepTitle(stepNum)}</span>
                                 </button>
                             );
                         })}
@@ -2449,14 +2503,23 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({
                                     <Button type="button" onClick={handleNext} className="w-2/3 flex-1 justify-center">
                                         التالي <ChevronRightIcon className="w-4 h-4 ms-2 transform rotate-180" />
                                     </Button>
+                                ) : nextIncompleteMobileStep ? (
+                                    <Button
+                                        type="button"
+                                        onClick={handleGoToIncompleteStep}
+                                        className="w-2/3 flex-1 justify-center font-bold text-base !bg-amber-500 hover:!bg-amber-600 text-white shadow-md"
+                                    >
+                                        إكمال: {nextIncompleteMobileStep.title}
+                                        <ChevronRightIcon className="w-4 h-4 ms-2" />
+                                    </Button>
                                 ) : (
                                     <Button 
-                                    type="submit" 
-                                    className="w-2/3 flex-1 justify-center font-bold text-lg"
-                                    disabled={isCreatingRequest || (isReservationMode && (!carMakeId || !carModelId || !carYear || !inspectionTypeId || !inspectionPrice))}
-                                >
-                                    {isReservationMode ? 'حفظ الحجز' : (initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionistMode ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب')))}
-                                </Button>
+                                        type="submit" 
+                                        className="w-2/3 flex-1 justify-center font-bold text-lg"
+                                        disabled={isCreatingRequest}
+                                    >
+                                        {isReservationMode ? 'حفظ الحجز' : (initialReservationData ? 'تأكيد البيانات وتثبيت الحجز' : (isReceptionistMode ? 'حفظ الطلب' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الطلب')))}
+                                    </Button>
                                 )}
                             </>
                         ) : (
